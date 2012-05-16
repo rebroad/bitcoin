@@ -25,7 +25,7 @@
 using namespace std;
 using namespace boost;
 
-static const int MAX_OUTBOUND_CONNECTIONS = 8;
+static const int MAX_OUTBOUND_CONNECTIONS = 125;
 
 void ThreadMessageHandler2(void* parg);
 void ThreadSocketHandler2(void* parg);
@@ -849,7 +849,7 @@ void ThreadSocketHandler2(void* parg)
                 if (WSAGetLastError() != WSAEWOULDBLOCK)
                     printf("socket error accept failed: %d\n", WSAGetLastError());
             }
-            else if (nInbound >= GetArg("-maxconnections", 125) - MAX_OUTBOUND_CONNECTIONS)
+            else if (nInbound >= GetArg("-maxconnections", 200) - MAX_OUTBOUND_CONNECTIONS)
             {
                 {
                     LOCK(cs_setservAddNodeAddresses);
