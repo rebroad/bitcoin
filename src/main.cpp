@@ -32,6 +32,16 @@ uint256 hashGenesisBlock("0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3
 static CBigNum bnProofOfWorkLimit(~uint256(0) >> 32);
 CBlockIndex* pindexGenesisBlock = NULL;
 int nBestHeight = -1;
+int nAskedForBlocks = 0;
+int nWaitingForBlocks = 0;
+int nReceivingBlocks = 0;
+int nInvShyNodes = 0;
+int nWasInvShyNodes = 0;
+int nBlockShyNodes = 0;
+int nWasBlockShyNodes = 0;
+int nBlockStuckNodes = 0;
+int nWasBlockStuckNodes = 0;
+int nUnreliableNodes = 0;
 CBigNum bnBestChainWork = 0;
 CBigNum bnBestInvalidWork = 0;
 uint256 hashBestChain = 0;
@@ -939,6 +949,11 @@ int GetNumBlocksOfPeers()
     return std::max(cPeerBlockCounts.median(), Checkpoints::GetTotalBlocksEstimate());
 }
 
+bool CaughtUp()
+{
+    return (nBestHeight >= GetNumBlocksOfPeers());
+}
+
 bool IsInitialBlockDownload()
 {
     if (pindexBest == NULL || nBestHeight < Checkpoints::GetTotalBlocksEstimate())
@@ -1782,10 +1797,25 @@ bool ProcessBlock(CNode* pfrom, CBlock* pblock)
 {
     // Check for duplicate
     uint256 hash = pblock->GetHash();
-    if (mapBlockIndex.count(hash))
-        return error("ProcessBlock() : already have block %d %s", mapBlockIndex[hash]->nHeight, hash.ToString().substr(0,20).c_str());
-    if (mapOrphanBlocks.count(hash))
-        return error("ProcessBlock() : already have block (orphan) %s", hash.ToString().substr(0,20).c_str());
+    if (mapBlockIndex.count(hash)) {
+        if (pfrom) { // REB
+            pfrom->nDupBlocks++;
+            if (pfrom->nDupBlocks > 3) pfrom->fDisconnect = true;
+            printf("ProcessBlock() : already(%d) have block %d %s\n", pfrom->nDupBlocks, mapBlockIndex[hash]->nHeight, hash.ToString().substr(0,20).c_str());
+        } else
+            printf("ProcessBlock() : already have block %d %s\n", mapBlockIndex[hash]->nHeight, hash.ToString().substr(0,20).c_str());
+        return false;
+    }
+    if (mapOrphanBlocks.count(hash)) {
+        if (pfrom) { // REB
+            pfrom->nDupBlocks++;
+            if (pfrom->nDupBlocks > 3) pfrom->fDisconnect = true;
+            printf("ProcessBlock() : already(%d) have block (orphan) %s\n", pfrom->nDupBlocks, hash.ToString().substr(0,20).c_str());
+        } else
+            printf("ProcessBlock() : already have block (orphan) %s\n", hash.ToString().substr(0,20).c_str());
+        return false;
+    }
+    if (pfrom) pfrom->nDupBlocks = 0;
 
     // Preliminary checks
     if (!pblock->CheckBlock())
@@ -2399,17 +2429,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             }
         }
 
-        // Ask the first connected node for block updates
-        static int nAskedForBlocks = 0;
-        if (!pfrom->fClient && !pfrom->fOneShot &&
-            (pfrom->nVersion < NOBLKS_VERSION_START ||
-             pfrom->nVersion >= NOBLKS_VERSION_END) &&
-             (nAskedForBlocks < 1 || vNodes.size() <= 1))
-        {
-            nAskedForBlocks++;
-            pfrom->PushGetBlocks(pindexBest, uint256(0));
-        }
-
         // Relay alerts
         {
             LOCK(cs_mapAlerts);
@@ -2433,6 +2452,22 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
     }
 
 
+    // Ask a connected node for block updates
+    if (!pfrom->fClient && !pfrom->fOneShot &&
+        // below commented out as 32200 seems friendly enough. Not so sure about 32400 though!
+        //(pfrom->nVersion < NOBLKS_VERSION_START ||
+        // pfrom->nVersion >= NOBLKS_VERSION_END) &&
+         nAskedForBlocks < 8 && !pfrom->fAskedForBlocks && !CaughtUp()) // TODO - tune
+    {
+        nAskedForBlocks++;
+        pfrom->fAskedForBlocks = true;
+        printf("initial getblocks to %s\n", pfrom->addr.ToString().c_str());
+        pfrom->PushGetBlocks(pindexBest, uint256(0));
+        NodeSummary();
+    }
+
+
+    if (strCommand == "version") ;
     else if (strCommand == "verack")
     {
         pfrom->vRecv.SetVersion(min(pfrom->nVersion, PROTOCOL_VERSION));
@@ -2518,12 +2553,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
         // find last block in inv vector
         unsigned int nLastBlock = (unsigned int)(-1);
-        for (unsigned int nInv = 0; nInv < vInv.size(); nInv++) {
-            if (vInv[vInv.size() - 1 - nInv].type == MSG_BLOCK) {
-                nLastBlock = vInv.size() - 1 - nInv;
-                break;
+        if (!CaughtUp()) // No need to do this once caught up...
+            for (unsigned int nInv = 0; nInv < vInv.size(); nInv++) {
+                if (vInv[vInv.size() - 1 - nInv].type == MSG_BLOCK) {
+                    nLastBlock = vInv.size() - 1 - nInv;
+                    break;
+                }
             }
-        }
         CTxDB txdb("r");
         for (unsigned int nInv = 0; nInv < vInv.size(); nInv++)
         {
@@ -2537,9 +2573,16 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             if (fDebug)
                 printf("  got inventory: %s  %s\n", inv.ToString().c_str(), fAlreadyHave ? "have" : "new");
 
-            if (!fAlreadyHave)
-                pfrom->AskFor(inv);
-            else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash)) {
+            if (!fAlreadyHave) {
+                if (inv.type == MSG_BLOCK) {
+                    pfrom->tBlockInvs = GetTime();
+                    int64 nRequestTime = pfrom->AskForBlock(inv, 60);
+                    printf("askforb %s   %s (%"PRI64d")   %s\n", inv.ToString().c_str(),
+                      DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000).c_str(), nRequestTime,
+                      pfrom->addr.ToString().c_str());
+                } else
+                    pfrom->AskFor(inv);
+            } else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash)) {
                 pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(mapOrphanBlocks[inv.hash]));
             } else if (nInv == nLastBlock) {
                 // In case we are on a very long side-chain, it is possible that we already have
@@ -2553,7 +2596,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
             // Track requests for our stuff
             Inventory(inv.hash);
-        }
+        } // for each item in inv bundle
     }
 
 
@@ -2615,6 +2658,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
     else if (strCommand == "getblocks")
     {
+        // This is a request from a node to tell them about the blocks I have.
+
         CBlockLocator locator;
         uint256 hashStop;
         vRecv >> locator >> hashStop;
@@ -2759,16 +2804,29 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
     else if (strCommand == "block")
     {
         CBlock block;
+        int size = vRecv.size();
         vRecv >> block;
-
-        printf("received block %s\n", block.GetHash().ToString().substr(0,20).c_str());
-        // block.print();
+        int timetodownload = GetTime() - pfrom->tBlockRecvStart;
 
         CInv inv(MSG_BLOCK, block.GetHash());
+
+        if (timetodownload)
+            printf("block recved(%d) %s (%u bytes, %us, %uB/s) from %s\n", nReceivingBlocks,
+              inv.hash.ToString().substr(0,20).c_str(), size, timetodownload,
+              size / timetodownload, pfrom->addr.ToString().c_str());
+        else
+            printf("block recved(%d) %s (%u bytes) from %s\n", nReceivingBlocks,
+              inv.hash.ToString().substr(0,20).c_str(), size, pfrom->addr.ToString().c_str());
+        if (pfrom->fWaitingForBlock) {
+            pfrom->fWaitingForBlock = false;
+            nWaitingForBlocks--;
+        }
+        NodeSummary();
+
         pfrom->AddInventoryKnown(inv);
 
-        if (ProcessBlock(pfrom, &block))
-            mapAlreadyAskedFor.erase(inv);
+        ProcessBlock(pfrom, &block);
+        mapWaitingFor.erase(inv);
         if (block.nDoS) pfrom->Misbehaving(block.nDoS);
     }
 
@@ -2937,6 +2995,79 @@ bool ProcessMessages(CNode* pfrom)
             printf("ProcessMessages(%s, %u bytes) : nMessageSize > MAX_SIZE\n", strCommand.c_str(), nMessageSize);
             continue;
         }
+
+        /* Discover stuck block downloads and show progress */
+        if (strCommand == "block") {
+            bool fPrintBlock;
+            fPrintBlock = false;
+            bool fNodeSummary = false;
+            if (!pfrom->fReceivingBlock) {
+                pfrom->fReceivingBlock = true;
+                nReceivingBlocks++;
+                pfrom->tBlockRecvStart = GetTime();
+                if (pfrom->tBlockRecving <= pfrom->tGetdataBlock && pfrom->tBlockRecvStart > pfrom->tGetdataBlock) {
+                    printf("%ds later, ", pfrom->tBlockRecvStart - pfrom->tGetdataBlock);
+                    fPrintBlock = true;
+                }
+            }
+
+            if ((GetTime() > pfrom->tBlockRecving + (15 * (pfrom->nStuckDB+1))) ||
+              vRecv.size() >= nMessageSize) {
+                // Update as 15 secs elapsed or download complete
+                if ((int)vRecv.size() == pfrom->nBlockBytes) {
+                    // Download not completed and no progress
+                    pfrom->nStuckDB++;
+                    if (pfrom->nStuckDB < 3) {
+                        printf("stuck(%d) ", pfrom->nStuckDB);
+                        fPrintBlock = true;
+                    } else if (pfrom->nStuckDB == 3) {
+                        //pfrom->fWaitingForBlock = false;
+                        //nWaitingForBlocks--;
+                        mapWaitingFor.erase(pfrom->WaitingForBlock);
+                        nBlockStuckNodes++;
+                        fNodeSummary = true;
+                        printf("given up %s (size %d) from %s", pfrom->WaitingForBlock.ToString().c_str(),
+                          nMessageSize, pfrom->addr.ToString().c_str());
+                    }
+                } else {
+                    // download progressing
+                    if (pfrom->nStuckDB >= 3) {
+                        pfrom->nWasStuckDB = pfrom->nStuckDB;
+                        pfrom->nStuckDB = 0;
+                        nBlockStuckNodes--;
+                        nWasBlockStuckNodes++;
+                        fNodeSummary = true;
+                        printf("%d later, unstuck ", GetTime() - pfrom->tBlockRecving);
+                    }
+                    if (pfrom->fBlockShy) {
+                        pfrom->fBlockShy = false;
+                        pfrom->fWasBlockShy = true;
+                        nBlockShyNodes--;
+                        nWasBlockShyNodes++;
+                        fNodeSummary = true;
+                        printf("shy ");
+                    }
+                    pfrom->tBlockRecving = GetTime();
+                    pfrom->nBlockBytes = vRecv.size();
+                    if (vRecv.size() >= nMessageSize) {
+                        // Download completed
+                        pfrom->fReceivingBlock = false;
+                        nReceivingBlocks--;
+                        fPrintBlock = false;
+                    } else {
+                        printf("recving(%d) ", nReceivingBlocks);
+                        fPrintBlock = true;
+                    }
+                }
+            } // 15s elapsed since last report or completed
+
+            if (fPrintBlock) {
+                printf("block %u / %u bytes from %s\n", vRecv.size(), nMessageSize,
+                  pfrom->addr.ToString().c_str());
+                if (fNodeSummary) NodeSummary();
+            }
+        } // strCommand == "block"
+
         if (nMessageSize > vRecv.size())
         {
             // Rewind and wait for rest of message
@@ -2995,11 +3126,15 @@ bool ProcessMessages(CNode* pfrom)
 
         if (!fRet)
             printf("ProcessMessage(%s, %u bytes) FAILED\n", strCommand.c_str(), nMessageSize);
+        else
+            break; // Helps avoid dropping messages from peers when processing blocks.
     }
 
     vRecv.Compact();
     return true;
 }
+
+
 
 
 bool SendMessages(CNode* pto, bool fSendTrickle)
@@ -3130,13 +3265,68 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         if (!vInv.empty())
             pto->PushMessage("inv", vInv);
 
-
         //
         // Message: getdata
         //
         vector<CInv> vGetData;
         int64 nNow = GetTime() * 1000000;
         CTxDB txdb("r");
+
+        // First, the priority blocks (blocks that other peers were supposed to provide but timed-out).
+        while (!pto->fWaitingForBlock && !pto->mapPriorityBlock.empty() &&
+          (*pto->mapPriorityBlock.begin()).first <= nNow) {
+            const CInv& inv = (*pto->mapPriorityBlock.begin()).second;
+            if (!AlreadyHave(txdb, inv)) {
+                int64 nRequestTime = mapWaitingFor[inv];
+                if (nRequestTime == 0) { // Not requested from another peer
+                    printf("getdata^ %s to %s\n", inv.ToString().c_str(), pto->addr.ToString().c_str());
+                    pto->fWaitingForBlock = true;
+                    pto->WaitingForBlock = inv;
+                    nWaitingForBlocks++;
+                    pto->tGetdataBlock = GetTime();
+                    NodeSummary();
+                    vGetData.push_back(inv);
+                    pto->PushMessage("getdata", vGetData);
+                    vGetData.clear();
+                    mapWaitingFor[inv] = nNow;
+                } else { // Another node is waiting for this inv, so put to end of the pri queue
+                    nRequestTime = pto->PriorityBlock(inv, 30);
+                    printf("askfor^^ %s   %s (%"PRI64d")   %s\n", inv.ToString().c_str(),
+                      DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000).c_str(), nRequestTime,
+                      pto->addr.ToString().c_str());
+                }
+            } // if !AlreadyHave
+            pto->mapPriorityBlock.erase(pto->mapPriorityBlock.begin());
+        } // while
+
+        // Next, the rest of the blocks as seen in invs
+        while (!pto->fWaitingForBlock && !pto->mapAskForBlock.empty() &&
+          (*pto->mapAskForBlock.begin()).first <= nNow) {
+            const CInv& inv = (*pto->mapAskForBlock.begin()).second;
+            if (!AlreadyHave(txdb, inv)) {
+                int64 nRequestTime = mapWaitingFor[inv];
+                if (nRequestTime == 0) { // Not requested from another peer
+                    printf("getdata %s to %s\n", inv.ToString().c_str(), pto->addr.ToString().c_str());
+                    pto->fWaitingForBlock = true;
+                    pto->WaitingForBlock = inv;
+                    nWaitingForBlocks++;
+                    pto->tGetdataBlock = GetTime();
+                    NodeSummary();
+                    vGetData.push_back(inv);
+                    pto->PushMessage("getdata", vGetData);
+                    vGetData.clear();
+                    mapWaitingFor[inv] = nNow;
+                } else { // Another node is waiting for this inv, so add to pri queue
+                    nRequestTime = pto->PriorityBlock(inv, 30);
+                    printf("askfor^ %s   %s (%"PRI64d")   %s\n", inv.ToString().c_str(),
+                      DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000).c_str(), nRequestTime,
+                      pto->addr.ToString().c_str());
+                }
+            } // if !AlreadyHave
+            pto->mapAskForBlock.erase(pto->mapAskForBlock.begin());
+        } // while
+
+        // Finally, the transactions
         while (!pto->mapAskFor.empty() && (*pto->mapAskFor.begin()).first <= nNow)
         {
             const CInv& inv = (*pto->mapAskFor.begin()).second;
@@ -3156,16 +3346,50 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         if (!vGetData.empty())
             pto->PushMessage("getdata", vGetData);
 
-    }
+
+        //
+        // Check for timed-out requests
+        //
+
+        // Check for timed-out getdata block requests
+        if (pto->fWaitingForBlock && (pto->tGetdataBlock > pto->tBlockRecvStart) &&
+          (GetTime() > pto->tGetdataBlock + (pto->nStuckWB+1)*15) ) {
+            // Node not sent block within 15 seconds of sending getdata.
+            pto->nStuckWB++;
+            if (pto->nStuckWB == 3) {
+                if (!pto->fBlockShy) {
+                    nBlockShyNodes++;
+                    pto->fBlockShy = true;
+                }
+                //pto->fWaitingForBlock = false;
+                //nWaitingForBlocks--;
+                mapWaitingFor.erase(pto->WaitingForBlock);
+                printf("Given up waiting for block from %s\n", pto->addr.ToString().c_str());
+                NodeSummary();
+            } else
+                if (pto->nStuckWB < 3) printf("Waited %ds for block from %s\n", (pto->nStuckWB)*15, pto->addr.ToString().c_str());
+        }
+
+        // Check for timed-out getblocks requests
+        if (!pto->fInvShy && (pto->tGetblocks > pto->tBlockInvs) &&
+          (GetTime() > pto->tGetblocks + (pto->nStuckWI+1)*15)) {
+            // Node not sent invs within 15 seconds of sending getblocks.
+            pto->nStuckWI++;
+            if (pto->nStuckWI == 3) {
+                nInvShyNodes++;
+                pto->fInvShy = true;
+                printf("Given up waiting for invs from %s\n", pto->addr.ToString().c_str());
+                NodeSummary();
+            } else
+                if (pto->nStuckWI < 3) printf("Waited %ds for invs from %s\n", (pto->nStuckWI)*15, pto->addr.ToString().c_str());
+        }
+
+        // If we're short on providers, kick the stuck ones, so we can reconnect and use them.  REB
+        //if (nBlockProviders < 3 && pto->fStuck) pto->fDisconnect = true;
+
+    } // if LockMain
     return true;
-}
-
-
-
-
-
-
-
+} // SendMessages()
 
 
 
