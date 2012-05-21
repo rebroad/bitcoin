@@ -234,6 +234,7 @@ bool CAlert::ProcessAlert()
             uiInterface.NotifyAlertChanged(GetHash(), CT_NEW);
     }
 
-    printf("accepted alert %d, AppliesToMe()=%d\n", nID, AppliesToMe());
+    if (!fQuietInitial || CaughtUp())
+        printf("accepted alert %d, AppliesToMe()=%d\n", nID, AppliesToMe());
     return true;
 }
