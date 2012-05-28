@@ -203,7 +203,8 @@ std::string HelpMessage()
         "  -dbcache=<n>           " + _("Set database cache size in megabytes (default: 25)") + "\n" +
         "  -dblogsize=<n>         " + _("Set database disk log size in megabytes (default: 100)") + "\n" +
         "  -timeout=<n>           " + _("Specify connection timeout (in milliseconds)") + "\n" +
-        "  -proxy=<ip:port>       " + _("Connect through socks proxy") + "\n" +
+        "  -proxy=<ip:port>       " + _("Exclusively connect through socks proxy") + "\n" +
+        "  -proxytoo=<ip:port>    " + _("Also connect through socks proxy") + "\n" +
         "  -socks=<n>             " + _("Select the version of socks proxy to use (4 or 5, 5 is default)") + "\n" +
         "  -noproxy=<net>         " + _("Do not use proxy for connections to network <net> (IPv4 or IPv6)") + "\n" +
         "  -dns                   " + _("Allow DNS lookups for -addnode, -seednode and -connect") + "\n" +
@@ -444,6 +445,13 @@ bool AppInit2()
                 return InitError(strprintf(_("Unknown network specified in -noproxy: '%s'"), snet.c_str()));
             SetNoProxy(net);
         }
+    }
+
+    if (mapArgs.count("-proxytoo")) {
+        fProxyToo = true;
+        addrProxy = CService(mapArgs["-proxytoo"], 9050);
+        if (!addrProxy.IsValid())
+            return InitError(strprintf(_("Invalid -proxytoo address: '%s'"), mapArgs["-proxytoo"].c_str()));
     }
 
     fNameLookup = GetBoolArg("-dns");
