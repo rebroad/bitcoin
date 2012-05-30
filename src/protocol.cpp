@@ -140,6 +140,11 @@ const char* CInv::GetCommand() const
 
 std::string CInv::ToString() const
 {
+    if (GetCommand() == "block")
+        return strprintf("%s %s", GetCommand(), hash.ToString().substr(10,15).c_str());
+    if (GetCommand() == "tx")
+        return strprintf("%s %s", GetCommand(), hash.ToString().substr(0,10).c_str());
+
     return strprintf("%s %s", GetCommand(), hash.ToString().substr(0,20).c_str());
 }
 
