@@ -1825,7 +1825,8 @@ bool ProcessBlock(CNode* pfrom, CBlock* pblock)
 
         // Ask this guy to fill in what we're missing
         if (pfrom)
-            pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(pblock2));
+            if (pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(pblock2)))
+                printf("fill-in getblocks to %s\n", pfrom->addr.ToString().c_str());
         return true;
     }
 
@@ -2546,8 +2547,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
                 // the last block in an inv bundle sent in response to getblocks. Try to detect
                 // this situation and push another getblocks to continue.
                 std::vector<CInv> vGetData(1,inv);
-                pfrom->PushGetBlocks(mapBlockIndex[inv.hash], uint256(0));
-                if (fDebug)
+                if (pfrom->PushGetBlocks(mapBlockIndex[inv.hash], uint256(0)) && fDebug)
                     printf("force request: %s\n", inv.ToString().c_str());
             }
 
