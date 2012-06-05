@@ -3388,7 +3388,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 } else { // Another node is waiting for this inv, so add to pri queue
                     int OldReqTime = nRequestTime; // REBTEST
                     nRequestTime = pto->PriorityBlock(inv, 30);
-                    printf("askfor^ %s   %s (%"PRI64d")   %s\n", inv.ToString().c_str(),
+                    printf("askfor^ %s  %s (%"PRI64d") %s (%"PRI64d") %s\n", inv.ToString().c_str(),
                       DateTimeStrFormat("%H:%M:%S", OldReqTime/1000000).c_str(), OldReqTime,
                       DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000).c_str(), nRequestTime,
                       pto->addr.ToString().c_str());
