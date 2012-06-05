@@ -3345,7 +3345,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             const CInv& inv = (*pto->mapPriorityBlock.begin()).second;
             if (!AlreadyHave(txdb, inv)) {
                 int64 nRequestTime = mapWaitingFor[inv];
-                if (nRequestTime == 0) { // Not requested from another peer
+                if (mapWaitingFor.count(inv) == 0) { // Not requested from another peer
                     printf("getdata^ %s to %s\n", inv.ToString().c_str(), pto->addr.ToString().c_str());
                     pto->fWaitingForBlock = true;
                     pto->WaitingForBlock = inv;
@@ -3374,7 +3374,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             const CInv& inv = (*pto->mapAskForBlock.begin()).second;
             if (!AlreadyHave(txdb, inv)) {
                 int64 nRequestTime = mapWaitingFor[inv];
-                if (nRequestTime == 0) { // Not requested from another peer
+                if (mapWaitingFor.count(inv) == 0) { // Not requested from another peer
                     printf("getdata %s to %s\n", inv.ToString().c_str(), pto->addr.ToString().c_str());
                     pto->fWaitingForBlock = true;
                     pto->WaitingForBlock = inv;
@@ -3388,7 +3388,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 } else { // Another node is waiting for this inv, so add to pri queue
                     int OldReqTime = nRequestTime; // REBTEST
                     nRequestTime = pto->PriorityBlock(inv, 30);
-                    printf("askfor^ %s  %s (%"PRI64d") %s (%"PRI64d") %s\n", inv.ToString().c_str(),
+                    printf("askfor^ %s %s (%"PRI64d") %s (%"PRI64d") %s\n", inv.ToString().c_str(),
                       DateTimeStrFormat("%H:%M:%S", OldReqTime/1000000).c_str(), OldReqTime,
                       DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000).c_str(), nRequestTime,
                       pto->addr.ToString().c_str());
