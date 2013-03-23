@@ -5,6 +5,8 @@
 #ifndef BITCOIN_MAIN_H
 #define BITCOIN_MAIN_H
 
+#define BLOCKSUBSTR 10,15
+
 #include "bignum.h"
 #include "sync.h"
 #include "net.h"
@@ -201,7 +203,7 @@ bool AbortNode(const std::string &msg);
 
 static inline std::string BlockHashStr(const uint256& hash)
 {
-    return hash.ToString();
+    return hash.ToString().substr(BLOCKSUBSTR);
 }
 
 bool GetWalletFile(CWallet* pwallet, std::string &strWalletFileOut);
