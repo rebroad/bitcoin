@@ -558,6 +558,8 @@ void CNode::PushVersion()
         LogPrint("net", "send version message: version %d, blocks=%d, us=%s\n", PROTOCOL_VERSION, nBestHeight, addrMe.ToString());
     PushMessage("version", PROTOCOL_VERSION, nLocalServices, nTime, addrYou, addrMe,
                 nLocalHostNonce, FormatSubVersion(CLIENT_NAME, CLIENT_VERSION, std::vector<string>()), nBestHeight, true);
+/*                nLocalHostNonce, FormatSubVersion(CLIENT_NAME, CLIENT_VERSION, std::vector<string>()), (fAntisocial ? 0 : nBestHeight), !fAntisocial); */
+    // Line above : if being antisocial, send bestheight of zero as clients currently don't deal well with ignored getblocks requests.
 }
 
 
