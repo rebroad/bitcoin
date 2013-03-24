@@ -285,6 +285,7 @@ std::string HelpMessage()
         "  -daemon                " + _("Run in the background as a daemon and accept commands") + "\n" +
 #endif
         "  -testnet               " + _("Use the test network") + "\n" +
+        "  -antisocial            " + _("Don't relay network traffic") + "\n" +
         "  -debug                 " + _("Output extra debugging information. Implies all other -debug* options") + "\n" +
         "  -debugnet              " + _("Output extra network debugging information") + "\n" +
         "  -logtimestamps         " + _("Prepend debug output with timestamp") + "\n" +
@@ -452,6 +453,9 @@ bool AppInit2()
     // ********************************************************* Step 2: parameter interactions
 
     fTestNet = GetBoolArg("-testnet");
+
+    fAntisocial = GetBoolArg("-antisocial");
+    if (fAntisocial) SoftSetBoolArg("-listen", false);
 
     if (mapArgs.count("-bind")) {
         // when specifying an explicit binding address, you want to listen on it
