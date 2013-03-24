@@ -1214,6 +1214,11 @@ int GetNumBlocksOfPeers()
     return std::max(cPeerBlockCounts.median(), Checkpoints::GetTotalBlocksEstimate());
 }
 
+bool CaughtUp()
+{
+    return ((chainActive.Height() >= GetNumBlocksOfPeers()) && chainActive.Tip()->GetBlockTime() > GetTime() - 90 * 60);
+}
+
 bool IsInitialBlockDownload()
 {
     if (fImporting || fReindex || chainActive.Height() < Checkpoints::GetTotalBlocksEstimate())
@@ -2329,7 +2334,7 @@ bool AcceptBlock(CBlock& block, CValidationState& state, CDiskBlockPos* dbp)
     {
         LOCK(cs_vNodes);
         BOOST_FOREACH(CNode* pnode, vNodes)
-            if (chainActive.Height() > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : nBlockEstimate))
+            if (chainActive.Height() > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : nBlockEstimate) && !fAntisocial)
                 pnode->PushInventory(CInv(MSG_BLOCK, hash));
     }
 
@@ -3135,7 +3140,7 @@ void static ProcessGetData(CNode* pfrom)
             boost::this_thread::interruption_point();
             it++;
 
-            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK)
+            if ((inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK) && !fAntisocial)
             {
                 bool send = false;
                 map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(inv.hash);
@@ -3352,6 +3357,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         }
 
         // Relay alerts
+        if (!fAntisocial)
         {
             LOCK(cs_mapAlerts);
             BOOST_FOREACH(PAIRTYPE(const uint256, CAlert)& item, mapAlerts)
@@ -3483,7 +3489,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
             if (!fAlreadyHave) {
                 if (!fImporting && !fReindex)
-                    pfrom->AskFor(inv);
+                    if (!fAntisocial || inv.type == MSG_BLOCK)
+                        pfrom->AskFor(inv);
             } else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash)) {
                 PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash));
             } else if (nInv == nLastBlock) {
@@ -3528,6 +3535,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         uint256 hashStop;
         vRecv >> locator >> hashStop;
 
+        if (fAntisocial) {
+            printf("antisocial: ignoring getblocks from %s\n", pfrom->addr.ToString().c_str());
+            return true;
+        }
         LOCK(cs_main);
 
         // Find the last block the caller has in the main chain
@@ -3567,6 +3578,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         LOCK(cs_main);
 
         CBlockIndex* pindex = NULL;
+        if (fAntisocial) return true;
         if (locator.IsNull())
         {
             // If locator is null, return the hashStop block
@@ -3701,12 +3713,24 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         mapBlockSource[inv.hash] = pfrom->GetId();
 
         CValidationState state;
-        ProcessBlock(state, pfrom, &block);
+        if (ProcessBlock(state, pfrom, &block)) {
+            if (nAntisocial == 1) {
+                if (CaughtUp() && fAntisocial) {
+                    fAntisocial = false;
+                    LogPrintf("CaughtUp. Becoming social again\n");
+                }
+                if (!CaughtUp() && !fAntisocial) {
+                    fAntisocial = true;
+                    LogPrintf("Fallen behind. Becoming antisocial again\n");
+                }
+            }
+        }
     }
 
 
     else if (strCommand == "getaddr")
     {
+        if (fAntisocial) return true;
         pfrom->vAddrToSend.clear();
         vector<CAddress> vAddr = addrman.GetAddr();
         BOOST_FOREACH(const CAddress &addr, vAddr)
@@ -3716,6 +3740,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
     else if (strCommand == "mempool")
     {
+        if (fAntisocial) return true;
         LOCK2(cs_main, pfrom->cs_filter);
 
         std::vector<uint256> vtxid;
@@ -3830,6 +3855,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             {
                 // Relay
                 pfrom->setKnown.insert(alertHash);
+                if (!fAntisocial)
                 {
                     LOCK(cs_vNodes);
                     BOOST_FOREACH(CNode* pnode, vNodes)
@@ -4121,7 +4147,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         //
         // Message: addr
         //
-        if (fSendTrickle)
+        if (fSendTrickle && !fAntisocial)
         {
             vector<CAddress> vAddr;
             vAddr.reserve(pto->vAddrToSend.size());

@@ -210,6 +210,7 @@ std::string HelpMessage(HelpMessageMode hmm)
     strUsage += "  -onlynet=<net>         " + _("Only connect to nodes in network <net> (IPv4, IPv6 or Tor)") + "\n";
     strUsage += "  -discover              " + _("Discover own IP address (default: 1 when listening and no -externalip)") + "\n";
     strUsage += "  -checkpoints           " + _("Only accept block chain matching built-in checkpoints (default: 1)") + "\n";
+    strUsage += "  -antisocial=<n>        " + _("Don't relay network traffic: 0 = relay as usual, 1 = relay once updated, 2 = never relay (default: 0)") + "\n";
     strUsage += "  -listen                " + _("Accept connections from outside (default: 1 if no -proxy or -connect)") + "\n";
     strUsage += "  -bind=<addr>           " + _("Bind to given address and always listen on it. Use [host]:port notation for IPv6") + "\n";
     strUsage += "  -dnsseed               " + _("Find peers using DNS lookup (default: 1 unless -connect)") + "\n";
@@ -416,6 +417,12 @@ bool AppInit2(boost::thread_group& threadGroup)
 #endif
 
     // ********************************************************* Step 2: parameter interactions
+
+    nAntisocial = GetArg("-antisocial", 0);
+    if (nAntisocial > 0) {
+        fAntisocial = true;
+        if (nAntisocial == 2) SoftSetBoolArg("-listen", false);
+    }
 
     if (mapArgs.count("-bind")) {
         // when specifying an explicit binding address, you want to listen on it
