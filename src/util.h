@@ -124,6 +124,7 @@ extern bool fPrintToDebugger;
 extern bool fDaemon;
 extern bool fServer;
 extern std::string strMiscWarning;
+extern bool fDownload;
 extern bool fNoListen;
 extern bool fLogTimestamps;
 extern volatile bool fReopenDebugLog;

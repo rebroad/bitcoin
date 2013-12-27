@@ -94,6 +94,7 @@ bool fPrintToDebugger = false;
 bool fDaemon = false;
 bool fServer = false;
 string strMiscWarning;
+bool fDownload = true;
 bool fNoListen = false;
 bool fLogTimestamps = false;
 volatile bool fReopenDebugLog = false;
@@ -1379,7 +1380,7 @@ void AddTimeData(const CNetAddr& ip, int64_t nTime)
                     if (nOffset != 0 && abs64(nOffset) < 5 * 60)
                         fMatch = true;
 
-                if (!fMatch)
+                if (!fMatch && fDownload)
                 {
                     fDone = true;
                     string strMessage = _("Warning: Please check that your computer's date and time are correct! If your clock is wrong Bitcoin will not work properly.");
