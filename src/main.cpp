@@ -3795,7 +3795,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         CBlock block;
         vRecv >> block;
 
-        LogPrint("net", "received block %s peer=%d\n", block.GetHash().ToString(), pfrom->id);
+        LogPrintf("received block %s peer=%d\n", block.GetHash().ToString(), pfrom->id);
         // block.print();
 
         CInv inv(MSG_BLOCK, block.GetHash());
