@@ -2495,16 +2495,18 @@ void CBlockIndex::BuildSkip()
         pskip = pprev->GetAncestor(GetSkipHeight(nHeight));
 }
 
-void PushGetBlocks(CNode* pnode, CBlockIndex* pindexBegin, uint256 hashEnd)
+bool PushGetBlocks(CNode* pnode, CBlockIndex* pindexBegin, uint256 hashEnd)
 {
     AssertLockHeld(cs_main);
     // Filter out duplicate requests
     if (pindexBegin == pnode->pindexLastGetBlocksBegin && hashEnd == pnode->hashLastGetBlocksEnd)
-        return;
+        return false;
     pnode->pindexLastGetBlocksBegin = pindexBegin;
     pnode->hashLastGetBlocksEnd = hashEnd;
 
     pnode->PushMessage("getblocks", chainActive.GetLocator(pindexBegin), hashEnd);
+
+    return true;
 }
 
 bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBlockPos *dbp)
@@ -2544,7 +2546,8 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
             mapOrphanBlocksByPrev.insert(make_pair(pblock2->hashPrev, pblock2));
 
             // Ask this guy to fill in what we're missing
-            PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(hash));
+            if (PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(hash)))
+                LogPrint("net", "fill-in getblocks %s to peer=%d\n", GetOrphanRoot(hash).ToString(), pfrom->id);
         }
         return true;
     }
@@ -3646,7 +3649,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         pfrom->AskFor(inv);
                 }
             } else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash))
-                PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash));
+                if (PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash)))
+                    LogPrint("net", "orphan getblocks %s to peer=%d\n", GetOrphanRoot(inv.hash).ToString(), pfrom->id);
 
             if (inv.type == MSG_BLOCK) {
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
@@ -3707,7 +3711,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         {
             if (pindex->GetBlockHash() == hashStop)
             {
-                LogPrint("net", "  getblocks stopping at %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
+                LogPrint("net", "  getblocks stopping at height %d\n", pindex->nHeight);
                 break;
             }
             pfrom->PushInventory(CInv(MSG_BLOCK, pindex->GetBlockHash()));
@@ -3715,7 +3719,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             {
                 // When this block is requested, we'll send an inv that'll make them
                 // getblocks the next batch of inventory.
-                LogPrint("net", "  getblocks stopping at limit %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
+                LogPrint("net", "  getblocks stopping at height limit %d\n", pindex->nHeight);
                 pfrom->hashContinue = pindex->GetBlockHash();
                 break;
             }
@@ -4396,7 +4400,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
 
         // Start block sync
         if (pto->fStartSync && !fImporting && !fReindex) {
-            PushGetBlocks(pto, chainActive.Tip(), uint256(0));
+            if (PushGetBlocks(pto, chainActive.Tip(), uint256(0)))
+                LogPrint("net", "initial getblocks to peer=%d\n", pto->id);
+            else
+                LogPrint("net", "not sending initial getblocks to peer=%d\n", pto->id);
             pto->tGetblocks = GetTimeMillis();
             pto->fStartSync = false;
         }
