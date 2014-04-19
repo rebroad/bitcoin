@@ -46,6 +46,7 @@ void AddOneShot(std::string strDest);
 bool RecvLine(SOCKET hSocket, std::string& strLine);
 bool GetMyExternalIP(CNetAddr& ipRet);
 void AddressCurrentlyConnected(const CService& addr);
+void NodeSummary();
 CNode* FindNode(const CNetAddr& ip);
 CNode* FindNode(const CService& ip);
 CNode* ConnectNode(CAddress addrConnect, const char *strDest = NULL);
@@ -108,7 +109,7 @@ extern CCriticalSection cs_vNodes;
 extern std::map<CInv, CDataStream> mapRelay;
 extern std::deque<std::pair<int64_t, CInv> > vRelayExpiration;
 extern CCriticalSection cs_mapRelay;
-extern limitedmap<CInv, int64_t> mapAlreadyAskedFor;
+extern limitedmap<CInv, int64_t> mapWaitingFor;
 
 extern std::vector<std::string> vAddedNodes;
 extern CCriticalSection cs_vAddedNodes;
@@ -204,6 +205,24 @@ public:
     int64_t nLastRecv;
     int64_t nLastSendEmpty;
     int64_t nTimeConnected;
+    bool fWaitingForBlock; // true when getdata block sent and not timed out
+    CInv WaitingForBlock;  // the block waiting to be downloaded
+    bool fAskedForBlocks;  // true when getblocks 0 sent
+    bool fReceivingBlock;  // true when block being received
+    int64_t tGetblocks;      // Time of last getblocks sent
+    int64_t tBlockInvs;      // Time of last block invs received
+    int64_t tGetdataBlock;   // Time getdata block request sent
+    int64_t tBlockRecvStart; // Time block reception first noticed
+    int64_t tBlockRecving;   // Time block reception last progressed
+    int nStuckDB;          // Count of stuck block download
+    int nWasStuckDB;       // Count of stuck block download before unsticking
+    int nStuckWB;          // Count of waiting for block to start downloading
+    int nStuckWI;          // Count of waiting for invs following getblocks
+    int nBlockBytes;       // To track progress of block download
+    bool fBlockShy;        // true when getdata block timeouts
+    bool fInvShy;          // true when getblocks timeouts
+    bool fWasInvShy;       // true when invs arrive after inv timeout
+    bool fWasBlockShy;     // true when block starts to arrive after timeout
     CAddress addr;
     std::string addrName;
     CService addrLocal;
@@ -245,7 +264,6 @@ public:
     CBlockIndex* pindexLastGetBlocksBegin;
     uint256 hashLastGetBlocksEnd;
     int nStartingHeight;
-    bool fStartSync;
 
     // flood relay
     std::vector<CAddress> vAddrToSend;
@@ -258,6 +276,8 @@ public:
     std::vector<CInv> vInventoryToSend;
     CCriticalSection cs_inventory;
     std::multimap<int64_t, CInv> mapAskFor;
+    std::multimap<int64_t, CInv> mapAskForBlock;
+    std::multimap<int64_t, CInv> mapPriorityBlock;
 
     // Ping time measurement
     uint64_t nPingNonceSent;
@@ -276,6 +296,23 @@ public:
         nRecvBytes = 0;
         nLastSendEmpty = GetTime();
         nTimeConnected = GetTime();
+        fWaitingForBlock = false;
+        fAskedForBlocks = false;
+        fReceivingBlock = false;
+        tGetblocks = 0;
+        tBlockInvs = 0;
+        tGetdataBlock = 0;
+        tBlockRecvStart = 0;
+        tBlockRecving = 0;
+        nStuckDB = 0;
+        nWasStuckDB = 0;
+        nStuckWB = 0;
+        nStuckWI = 0;
+        nBlockBytes = 0;
+        fBlockShy = false;
+        fInvShy = false;
+        fWasInvShy = false;
+        fWasBlockShy = false;
         addr = addrIn;
         addrName = addrNameIn == "" ? addr.ToStringIPPort() : addrNameIn;
         nVersion = 0;
@@ -294,7 +331,6 @@ public:
         pindexLastGetBlocksBegin = 0;
         hashLastGetBlocksEnd = 0;
         nStartingHeight = -1;
-        fStartSync = false;
         fGetAddr = false;
         fRelayTxes = false;
         setInventoryKnown.max_size(SendBufferSize() / 1000);
@@ -424,12 +460,13 @@ public:
         // We're using mapAskFor as a priority queue,
         // the key is the earliest time the request can be sent
         int64_t nRequestTime;
-        limitedmap<CInv, int64_t>::const_iterator it = mapAlreadyAskedFor.find(inv);
-        if (it != mapAlreadyAskedFor.end())
+        limitedmap<CInv, int64_t>::const_iterator it = mapWaitingFor.find(inv);
+        if (it != mapWaitingFor.end())
             nRequestTime = it->second;
         else
             nRequestTime = 0;
-        LogPrint("net", "askfor %s  %d (%s) peer=%d\n", inv.ToString().c_str(), nRequestTime, DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000).c_str(), id);
+        if (!fQuietInitial || CaughtUp())
+            LogPrint("net", "askfor %s  %d (%s) peer=%d\n", inv.ToString().c_str(), nRequestTime, DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000).c_str(), id);
 
         // Make sure not to reuse time indexes to keep things in the same order
         int64_t nNow = GetTimeMicros() - 1000000;
@@ -440,14 +477,56 @@ public:
 
         // Each retry is 2 minutes after the last
         nRequestTime = std::max(nRequestTime + 2 * 60 * 1000000, nNow);
-        if (it != mapAlreadyAskedFor.end())
-            mapAlreadyAskedFor.update(it, nRequestTime);
+        if (it != mapWaitingFor.end())
+            mapWaitingFor.update(it, nRequestTime);
         else
-            mapAlreadyAskedFor.insert(std::make_pair(inv, nRequestTime));
+            mapWaitingFor.insert(std::make_pair(inv, nRequestTime));
         mapAskFor.insert(std::make_pair(nRequestTime, inv));
     }
 
+    int64_t AskForBlock(const CInv& inv, int nWait) {
+        int64_t nRequestTime;
+        limitedmap<CInv, int64_t>::const_iterator it = mapWaitingFor.find(inv);
+        if (it != mapWaitingFor.end())
+            nRequestTime = it->second;
+        else
+            nRequestTime = 0;
+        int64_t nNow = GetTimeMicros() - 1000000;
+        static int64_t nLastTime;
+        ++nLastTime;
+        nNow = std::max(nNow, nLastTime);
+        nLastTime = nNow;
+        nRequestTime = std::max(nRequestTime + nWait * 1000000, nNow);
+        if (it != mapWaitingFor.end())
+            mapWaitingFor.update(it, nRequestTime);
+        else
+            mapWaitingFor.insert(std::make_pair(inv, nRequestTime));
+        mapAskForBlock.insert(std::make_pair(nRequestTime, inv));
 
+        return nRequestTime;
+    }
+
+    int64_t PriorityBlock(const CInv& inv, int nWait) {
+        int64_t nRequestTime;
+        limitedmap<CInv, int64_t>::const_iterator it = mapWaitingFor.find(inv);
+        if (it != mapWaitingFor.end())
+            nRequestTime = it->second;
+        else
+            nRequestTime = 0;
+        int64_t nNow = GetTimeMicros() - 1000000;
+        static int64_t nLastTime;
+        ++nLastTime;
+        nNow = std::max(nNow, nLastTime);
+        nLastTime = nNow;
+        nRequestTime = std::max(nRequestTime + nWait * 1000000, nNow);
+        if (it != mapWaitingFor.end())
+            mapWaitingFor.update(it, nRequestTime);
+        else
+            mapWaitingFor.insert(std::make_pair(inv, nRequestTime));
+        mapPriorityBlock.insert(std::make_pair(nRequestTime, inv));
+
+        return nRequestTime;
+    }
 
     // TODO: Document the postcondition of this function.  Is cs_vSend locked?
     void BeginMessage(const char* pszCommand) EXCLUSIVE_LOCK_FUNCTION(cs_vSend)

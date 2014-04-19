@@ -41,6 +41,16 @@ CTxMemPool mempool;
 map<uint256, CBlockIndex*> mapBlockIndex;
 CChain chainActive;
 CChain chainMostWork;
+int nAskedForBlocks = 0;
+int nWaitingForBlocks = 0;
+int nReceivingBlocks = 0;
+int nInvShyNodes = 0;
+int nWasInvShyNodes = 0;
+int nBlockShyNodes = 0;
+int nWasBlockShyNodes = 0;
+int nBlockStuckNodes = 0;
+int nWasBlockStuckNodes = 0;
+int nUnreliableNodes = 0;
 int64_t nTimeBestReceived = 0;
 int nScriptCheckThreads = 0;
 bool fImporting = false;
@@ -111,16 +121,6 @@ uint32_t nBlockSequenceId = 1;
 // Sources of received blocks, to be able to send them reject messages or ban
 // them, if processing happens afterwards. Protected by cs_main.
 map<uint256, NodeId> mapBlockSource;
-
-// Blocks that are in flight, and that are in the queue to be downloaded.
-// Protected by cs_main.
-struct QueuedBlock {
-    uint256 hash;
-    int64_t nTime;  // Time of "getdata" request in microseconds.
-    int nQueuedBefore;  // Number of blocks in flight at the time of request.
-};
-map<uint256, pair<NodeId, list<QueuedBlock>::iterator> > mapBlocksInFlight;
-map<uint256, pair<NodeId, list<uint256>::iterator> > mapBlocksToDownload;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -185,131 +185,58 @@ void SyncWithWallets(const uint256 &hash, const CTransaction &tx, const CBlock *
 
 namespace {
 
-struct CBlockReject {
-    unsigned char chRejectCode;
-    string strRejectReason;
-    uint256 hashBlock;
-};
+    struct CBlockReject {
+        unsigned char chRejectCode;
+        string strRejectReason;
+        uint256 hashBlock;
+    };
 
-// Maintain validation-specific state about nodes, protected by cs_main, instead
-// by CNode's own locks. This simplifies asynchronous operation, where
-// processing of incoming data is done after the ProcessMessage call returns,
-// and we're no longer holding the node's locks.
-struct CNodeState {
-    // Accumulated misbehaviour score for this peer.
-    int nMisbehavior;
-    // Whether this peer should be disconnected and banned.
-    bool fShouldBan;
-    // String name of this peer (debugging/logging purposes).
-    std::string name;
-    // List of asynchronously-determined block rejections to notify this peer about.
-    std::vector<CBlockReject> rejects;
-    list<QueuedBlock> vBlocksInFlight;
-    int nBlocksInFlight;
-    list<uint256> vBlocksToDownload;
-    int nBlocksToDownload;
-    int64_t nLastBlockReceive;
-    int64_t nLastBlockProcess;
+    // Maintain validation-specific state about nodes, protected by cs_main, instead
+    // by CNode's own locks. This simplifies asynchronous operation, where
+    // processing of incoming data is done after the ProcessMessage call returns,
+    // and we're no longer holding the node's locks.
+    struct CNodeState {
+        // Accumulated misbehaviour score for this peer.
+        int nMisbehavior;
+        // Whether this peer should be disconnected and banned.
+        bool fShouldBan;
+        // String name of this peer (debugging/logging purposes).
+        std::string name;
+        // List of asynchronously-determined block rejections to notify this peer about.
+        std::vector<CBlockReject> rejects;
 
-    CNodeState() {
-        nMisbehavior = 0;
-        fShouldBan = false;
-        nBlocksToDownload = 0;
-        nBlocksInFlight = 0;
-        nLastBlockReceive = 0;
-        nLastBlockProcess = 0;
-    }
-};
+        CNodeState() {
+            nMisbehavior = 0;
+            fShouldBan = false;
+        }
+    };
 
-// Map maintaining per-node state. Requires cs_main.
-map<NodeId, CNodeState> mapNodeState;
+    // Map maintaining per-node state. Requires cs_main.
+    map<NodeId, CNodeState> mapNodeState;
 
-// Requires cs_main.
-CNodeState *State(NodeId pnode) {
-    map<NodeId, CNodeState>::iterator it = mapNodeState.find(pnode);
-    if (it == mapNodeState.end())
-        return NULL;
-    return &it->second;
-}
-
-int GetHeight()
-{
-    LOCK(cs_main);
-    return chainActive.Height();
-}
-
-void InitializeNode(NodeId nodeid, const CNode *pnode) {
-    LOCK(cs_main);
-    CNodeState &state = mapNodeState.insert(std::make_pair(nodeid, CNodeState())).first->second;
-    state.name = pnode->addrName;
-}
-
-void FinalizeNode(NodeId nodeid) {
-    LOCK(cs_main);
-    CNodeState *state = State(nodeid);
-
-    BOOST_FOREACH(const QueuedBlock& entry, state->vBlocksInFlight)
-        mapBlocksInFlight.erase(entry.hash);
-    BOOST_FOREACH(const uint256& hash, state->vBlocksToDownload)
-        mapBlocksToDownload.erase(hash);
-
-    mapNodeState.erase(nodeid);
-}
-
-// Requires cs_main.
-void MarkBlockAsReceived(const uint256 &hash, NodeId nodeFrom = -1) {
-    map<uint256, pair<NodeId, list<uint256>::iterator> >::iterator itToDownload = mapBlocksToDownload.find(hash);
-    if (itToDownload != mapBlocksToDownload.end()) {
-        CNodeState *state = State(itToDownload->second.first);
-        state->vBlocksToDownload.erase(itToDownload->second.second);
-        state->nBlocksToDownload--;
-        mapBlocksToDownload.erase(itToDownload);
+    // Requires cs_main.
+    CNodeState *State(NodeId pnode) {
+        map<NodeId, CNodeState>::iterator it = mapNodeState.find(pnode);
+        if (it == mapNodeState.end())
+            return NULL;
+        return &it->second;
     }
 
-    map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash);
-    if (itInFlight != mapBlocksInFlight.end()) {
-        CNodeState *state = State(itInFlight->second.first);
-        state->vBlocksInFlight.erase(itInFlight->second.second);
-        state->nBlocksInFlight--;
-        if (itInFlight->second.first == nodeFrom)
-            state->nLastBlockReceive = GetTimeMicros();
-        mapBlocksInFlight.erase(itInFlight);
+    int GetHeight() {
+        LOCK(cs_main);
+        return chainActive.Height();
     }
 
-}
+    void InitializeNode(NodeId nodeid, const CNode *pnode) {
+        LOCK(cs_main);
+        CNodeState &state = mapNodeState.insert(std::make_pair(nodeid, CNodeState())).first->second;
+        state.name = pnode->addrName;
+    }
 
-// Requires cs_main.
-bool AddBlockToQueue(NodeId nodeid, const uint256 &hash) {
-    if (mapBlocksToDownload.count(hash) || mapBlocksInFlight.count(hash))
-        return false;
-
-    CNodeState *state = State(nodeid);
-    if (state == NULL)
-        return false;
-
-    list<uint256>::iterator it = state->vBlocksToDownload.insert(state->vBlocksToDownload.end(), hash);
-    state->nBlocksToDownload++;
-    if (state->nBlocksToDownload > 5000)
-        Misbehaving(nodeid, 10);
-    mapBlocksToDownload[hash] = std::make_pair(nodeid, it);
-    return true;
-}
-
-// Requires cs_main.
-void MarkBlockAsInFlight(NodeId nodeid, const uint256 &hash) {
-    CNodeState *state = State(nodeid);
-    assert(state != NULL);
-
-    // Make sure it's not listed somewhere already.
-    MarkBlockAsReceived(hash);
-
-    QueuedBlock newentry = {hash, GetTimeMicros(), state->nBlocksInFlight};
-    if (state->nBlocksInFlight == 0)
-        state->nLastBlockReceive = newentry.nTime; // Reset when a first request is sent.
-    list<QueuedBlock>::iterator it = state->vBlocksInFlight.insert(state->vBlocksInFlight.end(), newentry);
-    state->nBlocksInFlight++;
-    mapBlocksInFlight[hash] = std::make_pair(nodeid, it);
-}
+    void FinalizeNode(NodeId nodeid) {
+        LOCK(cs_main);
+        mapNodeState.erase(nodeid);
+    }
 
 }
 
@@ -423,7 +350,7 @@ bool AddOrphanTx(const CTransaction& tx)
     unsigned int sz = tx.GetSerializeSize(SER_NETWORK, CTransaction::CURRENT_VERSION);
     if (sz > 5000)
     {
-        LogPrint("mempool", "ignoring large orphan tx (size: %u, hash: %s)\n", sz, hash.ToString());
+        LogPrint("mempool", "ignoring large orphan tx (size: %u, hash: %s)\n", sz, hash.ToString().substr(0,10));
         return false;
     }
 
@@ -431,8 +358,9 @@ bool AddOrphanTx(const CTransaction& tx)
     BOOST_FOREACH(const CTxIn& txin, tx.vin)
         mapOrphanTransactionsByPrev[txin.prevout.hash].insert(hash);
 
-    LogPrint("mempool", "stored orphan tx %s (mapsz %"PRIszu")\n", hash.ToString(),
-        mapOrphanTransactions.size());
+    if (!fQuietInitial || CaughtUp())
+        LogPrint("mempool", "stored orphan tx %s (mapsz %"PRIszu")\n", hash.ToString().substr(0,10),
+            mapOrphanTransactions.size());
     return true;
 }
 
@@ -906,7 +834,7 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         int64_t txMinFee = GetMinFee(tx, nSize, true, GMF_RELAY);
         if (fLimitFree && nFees < txMinFee)
             return state.DoS(0, error("AcceptToMemoryPool : not enough fees %s, %d < %d",
-                                      hash.ToString(), nFees, txMinFee),
+                                      hash.ToString().substr(0,10), nFees, txMinFee),
                              REJECT_INSUFFICIENTFEE, "insufficient fee");
 
         // Continuously rate-limit free transactions
@@ -935,14 +863,14 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
 
         if (fRejectInsaneFee && nFees > CTransaction::nMinRelayTxFee * 10000)
             return error("AcceptToMemoryPool: : insane fees %s, %d > %d",
-                         hash.ToString(),
+                         hash.ToString().substr(0,10),
                          nFees, CTransaction::nMinRelayTxFee * 10000);
 
         // Check against previous transactions
         // This is done last to help prevent CPU exhaustion denial-of-service attacks.
         if (!CheckInputs(tx, state, view, true, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_STRICTENC))
         {
-            return error("AcceptToMemoryPool: : ConnectInputs failed %s", hash.ToString());
+            return error("AcceptToMemoryPool: : ConnectInputs failed %s", hash.ToString().substr(0,10));
         }
         // Store transaction in memory
         pool.addUnchecked(hash, entry);
@@ -1434,11 +1362,11 @@ void static InvalidChainFound(CBlockIndex* pindexNew)
         uiInterface.NotifyBlocksChanged();
     }
     LogPrintf("InvalidChainFound: invalid block=%s  height=%d  log2_work=%.8g  date=%s\n",
-      pindexNew->GetBlockHash().ToString(), pindexNew->nHeight,
+      BlockHashStr(pindexNew->GetBlockHash()), pindexNew->nHeight,
       log(pindexNew->nChainWork.getdouble())/log(2.0), DateTimeStrFormat("%Y-%m-%d %H:%M:%S",
       pindexNew->GetBlockTime()));
     LogPrintf("InvalidChainFound:  current best=%s  height=%d  log2_work=%.8g  date=%s\n",
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0),
+      BlockHashStr(chainActive.Tip()->GetBlockHash()), chainActive.Height(), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0),
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()));
     CheckForkWarningConditions();
 }
@@ -1503,7 +1431,7 @@ void UpdateCoins(const CTransaction& tx, CValidationState &state, CCoinsViewCach
 bool CScriptCheck::operator()() const {
     const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
     if (!VerifyScript(scriptSig, scriptPubKey, *ptxTo, nIn, nFlags, nHashType))
-        return error("CScriptCheck() : %s VerifySignature failed", ptxTo->GetHash().ToString());
+        return error("CScriptCheck() : %s VerifySignature failed", ptxTo->GetHash().ToString().substr(0,10));
     return true;
 }
 
@@ -1522,7 +1450,7 @@ bool CheckInputs(const CTransaction& tx, CValidationState &state, CCoinsViewCach
         // This doesn't trigger the DoS code on purpose; if it did, it would make it easier
         // for an attacker to attempt to split the network.
         if (!inputs.HaveInputs(tx))
-            return state.Invalid(error("CheckInputs() : %s inputs unavailable", tx.GetHash().ToString()));
+            return state.Invalid(error("CheckInputs() : %s inputs unavailable", tx.GetHash().ToString().substr(0,10)));
 
         // While checking, GetBestBlock() refers to the parent block.
         // This is also true for mempool checks.
@@ -1552,13 +1480,13 @@ bool CheckInputs(const CTransaction& tx, CValidationState &state, CCoinsViewCach
         }
 
         if (nValueIn < tx.GetValueOut())
-            return state.DoS(100, error("CheckInputs() : %s value in < value out", tx.GetHash().ToString()),
+            return state.DoS(100, error("CheckInputs() : %s value in < value out", tx.GetHash().ToString().substr(0,10)),
                              REJECT_INVALID, "bad-txns-in-belowout");
 
         // Tally transaction fees
         int64_t nTxFee = nValueIn - tx.GetValueOut();
         if (nTxFee < 0)
-            return state.DoS(100, error("CheckInputs() : %s nTxFee < 0", tx.GetHash().ToString()),
+            return state.DoS(100, error("CheckInputs() : %s nTxFee < 0", tx.GetHash().ToString().substr(0,10)),
                              REJECT_INVALID, "bad-txns-fee-negative");
         nFees += nTxFee;
         if (!MoneyRange(nFees))
@@ -1915,7 +1843,7 @@ void static UpdateTip(CBlockIndex *pindexNew) {
     nTimeBestReceived = GetTime();
     mempool.AddTransactionsUpdated(1);
     LogPrintf("UpdateTip: new best=%s  height=%d  log2_work=%.8g  tx=%lu  date=%s progress=%f\n",
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nChainTx,
+      BlockHashStr(chainActive.Tip()->GetBlockHash()), chainActive.Height(), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nChainTx,
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
       Checkpoints::GuessVerificationProgress(chainActive.Tip()));
 
@@ -2134,7 +2062,7 @@ bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos
     // Check for duplicate
     uint256 hash = block.GetHash();
     if (mapBlockIndex.count(hash))
-        return state.Invalid(error("AddToBlockIndex() : %s already exists", hash.ToString()), 0, "duplicate");
+        return state.Invalid(error("AddToBlockIndex() : %s already exists", BlockHashStr(hash), 0, "duplicate"));
 
     // Construct new block index object
     CBlockIndex* pindexNew = new CBlockIndex(block);
@@ -2143,6 +2071,7 @@ bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos
          LOCK(cs_nBlockSequenceId);
          pindexNew->nSequenceId = nBlockSequenceId++;
     }
+    mapWaitingFor.erase(CInv(MSG_BLOCK, hash));
     map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.insert(make_pair(hash, pindexNew)).first;
     pindexNew->phashBlock = &((*mi).first);
     map<uint256, CBlockIndex*>::iterator miPrev = mapBlockIndex.find(block.hashPrevBlock);
@@ -2478,7 +2407,6 @@ bool PushGetBlocks(CNode* pnode, CBlockIndex* pindexBegin, uint256 hashEnd)
     pnode->pindexLastGetBlocksBegin = pindexBegin;
     pnode->hashLastGetBlocksEnd = hashEnd;
 
-    LogPrint("net", "sending getblocks. peer=%d\n", pnode->id);
     pnode->PushMessage("getblocks", chainActive.GetLocator(pindexBegin), hashEnd);
     return true;
 }
@@ -2493,22 +2421,25 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
         if (pfrom) {
             pfrom->nDupBlocks++;
             if (pfrom->nDupBlocks > 2) pfrom->fDisconnect = true;
-            return state.Invalid(error("ProcessBlock() : already(%d) have block %d %s", pfrom->nDupBlocks, mapBlockIndex[hash]->nHeight, hash.ToString()), 0, "duplicate");
+            return state.Invalid(error("ProcessBlock() : already(%d) have block %d %s", pfrom->nDupBlocks, mapBlockIndex[hash]->nHeight, BlockHashStr(hash), 0, "duplicate"));
         } else
-            return state.Invalid(error("ProcessBlock() : already have block %d %s", mapBlockIndex[hash]->nHeight, hash.ToString()), 0, "duplicate");
+            return state.Invalid(error("ProcessBlock() : already have block %d %s", mapBlockIndex[hash]->nHeight, BlockHashStr(hash), 0, "duplicate"));
     }
     if (mapOrphanBlocks.count(hash)) {
         if (pfrom) {
             if (pfrom->nDupBlocks > 2) pfrom->fDisconnect = true;
-            return state.Invalid(error("ProcessBlock() : already(%d) have block (orphan) %s", pfrom->nDupBlocks, hash.ToString()), 0, "duplicate");
+            return state.Invalid(error("ProcessBlock() : already(%d) have block (orphan) %s", pfrom->nDupBlocks, BlockHashStr(hash), 0, "duplicate"));
         } else
-            return state.Invalid(error("ProcessBlock() : already have block (orphan) %s", hash.ToString()), 0, "duplicate");
+            return state.Invalid(error("ProcessBlock() : already have block (orphan) %s", BlockHashStr(hash), 0, "duplicate"));
     }
     if (pfrom) pfrom->nDupBlocks = 0; // reset the counter
 
     // Preliminary checks
-    if (!CheckBlock(*pblock, state))
+    if (!CheckBlock(*pblock, state)) {
+        if (state.CorruptionPossible())
+            mapWaitingFor.erase(CInv(MSG_BLOCK, hash));
         return error("ProcessBlock() : CheckBlock FAILED");
+    }
 
     CBlockIndex* pcheckpoint = Checkpoints::GetLastCheckpoint(mapBlockIndex);
     if (pcheckpoint && pblock->hashPrevBlock != (chainActive.Tip() ? chainActive.Tip()->GetBlockHash() : uint256(0)))
@@ -2535,7 +2466,7 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
     // If we don't already have its previous block, shunt it off to holding area until we get it
     if (pblock->hashPrevBlock != 0 && !mapBlockIndex.count(pblock->hashPrevBlock))
     {
-        LogPrintf("ProcessBlock: ORPHAN BLOCK %lu, prev=%s\n", (unsigned long)mapOrphanBlocks.size(), pblock->hashPrevBlock.ToString());
+        LogPrintf("ProcessBlock: ORPHAN BLOCK %lu, prev=%s\n", (unsigned long)mapOrphanBlocks.size(), BlockHashStr(pblock->hashPrevBlock));
 
         // Accept orphans as long as there is a node to request its parents from
         if (pfrom) {
@@ -2553,7 +2484,7 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
 
             // Ask this guy to fill in what we're missing
             if (PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(hash)))
-                LogPrint("net", "send fill-in getblocks for %s\n", hash.ToString());
+                LogPrint("net", "send fill-in getblocks for %s to peer=%d\n", BlockHashStr(hash), pfrom->id);
         }
         return true;
     }
@@ -2869,7 +2800,7 @@ bool static LoadBlockIndexDB()
         return true;
     chainActive.SetTip(it->second);
     LogPrintf("LoadBlockIndexDB(): hashBestChain=%s height=%d date=%s progress=%f\n",
-        chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(),
+        BlockHashStr(chainActive.Tip()->GetBlockHash()), chainActive.Height(),
         DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
         Checkpoints::GuessVerificationProgress(chainActive.Tip()));
 
@@ -3259,6 +3190,7 @@ void static ProcessGetData(CNode* pfrom)
 
             if ((inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK) && !fAntisocial)
             {
+                // Send block from disk
                 bool send = false;
                 map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(inv.hash);
                 if (mi != mapBlockIndex.end())
@@ -3319,7 +3251,7 @@ void static ProcessGetData(CNode* pfrom)
                         pfrom->hashContinue = 0;
                     }
                 }
-            }
+            } // if a block
             else if (inv.IsKnownType())
             {
                 // Send stream from relay memory
@@ -3379,7 +3311,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         return true;
     }
 
-    State(pfrom->GetId())->nLastBlockProcess = GetTimeMicros();
 
 
 
@@ -3500,6 +3431,24 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
     }
 
 
+    // Ask a connected node for block updates
+    if (!pfrom->fClient && !pfrom->fOneShot &&
+        // below commented out as 32200 seems friendly enough. Not so sure about 32400 though!
+        //(pfrom->nVersion < NOBLKS_VERSION_START ||
+        // pfrom->nVersion >= NOBLKS_VERSION_END) &&
+         nAskedForBlocks < 8 && !pfrom->fAskedForBlocks && !CaughtUp()) // TODO - tune
+    {
+        nAskedForBlocks++;
+        pfrom->fAskedForBlocks = true;
+        if (PushGetBlocks(pfrom, chainActive.Tip(), uint256(0)))
+            LogPrintf("initial getblocks to peer=%d\n", pfrom->id);
+        else
+            LogPrintf("no initial getblocks to peer=%d\n", pfrom->id);
+        NodeSummary();
+    }
+
+
+    if (strCommand == "version") ;
     else if (strCommand == "verack")
     {
         pfrom->SetRecvVersion(min(pfrom->nVersion, PROTOCOL_VERSION));
@@ -3575,6 +3524,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
     else if (strCommand == "inv")
     {
+        int invblocks = 0;
+        int askblocks = 0;
+        int orphanget = 0;
+        int lastblockget = 0;
         vector<CInv> vInv;
         vRecv >> vInv;
         if (vInv.size() > MAX_INV_SZ)
@@ -3582,6 +3535,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             Misbehaving(pfrom->GetId(), 20);
             return error("message inv size() = %"PRIszu"", vInv.size());
         }
+
+        // find last block in inv vector
+        unsigned int nLastBlock = (unsigned int)(-1);
+        if (!CaughtUp()) // No need to do this once caught up...
+            for (unsigned int nInv = 0; nInv < vInv.size(); nInv++)
+                if (vInv[vInv.size() - 1 - nInv].type == MSG_BLOCK) {
+                    nLastBlock = vInv.size() - 1 - nInv;
+                    break;
+                }
 
         LOCK(cs_main);
 
@@ -3595,22 +3557,66 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             bool fAlreadyHave = AlreadyHave(inv);
             LogPrint("net2", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
 
+            if (inv.type == MSG_BLOCK) invblocks++;
+
             if (!fAlreadyHave) {
                 if (!fImporting && !fReindex) {
-                    if (inv.type == MSG_BLOCK)
-                        AddBlockToQueue(pfrom->GetId(), inv.hash);
-                    else if (!fAntisocial)
-                        pfrom->AskFor(inv);
+                    if (inv.type == MSG_BLOCK) {
+                        int64_t OldReqTime;
+                        limitedmap<CInv, int64_t>::const_iterator it = mapWaitingFor.find(inv);
+                        if (it != mapWaitingFor.end())
+                            OldReqTime = it->second;
+                        else
+                            OldReqTime = 0;
+                        int64_t nRequestTime = pfrom->AskForBlock(inv, 60);
+                        if (!fQuietInitial || vInv.size() == 1 || CaughtUp())
+                            LogPrint("net", "askforb %s %s (%d) %s (%d) peer=%d\n", inv.ToString(),
+                              DateTimeStrFormat("%H:%M:%S", OldReqTime/1000000), OldReqTime,
+                              DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000), nRequestTime,
+                              pfrom->id);
+                        askblocks++;
+                    } else
+                        if (!fAntisocial) pfrom->AskFor(inv);
                 }
-            } else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash)) {
-                if (PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash)))
-                    LogPrint("net", "send getblocks for %s\n", inv.hash.ToString());
+            } else {
+                if (inv.type == MSG_BLOCK && vInv.size() == 1)
+                    LogPrint("net", "inv %s at peer=%d\n", inv.ToString(), pfrom->id);
+                if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash)) {
+                    if (PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash))) {
+                        orphanget++;
+                        if (!fQuietInitial || vInv.size() == 1 || CaughtUp())
+                            LogPrint("net", "orphan getblocks %s to peer=%d\n", inv.ToString(),
+                              pfrom->id);
+                    }
+                } else if (nInv == nLastBlock) {
+                    // In case we are on a very long side-chain, it is possible that we already have
+                    // the last block in an inv bundle sent in response to getblocks. Try to detect
+                    // this situation and push another getblocks to continue.
+                    if (PushGetBlocks(pfrom, mapBlockIndex[inv.hash], uint256(0))) {
+                        lastblockget++;
+                        if (!fQuietInitial || vInv.size() == 1 || CaughtUp())
+                            LogPrint("net", "last %s getblocks to peer=%d\n", inv.ToString(),
+                              pfrom->id);
+                    }
+                }
             }
 
             // Track requests for our stuff
             g_signals.Inventory(inv.hash);
+        } // for each item in inv bundle
+
+        if (invblocks) pfrom->tBlockInvs = GetTime();
+
+        if (fQuietInitial && !CaughtUp()) {
+            if (invblocks && vInv.size() > 1)
+                LogPrint("net", "inv containing %d (askfor %d) blocks at peer=%d\n", invblocks, askblocks,
+                  pfrom->id);
+            if (orphanget)
+                LogPrint("net", "orphan getblocks (%d) to peer=%d\n", orphanget, pfrom->id);
+            if (lastblockget)
+                LogPrint("net", "lastblock getblocks to peer=%d\n", pfrom->id);
         }
-    }
+    } // strCommand == "inv"
 
 
     else if (strCommand == "getdata")
@@ -3623,12 +3629,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             return error("message getdata size() = %"PRIszu"", vInv.size());
         }
 
-        if (fDebug && (vInv.size() != 1))
-            LogPrintf("received getdata (%"PRIszu" invsz)\n", vInv.size());
-
-        if ((fDebug && vInv.size() > 0) || (vInv.size() == 1))
-            LogPrintf("received getdata for: %s peer=%d\n", vInv[0].ToString(), pfrom->id);
-
         pfrom->vRecvGetData.insert(pfrom->vRecvGetData.end(), vInv.begin(), vInv.end());
         ProcessGetData(pfrom);
     }
@@ -3636,6 +3636,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
     else if (strCommand == "getblocks")
     {
+        // This is a request from a node to tell them about the blocks I have.
+
         CBlockLocator locator;
         uint256 hashStop;
         vRecv >> locator >> hashStop;
@@ -3654,12 +3656,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         if (pindex)
             pindex = chainActive.Next(pindex);
         int nLimit = 500;
-        LogPrintf("getblocks %d to %s limit %d\n", (pindex ? pindex->nHeight : -1), hashStop==uint256(0) ? "0" : hashStop.ToString(), nLimit);
+        if (!fQuietInitial || CaughtUp())
+            LogPrintf("getblocks %d to %s limit %d\n", (pindex ? pindex->nHeight : -1), hashStop==uint256(0) ? "0" : BlockHashStr(hashStop), nLimit);
         for (; pindex; pindex = chainActive.Next(pindex))
         {
             if (pindex->GetBlockHash() == hashStop)
             {
-                LogPrintf("  getblocks stopping at %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
+                if (!fQuietInitial || CaughtUp())
+                    LogPrintf("  getblocks stopping at %d %s\n", pindex->nHeight, BlockHashStr(pindex->GetBlockHash()));
                 break;
             }
             pfrom->PushInventory(CInv(MSG_BLOCK, pindex->GetBlockHash()));
@@ -3667,7 +3671,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             {
                 // When this block is requested, we'll send an inv that'll make them
                 // getblocks the next batch of inventory.
-                LogPrintf("  getblocks stopping at limit %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
+                LogPrintf("  getblocks stopping at limit %d %s\n", pindex->nHeight, BlockHashStr(pindex->GetBlockHash()));
                 pfrom->hashContinue = pindex->GetBlockHash();
                 break;
             }
@@ -3704,7 +3708,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         // we must use CBlocks, as CBlockHeaders won't include the 0x00 nTx count at the end
         vector<CBlock> vHeaders;
         int nLimit = 2000;
-        LogPrintf("getheaders %d to %s\n", (pindex ? pindex->nHeight : -1), hashStop.ToString());
+        LogPrintf("getheaders %d to %s\n", (pindex ? pindex->nHeight : -1), BlockHashStr(hashStop));
         for (; pindex; pindex = chainActive.Next(pindex))
         {
             vHeaders.push_back(pindex->GetBlockHeader());
@@ -3733,13 +3737,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         {
             mempool.check(pcoinsTip);
             RelayTransaction(tx, inv.hash);
-            mapAlreadyAskedFor.erase(inv);
+            mapWaitingFor.erase(inv);
             vWorkQueue.push_back(inv.hash);
             vEraseQueue.push_back(inv.hash);
 
 
-            LogPrint("mempool", "AcceptToMemoryPool: peer=%d : accepted %s (poolsz %"PRIszu")\n",
-                pfrom->id, tx.GetHash().ToString(), mempool.mapTx.size());
+            LogPrint("mempool", "AcceptToMemoryPool: peer=%d %s : accepted %s (poolsz %"PRIszu")\n",
+                pfrom->id, pfrom->cleanSubVer,
+                tx.GetHash().ToString().substr(0,10),
+                mempool.mapTx.size());
 
             // Recursively process any orphan transactions that depended on this one
             for (unsigned int i = 0; i < vWorkQueue.size(); i++)
@@ -3759,9 +3765,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
                     if (AcceptToMemoryPool(mempool, stateDummy, orphanTx, true, &fMissingInputs2))
                     {
-                        LogPrint("mempool", "   accepted orphan tx %s\n", orphanHash.ToString());
+                        LogPrint("mempool", "   accepted orphan tx %s\n", orphanHash.ToString().substr(0,10));
                         RelayTransaction(orphanTx, orphanHash);
-                        mapAlreadyAskedFor.erase(CInv(MSG_TX, orphanHash));
+                        mapWaitingFor.erase(CInv(MSG_TX, orphanHash));
                         vWorkQueue.push_back(orphanHash);
                         vEraseQueue.push_back(orphanHash);
                     }
@@ -3769,7 +3775,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
                     {
                         // invalid or too-little-fee orphan
                         vEraseQueue.push_back(orphanHash);
-                        LogPrint("mempool", "   removed orphan tx %s\n", orphanHash.ToString());
+                        LogPrint("mempool", "   removed orphan tx %s\n", orphanHash.ToString().substr(0,10));
                     }
                     mempool.check(pcoinsTip);
                 }
@@ -3804,18 +3810,30 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
     else if (strCommand == "block" && !fImporting && !fReindex) // Ignore blocks received while importing
     {
         CBlock block;
+        int size = vRecv.size();
         vRecv >> block;
-
-        LogPrintf("received block %s peer=%d\n", block.GetHash().ToString(), pfrom->id);
-        // block.print();
+        int timetodownload = GetTime() - pfrom->tBlockRecvStart;
 
         CInv inv(MSG_BLOCK, block.GetHash());
+
+        if (timetodownload)
+            LogPrintf("block recved(%d) %s (%u bytes, %us, %uB/s) peer=%d\n", nReceivingBlocks,
+              inv.hash.ToString().substr(10,15), size, timetodownload,
+              size / timetodownload, pfrom->id);
+        else
+            LogPrintf("block recved(%d) %s (%u bytes) peer=%d\n", nReceivingBlocks,
+              inv.hash.ToString().substr(10,15), size, pfrom->id);
+        if (pfrom->fWaitingForBlock) {
+            pfrom->fWaitingForBlock = false;
+            nWaitingForBlocks--;
+        }
+        NodeSummary();
+
         pfrom->AddInventoryKnown(inv);
 
         LOCK(cs_main);
         // Remember who we got this block from.
         mapBlockSource[inv.hash] = pfrom->GetId();
-        MarkBlockAsReceived(inv.hash, pfrom->GetId());
 
         CValidationState state;
         if (ProcessBlock(state, pfrom, &block)) {
@@ -3934,8 +3952,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         }
 
         if (!(sProblem.empty())) {
-            LogPrint("net", "pong peer=%d %s, %x expected, %x received, %"PRIszu" bytes\n",
+            LogPrint("net", "pong peer=%d %s: %s, %x expected, %x received, %"PRIszu" bytes\n",
                 pfrom->id,
+                pfrom->cleanSubVer,
                 sProblem,
                 pfrom->nPingNonceSent,
                 nonce,
@@ -4127,6 +4146,78 @@ bool ProcessMessages(CNode* pfrom)
         // Message size
         unsigned int nMessageSize = hdr.nMessageSize;
 
+        /* Discover stuck block downloads and show progress */
+        if (strCommand == "block") {
+            bool fPrintBlock;
+            fPrintBlock = false;
+            bool fNodeSummary = false;
+            if (!pfrom->fReceivingBlock) {
+                pfrom->fReceivingBlock = true;
+                nReceivingBlocks++;
+                pfrom->tBlockRecvStart = GetTime();
+                if (pfrom->tBlockRecving <= pfrom->tGetdataBlock && pfrom->tBlockRecvStart > pfrom->tGetdataBlock) {
+                    LogPrintf("%ds later, ", pfrom->tBlockRecvStart - pfrom->tGetdataBlock);
+                    fPrintBlock = true;
+                }
+            }
+
+            if ((GetTime() > pfrom->tBlockRecving + (15 * (pfrom->nStuckDB+1))) ||
+              pfrom->vRecvMsg.size() >= nMessageSize) {
+                // Update as 15 secs elapsed or download complete
+                if ((int)pfrom->vRecvMsg.size() == pfrom->nBlockBytes) {
+                    // Download not completed and no progress
+                    pfrom->nStuckDB++;
+                    if (pfrom->nStuckDB < 3) {
+                        LogPrintf("stuck(%d) ", pfrom->nStuckDB);
+                        fPrintBlock = true;
+                    } else if (pfrom->nStuckDB == 3) {
+                        //pfrom->fWaitingForBlock = false;
+                        //nWaitingForBlocks--;
+                        mapWaitingFor.erase(pfrom->WaitingForBlock);
+                        nBlockStuckNodes++;
+                        fNodeSummary = true;
+                        LogPrintf("given up %s (size %d) from peer=%d\n", pfrom->WaitingForBlock.ToString(),
+                          nMessageSize, pfrom->id);
+                    }
+                } else {
+                    // download progressing
+                    if (pfrom->nStuckDB >= 3) {
+                        pfrom->nWasStuckDB = pfrom->nStuckDB;
+                        pfrom->nStuckDB = 0;
+                        nBlockStuckNodes--;
+                        nWasBlockStuckNodes++;
+                        fNodeSummary = true;
+                        LogPrintf("%d later, unstuck ", GetTime() - pfrom->tBlockRecving);
+                    }
+                    if (pfrom->fBlockShy) {
+                        pfrom->fBlockShy = false;
+                        pfrom->fWasBlockShy = true;
+                        nBlockShyNodes--;
+                        nWasBlockShyNodes++;
+                        fNodeSummary = true;
+                        LogPrintf("shy ");
+                    }
+                    pfrom->tBlockRecving = GetTime();
+                    pfrom->nBlockBytes = pfrom->vRecvMsg.size();
+                    if (pfrom->vRecvMsg.size() >= nMessageSize) {
+                        // Download completed
+                        pfrom->fReceivingBlock = false;
+                        nReceivingBlocks--;
+                        fPrintBlock = false;
+                    } else {
+                        LogPrintf("recving(%d) ", nReceivingBlocks);
+                        fPrintBlock = true;
+                    }
+                }
+            } // 15s elapsed since last report or completed
+
+            if (fPrintBlock) {
+                LogPrintf("block %u / %u bytes from peer=%d\n", pfrom->vRecvMsg.size(), nMessageSize,
+                  pfrom->id);
+                if (fNodeSummary) NodeSummary();
+            }
+        } // strCommand == "block"
+
         // Checksum
         CDataStream& vRecv = msg.vRecv;
         uint256 hash = Hash(vRecv.begin(), vRecv.begin() + nMessageSize);
@@ -4293,13 +4384,6 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             pto->PushMessage("reject", (string)"block", reject.chRejectCode, reject.strRejectReason, reject.hashBlock);
         state.rejects.clear();
 
-        // Start block sync
-        if (pto->fStartSync && !fImporting && !fReindex) {
-            pto->fStartSync = false;
-            if (PushGetBlocks(pto, chainActive.Tip(), uint256(0)))
-                LogPrint("net", "send initial getblocks\n");
-        }
-
         // Resend wallet transactions that haven't gotten in a block yet
         // Except during reindex, importing and IBD, when old wallet
         // transactions become unconfirmed and spams other nodes.
@@ -4357,33 +4441,77 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             pto->PushMessage("inv", vInv);
 
 
-        // Detect stalled peers. Require that blocks are in flight, we haven't
-        // received a (requested) block in one minute, and that all blocks are
-        // in flight for over two minutes, since we first had a chance to
-        // process an incoming block.
-        int64_t nNow = GetTimeMicros();
-        if (!pto->fDisconnect && state.nBlocksInFlight && 
-            state.nLastBlockReceive < state.nLastBlockProcess - BLOCK_DOWNLOAD_TIMEOUT*1000000 && 
-            state.vBlocksInFlight.front().nTime < state.nLastBlockProcess - 2*BLOCK_DOWNLOAD_TIMEOUT*1000000) {
-            LogPrintf("Peer %s is stalling block download, disconnecting\n", state.name.c_str());
-            pto->fDisconnect = true;
-        }
-
         //
         // Message: getdata (blocks)
         //
         vector<CInv> vGetData;
-        while (!pto->fDisconnect && state.nBlocksToDownload && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-            uint256 hash = state.vBlocksToDownload.front();
-            vGetData.push_back(CInv(MSG_BLOCK, hash));
-            MarkBlockAsInFlight(pto->GetId(), hash);
-            LogPrintf("Requesting block %s peer=%d\n", hash.ToString().c_str(), pto->id);
-            if (vGetData.size() >= 1000)
-            {
-                pto->PushMessage("getdata", vGetData);
-                vGetData.clear();
-            }
-        }
+        int64_t nNow = GetTime() * 1000000;
+
+        // First, the priority blocks (blocks that other peers were supposed to provide but timed-out).
+        while (!pto->fWaitingForBlock && !pto->mapPriorityBlock.empty() &&
+          (*pto->mapPriorityBlock.begin()).first <= nNow) {
+            const CInv& inv = (*pto->mapPriorityBlock.begin()).second;
+            if (!AlreadyHave(inv)) {
+                int64_t nRequestTime;
+                limitedmap<CInv, int64_t>::const_iterator it = mapWaitingFor.find(inv);
+                if (it != mapWaitingFor.end())
+                    nRequestTime = it->second;
+                else
+                    nRequestTime = 0;
+                if (mapWaitingFor.count(inv) == 0) { // Not requested from another peer
+                    LogPrintf("getdata^ %s to peer=%d\n", inv.ToString(), pto->id);
+                    pto->fWaitingForBlock = true;
+                    pto->WaitingForBlock = inv;
+                    nWaitingForBlocks++;
+                    pto->tGetdataBlock = GetTime();
+                    NodeSummary();
+                    vGetData.push_back(inv);
+                    pto->PushMessage("getdata", vGetData);
+                    vGetData.clear();
+                } else { // Another node is waiting for this inv, so put to end of the pri queue
+                    int OldReqTime = nRequestTime; // REBTEST
+                    nRequestTime = pto->PriorityBlock(inv, 30);
+                    LogPrint("net", "askfor^^ %s %s (%d) %s (%d) peer=%d\n", inv.ToString(),
+                      DateTimeStrFormat("%H:%M:%S", OldReqTime/1000000), OldReqTime,
+                      DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000), nRequestTime,
+                      pto->id);
+                }
+            } // if !AlreadyHave
+            pto->mapPriorityBlock.erase(pto->mapPriorityBlock.begin());
+        } // while
+
+        // Next, the rest of the blocks as seen in invs
+        while (!pto->fWaitingForBlock && !pto->mapAskForBlock.empty() &&
+          (*pto->mapAskForBlock.begin()).first <= nNow) {
+            const CInv& inv = (*pto->mapAskForBlock.begin()).second;
+            if (!AlreadyHave(inv)) {
+                int64_t nRequestTime;
+                limitedmap<CInv, int64_t>::const_iterator it = mapWaitingFor.find(inv);
+                if (it != mapWaitingFor.end())
+                    nRequestTime = it->second;
+                else
+                    nRequestTime = 0;
+                if (mapWaitingFor.count(inv) == 0) { // Not requested from another peer
+                    LogPrintf("getdata %s to peer=%d\n", inv.ToString(), pto->id);
+                    pto->fWaitingForBlock = true;
+                    pto->WaitingForBlock = inv;
+                    nWaitingForBlocks++;
+                    pto->tGetdataBlock = GetTime();
+                    NodeSummary();
+                    vGetData.push_back(inv);
+                    pto->PushMessage("getdata", vGetData);
+                    vGetData.clear();
+                } else { // Another node is waiting for this inv, so add to pri queue
+                    int OldReqTime = nRequestTime; // REBTEST
+                    nRequestTime = pto->PriorityBlock(inv, 30);
+                    LogPrintf("askfor^ %s %s (%d) %s (%d) peer=%d\n", inv.ToString(),
+                      DateTimeStrFormat("%H:%M:%S", OldReqTime/1000000), OldReqTime,
+                      DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000), nRequestTime,
+                      pto->id);
+                }
+            } // if !AlreadyHave
+            pto->mapAskForBlock.erase(pto->mapAskForBlock.begin());
+        } // while
 
         //
         // Message: getdata (non-blocks)
@@ -4393,7 +4521,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             const CInv& inv = (*pto->mapAskFor.begin()).second;
             if (!AlreadyHave(inv))
             {
-                if (fDebug)
+                if (!fQuietInitial || CaughtUp())
                     LogPrintf("Requesting %s peer=%d\n", inv.ToString(), pto->id);
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
@@ -4407,11 +4535,50 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         if (!vGetData.empty())
             pto->PushMessage("getdata", vGetData);
 
-    }
+
+        //
+        // Check for timed-out requests
+        //
+
+        // Check for timed-out getdata block requests
+        if (pto->fWaitingForBlock && (pto->tGetdataBlock > pto->tBlockRecvStart) &&
+          (GetTime() > pto->tGetdataBlock + (pto->nStuckWB+1)*15) ) {
+            // Node not sent block within 15 seconds of sending getdata.
+            pto->nStuckWB++;
+            if (pto->nStuckWB == 3) {
+                if (!pto->fBlockShy) {
+                    nBlockShyNodes++;
+                    pto->fBlockShy = true;
+                }
+                //pto->fWaitingForBlock = false;
+                //nWaitingForBlocks--;
+                mapWaitingFor.erase(pto->WaitingForBlock);
+                LogPrintf("Given up waiting for block from peer=%d\n", pto->id);
+                NodeSummary();
+            } else
+                if (pto->nStuckWB < 3) LogPrintf("Waited %ds for block from peer=%d\n", (pto->nStuckWB)*15, pto->id);
+        }
+
+        // Check for timed-out getblocks requests
+        if (!pto->fInvShy && (pto->tGetblocks > pto->tBlockInvs) &&
+          (GetTime() > pto->tGetblocks + (pto->nStuckWI+1)*15)) {
+            // Node not sent invs within 15 seconds of sending getblocks.
+            pto->nStuckWI++;
+            if (pto->nStuckWI == 3) {
+                nInvShyNodes++;
+                pto->fInvShy = true;
+                LogPrintf("Given up waiting for invs from peer=%d\n", pto->id);
+                NodeSummary();
+            } else
+                if (pto->nStuckWI < 3) LogPrintf("Waited %ds for invs from peer=%d\n", (pto->nStuckWI)*15, pto->id);
+        }
+
+        // TODO - If we're short on providers, kick the stuck ones, so we can reconnect and use them.
+        //if (nBlockProviders < 3 && pto->fStuck) pto->fDisconnect = true;
+
+    } // if LockMain
     return true;
-}
-
-
+} // SendMessages()
 
 
 

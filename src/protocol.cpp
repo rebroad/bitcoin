@@ -4,7 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "protocol.h"
-
+#include "main.h"
 #include "util.h"
 
 #ifndef WIN32
@@ -141,7 +141,12 @@ const char* CInv::GetCommand() const
 
 std::string CInv::ToString() const
 {
-    return strprintf("%s %s", GetCommand(), hash.ToString());
+    if (type == MSG_BLOCK)
+        return strprintf("%s %s", GetCommand(), BlockHashStr(hash));
+    if (type == MSG_TX)
+        return strprintf("%s %s", GetCommand(), hash.ToString().substr(0,10));
+
+    return strprintf("%s %s", GetCommand(), hash.ToString().substr(0,20));
 }
 
 void CInv::print() const

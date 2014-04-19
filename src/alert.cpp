@@ -254,6 +254,7 @@ bool CAlert::ProcessAlert(bool fThread)
         }
     }
 
-    LogPrint("alert", "accepted alert %d, AppliesToMe()=%d\n", nID, AppliesToMe());
+    if (!fQuietInitial || CaughtUp())
+        LogPrint("alert", "accepted alert %d, AppliesToMe()=%d\n", nID, AppliesToMe());
     return true;
 }

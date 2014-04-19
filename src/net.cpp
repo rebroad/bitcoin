@@ -8,7 +8,7 @@
 #endif
 
 #include "net.h"
-
+#include "main.h"
 #include "addrman.h"
 #include "chainparams.h"
 #include "core.h"
@@ -59,7 +59,6 @@ static map<CNetAddr, LocalServiceInfo> mapLocalHost;
 static bool vfReachable[NET_MAX] = {};
 static bool vfLimited[NET_MAX] = {};
 static CNode* pnodeLocalHost = NULL;
-static CNode* pnodeSync = NULL;
 uint64_t nLocalHostNonce = 0;
 static std::vector<SOCKET> vhListenSocket;
 CAddrMan addrman;
@@ -70,7 +69,7 @@ CCriticalSection cs_vNodes;
 map<CInv, CDataStream> mapRelay;
 deque<pair<int64_t, CInv> > vRelayExpiration;
 CCriticalSection cs_mapRelay;
-limitedmap<CInv, int64_t> mapAlreadyAskedFor(MAX_INV_SZ);
+limitedmap<CInv, int64_t> mapWaitingFor(MAX_INV_SZ);
 
 static deque<string> vOneShots;
 CCriticalSection cs_vOneShots;
@@ -428,6 +427,19 @@ void AddressCurrentlyConnected(const CService& addr)
 
 
 
+void NodeSummary()
+{
+    LogPrintf("Nodes=%d: AskedFor=%d", vNodes.size(), nAskedForBlocks);
+    if (nWaitingForBlocks) LogPrintf(", WaitingFor=%d", nWaitingForBlocks);
+    if (nReceivingBlocks) LogPrintf(", Receiving=%d", nReceivingBlocks);
+    if (nInvShyNodes) LogPrintf(", InvShy=%d", nInvShyNodes);
+    if (nBlockShyNodes) LogPrintf(", BlockShy=%d", nBlockShyNodes);
+    if (nBlockStuckNodes) LogPrintf(", BlockStuck=%d", nBlockStuckNodes);
+    if (nWasInvShyNodes) LogPrintf(", WasInvShy=%d", nWasInvShyNodes);
+    if (nWasBlockShyNodes) LogPrintf(", WasBlockShy=%d", nWasBlockShyNodes);
+    if (nWasBlockStuckNodes) LogPrintf(", WasBlockStuck=%d", nWasBlockStuckNodes);
+    LogPrintf("\n");
+}
 
 uint64_t CNode::nTotalBytesRecv = 0;
 uint64_t CNode::nTotalBytesSent = 0;
@@ -488,7 +500,8 @@ CNode* ConnectNode(CAddress addrConnect, const char *pszDest)
     {
         addrman.Attempt(addrConnect);
 
-        if (fLogIPs) LogPrint("net", "connected %s\n", pszDest ? pszDest : addrConnect.ToString());
+        if (CaughtUp() || !fQuietInitial)
+            if (fLogIPs) LogPrint("net", "connected %s\n", pszDest ? pszDest : addrConnect.ToString());
 
         // Set to non-blocking
 #ifdef WIN32
@@ -523,7 +536,46 @@ void CNode::CloseSocketDisconnect()
     fDisconnect = true;
     if (hSocket != INVALID_SOCKET)
     {
-        LogPrint("net", "disconnecting node %d\n", id);
+        LogPrint("net", "disconnecting node %d [", id);
+        if (fAskedForBlocks) {
+            nAskedForBlocks--;
+            LogPrint("net", "ASK.");
+        }
+        if (fWaitingForBlock) {
+            nWaitingForBlocks--;
+            mapWaitingFor.erase(WaitingForBlock);
+            LogPrint("net", "GETDATA(%ds)", GetTime() - tGetdataBlock);
+        }
+        if (fReceivingBlock) {
+            nReceivingBlocks--;
+            LogPrint("net", "BLOCK(%ds)", GetTime() - tBlockRecving);
+        }
+        if (fInvShy) {
+            nInvShyNodes--;
+            LogPrint("net", "IS.");
+        }
+        if (fBlockShy) {
+            nBlockShyNodes--;
+            LogPrint("net", "BS.");
+        }
+        if (nStuckDB >= 3) {
+            nBlockStuckNodes--;
+            LogPrint("net", "ST.");
+        }
+        if (fWasInvShy) {
+            nWasInvShyNodes--;
+            LogPrint("net", "WIS.");
+        }
+        if (fWasBlockShy) {
+            nWasBlockShyNodes--;
+            LogPrint("net", "WBS.");
+        }
+        if (nWasStuckDB) {
+            nWasBlockStuckNodes--;
+            LogPrint("net", "WST.");
+        }
+        LogPrint("net", "]\n");
+        NodeSummary();
         closesocket(hSocket);
         hSocket = INVALID_SOCKET;
     }
@@ -532,10 +584,6 @@ void CNode::CloseSocketDisconnect()
     TRY_LOCK(cs_vRecvMsg, lockRecv);
     if (lockRecv)
         vRecvMsg.clear();
-
-    // if this was the sync node, we'll need a new one
-    if (this == pnodeSync)
-        pnodeSync = NULL;
 }
 
 void CNode::Cleanup()
@@ -616,7 +664,6 @@ void CNode::copyStats(CNodeStats &stats)
     X(nStartingHeight);
     X(nSendBytes);
     X(nRecvBytes);
-    stats.fSyncNode = (this == pnodeSync);
 
     // It is common for nodes with good ping times to suddenly become lagged,
     // due to a new block arriving or other large transfer.
@@ -1477,60 +1524,18 @@ bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant *grantOu
 }
 
 
-// for now, use a very simple selection metric: the node from which we received
-// most recently
-double static NodeSyncScore(const CNode *pnode) {
-    return -pnode->nLastRecv;
-}
-
-void static StartSync(const vector<CNode*> &vNodes) {
-    CNode *pnodeNewSync = NULL;
-    double dBestScore = 0;
-
-    int nBestHeight = g_signals.GetHeight().get_value_or(0);
-
-    // Iterate over all nodes
-    BOOST_FOREACH(CNode* pnode, vNodes) {
-        // check preconditions for allowing a sync
-        if (!pnode->fClient && !pnode->fOneShot &&
-            !pnode->fDisconnect && pnode->fSuccessfullyConnected &&
-            (pnode->nStartingHeight > (nBestHeight - 144)) &&
-            (pnode->nVersion < NOBLKS_VERSION_START || pnode->nVersion >= NOBLKS_VERSION_END)) {
-            // if ok, compare node's score with the best so far
-            double dScore = NodeSyncScore(pnode);
-            if (pnodeNewSync == NULL || dScore > dBestScore) {
-                pnodeNewSync = pnode;
-                dBestScore = dScore;
-            }
-        }
-    }
-    // if a new sync candidate was found, start sync!
-    if (pnodeNewSync) {
-        pnodeNewSync->fStartSync = true;
-        pnodeSync = pnodeNewSync;
-    }
-}
-
 void ThreadMessageHandler()
 {
     SetThreadPriority(THREAD_PRIORITY_BELOW_NORMAL);
     while (true)
     {
-        bool fHaveSyncNode = false;
-
         vector<CNode*> vNodesCopy;
         {
             LOCK(cs_vNodes);
             vNodesCopy = vNodes;
-            BOOST_FOREACH(CNode* pnode, vNodesCopy) {
+            BOOST_FOREACH(CNode* pnode, vNodesCopy)
                 pnode->AddRef();
-                if (pnode == pnodeSync)
-                    fHaveSyncNode = true;
-            }
         }
-
-        if (!fHaveSyncNode)
-            StartSync(vNodesCopy);
 
         // Poll the connected nodes for messages
         CNode* pnodeTrickle = NULL;

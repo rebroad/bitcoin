@@ -96,6 +96,7 @@ int nAntisocial = 0;
 bool fAntisocial = false;
 bool fNoListen = false;
 bool fLogTimestamps = false;
+bool fQuietInitial = false;
 bool fLogIPs = false;
 volatile bool fReopenDebugLog = false;
 CClientUIInterface uiInterface;

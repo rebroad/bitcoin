@@ -92,6 +92,16 @@ extern uint64_t nLastBlockTx;
 extern uint64_t nLastBlockSize;
 extern const std::string strMessageMagic;
 extern int64_t nTimeBestReceived;
+extern int nAskedForBlocks;    // Nodes sent a getblocks 0
+extern int nWaitingForBlocks;  // Nodes sent a getdata block
+extern int nReceivingBlocks;   // Nodes that have started sending a block
+extern int nInvShyNodes;       // Nodes that take too long to respond to getblocks
+extern int nBlockShyNodes;     // Nodes that take too long to respond to getdata block
+extern int nBlockStuckNodes;   // Nodes that have paused while sending a block
+extern int nUnreliableNodes;   // Total count of shy and stuck nodes
+extern int nWasInvShyNodes;    // Node that responded to getblocks after the timeout
+extern int nWasBlockShyNodes;  // Node that responded to getdata block after the timeout
+extern int nWasBlockStuckNodes;// Node that paused during block download and later resumed
 extern bool fImporting;
 extern bool fReindex;
 extern bool fBenchmark;
@@ -197,6 +207,12 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
 
 
 
+
+
+static inline std::string BlockHashStr(const uint256& hash)
+{
+    return hash.ToString().substr(10,15);
+}
 
 struct CNodeStateStats {
     int nMisbehavior;
@@ -857,8 +873,8 @@ public:
     {
         return strprintf("CBlockIndex(pprev=%p, nHeight=%d, merkle=%s, hashBlock=%s)",
             pprev, nHeight,
-            hashMerkleRoot.ToString().c_str(),
-            GetBlockHash().ToString().c_str());
+            hashMerkleRoot.ToString().substr(0,10).c_str(),
+            BlockHashStr(GetBlockHash()).c_str());
     }
 
     void print() const
@@ -926,7 +942,7 @@ public:
         str += CBlockIndex::ToString();
         str += strprintf("\n                hashBlock=%s, hashPrev=%s)",
             GetBlockHash().ToString().c_str(),
-            hashPrev.ToString().c_str());
+            BlockHashStr(hashPrev).c_str());
         return str;
     }
 
