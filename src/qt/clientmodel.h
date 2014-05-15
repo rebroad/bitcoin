@@ -15,6 +15,7 @@ class CWallet;
 
 QT_BEGIN_NAMESPACE
 class QDateTime;
+class QProgressDialog;
 class QTimer;
 QT_END_NAMESPACE
 
@@ -78,6 +79,7 @@ private:
 
     int numBlocksAtStartup;
 
+    QProgressDialog *progressDialog;
     QTimer *pollTimer;
 
     void subscribeToCoreSignals();
@@ -96,6 +98,7 @@ public slots:
     void updateTimer();
     void updateNumConnections(int numConnections);
     void updateAlert(const QString &hash, int status);
+    void showProgress(const QString &title, int nProgress);
 };
 
 #endif // CLIENTMODEL_H

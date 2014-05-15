@@ -17,6 +17,7 @@
 
 #include <QDateTime>
 #include <QDebug>
+#include <QProgressDialog>
 #include <QTimer>
 
 static const int64_t nClientStartupTime = GetTime();
@@ -198,7 +199,30 @@ QString ClientModel::formatClientStartupTime() const
     return QDateTime::fromTime_t(nClientStartupTime).toString();
 }
 
+void ClientModel::showProgress(const QString &title, int nProgress)
+{
+    if (nProgress == 0 && !ProgressDialog) {
+        progressDialog = new QProgressDialog(title, "", 0, 100);
+        progressDialog->setWindowModality(Qt::ApplicationModal);
+        progressDialog->setMinimumDuration(0);
+        progressDialog->setCancelButton(0);
+        progressDialog->setAutoClose(false);
+    }
+    progressDialog->setValue(nProgress);
+    if (nProgress == 100 && ProgressDialog) {
+        progressDialog->close();
+        progressDialog->deleteLater();
+    }
+}
+
 // Handlers for core signals
+static void ShowProgress(ClientModel *clientmodel, const std::string &title, int nProgress)
+{
+    QMetaObject::invokeMethod(clientmodel, "showProgress", Qt::QueuedConnection,
+                              Q_ARG(QString, QString::fromStdString(title)),
+                              Q_ARG(int, nProgress));
+}
+
 static void NotifyBlocksChanged(ClientModel *clientmodel)
 {
     // This notification is too frequent. Don't trigger a signal.
@@ -223,6 +247,7 @@ static void NotifyAlertChanged(ClientModel *clientmodel, const uint256 &hash, Ch
 void ClientModel::subscribeToCoreSignals()
 {
     // Connect signals to client
+    uiInterface.ShowProgress.connect(boost::bind(ShowProgress, this, _1, _2));
     uiInterface.NotifyBlocksChanged.connect(boost::bind(NotifyBlocksChanged, this));
     uiInterface.NotifyNumConnectionsChanged.connect(boost::bind(NotifyNumConnectionsChanged, this, _1));
     uiInterface.NotifyAlertChanged.connect(boost::bind(NotifyAlertChanged, this, _1, _2));
@@ -231,6 +256,7 @@ void ClientModel::subscribeToCoreSignals()
 void ClientModel::unsubscribeFromCoreSignals()
 {
     // Disconnect signals from client
+    uiInterface.ShowProgress.disconnect(boost::bind(ShowProgress, this, _1, _2));
     uiInterface.NotifyBlocksChanged.disconnect(boost::bind(NotifyBlocksChanged, this));
     uiInterface.NotifyNumConnectionsChanged.disconnect(boost::bind(NotifyNumConnectionsChanged, this, _1));
     uiInterface.NotifyAlertChanged.disconnect(boost::bind(NotifyAlertChanged, this, _1, _2));

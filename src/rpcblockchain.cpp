@@ -7,6 +7,7 @@
 #include "main.h"
 #include "sync.h"
 #include "checkpoints.h"
+#include "ui_interface.h"
 
 #include <stdint.h>
 
