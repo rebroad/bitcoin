@@ -4209,11 +4209,10 @@ bool ProcessMessages(CNode* pfrom)
         unsigned int nMessageSize = hdr.nMessageSize;
         string strCommand = hdr.GetCommand();
 
-        //if (fDebug)
-        //    LogPrintf("ProcessMessages(message %u msgsz, %u bytes, complete:%s)\n",
-        //            nMessageSize, msg.vRecv.size(),
-        //            msg.complete() ? "Y" : "N");
         if (msg.nDataPos != msg.nLastDataPos) {
+            if (!msg.complete())
+                LogPrint("net2", "ProcessMessages(%u of %u bytes) strCommand=%s peer=%d\n",
+                    msg.nDataPos, nMessageSize, strCommand, pfrom->id);
             if (strCommand == "block") {
                 if (msg.nLastDataPos == 0) {
                     pfrom->tBlockRecvStart = GetTimeMillis();
