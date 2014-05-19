@@ -5035,6 +5035,9 @@ bool ProcessMessages(CNode* pfrom)
                 state.nBytesTotMinute += (msg.nDataPos - msg.nLastDataPos);
                 nBytesTotMinute += (msg.nDataPos - msg.nLastDataPos);
             }
+            if (!msg.complete())
+                LogPrint("net2", "ProcessMessages(%u of %u bytes) strCommand=%s peer=%d\n",
+                    msg.nDataPos, nMessageSize, strCommand, pfrom->id);
             state.nStallTotMinute += state.nStallClicks - 1;
             nStallTotMinute += state.nStallClicks - 1;
             state.nStallSamples++;
