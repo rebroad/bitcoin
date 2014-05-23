@@ -8,9 +8,6 @@
 #include "init.h"
 #include "ui_interface.h"
 #include "util.h"
-#ifdef ENABLE_WALLET
-#include "wallet.h"
-#endif
 
 #include <QApplication>
 #include <QPainter>
@@ -121,7 +118,7 @@ static void ShowProgress(SplashScreen *splash, const std::string &title, int nPr
 #ifdef ENABLE_WALLET
 static void ConnectWallet(SplashScreen *splash, CWallet* wallet)
 {
-    wallet->ShowProgress.connect(boost::bind(ShowProgress, splash, _1, _2));
+    uiInterface.ShowProgress.connect(boost::bind(ShowProgress, splash, _1, _2));
 }
 #endif
 

@@ -237,9 +237,6 @@ signals:
     // Coins sent: from wallet, to recipient, in (serialized) transaction:
     void coinsSent(CWallet* wallet, SendCoinsRecipient recipient, QByteArray transaction);
 
-    // Show progress dialog e.g. for rescan
-    void showProgress(const QString &title, int nProgress);
-
 public slots:
     /* Wallet status might have changed */
     void updateStatus();
