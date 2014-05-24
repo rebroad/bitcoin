@@ -201,7 +201,7 @@ QString ClientModel::formatClientStartupTime() const
 
 void ClientModel::showProgress(const QString &title, int nProgress)
 {
-    if (nProgress == 0 && !ProgressDialog) {
+    if (nProgress == 0 && !progressDialog) {
         progressDialog = new QProgressDialog(title, "", 0, 100);
         progressDialog->setWindowModality(Qt::ApplicationModal);
         progressDialog->setMinimumDuration(0);
@@ -209,7 +209,7 @@ void ClientModel::showProgress(const QString &title, int nProgress)
         progressDialog->setAutoClose(false);
     }
     progressDialog->setValue(nProgress);
-    if (nProgress == 100 && ProgressDialog) {
+    if (nProgress == 100 && progressDialog) {
         progressDialog->close();
         progressDialog->deleteLater();
     }

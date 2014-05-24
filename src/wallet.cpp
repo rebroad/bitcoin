@@ -848,7 +848,7 @@ int CWallet::ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate)
         while (pindex)
         {
             if (pindex->nHeight % 100 == 0 && dProgressTip - dProgressStart > 0.0)
-                uiInterface.ShowProgress(_("Rescanning..."), ((Checkpoints::GuessVerificationProgress(pindex, false) - dProgressStart) / (dProgressTip - dProgressStart) * 100)));
+                uiInterface.ShowProgress(_("Rescanning..."), ((Checkpoints::GuessVerificationProgress(pindex, false) - dProgressStart) / (dProgressTip - dProgressStart) * 100));
 
             CBlock block;
             ReadBlockFromDisk(block, pindex);

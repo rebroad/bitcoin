@@ -3002,7 +3002,7 @@ bool VerifyDB(int nCheckLevel, int nCheckDepth)
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev)
     {
         boost::this_thread::interruption_point();
-        uiInterface.ShowProgress(_("Verifying blocks..."), (chainActive.Height()-pindex->nHeight)/nCheckDepth);
+        uiInterface.ShowProgress(_("Verifying blocks... "), (chainActive.Height()-pindex->nHeight)/nCheckDepth);
         if (pindex->nHeight < chainActive.Height()-nCheckDepth)
             break;
         CBlock block;

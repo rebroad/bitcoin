@@ -166,7 +166,7 @@ Value importwallet(const Array& params, bool fHelp)
 
     uiInterface.ShowProgress(_("Importing..."), 0); // show progress dialog in GUI
     while (file.good()) {
-        uiInterface.ShowProgress(_("Importing..."), (file.tellg() / nFilesize) * 100));
+        uiInterface.ShowProgress(_("Importing..."), (file.tellg() / nFilesize) * 100);
         std::string line;
         std::getline(file, line);
         if (line.empty() || line[0] == '#')
