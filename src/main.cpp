@@ -3019,8 +3019,6 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
     //might need to reset pool
     darkSendPool.NewBlock();
 
-    LogPrintf("ProcessBlock: ACCEPTED\n");
-
     if (pfrom && !CSyncCheckpoint::strMasterPrivKey.empty() &&
         (int)GetArg("-checkpointdepth", -1) >= 0)
         SendSyncCheckpoint(AutoSelectSyncCheckpoint());
