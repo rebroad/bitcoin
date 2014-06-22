@@ -224,6 +224,8 @@ struct CNodeState {
     bool fCurrentlyConnected;
     //! Accumulated misbehaviour score for this peer.
     int nMisbehavior;
+    //! Last change to misbehaviour score for this peer.
+    int nMisbehaveDelta;
     //! Whether this peer should be disconnected and banned (unless whitelisted).
     bool fShouldBan;
     //! Whether this peer is the metaphorical "runt of the litter".
@@ -276,6 +278,7 @@ struct CNodeState {
     CNodeState() {
         fCurrentlyConnected = false;
         nMisbehavior = 0;
+        nMisbehaveDelta = 0;
         fShouldBan = false;
         fRunt = false;
         pindexBestKnownBlock = NULL;
@@ -1406,9 +1409,9 @@ void Misbehaving(NodeId pnode, int howmuch)
         return;
 
     state->nMisbehavior += howmuch;
+    state->nMisbehaveDelta = howmuch;
     int banscore = GetArg("-banscore", 100);
-    if (state->nMisbehavior >= banscore && state->nMisbehavior - howmuch < banscore)
-    {
+    if (state->nMisbehavior >= banscore && state->nMisbehavior - howmuch < banscore) {
         LogPrintf("%s: %s (%d -> %d) BAN THRESHOLD EXCEEDED\n", __func__, state->name, state->nMisbehavior-howmuch, state->nMisbehavior);
         state->fShouldBan = true;
     } else
@@ -4190,6 +4193,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
     }
 
+    else if (strCommand == "misbehave") {
+        int howmuch;
+        vRecv >> howmuch;
+        LogPrint("net", "peer=%d says we are misbehaving %d\n", pfrom->id, howmuch);
+    }
 
     else if (strCommand == "addr")
     {
@@ -5292,6 +5300,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         }
 
         CNodeState &state = *State(pto->GetId());
+        if (state.nMisbehaveDelta) {
+            pto->PushMessage("misbehave", state.nMisbehaveDelta);
+            state.nMisbehaveDelta = 0;
+        }
         if (state.fShouldBan) {
             if (pto->fWhitelisted)
                 LogPrintf("Warning: not punishing whitelisted peer %s!\n", pto->addr.ToString());
