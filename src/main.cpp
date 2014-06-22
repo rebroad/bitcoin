@@ -206,6 +206,8 @@ struct CBlockReject {
 struct CNodeState {
     // Accumulated misbehaviour score for this peer.
     int nMisbehavior;
+    // Last change to misbehaviour score for this peer.
+    int nMisbehaveDelta;
     // Whether this peer should be disconnected and banned (unless whitelisted).
     bool fShouldBan;
     // String name of this peer (debugging/logging purposes).
@@ -226,6 +228,7 @@ struct CNodeState {
 
     CNodeState() {
         nMisbehavior = 0;
+        nMisbehaveDelta = 0;
         fShouldBan = false;
         pindexBestKnownBlock = NULL;
         hashLastUnknownBlock = uint256(0);
@@ -1287,9 +1290,9 @@ void Misbehaving(NodeId pnode, int howmuch)
         return;
 
     state->nMisbehavior += howmuch;
+    state->nMisbehaveDelta = howmuch;
     int banscore = GetArg("-banscore", 100);
-    if (state->nMisbehavior >= banscore && state->nMisbehavior - howmuch < banscore)
-    {
+    if (state->nMisbehavior >= banscore && state->nMisbehavior - howmuch < banscore) {
         LogPrintf("Misbehaving: %s (%d -> %d) BAN THRESHOLD EXCEEDED\n", state->name, state->nMisbehavior-howmuch, state->nMisbehavior);
         state->fShouldBan = true;
     } else
@@ -3543,6 +3546,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         pfrom->SetRecvVersion(min(pfrom->nVersion, PROTOCOL_VERSION));
     }
 
+    else if (strCommand == "misbehave") {
+        int howmuch;
+        vRecv >> howmuch;
+        LogPrint("net", "peer=%d says we are misbehaving %d\n", pfrom->id, howmuch);
+    }
 
     else if (strCommand == "addr")
     {
@@ -4397,6 +4405,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         }
 
         CNodeState &state = *State(pto->GetId());
+        if (state.nMisbehaveDelta) {
+            pto->PushMessage("misbehave", state.nMisbehaveDelta);
+            state.nMisbehaveDelta = 0;
+        }
         if (state.fShouldBan) {
             if (pto->fWhitelisted)
                 LogPrintf("Warning: not punishing whitelisted peer %s!\n", pto->addr.ToString());
