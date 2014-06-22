@@ -2668,6 +2668,7 @@ bool CBlock::CheckBlock(CValidationState &state, bool fCheckPOW, bool fCheckMerk
             // no previous block, can't check votes
             fCheckVotes = false;
             pindexPrev = NULL;
+            LogPrintf("CheckBlock() : Couldn't load previous block %s\n", hashPrevBlock.ToString().c_str());
         }
 
         if (!fCheckVotes) EnforceMasternodePayments = false;
