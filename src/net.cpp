@@ -1575,7 +1575,7 @@ bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant *grantOu
 // for now, use a very simple selection metric: the node from which we received
 // most recently
 double static NodeSyncScore(const CNode *pnode) {
-    return -pnode->nLastRecv;
+    return pnode->nLastRecv;
 }
 
 void static StartSync(const vector<CNode*> &vNodes) {
