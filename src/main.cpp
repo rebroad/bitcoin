@@ -2295,7 +2295,8 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
             mapOrphanBlocksByPrev.insert(make_pair(pblock2->hashPrevBlock, pblock2));
 
             // Ask this guy to fill in what we're missing
-            pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(pblock2));
+            if (pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(pblock2)))
+                printf("fill in getblocks to peer=%d\n", pfrom->id);
         }
         return true;
     }
@@ -3427,15 +3428,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             if (!fAlreadyHave) {
                 if (!fImporting && !fReindex)
                     pfrom->AskFor(inv);
-            } else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash)) {
-                pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(mapOrphanBlocks[inv.hash]));
-            } else if (nInv == nLastBlock) {
+            } else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash))
+                if (pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(mapOrphanBlocks[inv.hash])))
+                    printf("send getblocks to peer=%d\n, pfrom->id);
+            else if (nInv == nLastBlock) {
                 // In case we are on a very long side-chain, it is possible that we already have
                 // the last block in an inv bundle sent in response to getblocks. Try to detect
                 // this situation and push another getblocks to continue.
-                pfrom->PushGetBlocks(mapBlockIndex[inv.hash], uint256(0));
-                if (fDebug)
-                    printf("force request: %s\n", inv.ToString().c_str());
+                if (pfrom->PushGetBlocks(mapBlockIndex[inv.hash], uint256(0)))
+                    printf("last getblocks to peer=%d\n", pfrom->id);
             }
 
             // Track requests for our stuff
@@ -3937,7 +3938,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         // Start block sync
         if (pto->fStartSync && !fImporting && !fReindex) {
             pto->fStartSync = false;
-            pto->PushGetBlocks(pindexBest, uint256(0));
+            if (pto->PushGetBlocks(pindexBest, uint256(0)))
+                printf("sent initial getblocks to peer=%d\n", pto->id);
         }
 
         // Resend wallet transactions that haven't gotten in a block yet
