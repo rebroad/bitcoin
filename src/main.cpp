@@ -3455,7 +3455,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             return error("message getdata size() = %"PRIszu"", vInv.size());
         }
 
-        if (fDebugNet || (vInv.size() != 1))
+        if (fDebugNet && (vInv.size() != 1))
             printf("received getdata (%"PRIszu" invsz) peer=%d\n", vInv.size(), pfrom->id);
 
         if ((fDebugNet && vInv.size() > 0) || (vInv.size() == 1))
