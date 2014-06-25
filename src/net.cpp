@@ -484,9 +484,6 @@ CNode* ConnectNode(CAddress addrConnect, const char *pszDest)
     {
         addrman.Attempt(addrConnect);
 
-        /// debug print
-        printf("connected %s\n", pszDest ? pszDest : addrConnect.ToString().c_str());
-
         // Set to non-blocking
 #ifdef WIN32
         u_long nOne = 1;
@@ -507,6 +504,7 @@ CNode* ConnectNode(CAddress addrConnect, const char *pszDest)
         }
 
         pnode->nTimeConnected = GetTime();
+        printf("connected %s peer=%d\n", pszDest ? pszDest : addrConnect.ToString().c_str(), pnode->id);
         return pnode;
     }
     else
@@ -520,7 +518,7 @@ void CNode::CloseSocketDisconnect()
     fDisconnect = true;
     if (hSocket != INVALID_SOCKET)
     {
-        printf("disconnecting node %s\n", addrName.c_str());
+        printf("disconnecting node peer=%d\n", id);
         closesocket(hSocket);
         hSocket = INVALID_SOCKET;
     }
@@ -951,13 +949,13 @@ void ThreadSocketHandler()
             }
             else
             {
-                printf("accepted connection %s\n", addr.ToString().c_str());
                 CNode* pnode = new CNode(hSocket, addr, "", true);
                 pnode->AddRef();
                 {
                     LOCK(cs_vNodes);
                     vNodes.push_back(pnode);
                 }
+                printf("accepted connection %s peer=%d\n", addr.ToString().c_str(), pnode->id);
             }
         }
 
@@ -1040,7 +1038,7 @@ void ThreadSocketHandler()
             {
                 if (pnode->nLastRecv == 0 || pnode->nLastSend == 0)
                 {
-                    printf("socket no message in first 60 seconds, %d %d\n", pnode->nLastRecv != 0, pnode->nLastSend != 0);
+                    printf("socket no message in first 60 seconds, %d %d peer=%d\n", pnode->nLastRecv != 0, pnode->nLastSend != 0, pnode->id);
                     pnode->fDisconnect = true;
                 }
                 else if (GetTime() - pnode->nLastSend > 90*60 && GetTime() - pnode->nLastSendEmpty > 90*60)
