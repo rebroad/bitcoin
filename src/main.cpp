@@ -3647,29 +3647,28 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
         // Find the last block the caller has in the main chain
         CBlockIndex* pindex = chainActive.FindFork(locator);
+        CBlockIndex* pindexStart = pindex;
 
         // Send the rest of the chain
         if (pindex)
             pindex = chainActive.Next(pindex);
         int nLimit = 500;
-        LogPrint("net", "getblocks %d to %s limit %d\n", (pindex ? pindex->nHeight : -1), hashStop.ToString(), nLimit);
+        int nSent = 0;
         for (; pindex; pindex = chainActive.Next(pindex))
         {
             if (pindex->GetBlockHash() == hashStop)
-            {
-                LogPrint("net", "  getblocks stopping at %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
                 break;
-            }
             pfrom->PushInventory(CInv(MSG_BLOCK, pindex->GetBlockHash()));
+            nSent++;
             if (--nLimit <= 0)
             {
                 // When this block is requested, we'll send an inv that'll make them
                 // getblocks the next batch of inventory.
-                LogPrint("net", "  getblocks stopping at limit %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
                 pfrom->hashContinue = pindex->GetBlockHash();
                 break;
             }
         }
+        LogPrint("net", "getblocks %d to height %d (sent %d) from peer=%d\n", (pindexStart ? pindexStart->nHeight : -1), pindex->nHeight, nSent, pfrom->id);
     }
 
 
