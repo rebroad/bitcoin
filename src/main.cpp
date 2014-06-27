@@ -4055,14 +4055,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     if (strCommand == "version")
     {
-        // Each connection can only send one version message
-        if (pfrom->nVersion != 0)
-        {
-            pfrom->PushMessage("reject", strCommand, REJECT_DUPLICATE, string("Duplicate version message"));
-            Misbehaving(pfrom->GetId(), 1);
-            return false;
-        }
-
         int64_t nTime;
         CAddress addrMe;
         CAddress addrFrom;
