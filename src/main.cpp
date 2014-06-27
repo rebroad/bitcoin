@@ -2093,7 +2093,7 @@ bool ActivateBestChain(CValidationState &state, CBlock *pblock) {
             {
             LOCK(cs_vNodes);
             BOOST_FOREACH(CNode* pnode, vNodes)
-                if (chainActive.Height() > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : nBlockEstimate))
+                if (chainActive.Height() > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : nBlockEstimate) && !fAntisocial)
                     pnode->PushInventory(CInv(MSG_BLOCK, hashNewTip));
             }
 
@@ -3312,7 +3312,7 @@ void static ProcessGetData(CNode* pfrom)
                         send = true;
                     }
                 }
-                if (send)
+                if (send && !fAntisocial)
                 {
                     // Send block from disk
                     CBlock block;
@@ -3501,6 +3501,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
 
         // Relay alerts
+        if (!fAntisocial)
         {
             LOCK(cs_mapAlerts);
             BOOST_FOREACH(PAIRTYPE(const uint256, CAlert)& item, mapAlerts)
@@ -3690,6 +3691,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         vRecv >> locator >> hashStop;
         int nLastEnd = State(pfrom->id)->nLastBlockInvHeight;
 
+        if (fAntisocial) {
+            LogPrintf("antisocial: ignoring getblocks peer=%d\n", pfrom->id);
+            return true;
+        }
         LOCK(cs_main);
 
         // Find the last block the caller has in the main chain
@@ -3738,6 +3743,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         uint256 hashStop;
         vRecv >> locator >> hashStop;
 
+        if (fAntisocial) {
+            LogPrintf("antisocial: ignoring getheaders peer=%d\n", pfrom->id);
+            return true;
+        }
         LOCK(cs_main);
 
         CBlockIndex* pindex = NULL;
@@ -3942,6 +3951,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     else if (strCommand == "getaddr")
     {
+        if (fAntisocial) {
+            LogPrintf("antisocial: ignoring getaddr peer=%d\n", pfrom->id);
+            return true;
+        }
+ 
         pfrom->vAddrToSend.clear();
         vector<CAddress> vAddr = addrman.GetAddr();
         BOOST_FOREACH(const CAddress &addr, vAddr)
@@ -3951,6 +3965,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     else if (strCommand == "mempool")
     {
+        if (fAntisocial) {
+            LogPrintf("antisocial: ignoring mempool peer=%d\n", pfrom->id);
+            return true;
+        }
         LOCK2(cs_main, pfrom->cs_filter);
 
         std::vector<uint256> vtxid;
@@ -4065,6 +4083,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             {
                 // Relay
                 pfrom->setKnown.insert(alertHash);
+                if (!fAntisocial)
                 {
                     LOCK(cs_vNodes);
                     BOOST_FOREACH(CNode* pnode, vNodes)
@@ -4379,7 +4398,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         //
         // Message: addr
         //
-        if (fSendTrickle)
+        if (fSendTrickle && !fAntisocial)
         {
             vector<CAddress> vAddr;
             vAddr.reserve(pto->vAddrToSend.size());
@@ -4501,6 +4520,22 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             pto->fDisconnect = true;
         }
 
+        // Check whether to be antisocial or not
+        if (nAntisocial == 1) {
+            if (CaughtUp() && fAntisocial) {
+                fAntisocial = false;
+                LogPrintf("CaughtUp. Becoming social again\n");
+                LOCK(cs_vNodes);
+                // Let everyone know we want their txs
+                BOOST_FOREACH(CNode* pnode, vNodes)
+                    pnode->PushMessage("filterclear");
+            }
+            if (!CaughtUp() && !fAntisocial) {
+                fAntisocial = true;
+                LogPrintf("Fallen behind. Becoming antisocial again\n");
+            }
+        }
+
         //
         // Message: getdata (blocks)
         //
@@ -4523,7 +4558,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         //
         // Message: getdata (non-blocks)
         //
-        while (!pto->fDisconnect && !pto->mapAskFor.empty() && (*pto->mapAskFor.begin()).first <= nNow)
+        while (!fAntisocial && !pto->fDisconnect && !pto->mapAskFor.empty() && (*pto->mapAskFor.begin()).first <= nNow)
         {
             const CInv& inv = (*pto->mapAskFor.begin()).second;
             if (!AlreadyHave(inv))
