@@ -1280,6 +1280,12 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     return nSubsidy;
 }
 
+bool CaughtUp()
+{
+    const CChainParams& chainParams = Params();
+    return ((chainActive.Height() >= Checkpoints::GetTotalBlocksEstimate(chainParams.Checkpoints())) && chainActive.Tip()->GetBlockTime() > GetTime() - 90 * 60);
+}
+
 bool IsInitialBlockDownload()
 {
     const CChainParams& chainParams = Params();
