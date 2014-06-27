@@ -246,6 +246,7 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += "  -dnsseed               " + _("Query for peer addresses via DNS lookup, if low on addresses (default: 1 unless -connect)") + "\n";
     strUsage += "  -externalip=<ip>       " + _("Specify your own public address") + "\n";
     strUsage += "  -forcednsseed          " + _("Always query for peer addresses via DNS lookup (default: 0)") + "\n";
+    strUsage += "  -antisocial=<n>        " + _("Don't relay network traffic: 0 = relay as usual, 1 = relay once updated, 2 = never relay (default: 0)") + "\n";
     strUsage += "  -listen                " + _("Accept connections from outside (default: 1 if no -proxy or -connect)") + "\n";
     strUsage += "  -maxconnections=<n>    " + _("Maintain at most <n> connections to peers (default: 125)") + "\n";
     strUsage += "  -maxreceivebuffer=<n>  " + _("Maximum per-connection receive buffer, <n>*1000 bytes (default: 5000)") + "\n";
@@ -535,6 +536,12 @@ bool AppInit2(boost::thread_group& threadGroup)
 #endif
 
     // ********************************************************* Step 2: parameter interactions
+
+    nAntisocial = GetArg("-antisocial", 0);
+    if (nAntisocial > 0) {
+        fAntisocial = true;
+        if (nAntisocial == 2) SoftSetBoolArg("-listen", false);
+    }
 
     if (mapArgs.count("-bind") || mapArgs.count("-whitebind")) {
         // when specifying an explicit binding address, you want to listen on it

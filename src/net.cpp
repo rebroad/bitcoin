@@ -13,6 +13,7 @@
 #include "chainparams.h"
 #include "core.h"
 #include "ui_interface.h"
+#include "checkpoints.h"
 
 #ifdef WIN32
 #include <string.h>
@@ -542,7 +543,7 @@ void CNode::PushVersion()
     else
         LogPrint("net", "send version message: version %d, blocks=%d, us=%s, peer=%d\n", PROTOCOL_VERSION, nBestHeight, addrMe.ToString(), id);
     PushMessage("version", PROTOCOL_VERSION, nLocalServices, nTime, addrYou, addrMe,
-                nLocalHostNonce, FormatSubVersion(CLIENT_NAME, CLIENT_VERSION, std::vector<string>()), nBestHeight, true);
+        nLocalHostNonce, FormatSubVersion(CLIENT_NAME, CLIENT_VERSION, std::vector<string>()), Checkpoints::GetTotalBlocksEstimate(), !fAntisocial);
 }
 
 
