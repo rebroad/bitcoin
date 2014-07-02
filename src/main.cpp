@@ -225,6 +225,22 @@ struct CNodeState {
     int64_t nLastBlockReceive;
     int64_t nLastBlockProcess;
     int nLastBlockInvHeight;   // Height of last block inv sent.
+    int64_t tLastDebugInfo;    // Time last debug snapshot displayed.
+    int nNewBlockInvsReceived; // Total new block invs received.
+    int nOldBlockInvsReceived; // Total old block invs received.
+    int nNewTxInvsReceived;    // Total new tx invs received.
+    int nOldTxInvsReceived;    // Total old tx invs received.
+    int nBlockInvsSent;        // Total blocks invs sent.
+    int nTxInvsSent;           // Total tx invs sent.
+    int nBlocksRequested;      // Total blocks requested.
+    int nTxsRequested;         // Total txs requested.
+    int nBlocksReceived;       // Total blocks received that were requested.
+    int nRandomBlocksReceived; // Total blocks received that weren't requested.
+    int nTxsReceived;          // Total txs received that were requested.
+    int nRandomTxsReceived;    // Total txs received that weren't requested.
+    int nBlocksSent;           // Total blocks sent.
+    int nMerkleBlocksSent;     // Total merkle blocks sent.
+    int nTxsSent;              // Total txs sent.
 
     CNodeState() {
         nMisbehavior = 0;
@@ -237,6 +253,22 @@ struct CNodeState {
         nLastBlockReceive = 0;
         nLastBlockProcess = 0;
         nLastBlockInvHeight = 0;
+        tLastDebugInfo = GetTime();
+        nNewBlockInvsReceived = 0;
+        nOldBlockInvsReceived = 0;
+        nNewTxInvsReceived = 0;
+        nOldTxInvsReceived = 0;
+        nBlockInvsSent = 0;
+        nTxInvsSent = 0;
+        nBlocksRequested = 0;
+        nTxsRequested = 0;
+        nBlocksReceived = 0;
+        nRandomBlocksReceived = 0;
+        nTxsReceived = 0;
+        nRandomTxsReceived = 0;
+        nBlocksSent = 0;
+        nMerkleBlocksSent = 0;
+        nTxsSent = 0;
     }
 };
 
@@ -292,8 +324,11 @@ void MarkBlockAsReceived(const uint256 &hash, NodeId nodeFrom = -1) {
         CNodeState *state = State(itInFlight->second.first);
         state->vBlocksInFlight.erase(itInFlight->second.second);
         state->nBlocksInFlight--;
-        if (itInFlight->second.first == nodeFrom)
+        if (itInFlight->second.first == nodeFrom) {
             state->nLastBlockReceive = GetTimeMicros();
+            state->nBlocksReceived++;
+        } else
+            state->nRandomBlocksReceived++;
         mapBlocksInFlight.erase(itInFlight);
     }
 }
@@ -3324,15 +3359,17 @@ void static ProcessGetData(CNode* pfrom)
                     CBlock block;
                     if (!ReadBlockFromDisk(block, (*mi).second))
                         assert(!"cannot load block from disk");
-                    if (inv.type == MSG_BLOCK)
+                    if (inv.type == MSG_BLOCK) {
                         pfrom->PushMessage("block", block);
-                    else // MSG_FILTERED_BLOCK)
+                        State(pfrom->id)->nBlocksSent++;
+                    } else // MSG_FILTERED_BLOCK)
                     {
                         LOCK(pfrom->cs_filter);
                         if (pfrom->pfilter)
                         {
                             CMerkleBlock merkleBlock(block, *pfrom->pfilter);
                             pfrom->PushMessage("merkleblock", merkleBlock);
+                            State(pfrom->id)->nMerkleBlocksSent++;
                             // CMerkleBlock just contains hashes, so also push any transactions in the block the client did not see
                             // This avoids hurting performance by pointlessly requiring a round-trip
                             // Note that there is currently no way for a node to request any single transactions we didnt send here -
@@ -3370,6 +3407,7 @@ void static ProcessGetData(CNode* pfrom)
                     map<CInv, CDataStream>::iterator mi = mapRelay.find(inv);
                     if (mi != mapRelay.end()) {
                         pfrom->PushMessage(inv.GetCommand(), (*mi).second);
+                        State(pfrom->id)->nTxsSent++;
                         pushed = true;
                     }
                 }
@@ -3380,6 +3418,7 @@ void static ProcessGetData(CNode* pfrom)
                         ss.reserve(1000);
                         ss << tx;
                         pfrom->PushMessage("tx", ss);
+                        State(pfrom->id)->nTxsSent++;
                         pushed = true;
                     }
                 }
@@ -3643,6 +3682,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             if (!fAlreadyHave) {
                 if (!fImporting && !fReindex) {
                     if (inv.type == MSG_BLOCK) {
+                        State(pfrom->id)->nNewBlockInvsReceived++;
                         if (pfrom->tGetblocks > pfrom->tBlockInvs || CaughtUp()) {
                             AddBlockToQueue(pfrom->GetId(), inv.hash);
                             nBlocksGet++;
@@ -3653,12 +3693,18 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                                 LogPrint("net", "inv (new) %s from peer=%d\n", inv.ToString(), pfrom->id);
                             nBlocksNew++;
                         }
-                    } else
+                    } else {
+                        State(pfrom->id)->nNewTxInvsReceived++;
                         pfrom->AskFor(inv);
+                    }
                 }
-            } else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash))
-                if (PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash)))
-                    LogPrint("net", "orphan getblocks %s to peer=%d\n", GetOrphanRoot(inv.hash).ToString(), pfrom->id);
+            } else if (inv.type == MSG_BLOCK) {
+                State(pfrom->id)->nOldBlockInvsReceived++;
+                if (mapOrphanBlocks.count(inv.hash))
+                    if (PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash)))
+                        LogPrint("net", "orphan getblocks %s to peer=%d\n", GetOrphanRoot(inv.hash).ToString(), pfrom->id);
+            } else
+                State(pfrom->id)->nOldTxInvsReceived++;
 
             if (inv.type == MSG_BLOCK) {
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
@@ -3809,6 +3855,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         bool fMissingInputs = false;
         CValidationState state;
+
+        limitedmap<CInv, int64_t>::const_iterator it = mapAlreadyAskedFor.find(inv);
+        if (it != mapAlreadyAskedFor.end())
+            State(pfrom->id)->nTxsReceived++;
+        else
+            State(pfrom->id)->nRandomTxsReceived++;
+
         if (AcceptToMemoryPool(mempool, state, tx, true, &fMissingInputs))
         {
             mempool.check(pcoinsTip);
@@ -3960,8 +4013,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             bool fInMemPool = mempool.lookup(hash, tx);
             if (!fInMemPool) continue; // another thread removed since queryHashes, maybe...
             if ((pfrom->pfilter && pfrom->pfilter->IsRelevantAndUpdate(tx)) ||
-               (!pfrom->pfilter))
+               (!pfrom->pfilter)) {
                 vInv.push_back(inv);
+                State(pfrom->id)->nTxInvsSent++;
+            }
             if (vInv.size() == MAX_INV_SZ) {
                 pfrom->PushMessage("inv", vInv);
                 vInv.clear();
@@ -4488,8 +4543,12 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 // returns true if wasn't already contained in the set
                 if (pto->setInventoryKnown.insert(inv).second)
                 {
-                    if (inv.type == MSG_TX)
+                    if (inv.type == MSG_TX) {
                         LogPrint("tx", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
+                        State(pto->id)->nTxInvsSent++;
+                    }
+                    if (inv.type == MSG_BLOCK)
+                        State(pto->id)->nBlockInvsSent++;
                     vInv.push_back(inv);
                     if (vInv.size() >= 1000)
                     {
@@ -4503,9 +4562,52 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         if (!vInv.empty())
             pto->PushMessage("inv", vInv);
 
+        // Display periodic snapshot of node stats
+        int64_t tNow = GetTimeMillis();
+        if (tNow/1000 - State(pto->id)->tLastDebugInfo > 5*60) {
+            State(pto->id)->tLastDebugInfo = GetTime();
+            int nNewBlockInvsReceived = State(pto->id)->nNewBlockInvsReceived;
+            State(pto->id)->nNewBlockInvsReceived = 0;
+            int nOldBlockInvsReceived = State(pto->id)->nOldBlockInvsReceived;
+            State(pto->id)->nOldBlockInvsReceived = 0;
+            int nBlockInvsSent = State(pto->id)->nBlockInvsSent;
+            State(pto->id)->nBlockInvsSent = 0;
+            int nNewTxInvsReceived = State(pto->id)->nNewTxInvsReceived;
+            State(pto->id)->nNewTxInvsReceived =0;
+            int nOldTxInvsReceived = State(pto->id)->nOldTxInvsReceived;
+            State(pto->id)->nOldTxInvsReceived = 0;
+            int nTxInvsSent = State(pto->id)->nTxInvsSent;
+            State(pto->id)->nTxInvsSent = 0;
+            int nBlocksRequested = State(pto->id)->nBlocksRequested;
+            State(pto->id)->nBlocksRequested = 0;
+            int nBlocksReceived = State(pto->id)->nBlocksReceived;
+            State(pto->id)->nBlocksReceived = 0;
+            int nRandomBlocksReceived = State(pto->id)->nRandomBlocksReceived;
+            State(pto->id)->nRandomBlocksReceived = 0;
+            int nTxsRequested = State(pto->id)->nTxsRequested;
+            State(pto->id)->nTxsRequested = 0;
+            int nTxsReceived = State(pto->id)->nTxsReceived;
+            State(pto->id)->nTxsReceived = 0;
+            int nRandomTxsReceived = State(pto->id)->nRandomTxsReceived;
+            State(pto->id)->nRandomTxsReceived = 0;
+            int nBlocksSent = State(pto->id)->nBlocksSent;
+            State(pto->id)->nBlocksSent = 0;
+            int nMerkleBlocksSent = State(pto->id)->nMerkleBlocksSent;
+            State(pto->id)->nMerkleBlocksSent = 0;
+            int nTxsSent = State(pto->id)->nTxsSent;
+            State(pto->id)->nTxsSent = 0;
+            LogPrint("net", "peer=%d ping=%ums ", pto->id, pto->nPingUsecTime/1000);
+            LogPrint("net", "NewBlkInvIn=%d OldBlkInvIn=%d BlkInvOut=%d NewTxInvIn=%d OldTxInvIn=%d TxInvOut=%d\n",
+              nNewBlockInvsReceived, nOldBlockInvsReceived, nBlockInvsSent, nNewTxInvsReceived, nOldTxInvsReceived,
+              nTxInvsSent);
+            LogPrint("net", "peer=%d BlksReq=%d BlkRec=%d RBlkRec=%d TxReq=%d TxRec=%d RTxRec=%d BlkSent=%d MBlkSent=%d TxSent=%d\n",
+              pto->id, nBlocksRequested, nBlocksReceived, nRandomBlocksReceived, nTxsRequested, nTxsReceived, nRandomTxsReceived,
+              nBlocksSent, nMerkleBlocksSent, nTxsSent);
+            if (nRandomTxsReceived || nRandomBlocksReceived || ( nNewTxInvsReceived + nOldTxInvsReceived == 0 && !fAntisocial ) || nBlocksReceived+1 < nBlocksRequested || nBlocksReceived > nBlocksRequested || nTxsReceived+1 < nTxsRequested || nTxsReceived > nTxsRequested || nTxsSent > nTxInvsSent || nBlocksSent > nBlockInvsSent)
+                LogPrint("net", "peer=%d is being CURIOUS\n", pto->id);
+        }
 
         // Detect stalled peers.
-        int64_t tNow = GetTimeMillis();
         int nSyncTimeout = GetArg("-synctimeout", 60);
         if (pto->tGetblocks) {
             if (pto->tBlockRecving > pto->tBlockRecved) {
@@ -4562,6 +4664,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             LogPrint("net", "Requesting block %s peer=%d\n", hash.ToString(), pto->id);
             if (!pto->tGetdataBlock)
                 pto->tGetdataBlock = GetTimeMillis();
+            State(pto->id)->nBlocksRequested++;
             if (vGetData.size() >= 1000)
             {
                 pto->PushMessage("getdata", vGetData);
@@ -4579,6 +4682,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             if (!AlreadyHave(inv))
             {
                 LogPrint("tx", "Requesting %s peer=%d\n", inv.ToString(), pto->id);
+                State(pto->id)->nTxsRequested++;
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
                 {
