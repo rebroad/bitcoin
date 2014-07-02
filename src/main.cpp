@@ -4521,6 +4521,11 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             LOCK(pto->cs_inventory);
             vInv.reserve(pto->vInventoryToSend.size());
             vInvWait.reserve(pto->vInventoryToSend.size());
+
+            int nTxs = 0;
+            int nTxWaits = 0;
+            int nBlocks = 0;
+
             BOOST_FOREACH(const CInv& inv, pto->vInventoryToSend)
             {
                 if (pto->setInventoryKnown.count(inv))
@@ -4540,6 +4545,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                     if (fTrickleWait)
                     {
                         vInvWait.push_back(inv);
+                        nTxWaits++;
                         continue;
                     }
                 }
@@ -4550,9 +4556,12 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                     if (inv.type == MSG_TX) {
                         LogPrint("tx", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
                         State(pto->id)->nTxInvsSent++;
+                        nTxs++;
                     }
-                    if (inv.type == MSG_BLOCK)
+                    if (inv.type == MSG_BLOCK) {
                         State(pto->id)->nBlockInvsSent++;
+                        nBlocks++;
+                    }
                     vInv.push_back(inv);
                     if (vInv.size() >= 1000)
                     {
@@ -4562,6 +4571,17 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 }
             }
             pto->vInventoryToSend = vInvWait;
+
+            if (nBlocks || nTxs) {
+                LogPrint("net3", "send invs");
+                if (nBlocks)
+                    LogPrint("net3", " %d blocks", nBlocks);
+                if (nTxs) {
+                    LogPrint("net3", " %d txs", nTxs);
+                    if (nTxWaits) LogPrint("net3", " %d delayed-txs", nTxWaits);
+                }
+                LogPrint("net3", " to peer=%d\n", pto->id);
+            }
         }
         if (!vInv.empty())
             pto->PushMessage("inv", vInv);
