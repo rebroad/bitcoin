@@ -224,6 +224,21 @@ struct CNodeState {
     list<QueuedBlock> vBlocksInFlight;
     int nBlocksInFlight;
     int nLastBlockInvHeight;   // Height of last block inv sent.
+    int64_t tLastDebugInfo;    // Time last debug snapshot displayed.
+    int nNewBlkInvsReceived;   // Total new block invs received.
+    int nOldBlkInvsReceived;   // Total old block invs received.
+    int nNewTxInvsReceived;    // Total new tx invs received.
+    int nOldTxInvsReceived;    // Total old tx invs received.
+    int nBlockInvsSent;        // Total blocks invs sent.
+    int nTxInvsSent;           // Total tx invs sent.
+    int nBlksRequested;        // Total blocks requested.
+    int nTxsRequested;         // Total txs requested.
+    int nBlksReceived;         // Total blocks received that were requested.
+    int nTxsReceived;          // Total txs received that were requested.
+    int nRandomTxsReceived;    // Total txs received that weren't requested.
+    int nBlksSent;             // Total blocks sent.
+    int nMerkleBlksSent;       // Total merkle blocks sent.
+    int nTxsSent;              // Total txs sent.
 
     CNodeState() {
         nMisbehavior = 0;
@@ -236,6 +251,21 @@ struct CNodeState {
         nStallingSince = 0;
         nBlocksInFlight = 0;
         nLastBlockInvHeight = 0;
+        tLastDebugInfo = GetTime();
+        nNewBlkInvsReceived = 0;
+        nOldBlkInvsReceived = 0;
+        nNewTxInvsReceived = 0;
+        nOldTxInvsReceived = 0;
+        nBlockInvsSent = 0;
+        nTxInvsSent = 0;
+        nBlksRequested = 0;
+        nTxsRequested = 0;
+        nBlksReceived = 0;
+        nTxsReceived = 0;
+        nRandomTxsReceived = 0;
+        nBlksSent = 0;
+        nMerkleBlksSent = 0;
+        nTxsSent = 0;
     }
 };
 
@@ -283,6 +313,7 @@ void MarkBlockAsReceived(const uint256& hash) {
         state->vBlocksInFlight.erase(itInFlight->second.second);
         state->nBlocksInFlight--;
         state->nStallingSince = 0;
+        state->nBlksReceived++;
         mapBlocksInFlight.erase(itInFlight);
     }
 }
@@ -3321,15 +3352,17 @@ void static ProcessGetData(CNode* pfrom)
                     CBlock block;
                     if (!ReadBlockFromDisk(block, (*mi).second))
                         assert(!"cannot load block from disk");
-                    if (inv.type == MSG_BLOCK)
+                    if (inv.type == MSG_BLOCK) {
                         pfrom->PushMessage("block", block);
-                    else // MSG_FILTERED_BLOCK)
+                        State(pfrom->id)->nBlksSent++;
+                    } else // MSG_FILTERED_BLOCK)
                     {
                         LOCK(pfrom->cs_filter);
                         if (pfrom->pfilter)
                         {
                             CMerkleBlock merkleBlock(block, *pfrom->pfilter);
                             pfrom->PushMessage("merkleblock", merkleBlock);
+                            State(pfrom->id)->nMerkleBlksSent++;
                             // CMerkleBlock just contains hashes, so also push any transactions in the block the client did not see
                             // This avoids hurting performance by pointlessly requiring a round-trip
                             // Note that there is currently no way for a node to request any single transactions we didnt send here -
@@ -3367,6 +3400,7 @@ void static ProcessGetData(CNode* pfrom)
                     map<CInv, CDataStream>::iterator mi = mapRelay.find(inv);
                     if (mi != mapRelay.end()) {
                         pfrom->PushMessage(inv.GetCommand(), (*mi).second);
+                        State(pfrom->id)->nTxsSent++;
                         pushed = true;
                     }
                 }
@@ -3377,6 +3411,7 @@ void static ProcessGetData(CNode* pfrom)
                         ss.reserve(1000);
                         ss << tx;
                         pfrom->PushMessage("tx", ss);
+                        State(pfrom->id)->nTxsSent++;
                         pushed = true;
                     }
                 }
@@ -3636,25 +3671,33 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             bool fAlreadyHave = AlreadyHave(inv);
             LogPrint("net2", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
 
-            if (!fAlreadyHave && !fImporting && !fReindex && inv.type != MSG_BLOCK)
-                pfrom->AskFor(inv);
+            if (!fAlreadyHave && inv.type != MSG_BLOCK) {
+                if (!fImporting && !fReindex)
+                    pfrom->AskFor(inv);
+                State(pfrom->id)->nNewTxInvsReceived++;
+            } else
+                State(pfrom->id)->OldTxInvsReceived++;
 
             if (inv.type == MSG_BLOCK) {
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
-                if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
-                    // First request the headers preceeding the announced block. In the normal fully-synced
-                    // case where a new block is announced that succeeds the current tip (no reorganization),
-                    // there are no such headers.
-                    // Secondly, and only when we are close to being synced, we request the announced block directly,
-                    // to avoid an extra round-trip. Note that we must *first* ask for the headers, so by the
-                    // time the block arrives, the header chain leading up to it is already validated. Not
-                    // doing this will result in the received block being rejected as an orphan.
-                    pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader), inv.hash);
-                    if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - Params().TargetSpacing() * 20) {
-                        vToFetch.push_back(inv);
-                        MarkBlockAsInFlight(pfrom->GetId(), inv.hash);
+                if (!fAlreadyHave) {
+                    State(pfrom->id)->nNewBlkInvsReceived++;
+                    if (!fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
+                        // First request the headers preceeding the announced block. In the normal fully-synced
+                        // case where a new block is announced that succeeds the current tip (no reorganization),
+                        // there are no such headers.
+                        // Secondly, and only when we are close to being synced, we request the announced block directly,
+                        // to avoid an extra round-trip. Note that we must *first* ask for the headers, so by the
+                        // time the block arrives, the header chain leading up to it is already validated. Not
+                        // doing this will result in the received block being rejected as an orphan.
+                        pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader), inv.hash);
+                        if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - Params().TargetSpacing() * 20) {
+                            vToFetch.push_back(inv);
+                            MarkBlockAsInFlight(pfrom->GetId(), inv.hash);
+                        }
                     }
-                }
+                } else
+                    State(pfrom->id)->nOldBlkInvsReceived++;
             }
 
             // Track requests for our stuff
@@ -3797,6 +3840,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         bool fMissingInputs = false;
         CValidationState state;
+
+        limitedmap<CInv, int64_t>::const_iterator it = mapAlreadyAskedFor.find(inv);
+        if (it != mapAlreadyAskedFor.end())
+            State(pfrom->id)->nTxsReceived++;
+        else
+            State(pfrom->id)->nRandomTxsReceived++;
+
         if (AcceptToMemoryPool(mempool, state, tx, true, &fMissingInputs))
         {
             mempool.check(pcoinsTip);
@@ -3985,8 +4035,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             bool fInMemPool = mempool.lookup(hash, tx);
             if (!fInMemPool) continue; // another thread removed since queryHashes, maybe...
             if ((pfrom->pfilter && pfrom->pfilter->IsRelevantAndUpdate(tx)) ||
-               (!pfrom->pfilter))
+               (!pfrom->pfilter)) {
                 vInv.push_back(inv);
+                State(pfrom->id)->nTxInvsSent++;
+            }
             if (vInv.size() == MAX_INV_SZ) {
                 pfrom->PushMessage("inv", vInv);
                 vInv.clear();
@@ -4496,8 +4548,12 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 // returns true if wasn't already contained in the set
                 if (pto->setInventoryKnown.insert(inv).second)
                 {
-                    if (inv.type == MSG_TX)
+                    if (inv.type == MSG_TX) {
                         LogPrint("tx", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
+                        State(pto->id)->nTxInvsSent++;
+                    }
+                    if (inv.type == MSG_BLOCK)
+                        State(pto->id)->nBlockInvsSent++;
                     vInv.push_back(inv);
                     if (vInv.size() >= 1000)
                     {
@@ -4510,6 +4566,49 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         }
         if (!vInv.empty())
             pto->PushMessage("inv", vInv);
+
+        // Display periodic snapshot of node stats
+        int64_t tNow = GetTimeMillis();
+        if (tNow/1000 - State(pto->id)->tLastDebugInfo > 5*60) {
+            State(pto->id)->tLastDebugInfo = GetTime();
+            int nNewBlkInvsReceived = State(pto->id)->nNewBlkInvsReceived;
+            State(pto->id)->nNewBlkInvsReceived = 0;
+            int nOldBlkInvsReceived = State(pto->id)->nOldBlkInvsReceived;
+            State(pto->id)->nOldBlkInvsReceived = 0;
+            int nBlockInvsSent = State(pto->id)->nBlockInvsSent;
+            State(pto->id)->nBlockInvsSent = 0;
+            int nNewTxInvsReceived = State(pto->id)->nNewTxInvsReceived;
+            State(pto->id)->nNewTxInvsReceived =0;
+            int nOldTxInvsReceived = State(pto->id)->nOldTxInvsReceived;
+            State(pto->id)->nOldTxInvsReceived = 0;
+            int nTxInvsSent = State(pto->id)->nTxInvsSent;
+            State(pto->id)->nTxInvsSent = 0;
+            int nBlksRequested = State(pto->id)->nBlksRequested;
+            State(pto->id)->nBlksRequested = 0;
+            int nBlksReceived = State(pto->id)->nBlksReceived;
+            State(pto->id)->nBlksReceived = 0;
+            int nTxsRequested = State(pto->id)->nTxsRequested;
+            State(pto->id)->nTxsRequested = 0;
+            int nTxsReceived = State(pto->id)->nTxsReceived;
+            State(pto->id)->nTxsReceived = 0;
+            int nRandomTxsReceived = State(pto->id)->nRandomTxsReceived;
+            State(pto->id)->nRandomTxsReceived = 0;
+            int nBlksSent = State(pto->id)->nBlksSent;
+            State(pto->id)->nBlksSent = 0;
+            int nMerkleBlksSent = State(pto->id)->nMerkleBlksSent;
+            State(pto->id)->nMerkleBlksSent = 0;
+            int nTxsSent = State(pto->id)->nTxsSent;
+            State(pto->id)->nTxsSent = 0;
+            LogPrint("net", "peer=%d ping=%ums ", pto->id, pto->nPingUsecTime/1000);
+            LogPrint("net", "NewBlkInvIn=%d OldBlkInvIn=%d BlkInvOut=%d NewTxInvIn=%d OldTxInvIn=%d TxInvOut=%d\n",
+              nNewBlkInvsReceived, nOldBlkInvsReceived, nBlockInvsSent, nNewTxInvsReceived, nOldTxInvsReceived,
+              nTxInvsSent);
+            LogPrint("net", "peer=%d BlksReq=%d BlkRec=%d TxReq=%d TxRec=%d RTxRec=%d BlkSent=%d MBlkSent=%d TxSent=%d\n",
+              pto->id, nBlksRequested, nBlksReceived, nTxsRequested, nTxsReceived, nRandomTxsReceived,
+              nBlksSent, nMerkleBlksSent, nTxsSent);
+            if (nRandomTxsReceived || ( nNewTxInvsReceived + nOldTxInvsReceived == 0 && !fAntisocial ) || nBlksReceived+1 < nBlksRequested || nBlksReceived > nBlksRequested || nTxsReceived+1 < nTxsRequested || nTxsReceived > nTxsRequested || nTxsSent > nTxInvsSent || nBlksSent > nBlockInvsSent)
+                LogPrint("net", "peer=%d is being CURIOUS\n", pto->id);
+        }
 
         // Detect whether we're stalling
         int64_t nNow = GetTimeMicros();
@@ -4546,6 +4645,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
                 MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), pindex);
                 LogPrint("net", "Requesting block %s peer=%d\n", pindex->GetBlockHash().ToString(), pto->id);
+                State(pto->id)->nBlksRequested++;
             }
             if (staller != -1) {
                 if (State(staller)->nStallingSince == 0)
@@ -4562,6 +4662,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             if (!AlreadyHave(inv))
             {
                 LogPrint("tx", "Requesting %s peer=%d\n", inv.ToString(), pto->id);
+                State(pto->id)->nTxsRequested++;
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
                 {
