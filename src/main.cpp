@@ -2597,6 +2597,9 @@ bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBl
     if (!ActivateBestChain(state, pblock))
         return error("ProcessBlock() : ActivateBestChain failed");
 
+    // Update the last seen time for this node's address
+    AddressCurrentlyConnected(pfrom->addr);
+
     return true;
 }
 
@@ -3814,6 +3817,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             vWorkQueue.push_back(inv.hash);
             vEraseQueue.push_back(inv.hash);
 
+            // Update the last seen time for this node's address
+            AddressCurrentlyConnected(pfrom->addr);
 
             LogPrint("mempool", "AcceptToMemoryPool: peer=%d %s : accepted %s (poolsz %u)\n",
                 pfrom->id, pfrom->cleanSubVer,
@@ -4174,13 +4179,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // Ignore unknown commands for extensibility
         LogPrint("net", "Unknown command \"%s\" from peer=%d\n", SanitizeString(strCommand), pfrom->id);
     }
-
-
-    // Update the last seen time for this node's address
-    if (pfrom->fNetworkNode)
-        if (strCommand == "version" || strCommand == "addr" || strCommand == "inv" || strCommand == "getdata" || strCommand == "ping")
-            AddressCurrentlyConnected(pfrom->addr);
-
 
     return true;
 }
