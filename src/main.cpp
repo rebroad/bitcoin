@@ -4777,10 +4777,13 @@ bool ProcessMessages(CNode* pfrom)
 
         // get next message
         CNetMessage& msg = *it;
+        CMessageHeader& hdr = msg.hdr;
+        unsigned int nMessageSize = hdr.nMessageSize;
+        string strCommand = hdr.GetCommand();
 
         //if (fDebug)
         //    LogPrintf("%s(message %u msgsz, %u bytes, complete:%s)\n", __func__,
-        //            msg.hdr.nMessageSize, msg.vRecv.size(),
+        //            nMessageSize, msg.vRecv.size(),
         //            msg.complete() ? "Y" : "N");
 
         // end, if an incomplete message is found
@@ -4791,23 +4794,17 @@ bool ProcessMessages(CNode* pfrom)
         it++;
 
         // Scan for message start
-        if (memcmp(msg.hdr.pchMessageStart, Params().MessageStart(), MESSAGE_START_SIZE) != 0) {
-            LogPrintf("PROCESSMESSAGE: INVALID MESSAGESTART %s peer=%d\n", SanitizeString(msg.hdr.GetCommand()), pfrom->id);
+        if (memcmp(hdr.pchMessageStart, Params().MessageStart(), MESSAGE_START_SIZE) != 0) {
+            LogPrintf("PROCESSMESSAGE: INVALID MESSAGESTART %s peer=%d\n", SanitizeString(strCommand), pfrom->id);
             fOk = false;
             break;
         }
 
-        // Read header
-        CMessageHeader& hdr = msg.hdr;
         if (!hdr.IsValid(Params().MessageStart()))
         {
-            LogPrintf("PROCESSMESSAGE: ERRORS IN HEADER %s peer=%d\n", SanitizeString(hdr.GetCommand()), pfrom->id);
+            LogPrintf("PROCESSMESSAGE: ERRORS IN HEADER %s peer=%d\n", SanitizeString(strCommand), pfrom->id);
             continue;
         }
-        string strCommand = hdr.GetCommand();
-
-        // Message size
-        unsigned int nMessageSize = hdr.nMessageSize;
 
         // Checksum
         CDataStream& vRecv = msg.vRecv;
