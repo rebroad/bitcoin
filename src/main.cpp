@@ -3615,7 +3615,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
 
         LOCK(cs_main);
+        int nBlockInvs = 0;
         int nBlocksGet = 0;
+        int nBlocksNew = 0;
 
         for (unsigned int nInv = 0; nInv < vInv.size(); nInv++)
         {
@@ -3633,6 +3635,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         if (pfrom->tGetblocks > pfrom->tBlockInvs || CaughtUp()) {
                             AddBlockToQueue(pfrom->GetId(), inv.hash);
                             nBlocksGet++;
+                            if (vInv.size() == 1)
+                                LogPrint("net", "inv (get) %s from peer=%d\n", inv.ToString(), pfrom->id);
+                        } else {
+                            if (vInv.size() == 1)
+                                LogPrint("net", "inv (new) %s from peer=%d\n", inv.ToString(), pfrom->id);
+                            nBlocksNew++;
                         }
                     } else
                         pfrom->AskFor(inv);
@@ -3640,15 +3648,21 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             } else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash))
                 PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash));
 
-            if (inv.type == MSG_BLOCK)
+            if (inv.type == MSG_BLOCK) {
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
+                nBlockInvs++;
+            }
 
             // Track requests for our stuff
             g_signals.Inventory(inv.hash);
         }
 
-        if (nBlocksGet)
+        if (nBlocksGet) {
             pfrom->tBlockInvs = GetTimeMillis();
+            if (vInv.size() > 1)
+                LogPrint("net", "%d block invs (%d to get) from peer=%d\n", nBlockInvs, nBlocksGet, pfrom->id);
+        } else if (nBlockInvs && vInv.size() > 1)
+            LogPrint("net", "%d block invs (%d new) from peer=%d\n", nBlockInvs, nBlocksNew, pfrom->id);
     }
 
 
