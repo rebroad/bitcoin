@@ -4028,6 +4028,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         std::vector<uint256> vtxid;
         mempool.queryHashes(vtxid);
         vector<CInv> vInv;
+        int nTxs = 0;
         BOOST_FOREACH(uint256& hash, vtxid) {
             CInv inv(MSG_TX, hash);
             CTransaction tx;
@@ -4037,6 +4038,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                (!pfrom->pfilter)) {
                 vInv.push_back(inv);
                 State(pfrom->id)->nTxInvsSent++;
+                nTxs++;
             }
             if (vInv.size() == MAX_INV_SZ) {
                 pfrom->PushMessage("inv", vInv);
@@ -4045,6 +4047,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
         if (vInv.size() > 0)
             pfrom->PushMessage("inv", vInv);
+        LogPrint("net", "mempool (sent %d txs) peer=%d\n", nTxs, pfrom->id);
     }
 
 
