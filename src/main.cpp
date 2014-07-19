@@ -2541,7 +2541,7 @@ bool PushGetBlocks(CNode* pnode, CBlockIndex* pindexBegin, uint256 hashEnd)
 {
     AssertLockHeld(cs_main);
     // Filter out duplicate requests
-    if (pindexBegin == pnode->pindexLastGetBlocksBegin && hashEnd == pnode->hashLastGetBlocksEnd)
+    if (pindexBegin == pnode->pindexLastGetBlocksBegin || (hashEnd != 0 && hashEnd == pnode->hashLastGetBlocksEnd))
         return false;
     pnode->pindexLastGetBlocksBegin = pindexBegin;
     pnode->hashLastGetBlocksEnd = hashEnd;
