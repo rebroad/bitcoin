@@ -221,6 +221,7 @@ struct CNodeState {
     int64_t nStallingSince;
     list<QueuedBlock> vBlocksInFlight;
     int nBlocksInFlight;
+    int nLastBlockInvHeight;   // Height of last block inv sent.
 
     CNodeState() {
         nMisbehavior = 0;
@@ -231,6 +232,7 @@ struct CNodeState {
         fSyncStarted = false;
         nStallingSince = 0;
         nBlocksInFlight = 0;
+        nLastBlockInvHeight = 0;
     }
 };
 
@@ -3686,6 +3688,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         CBlockLocator locator;
         uint256 hashStop;
         vRecv >> locator >> hashStop;
+        int nLastEnd = State(pfrom->id)->nLastBlockInvHeight;
 
         LOCK(cs_main);
 
@@ -3693,6 +3696,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         CBlockIndex* pindex = chainActive.FindFork(locator);
         CBlockIndex* pindexStart;
         CBlockIndex* pindexEnd;
+
+        // Only accommodate getblocks requests starting from a height just below the last height reached.
+        if (!pindex || pindex->nHeight < nLastEnd - 2)
+            return true;
 
         // Send the rest of the chain
         int nLimit = MAX_BLOCK_INVS;
@@ -3717,9 +3724,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 break;
             }
         }
-        if (pindexEnd != 0)
+        if (pindexEnd != 0) {
             LogPrint("net", "sending %d block invs (height %d to %d) to peer=%d\n",
               nCount, pindexStart->nHeight, pindexEnd->nHeight, pfrom->id);
+            State(pfrom->id)->nLastBlockInvHeight = pindexEnd->nHeight;
+        }
     }
 
 
