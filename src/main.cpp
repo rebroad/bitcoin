@@ -3336,8 +3336,7 @@ void static ProcessGetData(CNode* pfrom)
             {
                 bool send = false;
                 map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(inv.hash);
-                if (mi != mapBlockIndex.end())
-                {
+                if (mi != mapBlockIndex.end()) {
                     // If the requested block is at a height below our last
                     // checkpoint, only serve it if it's in the checkpointed chain
                     int nHeight = mi->second->nHeight;
@@ -3352,6 +3351,8 @@ void static ProcessGetData(CNode* pfrom)
                     } else {
                         send = true;
                     }
+                } else {
+                    LogPrint("net", "Can't serve %s to peer=%d\n", inv.ToString(), pfrom->id);
                 }
                 if (send && !fAntisocial)
                 {
@@ -3682,6 +3683,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             if (!fAlreadyHave) {
                 if (!fImporting && !fReindex) {
                     if (inv.type == MSG_BLOCK) {
+                        std::map<uint256, NodeId>::iterator it = mapBlockSource.find(inv.hash);
+                        if (it == mapBlockSource.end()) { // Not already seen
+                            mapBlockSource[inv.hash] = pfrom->id; // Mark as seen
+                            // Broadcast inv to all nodes
+                            LOCK(cs_vNodes);
+                            BOOST_FOREACH(CNode* pnode, vNodes)
+                                pnode->PushInventory(inv);
+                        }
                         State(pfrom->id)->nNewBlockInvsReceived++;
                         if (pfrom->tGetblocks > pfrom->tBlockInvs || CaughtUp()) {
                             AddBlockToQueue(pfrom->GetId(), inv.hash);
