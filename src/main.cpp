@@ -3689,6 +3689,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         // time the block arrives, the header chain leading up to it is already validated. Not
                         // doing this will result in the received block being rejected as an orphan.
                         pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader), inv.hash);
+                        LogPrint("net", "getheaders %s to peer=%d\n", inv.hash.ToString(), pfrom->id);
                         if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - Params().TargetSpacing() * 20) {
                             vToFetch.push_back(inv);
                             MarkBlockAsInFlight(pfrom->GetId(), inv.hash);
@@ -3948,6 +3949,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         LOCK(cs_main);
 
+        LogPrint("net", "received %d headers from peer=%d\n", nCount, pfrom->id);
         if (nCount == 0) {
             // Nothing interesting. Stop asking this peers for more headers.
             return true;
@@ -3977,6 +3979,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             // Headers message had its maximum size; the peer may have more headers.
             // TODO: optimize: if pindexLast is an ancestor of chainActive.Tip or pindexBestHeader, continue
             // from there instead.
+            LogPrint("net", "more getheaders to end to peer=%d\n", pfrom->id);
             pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexLast), uint256(0));
         }
     }
@@ -4506,6 +4509,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             if (nSyncStarted == 0 || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
                 state.fSyncStarted = true;
                 nSyncStarted++;
+                LogPrint("net", "initial getheaders to peer=%d\n", pto->id);
                 pto->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader->pprev), uint256(0));
             }
         }
