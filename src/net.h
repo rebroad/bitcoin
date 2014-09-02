@@ -156,7 +156,6 @@ public:
     int nStartingHeight;
     uint64_t nSendBytes;
     uint64_t nRecvBytes;
-    bool fSyncNode;
     bool fWhitelisted;
     double dPingTime;
     double dPingWait;
@@ -274,10 +273,7 @@ protected:
 
 public:
     uint256 hashContinue;
-    CBlockIndex* pindexLastGetBlocksBegin;
-    uint256 hashLastGetBlocksEnd;
     int nStartingHeight;
-    bool fStartSync;
 
     // flood relay
     std::vector<CAddress> vAddrToSend;

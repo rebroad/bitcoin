@@ -67,9 +67,17 @@ static const int MAX_SCRIPTCHECK_THREADS = 16;
 /** -par default (number of script-checking threads, 0 = auto) */
 static const int DEFAULT_SCRIPTCHECK_THREADS = 0;
 /** Number of blocks that can be requested at any given time from a single peer. */
-static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 128;
-/** Timeout in seconds before considering a block download peer unresponsive. */
-static const unsigned int BLOCK_DOWNLOAD_TIMEOUT = 60;
+static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 16;
+/** Timeout in seconds during which a peer must stall block download progress before being disconnected. */
+static const unsigned int BLOCK_STALLING_TIMEOUT = 2;
+/** Number of headers sent in one getheaders result. We rely on the assumption that if a peer sends
+ *  less than this number, we reached their tip. Changing this value is a protocol upgrade. */
+static const unsigned int MAX_HEADERS_RESULTS = 2000;
+/** Size of the "block download window": how far ahead of our current height do we fetch?
+ *  Larger windows tolerate larger download speed differences between peer, but increase the potential
+ *  degree of disordering of blocks on disk (which make reindexing and in the future perhaps pruning
+ *  harder). We'll probably want to make this a per-peer adaptive value at some point. */
+static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
 
 /** "reject" message codes **/
 static const unsigned char REJECT_MALFORMED = 0x01;
@@ -100,6 +108,9 @@ extern bool fIsBareMultisigStd;
 extern unsigned int nCoinCacheSize;
 extern CFeeRate minRelayTxFee;
 
+// Best header we've seen so far (used for getheaders queries' starting points).
+extern CBlockIndex *pindexBestHeader;
+
 // Minimum disk space required - used in CheckDiskSpace()
 static const uint64_t nMinDiskSpace = 52428800;
 
@@ -127,8 +138,6 @@ void SyncWithWallets(const CTransaction& tx, const CBlock* pblock = NULL);
 void RegisterNodeSignals(CNodeSignals& nodeSignals);
 /** Unregister a network node */
 void UnregisterNodeSignals(CNodeSignals& nodeSignals);
-
-void PushGetBlocks(CNode* pnode, CBlockIndex* pindexBegin, uint256 hashEnd);
 
 /** Process an incoming block */
 bool ProcessBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, CDiskBlockPos *dbp = NULL);
@@ -190,6 +199,8 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
 struct CNodeStateStats {
     int nMisbehavior;
     int nSyncHeight;
+    int nCommonHeight;
+    std::vector<int> vHeightInFlight;
 };
 
 struct CDiskBlockPos
@@ -473,9 +484,6 @@ bool DisconnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex
 // Apply the effects of this block (with given index) on the UTXO set represented by coins
 bool ConnectBlock(CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& coins, bool fJustCheck = false);
 
-// Add this block to the block index, and if necessary, switch the active block chain to this
-bool AddToBlockIndex(CBlock& block, CValidationState& state, const CDiskBlockPos& pos);
-
 // Context-independent validity checks
 bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, bool fCheckPOW = true);
 bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW = true, bool fCheckMerkleRoot = true);
@@ -483,7 +491,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW = t
 // Store block on disk
 // if dbp is provided, the file is known to already reside on disk
 bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex **pindex, CDiskBlockPos* dbp = NULL);
-bool AcceptBlockHeader(CBlockHeader& block, CValidationState& state, CBlockIndex **ppindex= NULL);
+bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, CBlockIndex **ppindex= NULL);
 
 
 
@@ -542,12 +550,29 @@ public:
 };
 
 enum BlockStatus {
+    // Unused.
     BLOCK_VALID_UNKNOWN      =    0,
-    BLOCK_VALID_HEADER       =    1, // parsed, version ok, hash satisfies claimed PoW, 1 <= vtx count <= max, timestamp not in future
-    BLOCK_VALID_TREE         =    2, // parent found, difficulty matches, timestamp >= median previous, checkpoint
-    BLOCK_VALID_TRANSACTIONS =    3, // only first tx is coinbase, 2 <= coinbase input script length <= 100, transactions valid, no duplicate txids, sigops, size, merkle root
-    BLOCK_VALID_CHAIN        =    4, // outputs do not overspend inputs, no double spends, coinbase output ok, immature coinbase spends, BIP30
-    BLOCK_VALID_SCRIPTS      =    5, // scripts/signatures ok
+
+    // Parsed, version ok, hash satisfies claimed PoW, 1 <= vtx count <= max, timestamp not in future
+    BLOCK_VALID_HEADER       =    1,
+
+    // All parent headers found, difficulty matches, timestamp >= median previous, checkpoint. Implies all parents
+    // are also at least TREE.
+    BLOCK_VALID_TREE         =    2,
+
+    // Only first tx is coinbase, 2 <= coinbase input script length <= 100, transactions valid, no duplicate txids,
+    // sigops, size, merkle root. Implies all parents are at least TREE but not necessarily TRANSACTIONS. When all
+    // parent blocks also have TRANSACTIONS, CBlockIndex::nChainTx will be set.
+    BLOCK_VALID_TRANSACTIONS =    3,
+
+    // Outputs do not overspend inputs, no double spends, coinbase output ok, immature coinbase spends, BIP30.
+    // Implies all parents are also at least CHAIN.
+    BLOCK_VALID_CHAIN        =    4,
+
+    // Scripts & signatures ok. Implies all parents are also at least SCRIPTS.
+    BLOCK_VALID_SCRIPTS      =    5,
+
+    // All validity bits.
     BLOCK_VALID_MASK         =    7,
 
     BLOCK_HAVE_DATA          =    8, // full block available in blk*.dat
@@ -595,7 +620,8 @@ public:
     // Note: in a potential headers-first mode, this number cannot be relied upon
     unsigned int nTx;
 
-    // (memory only) Number of transactions in the chain up to and including this block
+    // (memory only) Number of transactions in the chain up to and including this block.
+    // This value will be non-zero only iff transactions for this block and all its parents are available.
     unsigned int nChainTx; // change to 64-bit type when necessary; won't happen before 2030
 
     // Verification status of this block. See enum BlockStatus
@@ -638,7 +664,7 @@ public:
         SetNull();
     }
 
-    CBlockIndex(CBlockHeader& block)
+    CBlockIndex(const CBlockHeader& block)
     {
         SetNull();
 
