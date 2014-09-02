@@ -5417,8 +5417,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                         LogPrint("tx3", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
                         nTxs++;
                     }
-                    if (inv.type == MSG_BLOCK)
+                    if (inv.type == MSG_BLOCK) {
+                        LogPrint("block2", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
                         nBlocks++;
+                    }
                     vInv.push_back(inv);
                     if (vInv.size() >= 1000)
                     {
