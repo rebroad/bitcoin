@@ -3678,8 +3678,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->AddInventoryKnown(inv);
 
             bool fAlreadyHave = AlreadyHave(inv);
-            LogPrint("net2", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
-
             if (!fAlreadyHave) {
                 if (!fImporting && !fReindex) {
                     if (inv.type == MSG_BLOCK) {
@@ -3709,6 +3707,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 }
             } else if (inv.type == MSG_BLOCK) {
                 State(pfrom->id)->nOldBlockInvsReceived++;
+                LogPrintf("block", "inv (old) %s from peer=%d\n", inv.ToString(), pfrom->id);
                 if (mapOrphanBlocks.count(inv.hash))
                     if (PushGetBlocks(pfrom, chainActive.Tip(), GetOrphanRoot(inv.hash)))
                         LogPrint("net", "orphan getblocks %s to peer=%d\n", GetOrphanRoot(inv.hash).ToString(), pfrom->id);
@@ -4566,6 +4565,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                         nTxs++;
                     }
                     if (inv.type == MSG_BLOCK) {
+                        LogPrint("block", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
                         State(pto->id)->nBlockInvsSent++;
                         nBlocks++;
                     }
