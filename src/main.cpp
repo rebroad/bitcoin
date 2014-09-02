@@ -3669,14 +3669,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->AddInventoryKnown(inv);
 
             bool fAlreadyHave = AlreadyHave(inv);
-            LogPrint("net2", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
-
             if (!fAlreadyHave && inv.type != MSG_BLOCK) {
                 if (!fImporting && !fReindex)
                     pfrom->AskFor(inv);
                 State(pfrom->id)->nNewTxInvsReceived++;
             } else
-                State(pfrom->id)->OldTxInvsReceived++;
+                State(pfrom->id)->nOldTxInvsReceived++;
 
             if (inv.type == MSG_BLOCK) {
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
@@ -3694,10 +3692,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - Params().TargetSpacing() * 20) {
                             vToFetch.push_back(inv);
                             MarkBlockAsInFlight(pfrom->GetId(), inv.hash);
-                        }
-                    }
-                } else
+                            LogPrint("block", "inv (get) %s from peer=%d\n", inv.ToString(), pfrom->id);
+                        } else
+                            LogPrint("block", "inv (new) %s from peer=%d\n", inv.ToString(), pfrom->id);
+                    } else
+                            LogPrint("block", "inv (new) %s from peer=%d\n", inv.ToString(), pfrom->id);
+                } else {
                     State(pfrom->id)->nOldBlkInvsReceived++;
+                    LogPrint("block", "inv (old) %s from peer=%d\n", inv.ToString(), pfrom->id);
+                }
             }
 
             // Track requests for our stuff
@@ -4562,6 +4565,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                         nTxs++;
                     }
                     if (inv.type == MSG_BLOCK) {
+                        LogPrint("block", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
                         State(pto->id)->nBlockInvsSent++;
                         nBlocks++;
                     }
