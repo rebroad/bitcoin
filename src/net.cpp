@@ -2753,7 +2753,7 @@ void CNode::AskFor(const CInv& inv)
         nRequestTime = 0;
 
     // Make sure not to reuse time indexes to keep things in the same order
-    int64_t nNow = GetTimeMicros() - 1000000;
+    int64_t nNow = GetTimeMicros() - 1;
     static int64_t nLastTime;
     ++nLastTime;
     nNow = std::max(nNow, nLastTime);
