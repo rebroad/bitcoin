@@ -2122,10 +2122,12 @@ bool ActivateBestChain(CValidationState &state, CBlock *pblock) {
             // Relay inventory, but don't relay old inventory during initial block download.
             int nBlockEstimate = Checkpoints::GetTotalBlocksEstimate();
             {
-            LOCK(cs_vNodes);
-            BOOST_FOREACH(CNode* pnode, vNodes)
-                if (chainActive.Height() > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : nBlockEstimate) && !fAntisocial)
-                    pnode->PushInventory(CInv(MSG_BLOCK, hashNewTip));
+                LOCK(cs_vNodes);
+                BOOST_FOREACH(CNode* pnode, vNodes) {
+                    CNodeState *state = State(pnode->id);
+                    if (chainActive.Height() > (state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight - 2000: nBlockEstimate) && !fAntisocial)
+                        pnode->PushInventory(CInv(MSG_BLOCK, hashNewTip));
+                }
             }
 
             uiInterface.NotifyBlockTip(hashNewTip);
