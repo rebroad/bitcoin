@@ -144,7 +144,7 @@ void Forget(MapInvRequests::iterator i)
 /** Actually request an item from a node.
  * @note requires that cs_invRequests lock is held.
  */
-void RequestItem(NodeId nodeid, CInvState &invstate, const CInv &inv)
+void RequestItem(NodeId nodeid, CInvState &invstate, const CInv &inv, bool isRetry)
 {
     /// TODO what locks on node to we need here?
     CNodeAskForState *state = State(nodeid);
@@ -153,7 +153,7 @@ void RequestItem(NodeId nodeid, CInvState &invstate, const CInv &inv)
 
     LogPrint("netaskfor", "%s: Requesting item %s from node %i (%s)\n", __func__,
             inv.ToString(), nodeid,
-            invRequestsWorkQueue.begin()->first ? "retry" : "first request");
+            isRetry ? "retry" : "first request");
     invstate.beingRequestedFrom = nodeid;
 
     std::vector<CInv> vGetData;
@@ -190,7 +190,7 @@ void ThreadHandleAskFor()
                         NodeId nodeid = *first;
                         invstate.notRequestedFrom.erase(first);
 
-                        RequestItem(nodeid, invstate, inv);
+                        RequestItem(nodeid, invstate, inv, invRequestsWorkQueue.begin()->first != 0);
 
                         /// Need to revisit this request after timeout
                         invstate.workQueueIter = invRequestsWorkQueue.insert(std::make_pair(now + NetAskFor::REQUEST_TIMEOUT, inv));
