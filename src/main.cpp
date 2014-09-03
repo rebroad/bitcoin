@@ -4233,15 +4233,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             vRecv >> LIMITED_STRING(strMsg, CMessageHeader::COMMAND_SIZE) >> ccode >> LIMITED_STRING(strReason, 111);
 
             ostringstream ss;
-            ss << strMsg << " code " << itostr(ccode) << ": " << strReason;
+            ss << " " << itostr(ccode) << ": " << strReason;
 
             if (strMsg == "block" || strMsg == "tx")
             {
                 uint256 hash;
                 vRecv >> hash;
-                ss << ": hash " << hash.ToString();
+                ss << ": " << strMsg << " " << hash.ToString();
             }
-            LogPrint("net", "Reject %s\n", SanitizeString(ss.str()));
+            LogPrint("net", "Reject %s from peer=%d\n", SanitizeString(ss.str()), pfrom->id);
         }
     }
 
