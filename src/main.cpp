@@ -3704,8 +3704,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 } else {
                     CNodeState *state = State(pfrom->id);
                     state->nOldBlkInvsReceived++;
-                    LogPrint("block", "inv (old) %s from peer=%d (startheight:%d syncheight:%d)\n", inv.ToString(), pfrom->id,
-                      pfrom->nStartingHeight, state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : -1);
+                    int theirheight = state->pindexBestKnownBlock->nHeight;
+                    if (CaughtUp() && theirheight >= chainActive.Height()-1)
+                        LogPrint("block", "inv (old) %s from peer=%d (height:%d)\n", inv.ToString(), pfrom->id,
+                                state->pindexBestKnownBlock ? theirheight : -1);
                 }
             }
 
