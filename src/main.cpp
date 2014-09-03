@@ -4573,7 +4573,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                         nTxs++;
                     }
                     if (inv.type == MSG_BLOCK) {
-                        LogPrint("block", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
+                        LogPrint("block2", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
                         State(pto->id)->nBlockInvsSent++;
                         nBlocks++;
                     }
