@@ -3700,7 +3700,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                             LogPrint("block", "inv (new) %s from peer=%d\n", inv.ToString(), pfrom->id);
                 } else {
                     State(pfrom->id)->nOldBlkInvsReceived++;
-                    LogPrint("block", "inv (old) %s from peer=%d\n", inv.ToString(), pfrom->id);
+                    LogPrint("block", "inv (old) %s from peer=%d (startheight:%d)\n", inv.ToString(), pfrom->id, pfrom->nStartingHeight);
                 }
             }
 
