@@ -4883,15 +4883,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 vRecv >> LIMITED_STRING(strMsg, CMessageHeader::COMMAND_SIZE) >> ccode >> LIMITED_STRING(strReason, MAX_REJECT_MESSAGE_LENGTH);
 
                 ostringstream ss;
-                ss << strMsg << " code " << itostr(ccode) << ": " << strReason;
+                ss << " " << itostr(ccode) << ": " << strReason << ": " << strMsg;
 
                 if (strMsg == "block" || strMsg == "tx")
                 {
                     uint256 hash;
                     vRecv >> hash;
-                    ss << ": hash " << hash.ToString();
+                    ss << " " << hash.ToString();
                 }
-                LogPrint("net", "Reject %s\n", SanitizeString(ss.str()));
+                LogPrint("net", "Reject %s from peer=%d\n", SanitizeString(ss.str()), pfrom->id);
             } catch (const std::ios_base::failure&) {
                 // Avoid feedback loops by preventing reject messages from triggering a new reject message.
                 LogPrint("net", "Unparseable reject message received\n");
