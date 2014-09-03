@@ -4689,8 +4689,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 State(pto->id)->nBlksRequested++;
             }
             if (staller != -1) {
-                if (State(staller)->nStallingSince == 0)
+                if (State(staller)->nStallingSince == 0) {
                     State(staller)->nStallingSince = nNow;
+                    LogPrint("net", "Stall started peer=%d\n", staller);
+                }
             }
         }
 
