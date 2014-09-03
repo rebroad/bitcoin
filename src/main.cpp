@@ -2125,7 +2125,7 @@ bool ActivateBestChain(CValidationState &state, CBlock *pblock) {
                 LOCK(cs_vNodes);
                 BOOST_FOREACH(CNode* pnode, vNodes) {
                     CNodeState *state = State(pnode->id);
-                    if (chainActive.Height() > (state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight - 2000: nBlockEstimate) && !fAntisocial)
+                    if (chainActive.Height() > (state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : nBlockEstimate) && !fAntisocial)
                         pnode->PushInventory(CInv(MSG_BLOCK, hashNewTip));
                 }
             }
