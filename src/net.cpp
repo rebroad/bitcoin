@@ -2036,7 +2036,6 @@ void CNode::AskFor(const CInv& inv)
         nRequestTime = it->second;
     else
         nRequestTime = 0;
-    LogPrint("tx", "askfor %s  (%s) peer=%d\n", inv.ToString(), DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000), id);
 
     // Make sure not to reuse time indexes to keep things in the same order
     int64_t nNow = GetTimeMicros() - 1000000;
@@ -2051,6 +2050,7 @@ void CNode::AskFor(const CInv& inv)
         mapAlreadyAskedFor.update(it, nRequestTime);
     else
         mapAlreadyAskedFor.insert(std::make_pair(inv, nRequestTime));
+    LogPrint("tx", "askfor %s  (%s) peer=%d\n", inv.ToString(), DateTimeStrFormat("%H:%M:%S", nRequestTime/1000000), id);
     mapAskFor.insert(std::make_pair(nRequestTime, inv));
 }
 
