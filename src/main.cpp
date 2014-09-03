@@ -2507,9 +2507,11 @@ bool ActivateBestChain(CValidationState &state, CBlock *pblock) {
             // in a stalled download if the block file is pruned before the request.
             if (nLocalServices & NODE_NETWORK) {
                 LOCK(cs_vNodes);
-                BOOST_FOREACH(CNode* pnode, vNodes)
-                    if (chainActive.Height() > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : nBlockEstimate))
+                BOOST_FOREACH(CNode* pnode, vNodes) {
+                    CNodeState *state = State(pnode->id);
+                    if (chainActive.Height() > (state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : nBlockEstimate))
                         pnode->PushInventory(CInv(MSG_BLOCK, hashNewTip));
+                }
             }
             // Notify external listeners about the new tip.
             uiInterface.NotifyBlockTip(hashNewTip);
