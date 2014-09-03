@@ -149,7 +149,7 @@ void RequestItem(NodeId nodeid, CInvState &invstate, const CInv &inv)
     /// TODO what locks on node to we need here?
     CNodeAskForState *state = State(nodeid);
     assert(state && state->node);
-    CNode *node = state->node->AddRef();
+    CNode *node = state->node;
 
     LogPrint("netaskfor", "%s: Requesting item %s from node %i (%s)\n", __func__,
             inv.ToString(), nodeid,
@@ -159,7 +159,6 @@ void RequestItem(NodeId nodeid, CInvState &invstate, const CInv &inv)
     std::vector<CInv> vGetData;
     vGetData.push_back(inv);
     node->PushMessage("getdata", vGetData);
-    node->Release();
 }
 
 void ThreadHandleAskFor()
