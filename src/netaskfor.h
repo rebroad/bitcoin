@@ -20,7 +20,7 @@ namespace NetAskFor
 /** Retry ask for inventory item to a different node if node doesn't
  * respond with data within this time
  */
-const int64_t REQUEST_TIMEOUT = 30 * 1000000;
+const int64_t REQUEST_TIMEOUT = 2 * 60 * 1000000;
 
 /** The maximum number of inv requests that can be in flight from a node */
 static const unsigned int MAX_SETASKFOR_SZ = 10000;
