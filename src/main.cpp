@@ -3419,7 +3419,7 @@ void static ProcessGetData(CNode* pfrom)
                 }
                 if (!pushed) {
                     vNotFound.push_back(inv);
-                    LogPrint("tx", "notfound %s to peer=%d\n", inv.ToString(), pfrom->id);
+                    LogPrint("tx2", "notfound %s to peer=%d\n", inv.ToString(), pfrom->id);
                 }
             }
 
@@ -4568,7 +4568,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 if (pto->setInventoryKnown.insert(inv).second)
                 {
                     if (inv.type == MSG_TX) {
-                        LogPrint("tx", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
+                        LogPrint("tx2", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
                         State(pto->id)->nTxInvsSent++;
                         nTxs++;
                     }
@@ -4695,7 +4695,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             const CInv& inv = (*pto->mapAskFor.begin()).second;
             if (!AlreadyHave(inv))
             {
-                LogPrint("tx", "Requesting %s peer=%d\n", inv.ToString(), pto->id);
+                LogPrint("tx2", "Requesting %s peer=%d\n", inv.ToString(), pto->id);
                 State(pto->id)->nTxsRequested++;
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
