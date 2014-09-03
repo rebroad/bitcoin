@@ -3751,6 +3751,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         NetAskFor::Completed(inv);
 
         LOCK(cs_main);
+
         bool fMissingInputs = false;
         CValidationState state;
         if (AcceptToMemoryPool(mempool, state, tx, true, &fMissingInputs))
@@ -3759,6 +3760,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             RelayTransaction(tx);
             vWorkQueue.push_back(inv.hash);
             vEraseQueue.push_back(inv.hash);
+
 
             LogPrint("mempool", "AcceptToMemoryPool: peer=%d %s : accepted %s (poolsz %u)\n",
                 pfrom->id, pfrom->cleanSubVer,
