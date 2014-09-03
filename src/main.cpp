@@ -231,9 +231,10 @@ struct CNodeState {
     int nOldTxInvsReceived;    // Total old tx invs received.
     int nBlockInvsSent;        // Total blocks invs sent.
     int nTxInvsSent;           // Total tx invs sent.
+    int nHeadersReceived;      // Total headers received.
     int nBlksRequested;        // Total blocks requested.
     int nTxsRequested;         // Total txs requested.
-    int nBlksReceived;         // Total blocks received that were requested.
+    int nBlksReceived;         // Total blocks received.
     int nTxsReceived;          // Total txs received that were requested.
     int nRandomTxsReceived;    // Total txs received that weren't requested.
     int nBlksSent;             // Total blocks sent.
@@ -3954,6 +3955,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         LOCK(cs_main);
 
         LogPrint("net", "received %d headers from peer=%d\n", nCount, pfrom->id);
+        State(pfrom->id)->nHeadersReceived += nCount;
+
         if (nCount == 0) {
             // Nothing interesting. Stop asking this peers for more headers.
             return true;
@@ -4617,6 +4620,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             State(pto->id)->nOldTxInvsReceived = 0;
             int nTxInvsSent = State(pto->id)->nTxInvsSent;
             State(pto->id)->nTxInvsSent = 0;
+            int nHeadersReceived = State(pto->id)->nHeadersReceived;
+            State(pto->id)->nHeadersReceived = 0;
             int nBlksRequested = State(pto->id)->nBlksRequested;
             State(pto->id)->nBlksRequested = 0;
             int nBlksReceived = State(pto->id)->nBlksReceived;
@@ -4637,8 +4642,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             LogPrint("net", "NewBlkInvIn=%d OldBlkInvIn=%d BlkInvOut=%d NewTxInvIn=%d OldTxInvIn=%d TxInvOut=%d\n",
               nNewBlkInvsReceived, nOldBlkInvsReceived, nBlockInvsSent, nNewTxInvsReceived, nOldTxInvsReceived,
               nTxInvsSent);
-            LogPrint("net", "peer=%d BlksReq=%d BlkRec=%d TxReq=%d TxRec=%d RTxRec=%d BlkSent=%d MBlkSent=%d TxSent=%d\n",
-              pto->id, nBlksRequested, nBlksReceived, nTxsRequested, nTxsReceived, nRandomTxsReceived,
+            LogPrint("net", "peer=%d HeadRec=%d BlksReq=%d BlkRec=%d TxReq=%d TxRec=%d RTxRec=%d BlkSent=%d MBlkSent=%d TxSent=%d\n",
+              pto->id, nHeadersReceived, nBlksRequested, nBlksReceived, nTxsRequested, nTxsReceived, nRandomTxsReceived,
               nBlksSent, nMerkleBlksSent, nTxsSent);
             if (nRandomTxsReceived || ( nNewTxInvsReceived + nOldTxInvsReceived == 0 && !fAntisocial ) || nBlksReceived+1 < nBlksRequested || nBlksReceived > nBlksRequested || nTxsReceived+1 < nTxsRequested || nTxsReceived > nTxsRequested || nTxsSent > nTxInvsSent || nBlksSent > nBlockInvsSent)
                 LogPrint("net", "peer=%d is being CURIOUS\n", pto->id);
