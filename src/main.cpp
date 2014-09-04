@@ -4222,14 +4222,14 @@ bool ProcessMessages(CNode* pfrom)
 
         // Scan for message start
         if (memcmp(msg.hdr.pchMessageStart, Params().MessageStart(), MESSAGE_START_SIZE) != 0) {
-            LogPrintf("\n\nPROCESSMESSAGE: INVALID MESSAGESTART\n\n");
+            LogPrintf("PROCESSMESSAGE: INVALID MESSAGESTART %s peer=%d\n", strCommand, pfrom->id);
             fOk = false;
             break;
         }
 
         if (!hdr.IsValid())
         {
-            LogPrintf("\n\nPROCESSMESSAGE: ERRORS IN HEADER %s\n\n\n", strCommand);
+            LogPrintf("PROCESSMESSAGE: ERRORS IN HEADER %s peer=%d\n", strCommand, pfrom->id);
             continue;
         }
 
