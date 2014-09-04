@@ -3748,7 +3748,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         CInv inv(MSG_TX, tx.GetHash());
         pfrom->AddInventoryKnown(inv);
-        NetAskFor::Completed(inv);
+        NetAskFor::Completed(pfrom, inv);
 
         LOCK(cs_main);
 

@@ -38,7 +38,7 @@ void AskFor(CNode *node, const CInv &inv);
 
 /** Forget an inventory item request
  */
-void Completed(const CInv &inv);
+void Completed(CNode *node, const CInv &inv);
 
 };
 

@@ -236,16 +236,19 @@ void StopThreads()
 namespace NetAskFor
 {
 
-void Completed(const CInv& inv)
+void Completed(CNode *node, const CInv& inv)
 {
     LOCK(cs_invRequests);
     MapInvRequests::iterator i = mapInvRequests.find(inv);
     if (i != mapInvRequests.end())
     {
-        LogPrint("netaskfor", "%s: %s\n", __func__, inv.ToString());
+        LogPrint("netaskfor", "%s: %s peer=%i\n", __func__, inv.ToString(), node->GetId());
         Forget(i);
     } else {
-        LogPrint("netaskfor", "%s: %s not found!\n", __func__, inv.ToString());
+        /// This can happen if a node sends a transaction without unannouncing it with 'inv'
+        /// first, or then we retry a request, which completes (and thus forget about), and then
+        /// the original node comes back and sends our requested data anyway.
+        LogPrint("netaskfor", "%s: %s not found! peer=%i\n", __func__, inv.ToString(), node->GetId());
     }
 }
 
