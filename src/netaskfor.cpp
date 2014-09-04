@@ -181,6 +181,10 @@ void ThreadHandleAskFor()
                     CInvState &invstate = it->second;
                     invstate.workQueueIter = invRequestsWorkQueue.end();
                     /// Pick a node to request from, if available
+                    ///
+                    /// Currently this picks the node with the lowest node id
+                    /// (notRequestedFrom is an ordered set) that offers the item
+                    /// that we haven't / tried yet.
                     if (invstate.notRequestedFrom.empty())
                     {
                         LogPrint("netaskfor", "%s: No more nodes to request item %s from, discarding request\n", __func__, inv.ToString());
