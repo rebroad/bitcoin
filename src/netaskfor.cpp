@@ -156,9 +156,8 @@ void RequestItem(NodeId nodeid, CInvState &invstate, const CInv &inv, bool isRet
             isRetry ? "retry" : "first request");
     invstate.beingRequestedFrom = nodeid;
 
-    std::vector<CInv> vGetData;
-    vGetData.push_back(inv);
-    node->PushMessage("getdata", vGetData);
+    int64_t nNow = GetTimeMicros();
+    node->mapAskFor.insert(std::make_pair(nNow, inv);
 }
 
 void ThreadHandleAskFor()

@@ -4413,6 +4413,27 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 vGetData.clear();
             }
         }
+
+        //
+        // Message: getdata (non-blocks)
+        //
+        while (!pto->fDisconnect && !pto->mapAskFor.empty() && (*pto->mapAskFor.begin()).first <= nNow)
+        {
+            const CInv& inv = (*pto->mapAskFor.begin()).second;
+            if (!AlreadyHave(inv))
+            {
+                if (fDebug)
+                    LogPrint("net", "Requesting %s peer=%d\n", inv.ToString(), pto->id);
+                vGetData.push_back(inv);
+                if (vGetData.size() >= 1000)
+                {
+                    pto->PushMessage("getdata", vGetData);
+                    vGetData.clear();
+                }
+            }
+            pto->mapAskFor.erase(pto->mapAskFor.begin());
+        }
+
         if (!vGetData.empty())
             pto->PushMessage("getdata", vGetData);
 
