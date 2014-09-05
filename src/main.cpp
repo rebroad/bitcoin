@@ -4611,7 +4611,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         int nDoS = 0;
         if (state.IsInvalid(nDoS))
         {
-            LogPrint("mempool", "mempool: %s not accepted from peer=%d %s: %s\n", inv.ToString(),
+            LogPrintf("mempool: %s not accepted from peer=%d %s: %s\n", inv.ToString(),
                 pfrom->id, pfrom->cleanSubVer.substr(0,20), state.GetRejectReason());
             pfrom->PushMessage("reject", strCommand, state.GetRejectCode(),
                                state.GetRejectReason().substr(0, MAX_REJECT_MESSAGE_LENGTH), inv.hash);
