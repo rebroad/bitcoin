@@ -14,6 +14,7 @@
 #include "consensus/validation.h"
 #include "init.h"
 #include "merkleblock.h"
+#include "mruset.h"
 #include "net.h"
 #include "pow.h"
 #include "txdb.h"
@@ -99,6 +100,7 @@ struct COrphanTx {
 map<uint256, COrphanTx> mapOrphanTransactions;
 map<uint256, set<uint256> > mapOrphanTransactionsByPrev;
 void EraseOrphansFor(NodeId peer);
+mruset<uint256> setRejectedTx(200);
 
 /**
  * Returns true if there are nRequired or more blocks of minVersion or above
@@ -665,6 +667,7 @@ bool AddOrphanTx(const CTransaction& tx, NodeId peer)
     {
         LogPrint("mempool", "ignoring large orphan tx (size: %u, hash: %s) peer=%d\n", sz,
             hash.ToString(), peer);
+        setRejectedTx.insert(hash);
         return false;
     }
 
@@ -3931,7 +3934,8 @@ bool static AlreadyHave(const CInv& inv)
         {
             bool txInMap = false;
             txInMap = mempool.exists(inv.hash);
-            return txInMap || mapOrphanTransactions.count(inv.hash) ||
+            bool txRejected = setRejectedTx.count(inv.hash);
+            return txInMap || txRejected || mapOrphanTransactions.count(inv.hash) ||
                 pcoinsTip->HaveCoins(inv.hash);
         }
     case MSG_BLOCK:
