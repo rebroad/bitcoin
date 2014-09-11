@@ -98,7 +98,8 @@ CCriticalSection cs_setservAddNodeAddresses;
 vector<std::string> vAddedNodes;
 CCriticalSection cs_vAddedNodes;
 
-NodeId nLastNodeId = 0;
+#define START_NODEID 100
+NodeId nLastNodeId = START_NODEID;
 CCriticalSection cs_nLastNodeId;
 
 static CSemaphore *semOutbound = NULL;
@@ -783,6 +784,7 @@ void ThreadSocketHandler()
             if (!vNodes.size()) {
                 LogPrint("net", "NO PEERS CONNECTED. Resetting network state.\n");
                 fReset = true;
+                nLastNodeId = START_NODEID;
             }
         }
 
