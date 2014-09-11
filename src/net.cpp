@@ -107,7 +107,8 @@ CCriticalSection cs_vOneShots;
 std::vector<std::string> vAddedNodes;
 CCriticalSection cs_vAddedNodes;
 
-NodeId nLastNodeId = 0;
+#define START_NODEID 0
+NodeId nLastNodeId = START_NODEID;
 CCriticalSection cs_nLastNodeId;
 
 static CSemaphore *semOutbound = NULL;
@@ -1153,6 +1154,10 @@ void ThreadSocketHandler()
         if(vNodes.size() != nPrevNodeCount) {
             nPrevNodeCount = vNodes.size();
             uiInterface.NotifyNumConnectionsChanged(nPrevNodeCount);
+            if (!vNodes.size()) {
+                LogPrint("net", "NO PEERS CONNECTED. Resetting NodeId\n");
+                nLastNodeId = START_NODEID;
+            }
         }
 
         //
