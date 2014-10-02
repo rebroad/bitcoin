@@ -4277,6 +4277,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             CNodeState *state = State(pfrom->id);
             if (inv.type == MSG_BLOCK) {
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
+                if (!fAlreadyHave)
+                    LogPrint("block", "inv (new) %s from peer=%d\n", inv.ToString(), pfrom->id);
                 if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
                     // First request the headers preceding the announced block. In the normal fully-synced
                     // case where a new block is announced that succeeds the current tip (no reorganization),
@@ -4303,6 +4305,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         if (!state->tGetdataBlock)
                             state->tGetdataBlock = nNow;
                     }
+                } else {
+                    int theirheight = state->pindexBestKnownBlock->nHeight;
+                    if (CaughtUp() && theirheight >= chainActive.Height()-1)
+                        LogPrint("block", "inv (old) %s (height:%d) from peer=%d\n", inv.ToString(),
+                                state->pindexBestKnownBlock ? theirheight : -1, pfrom->id);
                 }
             }
 
