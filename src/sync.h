@@ -95,9 +95,7 @@ void static inline AssertLockHeldInternal(const char* pszName, const char* pszFi
 #endif
 #define AssertLockHeld(cs) AssertLockHeldInternal(#cs, __FILE__, __LINE__, &cs)
 
-#ifdef DEBUG_LOCKCONTENTION
 void PrintLockContention(const char* pszName, const char* pszFile, int nLine);
-#endif
 
 /** Wrapper around boost::unique_lock<Mutex> */
 template <typename Mutex>

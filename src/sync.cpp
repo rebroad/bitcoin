@@ -12,13 +12,11 @@
 #include <boost/foreach.hpp>
 #include <boost/thread.hpp>
 
-#ifdef DEBUG_LOCKCONTENTION
 void PrintLockContention(const char* pszName, const char* pszFile, int nLine)
 {
-    LogPrintf("LOCKCONTENTION: %s\n", pszName);
-    LogPrintf("Locker: %s:%d\n", pszFile, nLine);
+    LogPrint("lockcontention", "LOCKCONTENTION: %s\n", pszName);
+    LogPrint("lockcontention", "Locker: %s:%d\n", pszFile, nLine);
 }
-#endif /* DEBUG_LOCKCONTENTION */
 
 #ifdef DEBUG_LOCKORDER
 //
