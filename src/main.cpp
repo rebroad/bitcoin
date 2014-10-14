@@ -5283,7 +5283,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
                 state.fSyncStarted = true;
                 nSyncStarted++;
-                CBlockIndex *pindexStart = pindexBestHeader->pprev ? pindexBestHeader->pprev : pindexBestHeader;
+                CBlockIndex *pindexJointBest = pindexBestHeader;
+                if (pindexJointBest->nHeight > pto->nStartingHeight && pto->nStartingHeight > 0)
+                    pindexJointBest = pindexBestHeader->GetAncestor(pto->nStartingHeight);
+                CBlockIndex *pindexStart = pindexJointBest->pprev ? pindexJointBest->pprev : pindexJointBest;
                 LogPrint("net", "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);
                 pto->PushMessage("getheaders", chainActive.GetLocator(pindexStart), uint256());
                 state.tGetheaders = nNow;
