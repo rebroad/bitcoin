@@ -5268,8 +5268,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
             // should only happen during initial block download.
-            LogPrintf("Peer=%d is stalling block download, disconnecting\n", pto->id);
-            pto->fDisconnect = true;
+            LogPrintf("Peer=%d is stalling block download (%u / %u bytes) clicks=%d\n", pto->id, state.nBlockDLed, state.nBlockSize, state.nStallClicks);
+            state.nStallingSince = nNow + 60000000; // Delay showing next warning until another minute.
         }
         // In case there is a block that has been in flight from this peer for (2 + 0.5 * N) times the block interval
         // (with N the number of validated blocks that were in flight at the time it was requested), disconnect due to
@@ -5331,10 +5331,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 }
                 MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), consensusParams, pindex);
             }
-            if (state.nBlocksInFlight == 0 && staller != -1) {
+            if (staller != -1) {
                 if (State(staller)->nStallingSince == 0) {
                     State(staller)->nStallingSince = nNow;
-                    LogPrint("net", "Stall started peer=%d\n", staller);
+                    LogPrint("net", "Key sync peer=%d\n", staller);
                 }
             }
         }
