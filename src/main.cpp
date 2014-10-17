@@ -270,6 +270,7 @@ struct CNodeState {
     int nHeadersSize;          //! Size of current headers being downloaded.
     int nHeadersDLed;          //! Bytes of current headers downloaded.
     int nBlockBunch;           //! Size of last bunch of blocks received.
+    bool fSendingBlocks;       //! Have we sent blocks to this node?
     list<QueuedBlock> vBlocksInFlight;
     int nBlocksInFlight;       //! How many getdata block requests still waiting for.
     int nBlocksInFlightValidHeaders;
@@ -323,6 +324,7 @@ struct CNodeState {
         nBlockSize = 0;
         nBlockDLed = 0;
         nBlockBunch = 0;
+        fSendingBlocks = false;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
         fPreferredDownload = false;
@@ -3992,6 +3994,8 @@ void static ProcessGetData(CNode* pfrom)
                     CBlock block;
                     if (!ReadBlockFromDisk(block, (*mi).second))
                         assert(!"cannot load block from disk");
+                    LogPrint("block2", "Sending %s (%d) to peer=%d (height: %d)\n", inv.ToString(), mi->second->nHeight, pfrom->id, State(pfrom->id)->pindexBestKnownBlock->nHeight);
+                    State(pfrom->id)->fSendingBlocks = true;
                     if (inv.type == MSG_BLOCK) {
                         pfrom->PushMessage("block", block);
                         State(pfrom->id)->nBlksSent++;
@@ -4368,10 +4372,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     }
                 } else {
                     state->nOldBlkInvsReceived++;
-                    int theirheight = state->pindexBestKnownBlock->nHeight;
-                    if (CaughtUp() && theirheight >= chainActive.Height()-1)
+                    int theirheight = state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : -1;
+                    if ((CaughtUp() && theirheight >= chainActive.Height()-1) || state->fSendingBlocks)
                         LogPrint("block", "inv (old) %s (height:%d) from peer=%d\n", inv.ToString(),
-                                state->pindexBestKnownBlock ? theirheight : -1, pfrom->id);
+                                theirheight, pfrom->id);
                 }
             }
 
@@ -5474,7 +5478,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                         State(pto->id)->nTxInvsSent++;
                     }
                     if (inv.type == MSG_BLOCK) {
-                        LogPrint("block2", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
+                        LogPrint("block3", "sending inv %s to peer=%d\n", inv.ToString(), pto->id);
                         nBlocks++;
                         State(pto->id)->nBlockInvsSent++;
                     }
