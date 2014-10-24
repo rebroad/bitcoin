@@ -259,6 +259,7 @@ struct CNodeState {
     int nBlockDLed;            //! Bytes of current block downloaded.
     int nHeadersSize;          //! Size of current headers being downloaded.
     int nHeadersDLed;          //! Bytes of current headers downloaded.
+    int nBlockBunch;           //! Size of last bunch of blocks received.
     list<QueuedBlock> vBlocksInFlight;
     int nBlocksInFlight;       //! How many getdata block requests still waiting for.
     int nBlocksInFlightValidHeaders;
@@ -292,6 +293,7 @@ struct CNodeState {
         tGetheaders = 0;
         nBlockSize = 0;
         nBlockDLed = 0;
+        nBlockBunch = 0;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
         fPreferredDownload = false;
@@ -4924,6 +4926,7 @@ bool ProcessMessages(CNode* pfrom)
     } // If we've reached a minute (based on average click).
 
     std::deque<CNetMessage>::iterator it = pfrom->vRecvMsg.begin();
+    state.nBlockBunch = 0;
     while (!pfrom->fDisconnect && it != pfrom->vRecvMsg.end()) {
         // Don't bother if send buffer is too full to respond anyway
         if (pfrom->nSendSize >= SendBufferSize())
@@ -4958,6 +4961,7 @@ bool ProcessMessages(CNode* pfrom)
                 if (msg.nLastDataPos == 0) {
                     nBlockTotMinute += nMessageSize;
                     nBlocksMinute++;
+                    state.nBlockBunch++;
                     if (!state.nBlockSize && !msg.complete())
                         LogPrint("net", "%d clicks later, first incoming block (%u of %u bytes) from peer=%d\n", state.nStallClicks, msg.nDataPos, nMessageSize, pfrom->id);
                     state.nBlockSize = nMessageSize;
@@ -5304,7 +5308,19 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         if (!pto->fDisconnect && !pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < state.nMaxInFlight) {
             vector<CBlockIndex*> vToDownload;
             NodeId staller = -1;
-            FindNextBlocksToDownload(pto->GetId(), state.nMaxInFlight - state.nBlocksInFlight, vToDownload, staller);
+            int nToDownload = state.nMaxInFlight - state.nBlocksInFlight;
+            int nBatch = 1;
+            if (state.nBytesPerMinute && nAvgBlockSize && nAvgClick) {
+                nBatch = std::max<int>(1, (state.nBytesPerMinute / (60*1000*1000 / nAvgClick) / nAvgBlockSize));
+                if (state.nMaxInFlight > nBatch * 2 && nToDownload < nBatch)
+                    nBatch = 0;
+                else
+                    if (state.nBlockBunch > nBatch)
+                        nBatch = state.nBlockBunch;
+                if (GetArg("-stripe", false) && nBatch < nToDownload)
+                    nToDownload = nBatch;
+            }
+            FindNextBlocksToDownload(pto->GetId(), nToDownload, vToDownload, staller);
             BOOST_FOREACH(CBlockIndex *pindex, vToDownload) {
                 vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
                 LogPrint("net", "Requesting(%d,%d) block %s (%d) peer=%d (%d)\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nHeight, pto->id, state.nBlocksInFlight);
