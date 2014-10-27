@@ -5102,7 +5102,8 @@ bool ProcessMessages(CNode* pfrom)
         if (!fRet)
             LogPrintf("%s(%s, %u bytes) FAILED peer=%d\n", __func__, SanitizeString(strCommand), nMessageSize, pfrom->id);
 
-        break;
+        if (!nConcurrentDownloads || GetTimeMicros() - nNow > 1000000 / nConcurrentDownloads)
+            break;
     }
 
     // Detect whether we're stalling
