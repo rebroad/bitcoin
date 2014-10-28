@@ -5390,6 +5390,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 LogPrint("net", "peer=%d is of no use during IBD. Disconnecting.\n", pto->id);
                 pto->fDisconnect = true;
             }
+            if (nAvgBlockSize && nAvgClick && !vToDownload.empty())
+                LogPrint("stall2", "peer=%d nBatch (%d) = %d = B/m (%d) / Click/m (%d) / nAvgBlockSize (%d)\n", pto->id, nBatch, (state.nBytesPerMinute / (60*1000*1000 / nAvgClick)) / nAvgBlockSize, state.nBytesPerMinute, 60*1000*1000 / nAvgClick, nAvgBlockSize);
             BOOST_FOREACH(CBlockIndex *pindex, vToDownload) {
                 vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
                 LogPrint("net", "Requesting(%d,%d) block %s (%d) peer=%d (%d)\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nHeight, pto->id, state.nBlocksInFlight);
