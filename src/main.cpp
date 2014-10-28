@@ -4848,6 +4848,7 @@ bool ProcessMessages(CNode* pfrom)
 {
     //if (fDebug)
     //    LogPrintf("%s(%u messages)\n", __func__, pfrom->vRecvMsg.size());
+    int nMessages = pfrom->vRecvMsg.size();
 
     //
     // Message format
@@ -4973,6 +4974,7 @@ bool ProcessMessages(CNode* pfrom)
 
     std::deque<CNetMessage>::iterator it = pfrom->vRecvMsg.begin();
     state.nBlockBunch = 0;
+    int nMessage = 0;
     while (!pfrom->fDisconnect && it != pfrom->vRecvMsg.end()) {
         // Don't bother if send buffer is too full to respond anyway
         if (pfrom->nSendSize >= SendBufferSize())
@@ -4983,6 +4985,7 @@ bool ProcessMessages(CNode* pfrom)
         CMessageHeader& hdr = msg.hdr;
         unsigned int nMessageSize = hdr.nMessageSize;
         string strCommand = hdr.GetCommand();
+        nMessage++;
 
         //if (fDebug)
         //    LogPrintf("%s(message %u msgsz, %u bytes, complete:%s)\n", __func__,
@@ -5102,7 +5105,14 @@ bool ProcessMessages(CNode* pfrom)
         if (!fRet)
             LogPrintf("%s(%s, %u bytes) FAILED peer=%d\n", __func__, SanitizeString(strCommand), nMessageSize, pfrom->id);
 
-        if (!nConcurrentDownloads || GetTimeMicros() - nNow > 1000000 / nConcurrentDownloads)
+        int nTimespent = GetTimeMicros() - nNow;
+        if (nConcurrentDownloads)
+            if (nTimespent > 1000000 / nConcurrentDownloads) {
+                LogPrint("stall2", "peer=%d Break out of receiving %s %d (of %d) %d bytes after %dms.\n", pfrom->id, strCommand, nMessage, nMessages, nMessageSize, nTimespent * .001);
+                break;
+            } else
+                LogPrint("stall2", "peer=%d %dms spent receiving %s %d (of %d) %d bytes.\n", pfrom->id, nTimespent * .001, strCommand, nMessage, nMessages, nMessageSize);
+        else
             break;
     }
 
