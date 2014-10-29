@@ -45,6 +45,7 @@ extern bool fServer;
 extern std::string strMiscWarning;
 extern bool fLogTimestamps;
 extern bool fLogIPs;
+extern bool fReset;
 extern volatile bool fReopenDebugLog;
 extern CTranslationInterface translationInterface;
 
