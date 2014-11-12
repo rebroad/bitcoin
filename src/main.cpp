@@ -5376,6 +5376,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             } else
                 nSlowest = -1;
             FindNextBlocksToDownload(pto->GetId(), nToDownload, vToDownload, staller);
+            if (staller == -1 && !state.nBlocksInFlight && state.pindexBestKnownBlock && vToDownload.empty() && !CaughtUp()) {
+                LogPrint("net", "peer=%d is of no use during IBD. Disconnecting.\n", pto->id);
+                pto->fDisconnect = true;
+            }
             BOOST_FOREACH(CBlockIndex *pindex, vToDownload) {
                 vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
                 LogPrint("net", "Requesting(%d,%d) block %s (%d) peer=%d (%d)\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nHeight, pto->id, state.nBlocksInFlight);
