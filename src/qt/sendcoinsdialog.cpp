@@ -516,9 +516,6 @@ void SendCoinsDialog::processSendCoinsReturn(const WalletModel::SendCoinsReturn 
     case WalletModel::AmountWithFeeExceedsBalance:
         msgParams.first = tr("The total exceeds your balance when the %1 transaction fee is included.").arg(msgArg);
         break;
-    case WalletModel::DuplicateAddress:
-        msgParams.first = tr("Duplicate address found: addresses should only be used once each.");
-        break;
     case WalletModel::TransactionCreationFailed:
         msgParams.first = tr("Transaction creation failed!");
         msgParams.second = CClientUIInterface::MSG_ERROR;
