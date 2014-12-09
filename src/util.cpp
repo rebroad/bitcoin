@@ -113,6 +113,7 @@ bool fLogIPs = false;
 bool fReset = false;
 volatile bool fReopenDebugLog = false;
 CTranslationInterface translationInterface;
+volatile bool fRequestShutdown = false;
 
 /** Init OpenSSL library multithreading support */
 static CCriticalSection** ppmutexOpenSSL;

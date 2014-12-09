@@ -104,8 +104,6 @@ CClientUIInterface uiInterface; // Declared but not defined in ui_interface.h
 // shutdown thing.
 //
 
-volatile bool fRequestShutdown = false;
-
 void StartShutdown()
 {
     fRequestShutdown = true;

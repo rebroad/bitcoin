@@ -60,6 +60,7 @@ inline std::string _(const char* psz)
     boost::optional<std::string> rv = translationInterface.Translate(psz);
     return rv ? (*rv) : psz;
 }
+extern volatile bool fRequestShutdown;
 
 void SetupEnvironment();
 
