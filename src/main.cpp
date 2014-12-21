@@ -176,6 +176,7 @@ namespace {
      * cs_main.
      */
     map<uint256, NodeId> mapBlockSource;
+    map<uint256, int> mapBlockSize;
 
     /** Blocks that are in flight, and that are in the queue to be downloaded. Protected by cs_main. */
     struct QueuedBlock {
@@ -1998,6 +1999,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     std::vector<std::pair<uint256, CDiskTxPos> > vPos;
     vPos.reserve(block.vtx.size());
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
+    int nBiggestTx = 0;
+    uint256 BiggestTxHash;
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = block.vtx[i];
@@ -2040,8 +2043,15 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         UpdateCoins(tx, state, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
 
         vPos.push_back(std::make_pair(tx.GetHash(), pos));
-        pos.nTxOffset += ::GetSerializeSize(tx, SER_DISK, CLIENT_VERSION);
+        int nTxsize = ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
+        if (nTxsize > nBiggestTx) {
+            nBiggestTx = nTxsize;
+            BiggestTxHash = tx.GetHash();
+        }
+        pos.nTxOffset += nTxsize;
     }
+    LogPrint("tx4", "nTxOffset = %d, biggest tx: size = %d hash=%s\n", pos.nTxOffset, nBiggestTx, BiggestTxHash.ToString());
+    mapBlockSize[block.GetHash()] = pos.nTxOffset;
     int64_t nTime1 = GetTimeMicros(); nTimeConnect += nTime1 - nTimeStart;
     LogPrint("bench", "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs]\n", (unsigned)block.vtx.size(), 0.001 * (nTime1 - nTimeStart), 0.001 * (nTime1 - nTimeStart) / block.vtx.size(), nInputs <= 1 ? 0 : 0.001 * (nTime1 - nTimeStart) / (nInputs-1), nTimeConnect * 0.000001);
 
@@ -2229,10 +2239,15 @@ void static UpdateTip(CBlockIndex *pindexNew) {
     nTimeBestReceived = GetTime();
     mempool.AddTransactionsUpdated(1);
 
-    LogPrintf("%s: new best=%s (%d)  work=%.8g  tx=%lu  date=%s %f%%  cache=%.1fMiB(%utx)\n", __func__,
+    uint256 hash = chainActive.Tip()->GetBlockHash();
+    std::map<uint256, int>::iterator it = mapBlockSize.find(hash);
+    int nSize = -1;
+    if (it != mapBlockSize.end()) nSize = it->second;
+    mapBlockSize.erase(hash);
+    LogPrintf("%s: new best=%s (%d)  work=%.8g  tx=%lu  date=%s %f%%  size=%u\n", __func__,
       chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nTx,
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
-      Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), chainActive.Tip()), pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
+      Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), chainActive.Tip())*100, nSize);
 
     cvBlockChange.notify_all();
 
@@ -3076,8 +3091,9 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
         CBlockIndex *pindex = NULL;
         bool ret = AcceptBlock(*pblock, state, &pindex, fRequested, dbp);
         if (pindex && pfrom) {
-            LogPrint("net", "received(%d,%d) block %s (height:%d) peer=%d (%d)\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nHeight, pfrom->id, State(pfrom->id)->nBlocksInFlight);
+            LogPrint("net", "received(%d,%d) block %s (height:%d) peer=%d (%d) size=%d\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nHeight, pfrom->id, State(pfrom->id)->nBlocksInFlight, State(pfrom->id)->nBlockSize);
             mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
+            //mapBlockSize[pindex->GetBlockHash()] = State(pfrom->id)->nBlockSize;
         }
         CheckBlockIndex();
         if (!ret)
