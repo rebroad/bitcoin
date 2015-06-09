@@ -2512,7 +2512,7 @@ bool ActivateBestChain(CValidationState &state, CBlock *pblock) {
                 LOCK(cs_vNodes);
                 BOOST_FOREACH(CNode* pnode, vNodes) {
                     CNodeState *state = State(pnode->id);
-                    if (chainActive.Height() > (state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : nBlockEstimate))
+                    if (chainActive.Height() > (state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : nBlockEstimate) && !fAntisocial)
                         pnode->PushInventory(CInv(MSG_BLOCK, hashNewTip));
                 }
             }
@@ -3946,7 +3946,7 @@ void static ProcessGetData(CNode* pfrom)
                 }
                 // Pruned nodes may have deleted the block, so check whether
                 // it's available before trying to send.
-                if (send && (mi->second->nStatus & BLOCK_HAVE_DATA))
+                if (send && !fAntisocial && (mi->second->nStatus & BLOCK_HAVE_DATA))
                 {
                     // Send block from disk
                     CBlock block;
@@ -4143,6 +4143,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
 
         // Relay alerts
+        if (!fAntisocial)
         {
             LOCK(cs_mapAlerts);
             BOOST_FOREACH(PAIRTYPE(const uint256, CAlert)& item, mapAlerts)
@@ -4281,7 +4282,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
             bool fAlreadyHave = AlreadyHave(inv);
 
-            if (!fAlreadyHave && !fImporting && !fReindex && inv.type != MSG_BLOCK)
+            if (!fAlreadyHave && !fImporting && !fReindex && inv.type != MSG_BLOCK && !fAntisocial)
                 pfrom->AskFor(inv);
 
             CNodeState *state = State(pfrom->id);
@@ -4365,6 +4366,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         vRecv >> locator >> hashStop;
         int nLastEnd = State(pfrom->id)->nLastBlockInvHeight;
 
+        if (fAntisocial) {
+            LogPrintf("antisocial: ignoring getblocks peer=%d\n", pfrom->id);
+            return true;
+        }
         LOCK(cs_main);
 
         // Find the last block the caller has in the main chain
@@ -4413,6 +4418,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         uint256 hashStop;
         vRecv >> locator >> hashStop;
 
+        if (fAntisocial) {
+            LogPrintf("antisocial: ignoring getheaders peer=%d\n", pfrom->id);
+            return true;
+        }
         LOCK(cs_main);
 
         if (IsInitialBlockDownload())
@@ -4657,6 +4666,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (!pfrom->fInbound)
             return true;
 
+        if (fAntisocial) {
+            LogPrintf("antisocial: ignoring getaddr peer=%d\n", pfrom->id);
+            return true;
+        }
+
         pfrom->vAddrToSend.clear();
         vector<CAddress> vAddr = addrman.GetAddr();
         BOOST_FOREACH(const CAddress &addr, vAddr)
@@ -4666,6 +4680,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     else if (strCommand == "mempool")
     {
+        if (fAntisocial) {
+            LogPrintf("antisocial: ignoring mempool peer=%d\n", pfrom->id);
+            return true;
+        }
         LOCK2(cs_main, pfrom->cs_filter);
 
         std::vector<uint256> vtxid;
@@ -4780,6 +4798,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             {
                 // Relay
                 pfrom->setKnown.insert(alertHash);
+                if (!fAntisocial)
                 {
                     LOCK(cs_vNodes);
                     BOOST_FOREACH(CNode* pnode, vNodes)
@@ -5268,7 +5287,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         //
         // Message: addr
         //
-        if (fSendTrickle)
+        if (fSendTrickle && !fAntisocial)
         {
             vector<CAddress> vAddr;
             vAddr.reserve(pto->vAddrToSend.size());
@@ -5422,6 +5441,22 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             if (queuedBlock.nTimeDisconnect < nNow) {
                 LogPrintf("Timeout downloading block %s from peer=%d, disconnecting\n", queuedBlock.hash.ToString(), pto->id);
                 pto->fDisconnect = true;
+            }
+        }
+
+        // Check whether to be antisocial or not
+        if (nAntisocial == 1) {
+            if (CaughtUp() && fAntisocial) {
+                fAntisocial = false;
+                LogPrintf("CaughtUp. Becoming social again\n");
+                LOCK(cs_vNodes);
+                // Let everyone know we want their txs
+                BOOST_FOREACH(CNode* pnode, vNodes)
+                    pnode->PushMessage("filterclear");
+            }
+            if (!CaughtUp() && !fAntisocial) {
+                fAntisocial = true;
+                LogPrintf("Fallen behind. Becoming antisocial again\n");
             }
         }
 

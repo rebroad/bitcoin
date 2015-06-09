@@ -298,6 +298,7 @@ std::string HelpMessage(HelpMessageMode mode)
 
     strUsage += HelpMessageGroup(_("Connection options:"));
     strUsage += HelpMessageOpt("-addnode=<ip>", _("Add a node to connect to and attempt to keep the connection open"));
+    strUsage += HelpMessageOpt("-antisocial=<n>", _("Don't relay network traffic: 0 = relay as usual, 1 = relay once updated, 2 = never relay (default: 0)"));
     strUsage += HelpMessageOpt("-banscore=<n>", strprintf(_("Threshold for disconnecting misbehaving peers (default: %u)"), 100));
     strUsage += HelpMessageOpt("-bantime=<n>", strprintf(_("Number of seconds to keep misbehaving peers from reconnecting (default: %u)"), 86400));
     strUsage += HelpMessageOpt("-bind=<addr>", _("Bind to given address and always listen on it. Use [host]:port notation for IPv6"));
@@ -665,6 +666,12 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     fPrintToConsole = GetBoolArg("-printtoconsole", false);
     fLogTimestamps = GetBoolArg("-logtimestamps", true);
     fLogIPs = GetBoolArg("-logips", false);
+
+    nAntisocial = GetArg("-antisocial", 0);
+    if (nAntisocial > 0) {
+        fAntisocial = true;
+        if (nAntisocial == 2) SoftSetBoolArg("-listen", false);
+    }
 
     // when specifying an explicit binding address, you want to listen on it
     // even when -connect or -proxy is specified

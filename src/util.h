@@ -43,6 +43,8 @@ extern bool fPrintToConsole;
 extern bool fPrintToDebugLog;
 extern bool fServer;
 extern std::string strMiscWarning;
+extern bool fAntisocial;
+extern int nAntisocial;
 extern bool fLogTimestamps;
 extern bool fLogIPs;
 extern bool fReset;
