@@ -4359,32 +4359,33 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 if (!fAlreadyHave) {
                     LogPrint("block", "inv (new) %s from peer=%d\n", inv.ToString(), pfrom->id);
                     State(pfrom->id)->nNewBlkInvsReceived++;
-                }
-                if (!fAlreadyHave && !fImporting && !fReindex) {
-                    // First request the headers preceding the announced block. In the normal fully-synced
-                    // case where a new block is announced that succeeds the current tip (no reorganization),
-                    // there are no such headers.
-                    // Secondly, and only when we are close to being synced, we request the announced block directly,
-                    // to avoid an extra round-trip. Note that we must *first* ask for the headers, so by the
-                    // time the block arrives, the header chain leading up to it is already validated. Not
-                    // doing this will result in the received block being rejected as an orphan in case it is
-                    // not a direct successor.
-                    pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader), uint256());
-                    int64_t nNow = GetTimeMicros();
-                    state->tGetheaders = nNow;
-                    if (!state->nBlocksInFlight)
-                        state->nStallClicks = 0;
-                    LogPrint("net", "getheaders (%d) to peer=%d\n", pindexBestHeader->nHeight, pfrom->id);
-                    CNodeState *nodestate = State(pfrom->GetId());
-                    if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - chainparams.GetConsensus().nPowTargetSpacing * 20 &&
-                        nodestate->nBlocksInFlight < nodestate->nMaxInFlight && !mapBlocksInFlight.count(inv.hash)) {
-                        vToFetch.push_back(inv);
-                        // Mark block as in flight already, even though the actual "getdata" message only goes out
-                        // later (within the same cs_main lock, though).
-                        MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
-                        LogPrint("net", "Requesting(%d,%d) %s peer=%d (%d)\n", nConcurrentDownloads, nBlocksInFlight, inv.ToString(), pfrom->id, state->nBlocksInFlight);
-                        if (!state->tGetdataBlock)
-                            state->tGetdataBlock = nNow;
+
+                    if (!fImporting && !fReindex && CaughtUp()) {
+                        // First request the headers preceding the announced block. In the normal fully-synced
+                        // case where a new block is announced that succeeds the current tip (no reorganization),
+                        // there are no such headers.
+                        // Secondly, and only when we are close to being synced, we request the announced block directly,
+                        // to avoid an extra round-trip. Note that we must *first* ask for the headers, so by the
+                        // time the block arrives, the header chain leading up to it is already validated. Not
+                        // doing this will result in the received block being rejected as an orphan in case it is
+                        // not a direct successor.
+                        pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader), uint256());
+                        int64_t nNow = GetTimeMicros();
+                        state->tGetheaders = nNow;
+                        if (!state->nBlocksInFlight)
+                            state->nStallClicks = 0;
+                        LogPrint("net", "getheaders (%d) to peer=%d\n", pindexBestHeader->nHeight, pfrom->id);
+                        CNodeState *nodestate = State(pfrom->GetId());
+                        if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - chainparams.GetConsensus().nPowTargetSpacing * 20 &&
+                            nodestate->nBlocksInFlight < nodestate->nMaxInFlight && !mapBlocksInFlight.count(inv.hash)) {
+                            vToFetch.push_back(inv);
+                            // Mark block as in flight already, even though the actual "getdata" message only goes out
+                            // later (within the same cs_main lock, though).
+                            MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
+                            LogPrint("net", "Requesting(%d,%d) %s peer=%d (%d)\n", nConcurrentDownloads, nBlocksInFlight, inv.ToString(), pfrom->id, state->nBlocksInFlight);
+                            if (!state->tGetdataBlock)
+                                state->tGetdataBlock = nNow;
+                        }
                     }
                 } else {
                     state->nOldBlkInvsReceived++;
