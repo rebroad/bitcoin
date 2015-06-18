@@ -5277,10 +5277,10 @@ bool ProcessMessages(CNode* pfrom)
         int nTimespent = GetTimeMicros() - nNow;
         if (nConcurrentDownloads)
             if (nTimespent > 1000000 / nConcurrentDownloads) {
-                LogPrint("stall2", "peer=%d Break out of receiving %s %d (of %d) %d bytes after %dms.\n", pfrom->id, strCommand, nMessage, nMessages, nMessageSize, nTimespent * .001);
+                LogPrint("stall3", "peer=%d Break out of receiving %s %d (of %d) %d bytes after %dms.\n", pfrom->id, strCommand, nMessage, nMessages, nMessageSize, nTimespent * .001);
                 break;
             } else
-                LogPrint("stall2", "peer=%d %dms spent receiving %s %d (of %d) %d bytes.\n", pfrom->id, nTimespent * .001, strCommand, nMessage, nMessages, nMessageSize);
+                LogPrint("stall3", "peer=%d %dms spent receiving %s %d (of %d) %d bytes.\n", pfrom->id, nTimespent * .001, strCommand, nMessage, nMessages, nMessageSize);
         else
             break;
     }
@@ -5654,7 +5654,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 pto->fDisconnect = true;
             }
             if (nAvgBlockSize && nAvgClick && !vToDownload.empty())
-                LogPrint("stall2", "peer=%d nBatch (%d) = %d = B/m (%d) / Click/m (%d) / nAvgBlockSize (%d)\n", pto->id, nBatch, (state.nBytesPerMinute / (60*1000*1000 / nAvgClick)) / nAvgBlockSize, state.nBytesPerMinute, 60*1000*1000 / nAvgClick, nAvgBlockSize);
+                LogPrint("stall3", "peer=%d nBatch (%d) = %d = B/m (%d) / Click/m (%d) / nAvgBlockSize (%d)\n", pto->id, nBatch, (state.nBytesPerMinute / (60*1000*1000 / nAvgClick)) / nAvgBlockSize, state.nBytesPerMinute, 60*1000*1000 / nAvgClick, nAvgBlockSize);
             BOOST_FOREACH(CBlockIndex *pindex, vToDownload) {
                 vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
                 LogPrint("net", "Requesting(%d,%d) block %s (%d) peer=%d (%d)\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nHeight, pto->id, state.nBlocksInFlight);
