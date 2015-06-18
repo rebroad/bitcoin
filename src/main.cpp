@@ -5648,7 +5648,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                     nToDownload = nBatch;
             } else
                 nSlowest = -1;
-            if (state.nBlocksInFlight == 0 && state.nBlockSize) {
+            if (state.nBlocksInFlight == 0 && state.nBlockBunch && !CaughtUp()) {
                  LogPrint("stall2", "peer=%d nToDownload %d->%d MaxInFlight %d->%d.\n", pto->id, nToDownload, nToDownload+1, state.nMaxInFlight, state.nMaxInFlight+1);
                  state.nMaxInFlight++;
                  nToDownload++;
