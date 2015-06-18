@@ -5641,10 +5641,13 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 nBatch = std::max<int>(1, (state.nBytesPerMinute / (60*1000*1000 / nAvgClick) / nAvgBlockSize));
                 if (state.nMaxInFlight > nBatch * 2 && nToDownload < nBatch)
                     nBatch = 0;
-                else
+                else {
                     if (state.nBlockBunch > nBatch)
                         nBatch = state.nBlockBunch;
-                if (GetArg("-stripe", false) && nBatch < nToDownload)
+                    if (!state.nBlocksInFlight)
+                        nBatch++;
+                }
+                if (GetArg("-stripe", true) && nBatch < nToDownload)
                     nToDownload = nBatch;
             } else
                 nSlowest = -1;
