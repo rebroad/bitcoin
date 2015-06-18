@@ -5587,15 +5587,15 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             state.nMerkleBlksSent = 0;
             int nTxsSent = state.nTxsSent;
             state.nTxsSent = 0;
-            LogPrint("stats", "peer=%d ping=%ums ", pto->id, pto->nPingUsecTime/1000);
-            LogPrint("stats", "NewBlkInvIn=%d OldBlkInvIn=%d BlkInvOut=%d NewTxInvIn=%d OldTxInvIn=%d TxInvOut=%d\n",
-              nNewBlkInvsReceived, nOldBlkInvsReceived, nBlockInvsSent, nNewTxInvsReceived, nOldTxInvsReceived,
-              nTxInvsSent);
-            LogPrint("stats", "peer=%d HeadRec=%d BlksReq=%d BlkRec=%d TxReq=%d TxRec=%d RTxRec=%d BlkSent=%d MBlkSent=%d TxSent=%d\n",
-              pto->id, nHeadersReceived, nBlksRequested, nBlksReceived, nTxsRequested, nTxsReceived, nRandomTxsReceived,
-              nBlksSent, nMerkleBlksSent, nTxsSent);
-            if (nRandomTxsReceived || ( nNewTxInvsReceived + nOldTxInvsReceived == 0 && !fAntisocial ) || nBlksReceived+1 < nBlksRequested || nBlksReceived > nBlksRequested || nTxsReceived+1 < nTxsRequested || nTxsReceived > nTxsRequested || nTxsSent > nTxInvsSent || nBlksSent > nBlockInvsSent)
-                LogPrint("stats", "peer=%d is being CURIOUS\n", pto->id);
+            if (nRandomTxsReceived || ( nNewTxInvsReceived + nOldTxInvsReceived == 0 && !fAntisocial ) || nBlksReceived+1 < nBlksRequested || nBlksReceived > nBlksRequested || nTxsReceived+1 < nTxsRequested || nTxsReceived > nTxsRequested || nTxsSent > nTxInvsSent || nBlksSent > nBlockInvsSent) {
+                LogPrint("stats", "peer=%d ping=%ums ", pto->id, pto->nPingUsecTime/1000);
+                LogPrint("stats", "NewBlkInvIn=%d OldBlkInvIn=%d BlkInvOut=%d NewTxInvIn=%d OldTxInvIn=%d TxInvOut=%d\n",
+                  nNewBlkInvsReceived, nOldBlkInvsReceived, nBlockInvsSent, nNewTxInvsReceived, nOldTxInvsReceived,
+                  nTxInvsSent);
+                LogPrint("stats", "peer=%d HeadRec=%d BlksReq=%d BlkRec=%d TxReq=%d TxRec=%d RTxRec=%d BlkSent=%d MBlkSent=%d TxSent=%d\n",
+                  pto->id, nHeadersReceived, nBlksRequested, nBlksReceived, nTxsRequested, nTxsReceived, nRandomTxsReceived,
+                  nBlksSent, nMerkleBlksSent, nTxsSent);
+            }
         }
 
         // Check whether to be antisocial or not
