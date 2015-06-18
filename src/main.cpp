@@ -5641,16 +5641,18 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 nBatch = std::max<int>(1, (state.nBytesPerMinute / (60*1000*1000 / nAvgClick) / nAvgBlockSize));
                 if (state.nMaxInFlight > nBatch * 2 && nToDownload < nBatch)
                     nBatch = 0;
-                else {
+                else
                     if (state.nBlockBunch > nBatch)
                         nBatch = state.nBlockBunch;
-                    if (!state.nBlocksInFlight)
-                        nBatch++;
-                }
                 if (GetArg("-stripe", true) && nBatch < nToDownload)
                     nToDownload = nBatch;
             } else
                 nSlowest = -1;
+            if (state.nBlocksInFlight == 0 && state.nBlockSize) {
+                 LogPrint("stall2", "peer=%d nToDownload %d->%d MaxInFlight %d->%d.\n", pto->id, nToDownload, nToDownload+1, state.nMaxInFlight, state.nMaxInFlight+1);
+                 state.nMaxInFlight++;
+                 nToDownload++;
+            }
             FindNextBlocksToDownload(pto->GetId(), nToDownload, vToDownload, staller);
             if (staller == -1 && !state.nBlocksInFlight && state.pindexBestKnownBlock && vToDownload.empty() && !CaughtUp()) {
                 LogPrint("net", "peer=%d is of no use during IBD. Disconnecting.\n", pto->id);
