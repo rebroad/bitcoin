@@ -5096,7 +5096,7 @@ bool ProcessMessages(CNode* pfrom)
             nClickBiggestNext = 0;
             nStallBiggest = nStallBiggestNext;
             nStallBiggestNext = 0;
-            LogPrint("stall", "System: AvgStall=%d BigStall=%d B/s=%d AvgBlkSize=%d Click: Avg=%dms Big=%dms\n", nAvgStallMinute, nStallBiggest, nBytesPerMinute / 60, nAvgBlockSize, nAvgClick * .001, nClickBiggest * .001);
+            LogPrint("stall", "System: AvgStall=%d BigStall=%d B/s=%d AvgBlkSize=%d Click: Avg=%dms Big=%dms nSyncStarted=%d\n", nAvgStallMinute, nStallBiggest, nBytesPerMinute / 60, nAvgBlockSize, nAvgClick * .001, nClickBiggest * .001, nSyncStarted);
             if (nSlowest > 0 && nSyncStarted > 7) {
                 if (State(nSlowest) == NULL)
                     LogPrint("stall", "peer=%d was the runt.\n", nSlowest);
