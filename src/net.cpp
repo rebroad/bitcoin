@@ -55,8 +55,6 @@
 using namespace std;
 
 namespace {
-    const int MAX_OUTBOUND_CONNECTIONS = 8;
-
     struct ListenSocket {
         SOCKET socket;
         bool whitelisted;
@@ -80,7 +78,7 @@ uint64_t nLocalHostNonce = 0;
 static std::vector<ListenSocket> vhListenSocket;
 CAddrMan addrman;
 int nMaxConnections = 125;
-int nMaxOutbound = MAX_OUTBOUND_CONNECTIONS;
+int nMaxOutbound = 8;
 bool fAddressesInitialized = false;
 
 vector<CNode*> vNodes;
@@ -902,7 +900,7 @@ void ThreadSocketHandler()
                     if (nErr != WSAEWOULDBLOCK)
                         LogPrintf("socket error accept failed: %s\n", NetworkErrorString(nErr));
                 }
-                else if (nInbound >= nMaxConnections - MAX_OUTBOUND_CONNECTIONS)
+                else if (nInbound >= nMaxConnections - nMaxOutbound)
                 {
                     CloseSocket(hSocket);
                 }
@@ -1662,7 +1660,7 @@ void StartNode(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     if (semOutbound == NULL) {
         // initialize semaphore
-        semOutbound = new CSemaphore(nMaxOutbound);
+        semOutbound = new CSemaphore(min(nMaxOutbound, nMaxConnections));
     }
 
     if (pnodeLocalHost == NULL)
@@ -1705,7 +1703,7 @@ bool StopNode()
     LogPrintf("StopNode()\n");
     MapPort(false);
     if (semOutbound)
-        for (int i=0; i<MAX_OUTBOUND_CONNECTIONS; i++)
+        for (int i=0; i<nMaxOutbound; i++)
             semOutbound->post();
 
     if (fAddressesInitialized)
