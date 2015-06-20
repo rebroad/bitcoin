@@ -5290,7 +5290,7 @@ bool ProcessMessages(CNode* pfrom)
         LogPrintf("No response from peer=%d for getdata block for %d seconds (%d clicks).\n", pfrom->id, (nNow - state.tGetdataBlock) / 1000000, state.nStallClicks);
         pfrom->fDisconnect = true;
     } else
-    if (state.tBlockRecving && (state.nStallClicks * nAvgClick) > 10*1000*1000 && state.nStallClicks > std::max(nStallBiggest, nStallBiggestNext) * 2) {
+    if (state.tBlockRecving && state.nBlockDLed < state.nBlockSize && (state.nStallClicks * nAvgClick) > 10*1000*1000 && state.nStallClicks > std::max(nStallBiggest, nStallBiggestNext) * 2) {
         LogPrintf("Block download (%u of %u bytes) from peer=%d stalled for %d seconds (%d clicks).\n", state.nBlockDLed, state.nBlockSize, pfrom->id, (nNow - state.tBlockRecving) / 1000000, state.nStallClicks);
         pfrom->fDisconnect = true;
     } else
