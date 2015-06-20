@@ -2244,8 +2244,8 @@ void static UpdateTip(CBlockIndex *pindexNew) {
     int nSize = -1;
     if (it != mapBlockSize.end()) nSize = it->second;
     mapBlockSize.erase(hash);
-    LogPrintf("%s: new best=%s (%d)  work=%.8g  tx=%lu  date=%s %f%%  size=%u\n", __func__,
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nTx,
+    LogPrintf("%s: new best=%s:%d (%d)  work=%.8g  tx=%lu  date=%s %f%%  size=%u\n", __func__,
+      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Tip()->nVersion, chainActive.Height(), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nTx,
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
       Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), chainActive.Tip())*100, nSize);
 
