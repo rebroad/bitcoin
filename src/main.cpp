@@ -4970,7 +4970,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 LogPrint("net", "Reject %s from peer=%d\n", SanitizeString(ss.str()), pfrom->id);
             } catch (const std::ios_base::failure&) {
                 // Avoid feedback loops by preventing reject messages from triggering a new reject message.
-                LogPrint("net", "Unparseable reject message received\n");
+                LogPrint("net", "Unparseable reject message received from peer=%d\n", pfrom->id);
             }
         }
     }
