@@ -728,8 +728,8 @@ void ThreadSocketHandler()
             vector<CNode*> vNodesCopy = vNodes;
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
             {
-                if (pnode->fDisconnect ||
-                    (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() && pnode->nSendSize == 0 && pnode->ssSend.empty()))
+                if (pnode->vRecvMsg.empty() && (pnode->fDisconnect ||
+                    (pnode->GetRefCount() <= 0 && pnode->nSendSize == 0 && pnode->ssSend.empty())))
                 {
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
@@ -1460,9 +1460,6 @@ void ThreadMessageHandler()
 
         BOOST_FOREACH(CNode* pnode, vNodesCopy)
         {
-            if (pnode->fDisconnect)
-                continue;
-
             // Receive messages
             {
                 TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
@@ -1481,6 +1478,9 @@ void ThreadMessageHandler()
                 }
             }
             boost::this_thread::interruption_point();
+
+            if (pnode->fDisconnect)
+                continue;
 
             // Send messages
             {
