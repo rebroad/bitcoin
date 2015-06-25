@@ -5143,7 +5143,7 @@ bool ProcessMessages(CNode* pfrom)
     std::deque<CNetMessage>::iterator it = pfrom->vRecvMsg.begin();
     state.nBlockBunch = 0;
     int nMessage = 0;
-    while (!pfrom->fDisconnect && it != pfrom->vRecvMsg.end()) {
+    while (it != pfrom->vRecvMsg.end()) {
         // Don't bother if send buffer is too full to respond anyway
         if (pfrom->nSendSize >= SendBufferSize())
             break;
