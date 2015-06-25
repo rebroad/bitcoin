@@ -5618,10 +5618,6 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         } // If we've reached a minute (based on average click).
 
 
-        //
-        // Message: getdata (blocks)
-        //
-        vector<CInv> vGetData;
         int64_t nOldMaxInFlight = state.nMaxInFlight;
         if (state.nBytesPerMinute && nBytesPerMinute && nAvgBlockSize && nAvgClick) {
             if (state.fRunt)
@@ -5636,6 +5632,12 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 pto->fDisconnect = true;
             }
         }
+
+
+        //
+        // Message: getdata (blocks)
+        //
+        vector<CInv> vGetData;
         if (!pto->fDisconnect && !pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < state.nMaxInFlight) {
             vector<CBlockIndex*> vToDownload;
             NodeId staller = -1;
