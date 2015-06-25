@@ -1464,12 +1464,12 @@ void static InvalidChainFound(CBlockIndex* pindexNew)
     if (!pindexBestInvalid || pindexNew->nChainWork > pindexBestInvalid->nChainWork)
         pindexBestInvalid = pindexNew;
 
-    LogPrintf("%s: invalid block=%s  height=%d  log2_work=%.8g  date=%s\n", __func__,
+    LogPrintf("%s: invalid block=%s  height=%d  dw=%.8g  date=%s\n", __func__,
       pindexNew->GetBlockHash().ToString(), pindexNew->nHeight,
-      log(pindexNew->nChainWork.getdouble())/log(2.0), DateTimeStrFormat("%Y-%m-%d %H:%M:%S",
+      ((pindexNew->nChainWork)-(pindexNew->pprev->nChainWork)).getdouble(), DateTimeStrFormat("%Y-%m-%d %H:%M:%S",
       pindexNew->GetBlockTime()));
-    LogPrintf("%s:  current best=%s  height=%d  log2_work=%.8g  date=%s\n", __func__,
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0),
+    LogPrintf("%s:  current best=%s  height=%d  dw=%.8g  date=%s\n", __func__,
+      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), ((chainActive.Tip()->nChainWork)-(chainActive.Tip()->pprev->nChainWork)).getdouble(),
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()));
     CheckForkWarningConditions();
 }
@@ -2246,9 +2246,9 @@ void static UpdateTip(CBlockIndex *pindexNew) {
     int nSize = -1;
     if (it != mapBlockSize.end()) nSize = it->second;
     mapBlockSize.erase(hash);
-    LogPrintf("%s: new best=%s:%d (%d)  work=%.8g  tx=%lu  date=%s %f%%  size=%u\n", __func__,
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Tip()->nVersion, chainActive.Height(), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nTx,
-      DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
+    LogPrintf("%s: new best=%s:%d (%d)  dw=%.8g  tx=%lu  date=%s %f%%  size=%u\n", __func__,
+      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Tip()->nVersion, chainActive.Height(), ((chainActive.Tip()->nChainWork)-(chainActive.Tip()->pprev->nChainWork)).getdouble(),
+      (unsigned long)chainActive.Tip()->nTx, DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
       Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), chainActive.Tip())*100, nSize);
 
     cvBlockChange.notify_all();
@@ -5665,7 +5665,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 LogPrint("stall3", "peer=%d nBatch (%d) = %d = B/m (%d) / Click/m (%d) / nAvgBlockSize (%d)\n", pto->id, nBatch, (state.nBytesPerMinute / (60*1000*1000 / nAvgClick)) / nAvgBlockSize, state.nBytesPerMinute, 60*1000*1000 / nAvgClick, nAvgBlockSize);
             BOOST_FOREACH(CBlockIndex *pindex, vToDownload) {
                 vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
-                LogPrint("net", "Requesting(%d,%d) block %s (%d) peer=%d (%d)\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nHeight, pto->id, state.nBlocksInFlight);
+                LogPrint("net", "Requesting(%d,%d) block %s:%d (%d) peer=%d (%d)\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nVersion, pindex->nHeight, pto->id, state.nBlocksInFlight);
                 if (!state.tGetdataBlock) {
                     state.tGetdataBlock = nNow;
                     if (!state.nBlocksInFlight)
