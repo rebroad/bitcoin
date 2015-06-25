@@ -3093,7 +3093,7 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
         CBlockIndex *pindex = NULL;
         bool ret = AcceptBlock(*pblock, state, &pindex, fRequested, dbp);
         if (pindex && pfrom) {
-            LogPrint("net", "received(%d,%d) block %s (height:%d) peer=%d (%d) size=%d\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nHeight, pfrom->id, State(pfrom->id)->nBlocksInFlight, State(pfrom->id)->nBlockSize);
+            LogPrint("net", "received(%d,%d) block %s (%d) peer=%d (%d) size=%d\n", nConcurrentDownloads, nBlocksInFlight, pindex->GetBlockHash().ToString(), pindex->nHeight, pfrom->id, State(pfrom->id)->nBlocksInFlight, State(pfrom->id)->nBlockSize);
             mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
             //mapBlockSize[pindex->GetBlockHash()] = State(pfrom->id)->nBlockSize;
         }
