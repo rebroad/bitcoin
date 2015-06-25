@@ -1466,10 +1466,10 @@ void static InvalidChainFound(CBlockIndex* pindexNew)
 
     LogPrintf("%s: invalid block=%s  height=%d  dw=%.8g  date=%s\n", __func__,
       pindexNew->GetBlockHash().ToString(), pindexNew->nHeight,
-      ((pindexNew->nChainWork)-(pindexNew->pprev->nChainWork)).getdouble(), DateTimeStrFormat("%Y-%m-%d %H:%M:%S",
+      log(((pindexNew->nChainWork)-(pindexNew->pprev->nChainWork)).getdouble()), DateTimeStrFormat("%Y-%m-%d %H:%M:%S",
       pindexNew->GetBlockTime()));
     LogPrintf("%s:  current best=%s  height=%d  dw=%.8g  date=%s\n", __func__,
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), ((chainActive.Tip()->nChainWork)-(chainActive.Tip()->pprev->nChainWork)).getdouble(),
+      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), log(((chainActive.Tip()->nChainWork)-(chainActive.Tip()->pprev->nChainWork)).getdouble()),
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()));
     CheckForkWarningConditions();
 }
@@ -2247,7 +2247,7 @@ void static UpdateTip(CBlockIndex *pindexNew) {
     if (it != mapBlockSize.end()) nSize = it->second;
     mapBlockSize.erase(hash);
     LogPrintf("%s: new best=%s:%d (%d)  dw=%.8g  tx=%lu  date=%s %f%%  size=%u\n", __func__,
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Tip()->nVersion, chainActive.Height(), ((chainActive.Tip()->nChainWork)-(chainActive.Tip()->pprev->nChainWork)).getdouble(),
+      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Tip()->nVersion, chainActive.Height(), log(((chainActive.Tip()->nChainWork)-(chainActive.Tip()->pprev->nChainWork)).getdouble()),
       (unsigned long)chainActive.Tip()->nTx, DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
       Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), chainActive.Tip())*100, nSize);
 
