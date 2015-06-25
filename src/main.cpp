@@ -5590,7 +5590,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             state.nMerkleBlksSent = 0;
             int nTxsSent = state.nTxsSent;
             state.nTxsSent = 0;
-            if (nRandomTxsReceived || ( nNewTxInvsReceived + nOldTxInvsReceived == 0 && !fAntisocial ) || nBlksReceived+1 < nBlksRequested || nBlksReceived > nBlksRequested || nTxsReceived+1 < nTxsRequested || nTxsReceived > nTxsRequested || nTxsSent > nTxInvsSent || nBlksSent > nBlockInvsSent) {
+            if (nRandomTxsReceived || ( nNewTxInvsReceived + nOldTxInvsReceived == 0 && !fAntisocial ) || nBlksReceived+state.nBlocksInFlight < nBlksRequested || nBlksReceived > nBlksRequested || nTxsReceived+1 < nTxsRequested || nTxsReceived > nTxsRequested || nTxsSent > nTxInvsSent || nBlksSent > nBlockInvsSent) {
                 LogPrint("stats", "peer=%d ping=%ums ", pto->id, pto->nPingUsecTime/1000);
                 LogPrint("stats", "NewBlkInvIn=%d OldBlkInvIn=%d BlkInvOut=%d NewTxInvIn=%d OldTxInvIn=%d TxInvOut=%d\n",
                   nNewBlkInvsReceived, nOldBlkInvsReceived, nBlockInvsSent, nNewTxInvsReceived, nOldTxInvsReceived,
