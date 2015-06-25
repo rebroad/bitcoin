@@ -2543,7 +2543,7 @@ bool ActivateBestChain(CValidationState &state, CBlock *pblock) {
             pindexMostWork = FindMostWorkChain();
 
             // Whether we have anything to do at all.
-            if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip() || (nConcurrentDownloads && GetTimeMicros() - tLastClick > 10000000))
+            if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip() || (nConcurrentDownloads && GetTimeMicros() - tLastClick > 10000000 / nConcurrentDownloads))
                 return true;
 
             if (!ActivateBestChainStep(state, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : NULL))
