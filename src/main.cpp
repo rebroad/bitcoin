@@ -5070,76 +5070,6 @@ bool ProcessMessages(CNode* pfrom)
     state.tLastClick = nNow;
     state.nLastBestHeight = chainActive.Height();
 
-    if ((nAvgClick && nAvgClick * state.nClicks >= 60*1000*1000) || (!nAvgClick && nNow - tMinuteStart >= 60*1000*1000)) {
-        state.nClicks = 0;
-        if (nNow - tMinuteStart >= 60*1000*1000) {
-            tMinuteStart = nNow;
-            if (nStallSamples > 5) {
-                nAvgStallMinute = nStallTotMinute / nStallSamples;
-                nStallTotMinute = 0;
-                nStallSamples = 0;
-            }
-            if (nBlocksMinute > 5) {
-                nAvgBlockSize = nBlockTotMinute / nBlocksMinute;
-                nBlockTotMinute = 0;
-                nBlocksMinute = 0;
-            }
-            if (nClickSamples > 5) {
-                nAvgClick = nClickTotMinute / nClickSamples;
-                nClickTotMinute = 0;
-                nClickSamples = 0;
-            }
-            if (nBytesPerMinute)
-                nBytesPerMinute = (nBytesPerMinute + nBytesTotMinute) / 2;
-            else
-                nBytesPerMinute = nBytesTotMinute;
-            nBytesTotMinute = 0;
-            nClickBiggest = nClickBiggestNext;
-            nClickBiggestNext = 0;
-            nStallBiggest = nStallBiggestNext;
-            nStallBiggestNext = 0;
-            LogPrint("stall", "System: AvgStall=%d BigStall=%d B/s=%d AvgBlkSize=%d Click: Avg=%dms Big=%dms nSyncStarted=%d\n", nAvgStallMinute, nStallBiggest, nBytesPerMinute / 60, nAvgBlockSize, nAvgClick * .001, nClickBiggest * .001, nSyncStarted);
-            if (nSlowest > 0 && nSyncStarted > 7) {
-                if (State(nSlowest) == NULL)
-                    LogPrint("stall", "peer=%d was the runt.\n", nSlowest);
-                else {
-                    if (nSlowest == nSlowestLast) {
-                        LogPrint("stall", "peer=%d is the consistent runt. Stopping using.\n", nSlowest);
-                        State(nSlowest)->fRunt = true;
-                    } else if (nFastest && State(nFastest) && State(nFastest)->nBytesPerMinute > State(nSlowest)->nBytesPerMinute * 2) {
-                        LogPrint("stall", "peer=%d is the runt. Stopping using.\n", nSlowest);
-                        State(nSlowest)->fRunt = true;
-                    } else
-                        LogPrint("stall", "peer=%d is the runt.\n", nSlowest);
-                }
-            }
-            nSlowestLast = nSlowest;
-            nSlowest = 0;
-            nFastest = 0;
-        }
-        if (state.nStallSamples > 5) {
-            state.nAvgStallMinute = state.nStallTotMinute / state.nStallSamples;
-            state.nStallTotMinute = 0;
-            state.nStallSamples = 0;
-        }
-        if (state.nBytesPerMinute)
-            state.nBytesPerMinute = (state.nBytesPerMinute + state.nBytesTotMinute) / 2;
-        else
-            state.nBytesPerMinute = state.nBytesTotMinute;
-        if (nSlowest > 0 && State(nSlowest) == NULL) {
-            LogPrint("stall", "peer=%d was the runt.\n", nSlowest);
-            nSlowest = 0;
-        }
-        if (!state.fRunt && (nSlowest == 0 || (nSlowest > 0 && state.nBytesPerMinute < State(nSlowest)->nBytesPerMinute)))
-            nSlowest = pfrom->id;
-        if (nFastest == 0 || (nFastest > 0 && (State(nFastest) == NULL || state.nBytesPerMinute > State(nFastest)->nBytesPerMinute)))
-            nFastest = pfrom->id;
-        state.nBytesTotMinute = 0;
-        state.nStallBiggest = state.nStallBiggestNext;
-        state.nStallBiggestNext = 0;
-        LogPrint("stall", "peer=%d Stall:Avg=%d Big=%d SysAvg=%d SysBig=%d AvgB/s=%d (%d%% of System=%d)\n", pfrom->id, state.nAvgStallMinute, state.nStallBiggest, nAvgStallMinute, nStallBiggest, state.nBytesPerMinute / 60, nBytesPerMinute ? state.nBytesPerMinute * 100 / nBytesPerMinute : 0, nBytesPerMinute / 60);
-    } // If we've reached a minute (based on average click).
-
     std::deque<CNetMessage>::iterator it = pfrom->vRecvMsg.begin();
     state.nBlockBunch = 0;
     int nMessage = 0;
@@ -5616,6 +5546,77 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 LogPrintf("Fallen behind. Becoming antisocial again\n");
             }
         }
+
+        if ((nAvgClick && nAvgClick * state.nClicks >= 60*1000*1000) || (!nAvgClick && nNow - tMinuteStart >= 60*1000*1000)) {
+            state.nClicks = 0;
+            if (nNow - tMinuteStart >= 60*1000*1000) {
+                tMinuteStart = nNow;
+                if (nStallSamples > 5) {
+                    nAvgStallMinute = nStallTotMinute / nStallSamples;
+                    nStallTotMinute = 0;
+                    nStallSamples = 0;
+                }
+                if (nBlocksMinute > 5) {
+                    nAvgBlockSize = nBlockTotMinute / nBlocksMinute;
+                    nBlockTotMinute = 0;
+                    nBlocksMinute = 0;
+                }
+                if (nClickSamples > 5) {
+                    nAvgClick = nClickTotMinute / nClickSamples;
+                    nClickTotMinute = 0;
+                    nClickSamples = 0;
+                }
+                if (nBytesPerMinute)
+                    nBytesPerMinute = (nBytesPerMinute + nBytesTotMinute) / 2;
+                else
+                    nBytesPerMinute = nBytesTotMinute;
+                nBytesTotMinute = 0;
+                nClickBiggest = nClickBiggestNext;
+                nClickBiggestNext = 0;
+                nStallBiggest = nStallBiggestNext;
+                nStallBiggestNext = 0;
+                LogPrint("stall", "System: AvgStall=%d BigStall=%d B/s=%d AvgBlkSize=%d Click: Avg=%dms Big=%dms nSyncStarted=%d\n", nAvgStallMinute, nStallBiggest, nBytesPerMinute / 60, nAvgBlockSize, nAvgClick * .001, nClickBiggest * .001, nSyncStarted);
+                if (nSlowest > 0 && nSyncStarted > 7) {
+                    if (State(nSlowest) == NULL)
+                        LogPrint("stall", "peer=%d was the runt.\n", nSlowest);
+                    else {
+                        if (nSlowest == nSlowestLast) {
+                            LogPrint("stall", "peer=%d is the consistent runt. Stopping using.\n", nSlowest);
+                            State(nSlowest)->fRunt = true;
+                        } else if (nFastest && State(nFastest) && State(nFastest)->nBytesPerMinute > State(nSlowest)->nBytesPerMinute * 2) {
+                            LogPrint("stall", "peer=%d is the runt. Stopping using.\n", nSlowest);
+                            State(nSlowest)->fRunt = true;
+                        } else
+                            LogPrint("stall", "peer=%d is the runt.\n", nSlowest);
+                    }
+                }
+                nSlowestLast = nSlowest;
+                nSlowest = 0;
+                nFastest = 0;
+            }
+            if (state.nStallSamples > 5) {
+                state.nAvgStallMinute = state.nStallTotMinute / state.nStallSamples;
+                state.nStallTotMinute = 0;
+                state.nStallSamples = 0;
+            }
+            if (state.nBytesPerMinute)
+                state.nBytesPerMinute = (state.nBytesPerMinute + state.nBytesTotMinute) / 2;
+            else
+                state.nBytesPerMinute = state.nBytesTotMinute;
+            if (nSlowest > 0 && State(nSlowest) == NULL) {
+                LogPrint("stall", "peer=%d was the runt.\n", nSlowest);
+                nSlowest = 0;
+            }
+            if (!state.fRunt && (nSlowest == 0 || (nSlowest > 0 && state.nBytesPerMinute < State(nSlowest)->nBytesPerMinute)))
+                nSlowest = pto->id;
+            if (nFastest == 0 || (nFastest > 0 && (State(nFastest) == NULL || state.nBytesPerMinute > State(nFastest)->nBytesPerMinute)))
+                nFastest = pto->id;
+            state.nBytesTotMinute = 0;
+            state.nStallBiggest = state.nStallBiggestNext;
+            state.nStallBiggestNext = 0;
+            LogPrint("stall", "peer=%d Stall:Avg=%d Big=%d SysAvg=%d SysBig=%d AvgB/s=%d (%d%% of System=%d)\n", pto->id, state.nAvgStallMinute, state.nStallBiggest, nAvgStallMinute, nStallBiggest, state.nBytesPerMinute / 60, nBytesPerMinute ? state.nBytesPerMinute * 100 / nBytesPerMinute : 0, nBytesPerMinute / 60);
+        } // If we've reached a minute (based on average click).
+
 
         //
         // Message: getdata (blocks)
