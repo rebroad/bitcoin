@@ -247,6 +247,7 @@ struct CNodeState {
     CBlockIndex *pindexLastCommonBlock;
     //! Whether we've started headers synchronization with this peer.
     bool fSyncStarted;
+    int nBufferedMessages;     //! Messages still waiting to be processed.
     int64_t tBlockRecving;     //! Time of last block reception.
     int64_t tHeadersRecving;   //! Time of last headers reception.
     int nStallSamples;         //! Number of stall samples collected per minute.
@@ -305,6 +306,7 @@ struct CNodeState {
         hashLastUnknownBlock.SetNull();
         pindexLastCommonBlock = NULL;
         fSyncStarted = false;
+        nBufferedMessages = 0;
         tBlockRecving = 0;
         tHeadersRecving = 0;
         nStallSamples = 0;
@@ -412,7 +414,7 @@ void FinalizeNode(NodeId nodeid) {
 
     if (state->nBlocksInFlight) {
         nConcurrentDownloads--;
-        LogPrint("concurrent", "Concurrent=%d Syncing=%d peer=%d removed\n", nConcurrentDownloads, nSyncStarted, state->id);
+        LogPrint("concurrent", "Concurrent=%d Syncing=%d peer=%d (buffered=%d) removed\n", nConcurrentDownloads, nSyncStarted, state->id, state->nBufferedMessages);
     }
 
     mapNodeState.erase(nodeid);
@@ -5275,13 +5277,14 @@ bool ProcessMessages(CNode* pfrom)
             LogPrintf("%s(%s, %u bytes) FAILED peer=%d\n", __func__, SanitizeString(strCommand), nMessageSize, pfrom->id);
 
         int nTimespent = GetTimeMicros() - nNow;
-        if (nConcurrentDownloads)
+        if (nConcurrentDownloads) {
+            state.nBufferedMessages = nMessages - nMessage;
             if (nTimespent > 1000000 / nConcurrentDownloads) {
                 LogPrint("stall3", "peer=%d Break out of receiving %s %d (of %d) %d bytes after %dms.\n", pfrom->id, strCommand, nMessage, nMessages, nMessageSize, nTimespent * .001);
                 break;
             } else
                 LogPrint("stall3", "peer=%d %dms spent receiving %s %d (of %d) %d bytes.\n", pfrom->id, nTimespent * .001, strCommand, nMessage, nMessages, nMessageSize);
-        else
+        } else
             break;
     }
 
