@@ -1466,8 +1466,10 @@ void ThreadMessageHandler()
                 TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
                 if (lockRecv)
                 {
-                    if (!g_signals.ProcessMessages(pnode))
+                    if (!g_signals.ProcessMessages(pnode)) {
+                        LogPrintf("ProcessMessages exiting?\n");
                         pnode->CloseSocketDisconnect();
+                    }
 
                     if (pnode->nSendSize < SendBufferSize())
                     {
