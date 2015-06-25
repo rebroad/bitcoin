@@ -962,9 +962,10 @@ void ThreadSocketHandler()
                         else if (nBytes == 0)
                         {
                             // socket closed gracefully
-                            if (!pnode->fDisconnect)
-                                LogPrint("net", "socket closed\n");
-                            pnode->CloseSocketDisconnect();
+                            if (!pnode->fDisconnect) {
+                                LogPrint("net", "socket closed. Disconnecting peer=%d\n", pnode->id);
+                                pnode->fDisconnect = true;
+                            }
                         }
                         else if (nBytes < 0)
                         {
