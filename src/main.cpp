@@ -2826,8 +2826,9 @@ bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, bool f
 
     // Check timestamp
     if (block.GetBlockTime() > GetAdjustedTime() + 2 * 60 * 60)
-        return state.Invalid(error("CheckBlockHeader(): block timestamp (%s) too far in the future",
-          DateTimeStrFormat("%Y-%m-%d %H:%M:%S", block.GetBlockTime())), REJECT_INVALID, "time-too-new");
+        return state.Invalid(error("CheckBlockHeader(): block timestamp (%s) too far ahead of now (%d)",
+          DateTimeStrFormat("%Y-%m-%d %H:%M:%S", block.GetBlockTime()),
+          DateTimeStrFormat("%Y-%m-%d %H:%M:%S", GetAdjustedTime())), REJECT_INVALID, "time-too-new");
 
     return true;
 }
