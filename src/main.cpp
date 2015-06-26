@@ -4533,7 +4533,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 break;
         }
         pfrom->PushMessage("headers", vHeaders);
-        State(pfrom->id)->nHeadersSent +=n Count;
+        State(pfrom->id)->nHeadersSent += nCount;
     }
 
 
