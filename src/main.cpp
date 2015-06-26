@@ -4375,10 +4375,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         // not a direct successor.
                         pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader), uint256());
                         int64_t nNow = GetTimeMicros();
-                        state->tGetheaders = nNow;
-                        if (!state->nBlocksInFlight)
-                            state->nStallClicks = 0;
-                        LogPrint("net", "getheaders (%d) to peer=%d\n", pindexBestHeader->nHeight, pfrom->id);
                         CNodeState *nodestate = State(pfrom->GetId());
                         if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - chainparams.GetConsensus().nPowTargetSpacing * 20 &&
                             nodestate->nBlocksInFlight < nodestate->nMaxInFlight && !mapBlocksInFlight.count(inv.hash)) {
@@ -4390,6 +4386,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                             if (!state->tGetdataBlock)
                                 state->tGetdataBlock = nNow;
                         }
+                        state->tGetheaders = nNow;
+                        if (!state->nBlocksInFlight)
+                            state->nStallClicks = 0;
+                        LogPrint("net", "getheaders (%d) to peer=%d\n", pindexBestHeader->nHeight, pfrom->id);
                     }
                 } else {
                     state->nOldBlkInvsReceived++;
