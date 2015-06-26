@@ -292,6 +292,7 @@ struct CNodeState {
     int nBlksReceived;         // Total blocks received.
     int nTxsReceived;          // Total txs received that were requested.
     int nRandomTxsReceived;    // Total txs received that weren't requested.
+    int nHeadersSent;          // Total headers sent.
     int nBlksSent;             // Total blocks sent.
     int nMerkleBlksSent;       // Total merkle blocks sent.
     int nTxsSent;              // Total txs sent.
@@ -345,6 +346,7 @@ struct CNodeState {
         nBlksReceived = 0;
         nTxsReceived = 0;
         nRandomTxsReceived = 0;
+        nHeadersSent = 0;
         nBlksSent = 0;
         nMerkleBlksSent = 0;
         nTxsSent = 0;
@@ -4521,13 +4523,16 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         vector<CBlock> vHeaders;
         int nLimit = MAX_HEADERS_RESULTS;
         LogPrint("net", "getheaders (%d) to %s from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), pfrom->id);
+        int nCount = 0;
         for (; pindex; pindex = chainActive.Next(pindex))
         {
+            nCount++;
             vHeaders.push_back(pindex->GetBlockHeader());
             if (--nLimit <= 0 || pindex->GetBlockHash() == hashStop)
                 break;
         }
         pfrom->PushMessage("headers", vHeaders);
+        State(pfrom->id)->nHeadersSent +=n Count;
     }
 
 
@@ -5513,6 +5518,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             state.nTxsReceived = 0;
             int nRandomTxsReceived = state.nRandomTxsReceived;
             state.nRandomTxsReceived = 0;
+            int nHeadersSent = state.nHeadersSent;
+            state.nHeadersSent = 0;
             int nBlksSent = state.nBlksSent;
             state.nBlksSent = 0;
             int nMerkleBlksSent = state.nMerkleBlksSent;
@@ -5524,8 +5531,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 LogPrint("stats", "NewBlkInvIn=%d OldBlkInvIn=%d BlkInvOut=%d NewTxInvIn=%d OldTxInvIn=%d TxInvOut=%d\n",
                   nNewBlkInvsReceived, nOldBlkInvsReceived, nBlockInvsSent, nNewTxInvsReceived, nOldTxInvsReceived,
                   nTxInvsSent);
-                LogPrint("stats", "peer=%d HeadRec=%d BlksReq=%d BlkRec=%d TxReq=%d TxRec=%d RTxRec=%d BlkSent=%d MBlkSent=%d TxSent=%d\n",
-                  pto->id, nHeadersReceived, nBlksRequested, nBlksReceived, nTxsRequested, nTxsReceived, nRandomTxsReceived,
+                LogPrint("stats", "peer=%d HeadRec=%d HeadSent=%d BlksReq=%d BlkRec=%d TxReq=%d TxRec=%d RTxRec=%d BlkSent=%d MBlkSent=%d TxSent=%d\n",
+                  pto->id, nHeadersReceived, nHeadersSent, nBlksRequested, nBlksReceived, nTxsRequested, nTxsReceived, nRandomTxsReceived,
                   nBlksSent, nMerkleBlksSent, nTxsSent);
             }
         }
