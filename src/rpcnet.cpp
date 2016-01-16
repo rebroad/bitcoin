@@ -16,6 +16,7 @@
 #include "util.h"
 #include "utilstrencodings.h"
 #include "version.h"
+#include "xthinblocks.h"
 
 #include <boost/foreach.hpp>
 
@@ -423,6 +424,20 @@ static UniValue GetNetworksInfo()
     return networks;
 }
 
+// BitcoinUnlimited BUIP010 : Start
+static UniValue GetThinBlockStats()
+{
+    UniValue obj(UniValue::VOBJ);
+    bool enabled = IsThinBlocksEnabled();
+    obj.push_back(Pair("enabled", enabled));
+    if (enabled) {
+        obj.push_back(Pair("summary", CThinBlockStats::ToString()));
+    }
+    return obj;
+}
+// BitcoinUnlimited BUIP010 : End
+
+
 UniValue getnetworkinfo(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
@@ -486,6 +501,9 @@ UniValue getnetworkinfo(const UniValue& params, bool fHelp)
         }
     }
     obj.push_back(Pair("localaddresses", localAddresses));
+// BitcoinUnlimited BUIP010: Start
+    obj.push_back(Pair("thinblockstats", GetThinBlockStats()));
+// BitcoinUnlimited BUIP010: End
     obj.push_back(Pair("warnings",       GetWarnings("statusbar")));
     return obj;
 }

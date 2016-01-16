@@ -1,5 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2015 The Bitcoin Core developers
+// Copyright (c) 2016 Tom Zander <tomz@freedommail.ch>
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,6 +11,7 @@
 #include "compat.h"
 #include "limitedmap.h"
 #include "netbase.h"
+#include "primitives/block.h"
 #include "protocol.h"
 #include "random.h"
 #include "streams.h"
@@ -26,6 +28,9 @@
 #include <boost/filesystem/path.hpp>
 #include <boost/foreach.hpp>
 #include <boost/signals2/signal.hpp>
+
+// if this is enabled the node will hold an extra int to do reporting. Enable to see size and other stats.
+// #define LOG_XTHINBLOCKS
 
 class CAddrMan;
 class CScheduler;
@@ -358,8 +363,22 @@ public:
     CSemaphoreGrant grantOutbound;
     CCriticalSection cs_filter;
     CBloomFilter* pfilter;
+    CBloomFilter* pThinBlockFilter; // BU - Xtreme Thinblocks: a bloom filter which is separate from the one used by SPV wallets
     int nRefCount;
     NodeId id;
+
+    // Xtreme Thinblocks: begin section
+    CBlock thinBlock;
+    std::vector<uint64_t> xThinBlockHashes;
+#ifdef LOG_XTHINBLOCKS
+    int nSizeThinBlock;   // Original on-wire size of the block. Just used for reporting
+#endif
+    int thinBlockWaitingForTxns;   // if -1 then not currently waiting
+    std::map<uint256, uint64_t> mapThinBlocksInFlight; // map of the hashes of thin blocks in flight with the time they were requested.
+    double nGetXBlockTxCount; // Count how many get_xblocktx requests are made
+    uint64_t nGetXBlockTxLastTime;  // The last time a get_xblocktx request was made
+    // Xtreme Thinblocks: end section
+
 protected:
 
     // Denial-of-service detection/prevention
@@ -410,6 +429,18 @@ public:
     int64_t nMinPingUsecTime;
     // Whether a ping is requested.
     bool fPingQueued;
+
+    // BU instrumentation
+    // track the number of bytes sent to this node
+    CStatHistory<unsigned int > bytesSent;
+    // track the number of bytes received from this node
+    CStatHistory<unsigned int > bytesReceived;
+    // track the average round trip latency for transaction requests to this node
+    // CStatHistory<unsigned int > txReqLatency;
+    // track the # of times this node is the first to send us a transaction INV
+    //CStatHistory<unsigned int> firstTx;
+    // track the # of times this node is the first to send us a block INV
+    //CStatHistory<unsigned int> firstBlock;
 
     CNode(SOCKET hSocketIn, const CAddress &addrIn, const std::string &addrNameIn = "", bool fInboundIn = false);
     ~CNode();
@@ -473,6 +504,12 @@ public:
         nRefCount--;
     }
 
+    // BUIP010:
+    bool ThinBlockCapable()
+    {
+        if (nServices & NODE_XTHIN) return true;
+        return false;
+    }
 
 
     void AddAddressKnown(const CAddress& addr)
