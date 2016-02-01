@@ -296,6 +296,7 @@ std::string HelpMessage(HelpMessageMode mode)
 
     strUsage += HelpMessageGroup(_("Connection options:"));
     strUsage += HelpMessageOpt("-addnode=<ip>", _("Add a node to connect to and attempt to keep the connection open"));
+    strUsage += HelpMessageOpt("-trusted=<ip>", _("Same as addnode, and trust this node to have the correct chain"));
     strUsage += HelpMessageOpt("-antisocial=<n>", _("Don't relay network traffic: 0 = relay as usual, 1 = relay once updated, 2 = never relay (default: 0)"));
     strUsage += HelpMessageOpt("-banscore=<n>", strprintf(_("Threshold for disconnecting misbehaving peers (default: %u)"), 100));
     strUsage += HelpMessageOpt("-bantime=<n>", strprintf(_("Number of seconds to keep misbehaving peers from reconnecting (default: %u)"), 86400));

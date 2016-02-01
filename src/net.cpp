@@ -1406,7 +1406,7 @@ void ThreadOpenAddedConnections()
 }
 
 // if successful, this moves the passed grant to the constructed node
-bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant *grantOutbound, const char *pszDest, bool fOneShot)
+bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant *grantOutbound, const char *pszDest, bool fOneShot, bool fTrusted)
 {
     //
     // Initiate outbound network connection
@@ -1430,6 +1430,8 @@ bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant *grantOu
     pnode->fNetworkNode = true;
     if (fOneShot)
         pnode->fOneShot = true;
+    if (fTrusted)
+        pnode->fTrusted = true;
 
     return true;
 }
@@ -1987,6 +1989,7 @@ CNode::CNode(SOCKET hSocketIn, const CAddress& addrIn, const std::string& addrNa
     strSubVer = "";
     fWhitelisted = false;
     fOneShot = false;
+    fTrusted = false;
     fClient = false; // set by version message
     fInbound = fInboundIn;
     fNetworkNode = false;
