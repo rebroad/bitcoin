@@ -49,6 +49,7 @@ CCriticalSection cs_main;
 BlockMap mapBlockIndex;
 CChain chainActive;
 CBlockIndex *pindexBestHeader = NULL;
+int nTimeout = 30; // REBTEMP
 int64_t nTimeBestReceived = 0;
 int64_t tMinuteStart = 0;
 int nStallSamples = 0;
@@ -5226,15 +5227,15 @@ bool ProcessMessages(CNode* pfrom)
     }
 
     // Detect whether we're stalling
-    if (state.tGetdataBlock > state.tBlockRecving && (state.nStallClicks * nAvgClick) > 10*1000*1000 && state.nStallClicks > std::max(nStallBiggest, nStallBiggestNext) * 2) {
+    if (state.tGetdataBlock > state.tBlockRecving && (state.nStallClicks * nAvgClick) > nTimeout*1000*1000 && state.nStallClicks > std::max(nStallBiggest, nStallBiggestNext) * 2) {
         LogPrintf("No response from peer=%d for getdata block for %d seconds (%d clicks).\n", pfrom->id, (nNow - state.tGetdataBlock) / 1000000, state.nStallClicks);
         pfrom->fDisconnect = true;
     } else
-    if (state.tBlockRecving && state.nBlockDLed < state.nBlockSize && (state.nStallClicks * nAvgClick) > 10*1000*1000 && state.nStallClicks > std::max(nStallBiggest, nStallBiggestNext) * 2) {
+    if (state.tBlockRecving && state.nBlockDLed < state.nBlockSize && (state.nStallClicks * nAvgClick) > nTimeout*1000*1000 && state.nStallClicks > std::max(nStallBiggest, nStallBiggestNext) * 2) {
         LogPrintf("Block download (%u of %u bytes) from peer=%d stalled for %d seconds (%d clicks).\n", state.nBlockDLed, state.nBlockSize, pfrom->id, (nNow - state.tBlockRecving) / 1000000, state.nStallClicks);
         pfrom->fDisconnect = true;
     } else
-    if (state.tGetheaders && (state.nStallClicks * nAvgClick) > 10*1000*1000 && state.nStallClicks > std::max(nStallBiggest, nStallBiggestNext) * 2) {
+    if (state.tGetheaders && (state.nStallClicks * nAvgClick) > nTimeout*1000*1000 && state.nStallClicks > std::max(nStallBiggest, nStallBiggestNext) * 2) {
         if (state.tHeadersRecving)
             LogPrintf("Headers download (%u of %u bytes) from peer=%d stalled for %d seconds (%d clicks).\n", state.nHeadersDLed, state.nHeadersSize, pfrom->id, (nNow - state.tHeadersRecving) / 1000000, state.nStallClicks);
         else
