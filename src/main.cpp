@@ -2842,6 +2842,8 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
     if (!CheckBlockHeader(block, state, fCheckPOW))
         return false;
 
+    if (fTrusting) return true;
+
     // Check the merkle root.
     if (fCheckMerkleRoot) {
         bool mutated;

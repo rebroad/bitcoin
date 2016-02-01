@@ -108,6 +108,7 @@ bool fServer = false;
 string strMiscWarning;
 int nAntisocial = 0;
 bool fAntisocial = false;
+bool fTrusting = false;
 bool fLogTimestamps = false;
 bool fLogIPs = false;
 bool fReset = false;

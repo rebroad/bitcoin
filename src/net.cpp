@@ -1240,6 +1240,8 @@ void ThreadOpenConnections()
     // Connect to specific addresses
     if (mapArgs.count("-connect") && mapMultiArgs["-connect"].size() > 0)
     {
+        if (GetBoolArg("-trustconnect", false))
+            fTrusting = true;
         for (int64_t nLoop = 0;; nLoop++)
         {
             ProcessOneShot();
