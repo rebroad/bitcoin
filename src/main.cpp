@@ -5208,8 +5208,10 @@ bool ProcessMessages(CNode* pfrom)
             PrintExceptionContinue(NULL, "ProcessMessages()");
         }
 
-        if (!fRet)
+        if (!fRet) {
             LogPrintf("%s(%s, %u bytes) FAILED peer=%d\n", __func__, SanitizeString(strCommand), nMessageSize, pfrom->id);
+            Misbehaving(pfrom->id, 10);
+        }
 
         int nTimespent = GetTimeMicros() - nNow;
         if (nConcurrentDownloads) {
