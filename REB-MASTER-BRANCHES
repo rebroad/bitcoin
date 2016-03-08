@@ -1,0 +1,10 @@
+GetAddrUnknownCommand / Avoid "Unknown command" messages
+AskforTime            / Only need to subtract 1
+NodeIdWhenMisbehaving / Show NodeId in misbehaving debug
+newcheckpoint         / new checkpoint
+DebugNet2             / Add net2 debug option
+BetterBest            / Display a more useful "new best"
+MoreGranularDebug     / Reduce debugging unless enabled
+
+Antisocial
+DebugInFlight
