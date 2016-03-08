@@ -180,6 +180,7 @@ namespace {
      * cs_main.
      */
     map<uint256, NodeId> mapBlockSource;
+    map<uint256, int> mapBlockSize;
 
     /**
      * Filter for transactions that were recently rejected by
@@ -1851,14 +1852,14 @@ void static InvalidChainFound(CBlockIndex* pindexNew)
     if (!pindexBestInvalid || pindexNew->nChainWork > pindexBestInvalid->nChainWork)
         pindexBestInvalid = pindexNew;
 
-    LogPrintf("%s: invalid block=%s  height=%d  log2_work=%.8g  date=%s\n", __func__,
-      pindexNew->GetBlockHash().ToString(), pindexNew->nHeight,
-      log(pindexNew->nChainWork.getdouble())/log(2.0), DateTimeStrFormat("%Y-%m-%d %H:%M:%S",
+    LogPrintf("%s: invalid block=%s:%d (%d)  dw=%.8g  date=%s\n", __func__,
+      pindexNew->GetBlockHash().ToString(), pindexNew->nVersion, pindexNew->nHeight,
+      log(((pindexNew->nChainWork)-(pindexNew->pprev->nChainWork)).getdouble())/log(2.0), DateTimeStrFormat("%Y-%m-%d %H:%M:%S",
       pindexNew->GetBlockTime()));
     CBlockIndex *tip = chainActive.Tip();
     assert (tip);
-    LogPrintf("%s:  current best=%s  height=%d  log2_work=%.8g  date=%s\n", __func__,
-      tip->GetBlockHash().ToString(), chainActive.Height(), log(tip->nChainWork.getdouble())/log(2.0),
+    LogPrintf("%s:  current best=%s:%d (%d)  dw=%.8g  date=%s\n", __func__,
+      tip->GetBlockHash().ToString(), tip->nVersion, tip->nHeight, log(((tip->nChainWork)-(tip->pprev->nChainWork)).getdouble())/log(2.0),
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", tip->GetBlockTime()));
     CheckForkWarningConditions();
 }
@@ -2482,6 +2483,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         vPos.push_back(std::make_pair(tx.GetHash(), pos));
         pos.nTxOffset += ::GetSerializeSize(tx, SER_DISK, CLIENT_VERSION);
     }
+    mapBlockSize[block.GetHash()] = pos.nTxOffset;
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint("bench", "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs]\n", (unsigned)block.vtx.size(), 0.001 * (nTime3 - nTime2), 0.001 * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : 0.001 * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * 0.000001);
 
@@ -2721,11 +2723,16 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
             }
         }
     }
-    LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utx)", __func__,
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), chainActive.Tip()->nVersion,
-      log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nChainTx,
-      DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
-      Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), chainActive.Tip()), pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
+    uint256 hash = chainActive.Tip()->GetBlockHash();
+    std::map<uint256, int>::iterator it = mapBlockSize.find(hash);
+    int nSize = -1;
+    if (it != mapBlockSize.end()) nSize = it->second;
+    mapBlockSize.erase(hash);
+    LogPrintf("%s: new best=%s:0x%08x (%d)  dw=%.8g  tx=%lu  date=%s %f%%  size=%u", __func__,
+      hash.ToString(), chainActive.Tip()->nVersion, chainActive.Height(),
+      log(((chainActive.Tip()->nChainWork)-(chainActive.Tip()->pprev->nChainWork)).getdouble())/log(2.0),
+      (unsigned long)chainActive.Tip()->nTx, DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
+      Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), chainActive.Tip())*100, nSize);
     if (!warningMessages.empty())
         LogPrintf(" warning='%s'", boost::algorithm::join(warningMessages, ", "));
     LogPrintf("\n");
