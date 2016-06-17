@@ -142,4 +142,23 @@ BOOST_AUTO_TEST_CASE(caddrdb_read_corrupted)
     BOOST_CHECK(addrman2.size() == 0);
 }
 
+BOOST_AUTO_TEST_CASE(cnode_simple_test)
+{
+    SOCKET hSocket = INVALID_SOCKET;
+
+    CAddress addr = CAddress(CService("252.1.1.1", 7777), NODE_NETWORK);
+    std::string pszDest = "";
+    bool fInboundIn = false;
+
+    // Test that fFeeler is false by default.
+    CNode* pnode1 = new CNode(hSocket, addr, pszDest, fInboundIn);
+    BOOST_CHECK(pnode1->fInbound == false);
+    BOOST_CHECK(pnode1->fFeeler == false);
+
+    fInboundIn = true;
+    CNode* pnode2 = new CNode(hSocket, addr, pszDest, fInboundIn);
+    BOOST_CHECK(pnode2->fInbound == true);
+    BOOST_CHECK(pnode2->fFeeler == false);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
