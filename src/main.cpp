@@ -4916,11 +4916,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
-    if (!(nLocalServices & NODE_BLOOM) &&
-              (strCommand == NetMsgType::FILTERLOAD ||
+    if (strCommand == NetMsgType::FILTERLOAD ||
                strCommand == NetMsgType::FILTERADD ||
-               strCommand == NetMsgType::FILTERCLEAR))
+               strCommand == NetMsgType::FILTERCLEAR)
     {
+        if (nLocalServices & NODE_BLOOM)
+            return true;
         if (pfrom->nVersion >= NO_BLOOM_VERSION) {
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 100);
@@ -5592,8 +5593,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
-    else if (strCommand == NetMsgType::CMPCTBLOCK && !fImporting && !fReindex) // Ignore blocks received while importing
+    else if (strCommand == NetMsgType::CMPCTBLOCK)
     {
+        if (fImporting || fReindex) {
+            LogPrint("net", "Ignoring (importing) cmpctblock peer=%d\n", pfrom->id);
+            return true;
+        }
+
         CBlockHeaderAndShortTxIDs cmpctblock;
         vRecv >> cmpctblock;
 
@@ -5716,8 +5722,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         CheckBlockIndex(chainparams.GetConsensus());
     }
 
-    else if (strCommand == NetMsgType::BLOCKTXN && !fImporting && !fReindex) // Ignore blocks received while importing
+    else if (strCommand == NetMsgType::BLOCKTXN)
     {
+        if (fImporting || fReindex) {
+            LogPrint("net", "Ignoring (importing) blocktxn peer=%d\n", pfrom->id);
+            return true;
+        }
+
         BlockTransactions resp;
         vRecv >> resp;
 
@@ -5760,8 +5771,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
-    else if (strCommand == NetMsgType::HEADERS && !fImporting && !fReindex) // Ignore headers received while importing
+    else if (strCommand == NetMsgType::HEADERS)
     {
+        if (fImporting || fReindex) {
+            LogPrint("net", "Ignoring (importing) headers peer=%d\n", pfrom->id);
+            return true;
+        }
+
         std::vector<CBlockHeader> headers;
 
         // Bypass the normal CBlock deserialization, as we don't want to risk deserializing 2000 full blocks.
@@ -5908,10 +5924,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         NotifyHeaderTip();
     }
 
-    else if (strCommand == NetMsgType::BLOCK && !fImporting && !fReindex) // Ignore blocks received while importing
+    else if (strCommand == NetMsgType::BLOCK)
     {
         CBlock block;
         vRecv >> block;
+
+        if (fImporting || fReindex) {
+            LogPrint("net", "Ignoring (importing) block %s peer=%d\n", block.GetHash().ToString(), pfrom->id);
+            return true;
+        }
 
         LogPrint("net", "received block %s peer=%d\n", block.GetHash().ToString(), pfrom->id);
 
