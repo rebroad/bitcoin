@@ -2576,8 +2576,29 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
     else if (strCommand == NetMsgType::NOTFOUND) {
-        // We do not care about the NOTFOUND message, but logging an Unknown Command
-        // message would be undesirable as we transmit it ourselves.
+        vector<CInv> vInv;
+        vRecv >> vInv;
+        if (vInv.size() > MAX_INV_SZ)
+        {
+            LogPrintf("recv %s too large (%d > %d) peer=%d\n", strCommand, vInv.size(), MAX_INV_SZ, pfrom->id);
+            LOCK(cs_main);
+            Misbehaving(pfrom->GetId(), 20);
+            return true;
+        }
+
+        for (unsigned int nInv = 0; nInv < vInv.size(); nInv++)
+        {
+            const CInv &inv = vInv[nInv];
+
+            boost::this_thread::interruption_point();
+            if (inv.type == MSG_TX || inv.type == MSG_WITNESS_TX)
+                LogPrint("tx", "notfound: %s from peer=%d\n", inv.ToString(), pfrom->id);
+            else if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_CMPCT_BLOCK || inv.type == MSG_WITNESS_BLOCK) {
+                pfrom->fDisconnect = true;
+                Misbehaving(pfrom->id, 100);
+            } else
+                LogPrint("net", "notfound: %s from peer=%d\n", inv.ToString(), pfrom->id);
+        }
     }
 
     else {
