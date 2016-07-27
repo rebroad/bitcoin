@@ -217,7 +217,7 @@ void AdvertiseLocal(CNode *pnode)
         }
         if (addrLocal.IsRoutable())
         {
-            LogPrint("net2", "AdvertiseLocal: advertising address %s\n", addrLocal.ToString());
+            LogPrint("net2", "AdvertiseLocal: advertising address %s to peer=%d\n", addrLocal.ToString(), pnode->id);
             pnode->PushAddress(addrLocal);
         }
     }
