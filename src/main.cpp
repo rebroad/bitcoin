@@ -1122,7 +1122,7 @@ std::string FormatStateMessage(const CValidationState &state)
 
 bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const CTransaction& tx, bool fLimitFree,
                               bool* pfMissingInputs, bool fOverrideMempoolLimit, const CAmount& nAbsurdFee,
-                              std::vector<uint256>& vHashTxnToUncache)
+                              std::vector<uint256>& vHashTxnToUncache, int64_t nAcceptTime)
 {
     const uint256 hash = tx.GetHash();
     CFeeRate poolMinFeeRate;
@@ -1291,7 +1291,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
             }
         }
 
-        CTxMemPoolEntry entry(tx, nFees, GetTime(), dPriority, chainActive.Height(), pool.HasNoInputsOf(tx), inChainInputValue, fSpendsCoinbase, nSigOpsCost, lp);
+        CTxMemPoolEntry entry(tx, nFees, nAcceptTime, dPriority, chainActive.Height(), pool.HasNoInputsOf(tx), inChainInputValue, fSpendsCoinbase, nSigOpsCost, lp);
         unsigned int nSize = entry.GetTxSize();
 
         // Check that the transaction doesn't have an excessive number of
@@ -1558,10 +1558,10 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
 }
 
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransaction &tx, bool fLimitFree,
-                        bool* pfMissingInputs, bool fOverrideMempoolLimit, const CAmount nAbsurdFee)
+                        bool* pfMissingInputs, int64_t nAcceptTime, bool fOverrideMempoolLimit, const CAmount nAbsurdFee)
 {
     std::vector<uint256> vHashTxToUncache;
-    bool res = AcceptToMemoryPoolWorker(pool, state, tx, fLimitFree, pfMissingInputs, fOverrideMempoolLimit, nAbsurdFee, vHashTxToUncache);
+    bool res = AcceptToMemoryPoolWorker(pool, state, tx, fLimitFree, pfMissingInputs, fOverrideMempoolLimit, nAbsurdFee, vHashTxToUncache, nAcceptTime);
     if (!res) {
         BOOST_FOREACH(const uint256& hashTx, vHashTxToUncache)
             pcoinsTip->Uncache(hashTx);
@@ -2768,7 +2768,7 @@ bool static DisconnectTip(CValidationState& state, const CChainParams& chainpara
             // ignore validation errors in resurrected transactions
             list<CTransaction> removed;
             CValidationState stateDummy;
-            if (tx.IsCoinBase() || !AcceptToMemoryPool(mempool, stateDummy, tx, false, NULL, true)) {
+            if (tx.IsCoinBase() || !AcceptToMemoryPool(mempool, stateDummy, tx, false, NULL, block.nTime, true, 0)) {
                 mempool.removeRecursive(tx, removed);
             } else if (mempool.exists(tx.GetHash())) {
                 vHashUpdate.push_back(tx.GetHash());
@@ -5461,7 +5461,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         pfrom->setAskFor.erase(inv.hash);
         mapAlreadyAskedFor.erase(inv.hash);
 
-        if (!AlreadyHave(inv) && AcceptToMemoryPool(mempool, state, tx, true, &fMissingInputs)) {
+        if (!AlreadyHave(inv) && AcceptToMemoryPool(mempool, state, tx, true, &fMissingInputs, GetTime(), false, 0)) {
             mempool.check(pcoinsTip);
             RelayTransaction(tx);
             for (unsigned int i = 0; i < tx.vout.size(); i++) {
@@ -5498,7 +5498,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
                     if (setMisbehaving.count(fromPeer))
                         continue;
-                    if (AcceptToMemoryPool(mempool, stateDummy, orphanTx, true, &fMissingInputs2)) {
+                    if (AcceptToMemoryPool(mempool, stateDummy, orphanTx, true, &fMissingInputs2, GetTime(), false, 0)) {
                         LogPrint("mempool2", "   accepted orphan tx %s\n", orphanHash.ToString());
                         RelayTransaction(orphanTx);
                         for (unsigned int i = 0; i < orphanTx.vout.size(); i++) {
