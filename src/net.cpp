@@ -424,13 +424,13 @@ void CConnman::DumpBanlist()
 
 void CNode::CloseSocketDisconnect()
 {
-    fDisconnect = true;
     LOCK(cs_hSocket);
     if (hSocket != INVALID_SOCKET)
     {
-        LogPrint(fFeeler ? "feeler" : "net", "disconnecting %speer=%d\n", fFeeler ? "feeler " : "", id);
+        LogPrint(fFeeler ? "feeler" : "net", "disconnecting %s%speer=%d\n", fDisconnect ? "(as requested) " : "", fFeeler ? "feeler " : "", id);
         CloseSocket(hSocket);
     }
+    fDisconnect = true;
 }
 
 void CConnman::ClearBanned()
