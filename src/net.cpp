@@ -427,12 +427,15 @@ CNode* ConnectNode(CAddress addrConnect, const char *pszDest)
 
 void CNode::CloseSocketDisconnect()
 {
-    fDisconnect = true;
     if (hSocket != INVALID_SOCKET)
     {
-        LogPrint("net", "disconnecting peer=%d\n", id);
+        if (fDisconnect)
+            LogPrint("net", "disconnecting (as requested) peer=%d\n", id);
+        fDisconnect = true;
         CloseSocket(hSocket);
+        LogPrint("net", "after CloseSocket() peer=%d\n", id); //REBTEMP
     }
+    fDisconnect = true;
 
     // in case this fails, we'll empty the recv buffer when the CNode is deleted
     TRY_LOCK(cs_vRecvMsg, lockRecv);
