@@ -29,6 +29,7 @@
 #include "script/standard.h"
 #include "script/sigcache.h"
 #include "scheduler.h"
+#include "stats/stats.h"
 #include "timedata.h"
 #include "txdb.h"
 #include "txmempool.h"
@@ -491,6 +492,7 @@ std::string HelpMessage(HelpMessageMode mode)
         strUsage += HelpMessageOpt("-rpcservertimeout=<n>", strprintf("Timeout during HTTP requests (default: %d)", DEFAULT_HTTP_SERVER_TIMEOUT));
     }
 
+    strUsage += CStats::getHelpString(showDebug);
     return strUsage;
 }
 
@@ -1034,6 +1036,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         }
     }
 
+    if (!CStats::parameterInteraction())
+        return false;
     // ********************************************************* Step 4: application initialization: dir lock, daemonize, pidfile, debug log
 
     // Initialize elliptic curve code
