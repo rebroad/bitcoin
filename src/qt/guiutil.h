@@ -204,6 +204,9 @@ namespace GUIUtil
 
     QString formatNiceTimeOffset(qint64 secs);
 
+    /* Format bytes into GB/MB/KB */
+    QString formatBytes(size_t nBytes);
+
     class ClickableLabel : public QLabel
     {
         Q_OBJECT
