@@ -40,6 +40,7 @@
 #include <qt/walletmodel.h>
 #endif // ENABLE_WALLET
 
+#include <stats/stats.h>
 #include <boost/signals2/connection.hpp>
 #include <chrono>
 #include <memory>
@@ -638,6 +639,9 @@ int GuiMain(int argc, char* argv[])
         // Store intro dialog settings other than datadir (network specific)
         app.InitPruneSetting(prune_MiB);
     }
+
+    // Enable mempool stats by default
+    gArgs.SoftSetBoolArg("-statsenable", true);
 
     if (gArgs.GetBoolArg("-splash", DEFAULT_SPLASHSCREEN) && !gArgs.GetBoolArg("-min", false))
         app.createSplashScreen(networkStyle.data());
