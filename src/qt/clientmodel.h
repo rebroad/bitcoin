@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <memory>
+#include <stats/stats.h>
 #include <sync.h>
 #include <uint256.h>
 
@@ -90,6 +91,8 @@ public:
     std::vector<mempool_feehist_sample> m_mempool_feehist;
     std::atomic<int64_t> m_mempool_feehist_last_sample_timestamp{0};
 
+    mempoolSamples_t getMempoolStatsInRange(QDateTime &from, QDateTime &to);
+
 private:
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_show_progress;
@@ -99,6 +102,7 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_banned_list_changed;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
     std::unique_ptr<interfaces::Handler> m_handler_notify_header_tip;
+    boost::signals2::scoped_connection m_connection_mempool_stats_did_change;
     OptionsModel *optionsModel;
     PeerTableModel *peerTableModel;
     BanTableModel *banTableModel;
@@ -124,11 +128,16 @@ Q_SIGNALS:
     // Show progress dialog e.g. for verifychain
     void showProgress(const QString &title, int nProgress);
 
+    void mempoolStatsDidUpdate();
+
 public Q_SLOTS:
     void updateNumConnections(int numConnections);
     void updateNetworkActive(bool networkActive);
     void updateAlert();
     void updateBanlist();
+
+    /* stats stack */
+    void updateMempoolStats();
 };
 
 #endif // BITCOIN_QT_CLIENTMODEL_H
