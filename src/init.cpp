@@ -48,6 +48,7 @@
 #include <script/sigcache.h>
 #include <script/standard.h>
 #include <shutdown.h>
+#include <stats/stats.h>
 #include <sync.h>
 #include <timedata.h>
 #include <torcontrol.h>
@@ -565,6 +566,8 @@ void SetupServerArgs(NodeContext& node)
     hidden_args.emplace_back("-daemonwait");
 #endif
 
+    CStats::AddStatsOptions();
+
     // Add the hidden options
     argsman.AddHiddenArgs(hidden_args);
 }
@@ -1008,6 +1011,8 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     if (args.IsArgSet("-proxy") && args.GetArg("-proxy", "").empty()) {
         return InitError(_("No proxy server specified. Use -proxy=<ip> or -proxy=<ip:port>."));
     }
+
+    if (!CStats::parameterInteraction()) return false;
 
     return true;
 }
