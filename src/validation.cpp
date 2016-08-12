@@ -35,6 +35,7 @@
 #include <script/sigcache.h>
 #include <shutdown.h>
 #include <signet.h>
+#include <stats/stats.h>
 #include <timedata.h>
 #include <tinyformat.h>
 #include <txdb.h>
@@ -1044,6 +1045,10 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
     if (!Finalize(args, ws)) return MempoolAcceptResult::Failure(ws.m_state);
 
     GetMainSignals().TransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence());
+
+    // update mempool stats cache
+    const CFeeRate mempool_min_fee_rate = m_pool.GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
+    CStats::DefaultStats()->addMempoolSample(m_pool.size(), m_pool.DynamicMemoryUsage(), mempool_min_fee_rate.GetFeePerK());
 
     return MempoolAcceptResult::Success(std::move(ws.m_replaced_transactions), ws.m_base_fees);
 }
@@ -2324,6 +2329,8 @@ bool CChainState::DisconnectTip(BlockValidationState& state, const CChainParams&
     // Let wallets know transactions went from 1-confirmed to
     // 0-confirmed or conflicted:
     GetMainSignals().BlockDisconnected(pblock, pindexDelete);
+    // add mempool stats sample
+    CStats::DefaultStats()->addMempoolSample(m_mempool.size(), m_mempool.DynamicMemoryUsage(), m_mempool.GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK());
     return true;
 }
 
@@ -2429,6 +2436,9 @@ bool CChainState::ConnectTip(BlockValidationState& state, const CChainParams& ch
     // Update m_chain & related variables.
     m_chain.SetTip(pindexNew);
     UpdateTip(m_mempool, pindexNew, chainparams, *this);
+
+    // add mempool stats sample
+    CStats::DefaultStats()->addMempoolSample(m_mempool.size(), m_mempool.DynamicMemoryUsage(), m_mempool.GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK());
 
     int64_t nTime6 = GetTimeMicros(); nTimePostConnect += nTime6 - nTime5; nTimeTotal += nTime6 - nTime1;
     LogPrint(BCLog::BENCH, "  - Connect postprocess: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime5) * MILLI, nTimePostConnect * MICRO, nTimePostConnect * MILLI / nBlocksTotal);
