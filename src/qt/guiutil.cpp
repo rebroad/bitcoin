@@ -991,4 +991,19 @@ QString formateNiceTimeOffset(qint64 secs)
     }
     return timeBehindText;
 }
+
+QString formatBytes(size_t nBytes)
+{
+    static float kilobyte = 1000.0;
+    if (nBytes >= kilobyte*kilobyte*kilobyte)
+        return QString::number(nBytes/kilobyte/kilobyte/kilobyte, 'f', 2)+" GB";
+    if (nBytes >= kilobyte*kilobyte)
+        return QString::number(nBytes/kilobyte/kilobyte, 'f', 2)+" MB";
+    if (nBytes >= kilobyte)
+        return QString::number(nBytes/kilobyte, 'f', 2)+" KB";
+
+    return QString::number(nBytes)+" Bytes";
+
+}
+
 } // namespace GUIUtil
