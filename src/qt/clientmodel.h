@@ -8,6 +8,8 @@
 #include <QObject>
 #include <QDateTime>
 
+#include "stats/stats.h"
+
 class AddressTableModel;
 class BanTableModel;
 class OptionsModel;
@@ -76,6 +78,8 @@ public:
     QString formatClientStartupTime() const;
     QString dataDir() const;
 
+    mempoolSamples_t getMempoolStatsInRange(QDateTime &from, QDateTime &to);
+
 private:
     OptionsModel *optionsModel;
     PeerTableModel *peerTableModel;
@@ -99,11 +103,16 @@ Q_SIGNALS:
     // Show progress dialog e.g. for verifychain
     void showProgress(const QString &title, int nProgress);
 
+    void mempoolStatsDidUpdate();
+
 public Q_SLOTS:
     void updateTimer();
     void updateNumConnections(int numConnections);
     void updateAlert();
     void updateBanlist();
+
+    /* stats stack */
+    void updateMempoolStats();
 };
 
 #endif // BITCOIN_QT_CLIENTMODEL_H
