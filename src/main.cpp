@@ -5235,6 +5235,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
             if (inv.type == MSG_BLOCK) {
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
+                if (!fAlreadyHave) {
+                    LogPrint("block", "inv (new) %s from peer=%d\n", inv.ToString(), pfrom->id);
+                } else {
+                    int theirheight = State(pfrom->id)->pindexBestKnownBlock ? State(pfrom->id)->pindexBestKnownBlock->nHeight : -1;
+                    if (theirheight >= chainActive.Height()-2)
+                        LogPrint("block", "inv (old) %s (%d) from peer=%d\n", inv.ToString(), theirheight, pfrom->id);
+                }
                 if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
                     // First request the headers preceding the announced block. In the normal fully-synced
                     // case where a new block is announced that succeeds the current tip (no reorganization),
@@ -6736,7 +6743,7 @@ bool SendMessages(CNode* pto)
                     uint32_t nFetchFlags = GetFetchFlags(pto, pindex->pprev, consensusParams);
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                     MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), consensusParams, pindex);
-                    LogPrint("block", "Requesting block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
+                    LogPrint("block", "getdata block %s (%d) to peer=%d\n", pindex->GetBlockHash().ToString(),
                         pindex->nHeight, pto->id);
                 }
             }
@@ -6756,7 +6763,7 @@ bool SendMessages(CNode* pto)
             const CInv& inv = (*pto->mapAskFor.begin()).second;
             if (!AlreadyHave(inv))
             {
-                LogPrint("tx2", "Requesting %s peer=%d\n", inv.ToString(), pto->id);
+                LogPrint("tx2", "getdata %s to peer=%d\n", inv.ToString(), pto->id);
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
                 {
