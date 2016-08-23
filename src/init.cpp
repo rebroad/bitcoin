@@ -1455,8 +1455,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // if pruning, unset the service bit and perform the initial blockstore prune
     // after any wallet rescanning has taken place.
     if (fPruneMode) {
-        LogPrintf("Unsetting NODE_NETWORK on prune mode\n");
-        nLocalServices = ServiceFlags(nLocalServices & ~NODE_NETWORK);
+        //LogPrintf("Unsetting NODE_NETWORK on prune mode\n");
+        //nLocalServices = ServiceFlags(nLocalServices & ~NODE_NETWORK);
         if (!fReindex) {
             uiInterface.InitMessage(_("Pruning blockstore..."));
             PruneAndFlush();

@@ -451,10 +451,10 @@ void CNode::PushVersion()
     CAddress addrYou = (addr.IsRoutable() && !IsProxy(addr) ? addr : CAddress(CService(), addr.nServices));
     CAddress addrMe = GetLocalAddress(&addr, nLocalServices);
     if (fLogIPs)
-        LogPrint("net2", "send version message: version %d, blocks=%d, us=%s, them=%s, peer=%d\n", PROTOCOL_VERSION, nMyStartingHeight, addrMe.ToString(), addrYou.ToString(), id);
+        LogPrint("net2", "send version message: version %d, blocks=%d, us=%s, them=%s, peer=%d\n", std::min(std::max(nVersion, 70012), PROTOCOL_VERSION), nMyStartingHeight, addrMe.ToString(), addrYou.ToString(), id);
     else
-        LogPrint("net2", "send version message: version %d, blocks=%d, us=%s, peer=%d\n", PROTOCOL_VERSION, nMyStartingHeight, addrMe.ToString(), id);
-    PushMessage(NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalServices, nTime, addrYou, addrMe,
+        LogPrint("net2", "send version message: version %d, blocks=%d, us=%s, peer=%d\n", std::min(std::max(nVersion, 70012), PROTOCOL_VERSION), nMyStartingHeight, addrMe.ToString(), id);
+    PushMessage(NetMsgType::VERSION, std::min(std::max(nVersion, 70012), PROTOCOL_VERSION), (uint64_t)nLocalServices, nTime, addrYou, addrMe,
                 nLocalHostNonce, strSubVersion, nMyStartingHeight, ::fRelayTxes);
 }
 
