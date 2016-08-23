@@ -452,10 +452,10 @@ void CNode::PushVersion()
     CAddress addrMe = GetLocalAddress(&addr);
     GetRandBytes((unsigned char*)&nLocalHostNonce, sizeof(nLocalHostNonce));
     if (fLogIPs)
-        LogPrint("net", "send version message: version %d, blocks=%d, us=%s, them=%s, peer=%d\n", PROTOCOL_VERSION, nBestHeight, addrMe.ToString(), addrYou.ToString(), id);
+        LogPrint("net2", "send version message: version %d, blocks=%d, us=%s, them=%s, peer=%d\n", std::min(std::max(nVersion, 70012), PROTOCOL_VERSION), nBestHeight, addrMe.ToString(), addrYou.ToString(), id); // REBTODO move net2 to net2 commit
     else
-        LogPrint("net", "send version message: version %d, blocks=%d, us=%s, peer=%d\n", PROTOCOL_VERSION, nBestHeight, addrMe.ToString(), id);
-    PushMessage(NetMsgType::VERSION, PROTOCOL_VERSION, nLocalServices, nTime, addrYou, addrMe,
+        LogPrint("net2", "send version message: version %d, blocks=%d, us=%s, peer=%d\n", std::min(std::max(nVersion, 70012), PROTOCOL_VERSION), nBestHeight, addrMe.ToString(), id); // REBTODO move net2 to net2 commit
+    PushMessage(NetMsgType::VERSION, std::min(std::max(nVersion, 70012), PROTOCOL_VERSION), nLocalServices, nTime, addrYou, addrMe,
                 nLocalHostNonce, strSubVersion, nBestHeight, !GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY));
 }
 
