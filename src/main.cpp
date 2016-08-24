@@ -4922,6 +4922,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                strCommand == NetMsgType::FILTERADD ||
                strCommand == NetMsgType::FILTERCLEAR)
     {
+        LogPrint("bloom", "received: %s (%u bytes) peer=%d\n", strCommand, vRecv.size(), pfrom->id);
         if (nLocalServices & NODE_BLOOM)
             return true;
         if (pfrom->nVersion >= NO_BLOOM_VERSION) {
