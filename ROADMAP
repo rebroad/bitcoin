@@ -1,0 +1,112 @@
+Start downloading blocks even before we've downloaded all the headers...? i.e. don't "send more getheaders" upon receiving headers - do it only when we've caught up with the best header.
+
+When ping timeout - display how many bytes received of current incoming block, and when it started to be received, and bytes per second - store this with inflight info so we can display it when the block is received by net_processing.
+
+Is a record kept of blocks in flight and the peer providing them? If so, use this to identify the IDBnode (one after MostWork)
+
+Debug IBDnode (as it seems to be faulty)
+
+Don't round robin to the next node if the node we're processing is the IBDnode
+
+Allow BCH nodes to connect
+
+Count and log number of current inbound connections
+
+Check why "made block" is not triggering Activatechain
+
+No need to send filterclear if we connected with relay=1
+
+Find a way to measure CPU used per peer. Factor this into their value rating.
+
+Stop sending the same headers over and over again (bigquiet beginning of 2020-05-04 13:14) - also don't send block invs for announce until we've received their headers (and know their best block)
+
+Count clicks (increase each time we start a loop through nodes to receive messages) - when a new best header is seen, mark the click count, and use this to determine who is slow to announce.
+
+Have 2 ban lists - one that applies to all nodes, and one that applies just to outbound nodes. (Bad blocks only ban outbound)
+
+Start off with all peers MaxBlocksInFlight = 1 - and see if they arrive before we can request more first (by counting clicks, i.e. if no clicks, then increase MaxInFlight).
+
+For very early IDB when blocks were very small, get the average block size of the last 50 - MaxBlocksInFlight can refer to MB rather than blocks.
+
+Don't use all avaiable nodes as sync-nodes, but keep some in reserve, and periodically change the reserve nodes so as to know the bandwidth of each connected node. These reserve nodes will be used when nodes are dropped during IBD and we need to fetch the oldest block quickly.
+
+Feed addresss to nodes with low ASNs (tor nodes might be easiest)
+
+Work out why ActiveChainStep slows down DeleteNode and MessageHandler
+
+Only need to request blocktxns from the first node to send us a cmpctblock, not every one.
+
+Seed from bitnodes every 6 hours - take on the nVersion and Services seen.
+
+Make PROTOCOL_VERSION and Services a bitcoin.conf option and changeable via RPC
+
+Time how long "version" arrives after connection.
+Time how long "sendheaders" arrives after "version"
+Time how long first header arrives after requesting them.
+Time how long from connection to first "getheaders" or "getblocks" - store these in a rolling average and flag nodes who are significantly outside of this average as suspicious.
+
+Show which block it is with "Incoming" messages and regularly log the incoming next best
+
+Don't direct-fetch if the headers were received in response to an "initial" getheaders (What is direct-fetch?! forgotten)
+
+Add Misbehaviour logic where nodes continue to advertise blocks with invs or headers once we've requested cmpctblocks announcments (this will protect against the upcoming "rebroad attack").
+
+rebroad attack: getheaders and getblocks respond with known blocks (not necessarily in our ActiveTip), broadcast invs/headers as soon as we get the block inv/header. Keep track who asked, and provide the header as soon as we have it. If they request compact block announcements, ignore these. Don't send blocks.
+
+When logging Incoming - show delay since request - show bytes received since request
+
+Log when a peer sends a tx below it's declared minfeefilter
+Log when a peer sends a tx below our requested minfeefilter
+
+Log when a peer sends headers or block invs when we've requested cmpctblocks announcement
+Log when a peer sends cmpctblocks announcements when we're not requested them
+
+Use code from BitcoinXT to catch LogPrint coding mistakes
+
+fix "more getheaders" still happening!
+
+Adjust network logic to increase delay between trying connections when the network is unreachable up to a maximum of 1 minute - if poss, make this check per network type, so delaying only those in the same network type.
+
+If a full block is in flight when a cmpctblock arrives - log how much of the block we have - go ahead and request the blocktxns and see which arrives first - use to dynamically tune for future instances.
+
+Change GUI to show confirmations in red if there is a fork present affecting the confirmations - or reduce the confirmations back based on the fork point.
+
+debug SENDCMPCT - keep track of which nodes are responding to announce / no announce requests
+
+respond to getheaders during IBD but not to nodes that ban us (check their version) if we are below block 295000
+
+Log when blockindex re-orgs (even if only for headers)
+
+Explore partial block download - perhaps request merkleblock to get the txs and then cmpctblock and blocktxn will be small enough - or perhaps it's possible to still process a blocktxn even if not fully downloaded...
+
+Network specific dynamic timesouts (work out reasonable timeouts per network type, e.g. onion timeouts generally need to be higher than IPv4 timeouts).
+
+Add -reusenodeids -> create a lookup table of IP addresses to nodeids. (Would need to deny connections to IP addresses already connected to)
+
+Change MAX_HEADERS_RESULTS from a fixed number to be based on a max of block data. Defaut to 4MB.
+
+Don't send headers of pruned blocks to nodes
+
+Assuming we were conneced to the best nodes, try the same nodes upon startup - may need to change peers.dat so that a rating per node is added and selected the highest rated nodes. Or store ratings in a separate way so as not to impact on the peers.dat format.
+
+If a node doesn't respond to getheaders then mark it as headershy (used for disconnection criteria later) unless their startheight suggests they were in IBD.
+
+Keep better track of CPU cycles used in total and per peer.
+
+Add a way to disconnect from a node and immediately reconnect (for ending receiving of unwwanted things).
+
+Debug sending of historical blocks - log first block requested, then message to show many are being requested with updates every minute, and final update when requests stop. Show block height ranges and total data sent per update.
+
+Outbound connections always drop one or two nodes after every block received - the slowest performing block delivery
+
+Keep a regular track of our overall incoming bandwidth capability (average and slowest), and the typical number of "stall" clicks. If upon receiving a block, the speed drops too low then don't count this as a block server and therefore request the block from the next fastest node.
+
+To calculate node's rating for block provision, use logarithmic decreasing number, such that it reaches < 0.5 at two minutes. Allocate this number for node's block advertisements and for their blocks (as two different numbers). Add to the previous number each time a block arrives and keep track of how many times this number has been added to so that the current rating is this number divided by the number of times. Create a record of times per block which gets deleted 2 minutes after the block was first seen.
+
+Correlate checksums of incoming blocks with the block requested. If other nodes start sending a block with the same checksum we can debug which block this is likely to be and possibly kill the connection to save bandwidth.
+
+If killing connections to save bandwidth, yet the node was considered a valuable node - create a mechanism by which we can immediately reconnect with the node.
+
+Get bitcoind compiling on Windows XP under cygwin.
+
+Add code to prune blk files not used in front and behind (in case we're switching between BCC<->BTC)
