@@ -131,6 +131,7 @@ BITCOIN_CORE_H = \
   support/cleanse.h \
   support/pagelocker.h \
   sync.h \
+  thinblock.h \
   threadsafety.h \
   timedata.h \
   torcontrol.h \
@@ -148,6 +149,7 @@ BITCOIN_CORE_H = \
   wallet/rpcwallet.h \
   wallet/wallet.h \
   wallet/walletdb.h \
+  xthinblocks.h \
   zmq/zmqabstractnotifier.h \
   zmq/zmqconfig.h\
   zmq/zmqnotificationinterface.h \
@@ -192,11 +194,13 @@ libbitcoin_server_a_SOURCES = \
   script/ismine.cpp \
   stats/rpc_stats.cpp \
   stats/stats.cpp \
+  thinblock.cpp \
   timedata.cpp \
   torcontrol.cpp \
   txdb.cpp \
   txmempool.cpp \
   ui_interface.cpp \
+  xthinblocks.cpp \
   validationinterface.cpp \
   versionbits.cpp \
   $(BITCOIN_CORE_H)
