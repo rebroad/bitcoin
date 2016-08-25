@@ -329,6 +329,10 @@ CNodeState *State(NodeId pnode) {
     return &it->second;
 }
 
+bool DoingXThin(CNode *node) {
+    return ((nLocalServices & NODE_XTHIN && (node->nServices & NODE_XTHIN))
+}
+
 int GetHeight()
 {
     LOCK(cs_main);
@@ -4777,7 +4781,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
             boost::this_thread::interruption_point();
             it++;
 
-            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_CMPCT_BLOCK || inv.type == MSG_WITNESS_BLOCK)
+            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_CMPCT_BLOCK || inv.type == MSG_WITNESS_BLOCK || inv.type == MSG_THINBLOCK || inv.type == MSG_XTHINBLOCK)
             {
                 bool send = false;
                 bool fRecent = false;
@@ -4821,7 +4825,24 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                     CBlock block;
                     if (!ReadBlockFromDisk(block, (*mi).second, consensusParams))
                         assert(!"cannot load block from disk");
-                    if (inv.type == MSG_BLOCK) {
+
+                    if (inv.type == MSG_XTHINBLOCK) {
+                        CXThinBlock xThinBlock(block, pfrom->pThinBlockFilter);
+                        if (!xThinBlock.collisin) {
+                            const int nSizeBlock = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
+                            // Only send a thinblock if smaller than a regular block
+                            const int nSizeThinBlock = ::GetSerializeSize(xThinBlock SER_NETWORK, PROTOCOL_VERSION);
+                            if (nSizeThinBlock < nSizeBlock) {
+                                LogPrint("block". "Sending xthin %s size=%d vs block.size=%d => tx.hashes=%d transactions=%d peer=%d\n",
+                                    block.ToString(), nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(), pfrom->id);
+                                pfrom->PushMessage(NetMsgType::XTHINBLOCK, xThinBlock);
+                                LogPrint("block", "Send xthinblock - size: %d vs block size: %d => tx hashes: %d transactions: %d peer=%d\n",
+                                    nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(), pfrom->id);
+                            } else
+                                LogPrint("block", "Not sending xthinblock as size not smaller than regular block! peer=%d\n", pfrom->id);
+                        } else
+                            LogPrint("block", "Not sending xthinblock. Collisin. peer=%d\n", pfrom->id);
+                    } else if (inv.type == MSG_BLOCK) {
                         LogPrint(fRecent ? "block" : "block2", "sending regular %s (%d) to peer=%d\n", inv.ToString(), nHeight, pfrom->id);
                         pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block);
                     } else if (inv.type == MSG_WITNESS_BLOCK) {
@@ -4904,7 +4925,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
             // Track requests for our stuff.
             GetMainSignals().Inventory(inv.hash);
 
-            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_CMPCT_BLOCK || inv.type == MSG_WITNESS_BLOCK)
+            if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_CMPCT_BLOCK || inv.type == MSG_WITNESS_BLOCK || inv.type == MSG_THINBLOCK || inv.type == MSG_XTHINBLOCK)
                 break;
         }
     }
@@ -5105,20 +5126,22 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             State(pfrom->GetId())->fCurrentlyConnected = true;
         }
 
-        // Tell our peer we prefer to receive headers rather than inv's
-        // We send this to non-NODE NETWORK peers as well, because even
-        // non-NODE NETWORK peers can announce blocks (such as pruning
-        // nodes)
-        pfrom->PushMessage(NetMsgType::SENDHEADERS);
+        If (!DoingXThin(pfrom)) {
+            // Tell our peer we prefer to receive headers rather than inv's
+            // We send this to non-NODE NETWORK peers as well, because even
+            // non-NODE NETWORK peers can announce blocks (such as pruning
+            // nodes)
+            pfrom->PushMessage(NetMsgType::SENDHEADERS);
 
-        // Tell our peer we are willing to provide version-1 cmpctblocks
-        // However, we do not request new block announcements using
-        // cmpctblock messages.
-        // We send this to non-NODE NETWORK peers as well, because
-        // they may wish to request compact blocks from us
-        bool fAnnounceUsingCMPCTBLOCK = false;
-        uint64_t nCMPCTBLOCKVersion = 1;
-        pfrom->PushMessage(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion);
+            // Tell our peer we are willing to provide version-1 cmpctblocks
+            // However, we do not request new block announcements using
+            // cmpctblock messages.
+            // We send this to non-NODE NETWORK peers as well, because
+            // they may wish to request compact blocks from us
+            bool fAnnounceUsingCMPCTBLOCK = false;
+            uint64_t nCMPCTBLOCKVersion = 1;
+            pfrom->PushMessage(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion);
+        }
 
     }
 
@@ -5203,7 +5226,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::SENDHEADERS)
     {
         LOCK(cs_main);
-        State(pfrom->GetId())->fPreferHeaders = true;
+        if (DoingXThin(pfrom))
+            State(pfrom->id)->fPreferHeaders = false;
+        else
+            State(pfrom->id)->fPreferHeaders = true;
     }
 
     else if (strCommand == NetMsgType::SENDCMPCT)
@@ -5278,15 +5304,24 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     CNodeState *nodestate = State(pfrom->GetId());
                     if (CanDirectFetch(chainparams.GetConsensus()) &&
                         nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER &&
-                        (!IsWitnessEnabled(chainActive.Tip(), chainparams.GetConsensus()) || State(pfrom->GetId())->fHaveWitness)) {
-                        inv.type |= nFetchFlags;
-                        if (nodestate->fProvidesHeaderAndIDs && !(nLocalServices & NODE_WITNESS))
-                            vToFetch.push_back(CInv(MSG_CMPCT_BLOCK, inv.hash));
-                        else
-                            vToFetch.push_back(inv);
-                        // Mark block as in flight already, even though the actual "getdata" message only goes out
-                        // later (within the same cs_main lock, though).
-                        MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
+                        (!IsWitnessEnabled(chainActive.Tip(), chainparams.GetConsensus()) || State(pfrom->GetId())->fHaveWitness))
+                    {
+                        if (DoingXThin(pfrom) && chainActive.Height() < pindexBestHeader->nHeight-2) {
+                            if (HaveThinblockNodes() && CheckThinblockTimer(inv.hash)) {
+                                if (pfrom->mapThinBlocksInFlight.size() < 1) {
+                            // Must download a block from a ThinBlock peer
+                            REBTODO
+
+                        } else {
+                            inv.type |= nFetchFlags;
+                            if (nodestate->fProvidesHeaderAndIDs && !(nLocalServices & NODE_WITNESS))
+                                vToFetch.push_back(CInv(MSG_CMPCT_BLOCK, inv.hash));
+                            else
+                                vToFetch.push_back(inv);
+                            // Mark block as in flight already, even though the actual "getdata" message only goes out
+                            // later (within the same cs_main lock, though).
+                            MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
+                        }
                     }
                 }
             }
