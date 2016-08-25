@@ -918,19 +918,19 @@ QString formatServicesStr(quint64 mask)
             switch (check)
             {
             case NODE_NETWORK:
-                strList.append("NETWORK");
+                strList.append("NET");
                 break;
             case NODE_GETUTXO:
-                strList.append("GETUTXO");
+                strList.append("UTXO");
                 break;
             case NODE_BLOOM:
                 strList.append("BLOOM");
                 break;
             case NODE_WITNESS:
-                strList.append("WITNESS");
+                strList.append("WIT");
                 break;
             case NODE_XTHIN:
-                strList.append("XTHIN");
+                strList.append("THIN");
                 break;
             default:
                 strList.append(QString("%1[%2]").arg("UNKNOWN").arg(check));
