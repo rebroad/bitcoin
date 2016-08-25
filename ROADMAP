@@ -1,0 +1,84 @@
+Improve addr advertising to bitnodes.
+
+Log when blockindex re-orgs (even if only for headers)
+
+Explore partial block download - perhaps request merkleblock to get the txs and then cmpctblock and blocktxn will be small enough - or perhaps it's possible to still process a blocktxn even if not fully downloaded...
+
+Network specific dynamic timesouts (work out reasonable timeouts per network type, e.g. onion timeouts generally need to be higher than IPv4 timeouts).
+
+Improve block download timeouts (currently 10 minutes! raise issue for this)
+
+On "Incoming block" debug - log which block it probably is!
+
+Add -reusenodeids -> create a lookup table of IP addresses to nodeids.
+
+Add Misbehaviour logic where nodes continue to advertise blocks with invs or headers once we've requested cmpctblocks announcments (this will protect against the upcoming "rebroad attack").
+
+Edmund attack: getheaders and getblocks respond with known blocks (not necessarily in our ActiveTip), broadcast invs/headers as soon as we get the block inv/header. Keep track who asked, and provide the header as soon as we have it. If they request compact block announcements, ignore these. Don't send blocks.
+
+Change MAX_HEADERS_RESULTS from a fixed number to be based on a max of block data. Defaut to 4MB.
+
+Add RPC connect option, like the command line (i.e. give up trying to connect to any other nodes)
+
+https://github.com/bitcoinfibre/bitcoinfibre
+
+debug fDisconnect after CloseSocket and when Deleting peer
+
+Find out why 0 headers being sent to oldcer nodes. (Debug pindex received)
+Find out why 0 block invs being sent to oldcer nodes. (Debug pindex received)
+
+If a whitelisted peer says a block is good then treat it as checkpointed.
+
+Show more granular debug of ProcessNewBlock()
+
+Shrink new best line further (don't show txs or log2_work)
+
+Allow some outbound connections to non-witness nodes.
+
+Classic - don't AskFor txs during IBD
+
+Classic - add compact blocks
+
+See if it is possible to extract a block header from a partially downloaded block...!
+
+Don't send headers to nodes that need blocks we don't have.
+
+Assuming we were conneced to the best nodes, try the same nodes upon startup - may need to change peers.dat so that a rating per node is added and selected the highest rated nodes. Or store ratings in a separate way so as not to impact on the peers.dat format.
+
+Don't try to connect to nodes if we already have an inbound connection from them, and they keep disconnecting us.
+
+Fix "more getheaders" and "more getblocks" that happens when requesting from not-up-to-date peers.
+
+Disconnect nodes that send unsolicited blocks if the block arrives after another node has managed to send the same block.
+
+If a node doesn't respond to getheaders then mark it as headershy (used for disconnection criteria later) unless their startheight suggests they were in IBD.
+
+Keep better track of CPU cycles used in total and per peer.
+
+Add a way to disconnect from a node and immediately reconnect (for ending receiving of unwwanted things).
+
+Debug sending of historical blocks - log first block requested, then message to show many are being requested with updates every minute, and final update when requests stop. Show block height ranges and total data sent per update.
+
+Outbound connections always drop one or two nodes after every block received - the slowest performing block deliverer.
+
+Ensure 1 outbound connection is reserved for ThinProviders and 1 outbound connection reserved for CompactBlockProviders.
+
+Allow user to specify how many "pity" connections (default to 3), and if there are no inbound connections, always reserve the 3 slowest deliverers as pity connections (i.e. when dropping an outbound connection, drop the 4th worst performer).
+
+When requesting blocks upon new block announcement, request from the first two nodes that announced it.
+
+Keep a regular track of our overall incoming bandwidth capability (average and slowest), and the typical number of "stall" clicks. If upon receiving a block, the speed drops too low then don't count this as a block server and therefore request the block from the next fastest node.
+
+Support both Compact Blocks and XThin if possible. If a node appears to facilitate both (service bit for XThin and requests compact blocks) then randomly pick which to use (and if chosing Compact Blocks, then send the request for compact blocks, otherwise send a new message to request xthin blocks).
+
+To calculate node's rating for block provision, use logarithmic decreasing number, such that it reaches < 0.5 at two minutes. Allocate this number for node's block advertisements and for their blocks (as two different numbers). Add to the previous number each time a block arrives and keep track of how many times this number has been added to so that the current rating is this number divided by the number of times. Create a record of times per block which gets deleted 2 minutes after the block was first seen.
+
+Correlate checksums of incoming blocks with the block requested. If other nodes start sending a block with the same checksum we can debug which block this is likely to be and possibly kill the connection to save bandwidth.
+
+If killing connections to save bandwidth, yet the node was considered a valuable node - create a mechanism by which we can immediately reconnect with the node.
+
+Update GUI to show blocks received (and what type of blocks), and blocks accepted (and what type).
+
+Get bitcoind compiling on Windows XP under cygwin.
+
+No need to validate txs/blocks from Whitelisted peers
