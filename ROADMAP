@@ -1,0 +1,134 @@
+Cache cmpctblock (for if a node disconnected before we received the blocktxn) to save from requesting it again from another peer.
+
+Request BLOCKTXNs from two peers
+
+For mempool graph - don't increase the ratio but instead have a band for the extra data.
+
+For determining misbehaviour of incoming TXs - we know the time it was announced (I think) - so we need to keep track of what when we announced to them our minrelayfee and what that was. If they announced after that, then and only then are they misbehaving.
+
+When a block arrives, show the oldest and youngest TX (based on time they entered our mempool)
+
+Don't announce block headers to nodes that have that block.
+
+Re-add commit 306c7e848b478a5a704c0238237fb9f0ba5ec663 - Only update last seen time when the node is actually being useful.
+
+Re-add commit a91fc475d922cc574a12bcbef332a9e0a99427e5 - Add stats per node for tx and block uploads/downloads.
+
+Re-send high feefilter when we go back into IBD - check 19c9a0a6e0a4622320217f64bb48e48cbb264636 for inspiration.
+
+Log if we receive TXs thay are below the feefilter sent - and what do we do with them?
+
+Find out what happens when we receive a TX with a minfee higher than the minfeerelay we sent, but lower than our actual minfeerelay.
+
+Add ability to add a node as high value (or allocate a number) and mark this upon disconnection so that we try to reconnect to it first before trying other nodes.
+
+When setting fDisconnect to true, also set a string to describe why.
+
+Log TXs sent and received per minute per peer
+
+Log the newest and the oldest tx that went into the last block
+
+When a peer sends a reduced feefilter, treat it as a mempool request for the range between the last feefilter and the new one, unless it sends wobbling feefilters.
+
+Log receiption of feefilters
+
+Don't reduce the recognised feefilter of a node unless at least 3 blocks have been found since it's last increase and 30 minutes have elapsed
+
+Don't lose blocks in flight when disconnecting nodes (BlocksToBeProcessed)
+
+Reduce network traffic by only sending TXs that are likely to be in the next few blocks (the top 4MB) and being careful not to send duplicates to the same nods. Also, keep track of how useful the TXs are from other nodes (e.g. were they used by the last 4 blocks if dated before the last 4 blocks) - and report on the overhead (from the less useful ones).
+
+Log RecvBytes for AcceptedTxs and AcceptedBlocks - then report RecvBps overhead (by deducting the TX and Block Bps)
+
+Log when a peer sends a tx below it's declared minfeefilter
+Log when a peer sends a tx below our requested minfeefilter
+
+Log when a peer sends headers or block invs when we've requested cmpctblocks announcement
+Log when a peer sends cmpctblocks announcements when we're not requested them
+
+Use code from BitcoinXT to catch LogPrint coding mistakes
+
+
+
+IBD improvements:
+=================
+Start downloading blocks even before we've downloaded all the headers...? i.e. don't "send more getheaders" upon receiving headers - do it only when we've caught up with the best header.
+
+Debug IBDnode (as it seems to be faulty)
+
+Is a record kept of blocks in flight and the peer providing them? If so, use this to identify the IDBnode (one after MostWork)
+
+Don't round robin to the next node if the node we're processing is the IBDnode
+
+For very early IDB when blocks were very small, get the average block size of the last 50 - MaxBlocksInFlight can refer to MB rather than blocks.
+
+Don't use all avaiable nodes as sync-nodes, but keep some in reserve, and periodically change the reserve nodes so as to know the bandwidth of each connected node. These reserve nodes will be used when nodes are dropped during IBD and we need to fetch the oldest block quickly.
+
+Outbound connections always drop one or two nodes after every block received - the slowest performing block delivery
+
+
+
+
+Bitnodes improvements:
+======================
+Seed from bitnodes every 6 hours - take on the nVersion and Services seen.
+
+Make PROTOCOL_VERSION and Services a bitcoin.conf option and changeable via RPC
+
+Don't send headers of pruned blocks to nodes
+
+
+
+
+Count and log number of current inbound connections
+
+No need to send filterclear if we connected with relay=1
+
+Find a way to measure CPU used per peer. Factor this into their value rating.
+
+Stop sending the same headers over and over again (bigquiet beginning of 2020-05-04 13:14) - also don't send block invs for announce until we've received their headers (and know their best block)
+
+Count clicks (increase each time we start a loop through nodes to receive messages) - when a new best header is seen, mark the click count, and use this to determine who is slow to announce.
+
+Work out why ActiveChainStep slows down DeleteNode and MessageHandler (with validate thread)
+
+Time how long "version" arrives after connection.
+Time how long "sendheaders" arrives after "version"
+Time how long first header arrives after requesting them.
+Time how long from connection to first "getheaders" or "getblocks" - store these in a rolling average and flag nodes who are significantly outside of this average as suspicious.
+
+Show which block it is with "Incoming" messages and regularly log the incoming next best
+
+Add Misbehaviour logic where nodes continue to advertise blocks with invs or headers once we've requested cmpctblocks announcments (this will protect against the upcoming "rebroad attack").
+
+rebroad attack: getheaders and getblocks respond with known blocks (not necessarily in our ActiveTip), broadcast invs/headers as soon as we get the block inv/header. Keep track who asked, and provide the header as soon as we have it. If they request compact block announcements, ignore these. Don't send blocks.
+
+When logging Incoming - show delay since request - show bytes received since request
+
+fix "more getheaders" still happening!
+
+Adjust network logic to increase delay between trying connections when the network is unreachable up to a maximum of 1 minute - if poss, make this check per network type, so delaying only those in the same network type.
+
+If a full block is in flight when a cmpctblock arrives - log how much of the block we have - go ahead and request the blocktxns and see which arrives first - use to dynamically tune for future instances.
+
+Change GUI to show confirmations in red if there is a fork present affecting the confirmations - or reduce the confirmations back based on the fork point.
+
+respond to getheaders during IBD but not to nodes that ban us (check their version) if we are below block 295000
+
+Log when blockindex re-orgs (even if only for headers)
+
+Network specific dynamic timesouts (work out reasonable timeouts per network type, e.g. onion timeouts generally need to be higher than IPv4 timeouts).
+
+Add -reusenodeids -> create a lookup table of IP addresses to nodeids. (Would need to deny connections to IP addresses already connected to)
+
+Change MAX_HEADERS_RESULTS from a fixed number to be based on a max of block data. Defaut to 4MB.
+
+Assuming we were conneced to the best nodes, try the same nodes upon startup - may need to change peers.dat so that a rating per node is added and selected the highest rated nodes. Or store ratings in a separate way so as not to impact on the peers.dat format.
+
+If a node doesn't respond to getheaders then mark it as headershy (used for disconnection criteria later) unless their startheight suggests they were in IBD.
+
+Keep better track of CPU cycles used in total and per peer.
+
+To calculate node's rating for block provision, use logarithmic decreasing number, such that it reaches < 0.5 at two minutes. Allocate this number for node's block advertisements and for their blocks (as two different numbers). Add to the previous number each time a block arrives and keep track of how many times this number has been added to so that the current rating is this number divided by the number of times. Create a record of times per block which gets deleted 2 minutes after the block was first seen.
+
+Add code to prune blk files not used in front and behind (in case we're switching between BCC<->BTC)
