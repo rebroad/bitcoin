@@ -5115,7 +5115,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             // We send this to non-NODE NETWORK peers as well, because even
             // non-NODE NETWORK peers can announce blocks (such as pruning
             // nodes)
-            pfrom->PushMessage(NetMsgType::SENDHEADERS);
+            If (!(nLocalServices & NODE_XTHIN) || !(pfrom->nServices & NODE_XTHIN)) {
+                LogPrint("net", "Requesting announcements by headers to peer=%d", pfrom->id);
+                pfrom->PushMessage(NetMsgType::SENDHEADERS);
+            } else
+                LogPrint("net", "XThin capable therefore NOT requesting block announcements by header to peer=%d\n", pfrom->id);
         }
         if (pfrom->nVersion >= SHORT_IDS_BLOCKS_VERSION) {
             // Tell our peer we are willing to provide version-1 cmpctblocks
@@ -5209,7 +5213,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::SENDHEADERS)
     {
         LOCK(cs_main);
-        State(pfrom->GetId())->fPreferHeaders = true;
+        if ((nLocalServices & NODE_XTHIN) && (pfrom->nServices & NODE_XTHIN))
+            State(pfrom->id)->fPreferHeaders = false;
+        else
+            State(pfrom->id)->fPreferHeaders = true;
     }
 
     else if (strCommand == NetMsgType::SENDCMPCT)
@@ -5284,15 +5291,22 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     CNodeState *nodestate = State(pfrom->GetId());
                     if (CanDirectFetch(chainparams.GetConsensus()) &&
                         nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER &&
-                        (!IsWitnessEnabled(chainActive.Tip(), chainparams.GetConsensus()) || State(pfrom->GetId())->fHaveWitness)) {
-                        inv.type |= nFetchFlags;
-                        if (nodestate->fProvidesHeaderAndIDs && !(nLocalServices & NODE_WITNESS))
-                            vToFetch.push_back(CInv(MSG_CMPCT_BLOCK, inv.hash));
-                        else
-                            vToFetch.push_back(inv);
-                        // Mark block as in flight already, even though the actual "getdata" message only goes out
-                        // later (within the same cs_main lock, though).
-                        MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
+                        (!IsWitnessEnabled(chainActive.Tip(), chainparams.GetConsensus()) || State(pfrom->GetId())->fHaveWitness))
+                    {
+                        if ((nLocalServices & NODE_XTHIN) && IsChainNearlySyncd()) {
+                            // Must download a block from a ThinBlock peer
+
+
+                        } else {
+                            inv.type |= nFetchFlags;
+                            if (nodestate->fProvidesHeaderAndIDs && !(nLocalServices & NODE_WITNESS))
+                                vToFetch.push_back(CInv(MSG_CMPCT_BLOCK, inv.hash));
+                            else
+                                vToFetch.push_back(inv);
+                            // Mark block as in flight already, even though the actual "getdata" message only goes out
+                            // later (within the same cs_main lock, though).
+                            MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
+                        }
                     }
                 }
             }
