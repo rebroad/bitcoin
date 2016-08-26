@@ -4831,14 +4831,15 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             // Only send a thinblock if smaller than a regular block
                             const int nSizeThinBlock = ::GetSerializeSize(xThinBlock SER_NETWORK, PROTOCOL_VERSION);
                             if (nSizeThinBlock < nSizeBlock) {
+                                LogPrint("block". "Sending xthin %s size=%d vs block.size=%d => tx.hashes=%d transactions=%d peer=%d\n",
+                                    block.ToString(), nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(), pfrom->id);
                                 pfrom->PushMessage(NetMsgType::XTHINBLOCK, xThinBlock);
-                                LogPrint("thin". "Sent xthinblock - size: %d vs block size: %d => tx hashes: %d transactions: %d peer=%d\n",
-                                    nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(), pfrom->id);
                             }
                         }
-                    } else if (inv.type == MSG_BLOCK)
+                    } else if (inv.type == MSG_BLOCK) {
+                        LogPrint("block", "Send %s to peer=%d\n", block.ToString(), pfrom->id);
                         pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block);
-                    else if (inv.type == MSG_WITNESS_BLOCK)
+                    } else if (inv.type == MSG_WITNESS_BLOCK)
                         pfrom->PushMessage(NetMsgType::BLOCK, block);
                     else if (inv.type == MSG_FILTERED_BLOCK)
                     {
