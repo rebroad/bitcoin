@@ -1426,8 +1426,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
             assert(pfrom->fInbound == false);
             pfrom->fDisconnect = true;
         }
-        return true;
-    }
+    } // if (strCommand == NetMsgType::VERSION)
 
 
     else if (pfrom->nVersion == 0)
@@ -1442,7 +1441,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
     // At this point, the outgoing message serialization version can't change.
     CNetMsgMaker msgMaker(pfrom->GetSendVersion());
 
-    if (strCommand == NetMsgType::VERACK)
+    if (strCommand == NetMsgType::VERSION)
     {
         pfrom->SetRecvVersion(std::min(pfrom->nVersion, PROTOCOL_VERSION));
 
@@ -1472,6 +1471,12 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
             nCMPCTBLOCKVersion = 1;
             connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion));
         }
+
+        return true;
+    } // if (strCommand == NetMsgType::VERSION)
+
+
+    else if (strCommand == NetMsgType::VERACK) {
     }
 
 
