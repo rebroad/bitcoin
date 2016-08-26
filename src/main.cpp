@@ -490,11 +490,13 @@ void MaybeSetPeerAsAnnouncingHeaderAndIDs(const CNodeState* nodestate, CNode* pf
             // blocks using compact encodings.
             CNode* pnodeStop = FindNode(lNodesAnnouncingHeaderAndIDs.front());
             if (pnodeStop) {
+                LogPrint("net", "Sending SENDCMPCT to peer=%s\n", pnodeStop->id);
                 pnodeStop->PushMessage(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion);
                 lNodesAnnouncingHeaderAndIDs.pop_front();
             }
         }
         fAnnounceUsingCMPCTBLOCK = true;
+        LogPrint("net", "Sending SENDCMPCT to peer=%s\n", pfrom->id);
         pfrom->PushMessage(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion);
         lNodesAnnouncingHeaderAndIDs.push_back(pfrom->GetId());
     }
