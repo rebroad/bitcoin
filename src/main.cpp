@@ -5037,11 +5037,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             }
 
             // Get recent addresses
-            if (pfrom->fOneShot || pfrom->nVersion >= CADDR_TIME_VERSION || addrman.size() < 1000)
-            {
-                pfrom->PushMessage(NetMsgType::GETADDR);
-                pfrom->fGetAddr = true;
-            }
+            pfrom->PushMessage(NetMsgType::GETADDR);
+            pfrom->fGetAddr = true;
             addrman.Good(pfrom->addr);
         } else {
             if (((CNetAddr)pfrom->addr) == (CNetAddr)addrFrom)
