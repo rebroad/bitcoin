@@ -1353,6 +1353,9 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
                   pfrom->nStartingHeight, pfrom->fRelayTxes ? "1" : "0", nServiceInt, addrMe.ToString(),
                   remoteAddr, pfrom->id);
 
+        if((pfrom->nServices & NODE_XTHIN))
+            LogPrint("thin", "peer=%d is XThin Capable\n", pfrom->id);
+
         pfrom->addrLocal = addrMe;
         if (pfrom->fInbound && addrMe.IsRoutable())
         {
