@@ -4947,6 +4947,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         {
             addrman.SetServices(pfrom->addr, pfrom->nServices);
         }
+
+        if((pfrom->nServices & NODE_XTHIN))
+            LogPrint("thin", "peer=%d is XThin Capable\n", pfrom->id);
+
         if (pfrom->nServicesExpected & ~pfrom->nServices)
         {
             LogPrint("net", "peer=%d does not offer the expected services (%08x offered, %08x expected)\n", pfrom->id, pfrom->nServices, pfrom->nServicesExpected);
