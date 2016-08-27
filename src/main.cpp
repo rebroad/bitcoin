@@ -5047,6 +5047,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                   pfrom->cleanSubVer, pfrom->nVersion,
                   pfrom->nStartingHeight, addrMe.ToString(), remoteAddr, pfrom->id);
 
+        if((pfrom->nServices & NODE_XTHIN))
+            LogPrint("thin", "peer=%d is XThin Capable\n", pfrom->id);
+
         // Feeler connections exist only to verify if address is online.
         if (pfrom->fFeeler) {
             assert(pfrom->fInbound == false);
