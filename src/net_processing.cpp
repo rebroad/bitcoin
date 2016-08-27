@@ -1392,6 +1392,9 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         LogPrint(pfrom->fFeeler ? "feeler" : "net", "recv version: %s: version %d, blocks=%d, relay=%s, services=0x%x us=%s%s, peer=%d\n",
                   cleanSubVer, nVersion, nStartingHeight, fRelay ? "1" : "0", nServiceInt, addrMe.ToString(), remoteAddr, pfrom->id);
 
+        if((nServiceInt & NODE_XTHIN))
+            LogPrint("thin", "peer=%d is XThin Capable\n", pfrom->id);
+
         if (pfrom->fInbound && addrMe.IsRoutable())
         {
             SeenLocal(addrMe);
