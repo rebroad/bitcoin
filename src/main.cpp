@@ -1120,6 +1120,8 @@ std::string FormatStateMessage(const CValidationState &state)
         state.GetRejectCode());
 }
 
+int64_t nLastFeePerK = 0;
+
 bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const CTransaction& tx, bool fLimitFree,
                               bool* pfMissingInputs, bool fOverrideMempoolLimit, const CAmount& nAbsurdFee,
                               std::vector<uint256>& vHashTxnToUncache)
@@ -1302,7 +1304,6 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
         if (nSigOpsCost > MAX_STANDARD_TX_SIGOPS_COST)
             return state.DoS(0, false, REJECT_NONSTANDARD, "bad-txns-too-many-sigops", false,
                 strprintf("%d", nSigOpsCost));
-
         poolMinFeeRate = pool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
         CAmount mempoolRejectFee = poolMinFeeRate.GetFee(nSize);
         if (mempoolRejectFee > 0 && nModifiedFees < mempoolRejectFee) {
@@ -1553,7 +1554,12 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
 
     SyncWithWallets(tx, NULL);
     // update mempool stats
-    CStats::DefaultStats()->addMempoolSample(pool.size(), pool.DynamicMemoryUsage(), poolMinFeeRate.GetFeePerK());
+    int64_t nFeePerK = poolMinFeeRate.GetFeePerK();
+    CStats::DefaultStats()->addMempoolSample(pool.size(), pool.DynamicMemoryUsage(), nFeePerK);
+    if (nFeePerK != nLastFeePerK) {
+        LogPrint("minfee", "%s: FeePerK %d -> %d\n", __func__, nLastFeePerK, nFeePerK);
+        nLastFeePerK = nFeePerK;
+    }
 
     return true;
 }
@@ -2788,7 +2794,12 @@ bool static DisconnectTip(CValidationState& state, const CChainParams& chainpara
         SyncWithWallets(tx, pindexDelete->pprev);
     }
     // update mempool stats
-    CStats::DefaultStats()->addMempoolSample(mempool.size(), mempool.DynamicMemoryUsage(), mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK());
+    int64_t nFeePerK = mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK();
+    CStats::DefaultStats()->addMempoolSample(mempool.size(), mempool.DynamicMemoryUsage(), nFeePerK);
+    if (nFeePerK != nLastFeePerK) {
+        LogPrint("minfee", "%s: FeePerK %d -> %d\n", __func__, nLastFeePerK, nFeePerK);
+        nLastFeePerK = nFeePerK;
+    }
     return true;
 }
 
@@ -2847,7 +2858,12 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
         txChanged.emplace_back(pblock->vtx[i], pindexNew, i);
 
     // update mempool stats
-    CStats::DefaultStats()->addMempoolSample(mempool.size(), mempool.DynamicMemoryUsage(), mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK());
+    int64_t nFeePerK = mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK();
+    CStats::DefaultStats()->addMempoolSample(mempool.size(), mempool.DynamicMemoryUsage(), nFeePerK);
+    if (nFeePerK != nLastFeePerK) {
+        LogPrint("minfee", "%s: FeePerK %d -> %d\n", __func__, nLastFeePerK, nFeePerK);
+        nLastFeePerK = nFeePerK;
+    }
 
     int64_t nTime6 = GetTimeMicros(); nTimePostConnect += nTime6 - nTime5; nTimeTotal += nTime6 - nTime1;
     LogPrint("bench", "  - Connect postprocess: %.2fms [%.2fs]\n", (nTime6 - nTime5) * 0.001, nTimePostConnect * 0.000001);
@@ -6862,12 +6878,18 @@ bool SendMessages(CNode* pto, CConnman& connman)
         if (pto->nVersion >= FEEFILTER_VERSION && GetBoolArg("-feefilter", DEFAULT_FEEFILTER) &&
             !(pto->fWhitelisted && GetBoolArg("-whitelistforcerelay", DEFAULT_WHITELISTFORCERELAY))) {
             CAmount currentFilter = mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK();
+            if (currentFilter != nLastFeePerK)
+                LogPrint("minfee", "%s: FeePerK %d -> %d", __func__, nLastFeePerK, currentFilter);
             int64_t timeNow = GetTimeMicros();
             if (timeNow > pto->nextSendTimeFeeFilter) {
                 CAmount filterToSend = filterRounder.round(currentFilter);
                 if (filterToSend != pto->lastSentFeeFilter) {
                     pto->PushMessage(NetMsgType::FEEFILTER, filterToSend);
                     pto->lastSentFeeFilter = filterToSend;
+                    if (currentFilter != nLastFeePerK)
+                        LogPrint("minfee", " (%d to peer=%d)", filterToSend, pto->id);
+                    else
+                        LogPrint("minfee", "%s: FeePerK %d (%d to peer=%d)\n", __func__, nLastFeePerK, filterToSend, pto->id);
                 }
                 pto->nextSendTimeFeeFilter = PoissonNextSend(timeNow, AVG_FEEFILTER_BROADCAST_INTERVAL);
             }
@@ -6877,6 +6899,9 @@ bool SendMessages(CNode* pto, CConnman& connman)
                      (currentFilter < 3 * pto->lastSentFeeFilter / 4 || currentFilter > 4 * pto->lastSentFeeFilter / 3)) {
                 pto->nextSendTimeFeeFilter = timeNow + (insecure_rand() % MAX_FEEFILTER_CHANGE_DELAY) * 1000000;
             }
+            if (currentFilter != nLastFeePerK)
+                LogPrint("minfee", "\n");
+            nLastFeePerK = currentFilter;
         }
     }
     return true;
