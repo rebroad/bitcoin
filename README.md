@@ -1,7 +1,7 @@
 Bitcoin Core integration/staging tree
 =====================================
 
-[![Build Status](https://travis-ci.org/bitcoin/bitcoin.svg?branch=master)](https://travis-ci.org/bitcoin/bitcoin)
+[![Build Status](https://travis-ci.org/rebroad/bitcoin.svg?branch=core-master)](https://travis-ci.org/rebroad/bitcoin)   [![Coverage Status](https://coveralls.io/repos/rebroad/bitcoin/badge.png?branch=core-master)](https://coveralls.io/r/rebroad/bitcoin?branch=core-master)
 
 https://bitcoincore.org
 
