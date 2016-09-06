@@ -2623,10 +2623,14 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman)
             break;
 
         string strCommand = msg.hdr.GetCommand();
+        string strChk = HexStr(msg.hdr.pchChecksum, msg.hdr.pchChecksum+CMessageHeader::CHECKSUM_SIZE);
 
         if (msg.nLastDataPos != (int)msg.nDataPos) {
-            if (strCommand == NetMsgType::BLOCK || strCommand == NetMsgType::CMPCTBLOCK || strCommand == NetMsgType::BLOCKTXN)
+            if (strCommand == NetMsgType::BLOCK || strCommand == NetMsgType::CMPCTBLOCK || strCommand == NetMsgType::BLOCKTXN || strCommand == NetMsgType::HEADERS) {
                 State(pfrom->id)->tLastRecvBlk = GetTime();
+                if (msg.nLastDataPos < 0 && !msg.complete())
+                    LogPrint("partial", "Incoming %s (%u of %u bytes) chk=%s from peer=%d\n", strCommand, msg.nDataPos, msg.hdr.nMessageSize, strChk, pfrom->id);
+            }
             msg.nLastDataPos = msg.nDataPos;
         }
 
@@ -2651,7 +2655,6 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman)
             LogPrintf("PROCESSMESSAGE: ERRORS IN HEADER %s peer=%d\n", SanitizeString(hdr.GetCommand()), pfrom->id);
             continue;
         }
-        string strCommand = hdr.GetCommand();
 
         // Message size
         unsigned int nMessageSize = hdr.nMessageSize;
