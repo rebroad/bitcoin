@@ -5758,8 +5758,15 @@ bool ProcessMessages(CNode* pfrom)
         //            msg.complete() ? "Y" : "N");
 
         // end, if an incomplete message is found
-        if (!msg.complete())
+        if (!msg.complete()) {
+            if (msg.in_data && msg.nLastDataPos < 0) {
+                string strCommand = msg.hdr.GetCommand();
+                if (strCommand == NetMsgType::BLOCK)
+                    LogPrint("partial", "Incoming block (%u of %u bytes) chk=%08x from peer=%d\n", msg.nDataPos, msg.hdr.nMessageSize, msg.hdr.nChecksum, pfrom->id);
+                msg.nLastDataPos = msg.nDataPos;
+            }
             break;
+        }
 
         // at this point, any failure means we can delete the current message
         it++;
