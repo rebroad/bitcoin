@@ -5057,9 +5057,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (fLogIPs)
             remoteAddr = ", them=" + pfrom->addr.ToString();
 
-        LogPrintf("receive version message: %s: version %d, blocks=%d, us=%s%s, peer=%d\n",
+        LogPrintf("receive version message: %s: version %d, blocks=%d, relay=%s, us=%s%s, peer=%d\n",
                   pfrom->cleanSubVer, pfrom->nVersion,
-                  pfrom->nStartingHeight, addrMe.ToString(), remoteAddr, pfrom->id);
+                  pfrom->nStartingHeight, pfrom->fRelayTxes ? "true" : "false", addrMe.ToString(), remoteAddr, pfrom->id);
 
         if((pfrom->nServices & NODE_XTHIN))
             LogPrint("thin", "peer=%d is XThin Capable\n", pfrom->id);
