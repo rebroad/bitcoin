@@ -4674,6 +4674,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         vector<CAddress> vAddrOk;
         int64_t nNow = GetAdjustedTime();
         int64_t nSince = nNow - 10 * 60;
+
         BOOST_FOREACH(CAddress& addr, vAddr)
         {
             boost::this_thread::interruption_point();
@@ -5511,11 +5512,25 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             return true;
         }
 
+        // Only send one GetAddr response per connection to reduce resource waste
+        //  and discourage addr stamping of INV announcements.
+        if (pfrom->fSentAddr) {
+            LogPrint("net2", "Ignoring repeated \"getaddr\". peer=%d\n", pfrom->id);
+            return true;
+        }
+        pfrom->fSentAddr = true;
+
+        int nOldToSend = pfrom->vAddrToSend.size();
         pfrom->vAddrToSend.clear();
-        vector<CAddress> vAddr = addrman.GetAddr();
-        BOOST_FOREACH(const CAddress &addr, vAddr)
+        vector<CAddress> vAddr = connman.GetAddresses();
+        int nCount = 0;
+        int nTotal = connman.GetAddressCount();
+        BOOST_FOREACH(const CAddress &addr, vAddr) {
             pfrom->PushAddress(addr);
+            ++nCount;
+        }
         pfrom->nNextAddrSend = 0; // Ensure it's sent right away.
+        LogPrint("addrman", "from peer=%d getaddr. Pushing %d (of %d) addresses. OldToSend=%d NewToSend=%d\n", pfrom->id, nCount, nTotal, nOldToSend, pfrom->vAddrToSend.size());
     }
 
 
@@ -5903,13 +5918,16 @@ bool SendMessages(CNode* pto)
         if (pto->nNextAddrSend < nNow) {
             pto->nNextAddrSend = PoissonNextSend(nNow, AVG_ADDRESS_BROADCAST_INTERVAL);
             vector<CAddress> vAddr;
-            vAddr.reserve(pto->vAddrToSend.size());
+            int nAddrToSend = pto->vAddrToSend.size();
+            int nCount = 0;
+            vAddr.reserve(nAddrToSend);
             BOOST_FOREACH(const CAddress& addr, pto->vAddrToSend)
             {
                 if (!pto->addrKnown.contains(addr.GetKey()))
                 {
                     pto->addrKnown.insert(addr.GetKey());
                     vAddr.push_back(addr);
+                    nCount++;
                     // receiver rejects addr messages larger than 1000
                     if (vAddr.size() >= 1000)
                     {
@@ -5919,6 +5937,8 @@ bool SendMessages(CNode* pto)
                 }
             }
             pto->vAddrToSend.clear();
+            if (nCount)
+                LogPrint(nCount==1 ? "addrman2" : "addrman", "to peer=%d Sending addr %d of %d entries\n", pto->id, nCount, nAddrToSend);
             if (!vAddr.empty())
                 pto->PushMessage(NetMsgType::ADDR, vAddr);
         }
