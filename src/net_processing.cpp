@@ -1505,6 +1505,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
         std::vector<CAddress> vAddrOk;
         int64_t nNow = GetAdjustedTime();
         int64_t nSince = nNow - 10 * 60;
+
         BOOST_FOREACH(CAddress& addr, vAddr)
         {
             if (interruptMsgProc)
@@ -2531,9 +2532,14 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
 
         pfrom->vAddrToSend.clear();
         std::vector<CAddress> vAddr = connman.GetAddresses();
+        int nCount = 0;
+        int nTotal = connman.GetAddressCount();
         FastRandomContext insecure_rand;
-        BOOST_FOREACH(const CAddress &addr, vAddr)
+        BOOST_FOREACH(const CAddress &addr, vAddr) {
             pfrom->PushAddress(addr, insecure_rand);
+            ++nCount;
+        }
+        LogPrint("addrman", "recv getaddr. Pushing %d (of %d) addresses. peer=%d\n", nCount, nTotal, pfrom->id);
     }
 
 
@@ -2971,12 +2977,15 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             pto->nNextAddrSend = PoissonNextSend(nNow, AVG_ADDRESS_BROADCAST_INTERVAL);
             std::vector<CAddress> vAddr;
             vAddr.reserve(pto->vAddrToSend.size());
+            int nAddrToSend = pto->vAddrToSend.size();
+            int nCount = 0;
             BOOST_FOREACH(const CAddress& addr, pto->vAddrToSend)
             {
                 if (!pto->addrKnown.contains(addr.GetKey()))
                 {
                     pto->addrKnown.insert(addr.GetKey());
                     vAddr.push_back(addr);
+                    nCount++;
                     // receiver rejects addr messages larger than 1000
                     if (vAddr.size() >= 1000)
                     {
@@ -2986,6 +2995,8 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
                 }
             }
             pto->vAddrToSend.clear();
+            if (nCount)
+                LogPrint(nCount==1 ? "addrman2" : "addrman", "send addr %d of %d entries peer=%d\n", nCount, nAddrToSend, pto->id);
             if (!vAddr.empty())
                 connman.PushMessage(pto, msgMaker.Make(NetMsgType::ADDR, vAddr));
             // we only send the big addr message once
