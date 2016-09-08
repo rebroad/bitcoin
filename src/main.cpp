@@ -5480,10 +5480,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // we must use CBlocks, as CBlockHeaders won't include the 0x00 nTx count at the end
         vector<CBlock> vHeaders;
         int nLimit = MAX_HEADERS_RESULTS;
-        LogPrint("block", "received getheaders %d to %s from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), pfrom->id);
+        int nHeightStart = pindex ? pindex->nHeight : -1;
+        int nHeightEnd = nHeightStart;
+        int nCount = 0;
         for (; pindex; pindex = chainActive.Next(pindex))
         {
             vHeaders.push_back(pindex->GetBlockHeader());
+            nCount++;
+            nHeightEnd = pindex->nHeight;
             if (--nLimit <= 0 || pindex->GetBlockHash() == hashStop)
                 break;
         }
@@ -5492,6 +5496,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // headers message). In both cases it's safe to update
         // pindexBestHeaderSent to be our tip.
         nodestate->pindexBestHeaderSent = pindex ? pindex : chainActive.Tip();
+        LogPrint(nCount==1 ? "block2" : "block", "from peer=%d getheaders to %s. sending %d headers (height %d", pfrom->id, hashStop.IsNull() ? "end" : hashStop.ToString(), nCount, nHeightStart);
+        if (nHeightEnd != nHeightStart)
+            LogPrint(nCount==1 ? "block2" : "block", " to %d)\n", nHeightEnd);
+        else
+            LogPrint(nCount==1 ? "block2" : "block", ")\n");
         pfrom->PushMessage(NetMsgType::HEADERS, vHeaders);
     }
 
