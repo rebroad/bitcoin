@@ -2353,6 +2353,7 @@ instance_of_cnetcleanup;
 
 void CConnman::Interrupt()
 {
+    LogPrintf("%s\n", __func__);
     {
         std::lock_guard<std::mutex> lock(mutexMsgProc);
         flagInterruptMsgProc = true;
@@ -2377,6 +2378,7 @@ void CConnman::Interrupt()
 
 void CConnman::Stop()
 {
+    LogPrintf("%s\n", __func__);
     if (threadValidation.joinable())
         threadValidation.join();
     if (threadMessageHandler.joinable())
