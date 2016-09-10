@@ -2461,9 +2461,9 @@ void CConnman::AddNewAddress(const CAddress& addr, const CAddress& addrFrom, int
     addrman.Add(addr, addrFrom, nTimePenalty);
 }
 
-void CConnman::AddNewAddresses(const std::vector<CAddress>& vAddr, const CAddress& addrFrom, int64_t nTimePenalty)
+void CConnman::AddNewAddresses(const std::vector<CAddress>& vAddr, const CAddress& addrFrom, NodeId nodeid, int64_t nTimePenalty)
 {
-    addrman.Add(vAddr, addrFrom, nTimePenalty);
+    addrman.Add(vAddr, addrFrom, nodeid, nTimePenalty);
 }
 
 std::vector<CAddress> CConnman::GetAddresses()
