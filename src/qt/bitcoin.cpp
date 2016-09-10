@@ -295,6 +295,7 @@ void BitcoinCore::initialize()
 
 void BitcoinCore::shutdown()
 {
+    LogPrintf("%s\n", __func__);
     try
     {
         qDebug() << __func__ << ": Running Shutdown in thread";

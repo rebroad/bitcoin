@@ -19,5 +19,6 @@ void CConnman::ThreadValidation()
         else
             nSleep = 0;
     }
+    LogPrintf("%s: Exiting\n", __func__);
 }
 
