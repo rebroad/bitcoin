@@ -1719,7 +1719,15 @@ void CConnman::ThreadOpenConnections()
                 LogPrint("net", "Making feeler connection to %s\n", addrConnect.ToString());
             }
 
-            OpenNetworkConnection(addrConnect, (int)setConnected.size() >= std::min(nMaxConnections - 1, 2), &grant, NULL, false, fFeeler);
+            int64_t nStartTime = GetTimeMicros();
+
+            bool fRet = OpenNetworkConnection(addrConnect, (int)setConnected.size() >= std::min(nMaxConnections - 1, 2), &grant, NULL, false, fFeeler);
+
+            // Retry feeler connection if OpenNetworkConnection fails in under 1ms.
+            // Avoids issues with feelers to IP space we don't know how to route.
+            if (!fRet && GetTimeMicros() - nStartTime < 1000) {
+                nNextFeeler = GetTime();
+            }
         }
     }
 }
