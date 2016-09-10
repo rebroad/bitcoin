@@ -1155,7 +1155,9 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         pfrom->hashContinue.SetNull();
                     }
                 } else if (send) {
-                    LogPrint(fRecent ? "block" : "blockhist", "recv getdata %s %s - NO DATA. peer=%d\n", inv.ToString(), strBlkInfo(mi->second), pfrom->id);
+                    LogPrint(fRecent ? "block" : "blockhist", "recv getdata %s %s - send notfound. peer=%d\n", inv.ToString(), strBlkInfo(mi->second), pfrom->id);
+                    vNotFound.push_back(inv);
+                }
             }
             else if (inv.type == MSG_TX || inv.type == MSG_WITNESS_TX)
             {
