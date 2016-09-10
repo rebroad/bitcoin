@@ -505,7 +505,7 @@ public:
     }
 
     //! Add a single address.
-    bool Add(const CAddress &addr, const CNetAddr& source, int64_t nTimePenalty = 0)
+    bool Add(const CAddress &addr, const CNetAddr& source, int64_t nodeid = 0, int64_t nTimePenalty = 0)
     {
         LOCK(cs);
         bool fRet = false;
@@ -513,13 +513,16 @@ public:
         fRet |= Add_(addr, source, nTimePenalty);
         Check();
         if (fRet) {
-            LogPrint(BCLog::ADDRMAN, "Added %s from %s: %i tried, %i new\n", addr.ToStringIPPort(), source.ToString(), nTried, nNew);
+            if (nodeid)
+                LogPrint(BCLog::ADDRMAN, "Added %s from peer=%d: %i tried, %i new\n", addr.ToStringIPPort(), nodeid, nTried, nNew);
+            else
+                LogPrint(BCLog::ADDRMAN, "Added %s from %s: %i tried, %i new\n", addr.ToStringIPPort(), source.ToString(), nTried, nNew);
         }
         return fRet;
     }
 
     //! Add multiple addresses.
-    bool Add(const std::vector<CAddress> &vAddr, const CNetAddr& source, int64_t nTimePenalty = 0)
+    bool Add(const std::vector<CAddress> &vAddr, const CNetAddr& source, int64_t nodeid = 0, int64_t nTimePenalty = 0)
     {
         LOCK(cs);
         int nAdd = 0;
@@ -528,7 +531,10 @@ public:
             nAdd += Add_(*it, source, nTimePenalty) ? 1 : 0;
         Check();
         if (nAdd) {
-            LogPrint(BCLog::ADDRMAN, "Added %i addresses from %s: %i tried, %i new\n", nAdd, source.ToString(), nTried, nNew);
+            if (nodeid)
+                LogPrint(BCLog::ADDRMAN, "Added %i addresses from peer=%d: %i tried, %i new\n", nAdd, nodeid, nTried, nNew);
+            else
+                LogPrint(BCLog::ADDRMAN, "Added %i addresses from %s: %i tried, %i new\n", nAdd, source.ToString(), nTried, nNew);
         }
         return nAdd > 0;
     }
