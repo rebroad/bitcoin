@@ -1511,7 +1511,7 @@ void CConnman::ThreadDNSAddressSeed()
             if (!vIPs.empty()) {
                 CService seedSource;
                 Lookup(seed.name.c_str(), seedSource, 0, true);
-                addrman.Add(vAdd, seedSource);
+                addrman.Add(vAdd, seedSource, 0);
             }
         }
     }
@@ -1596,7 +1596,7 @@ void CConnman::ThreadOpenConnections()
                 LogPrintf("Adding fixed seed nodes as DNS doesn't seem to be available.\n");
                 CNetAddr local;
                 LookupHost("127.0.0.1", local, false);
-                addrman.Add(convertSeed6(Params().FixedSeeds()), local);
+                addrman.Add(convertSeed6(Params().FixedSeeds()), local, 0);
                 done = true;
             }
         }
@@ -2244,9 +2244,9 @@ void CConnman::AddNewAddress(const CAddress& addr, const CAddress& addrFrom, int
     addrman.Add(addr, addrFrom, nTimePenalty);
 }
 
-void CConnman::AddNewAddresses(const std::vector<CAddress>& vAddr, const CAddress& addrFrom, int64_t nTimePenalty)
+void CConnman::AddNewAddresses(const std::vector<CAddress>& vAddr, const CAddress& addrFrom, NodeId nodeid, int64_t nTimePenalty)
 {
-    addrman.Add(vAddr, addrFrom, nTimePenalty);
+    addrman.Add(vAddr, addrFrom, nodeid, nTimePenalty);
 }
 
 std::vector<CAddress> CConnman::GetAddresses()
