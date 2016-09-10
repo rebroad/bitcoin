@@ -135,6 +135,7 @@ std::atomic<bool> fDumpMempoolLater(false);
 
 void StartShutdown()
 {
+    LogPrintf("StartShutdown()\n");
     fRequestShutdown = true;
 }
 bool ShutdownRequested()
