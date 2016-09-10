@@ -912,7 +912,7 @@ bool CConnman::AttemptToEvictConnection()
     if (vEvictionCandidates.empty()) return false;
 
     // Protect 4 nodes that most recently sent us blocks.
-    // An attacker cannot manipulate this metric without performing useful work.
+    // An attacker cannot manipulate this metric without performing useful work - REBTODO: make this statement true!
     std::sort(vEvictionCandidates.begin(), vEvictionCandidates.end(), CompareNodeBlockTime);
     vEvictionCandidates.erase(vEvictionCandidates.end() - std::min(4, static_cast<int>(vEvictionCandidates.size())), vEvictionCandidates.end());
 
@@ -1026,7 +1026,7 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
         }
     }
 
-    NodeId id = GetNewNodeId();
+    NodeId id = GetNewNodeId(); // REBTODO - check out GetNewNodeId()
     uint64_t nonce = GetDeterministicRandomizer(RANDOMIZER_ID_LOCALHOSTNONCE).Write(id).Finalize();
 
     CNode* pnode = new CNode(id, nLocalServices, GetBestHeight(), hSocket, addr, CalculateKeyedNetGroup(addr), nonce, "", true);
@@ -1300,7 +1300,7 @@ void CConnman::ThreadSocketHandler()
                     if (nBytes || nSendSizeBefore != pnode->nSendSize || nSendBytesBefore != pnode->nSendBytes || nSendOffsetBefore != pnode->nSendOffset)
                         LogPrint("netsend", "SSD: nBytes=%d, nSendSize=%d->%d, nSendBytes=%d->%d, nSendOffset=%d->%d peer=%d\n", nBytes, nSendSizeBefore, pnode->nSendSize, nSendBytesBefore, pnode->nSendBytes, nSendOffsetBefore, pnode->nSendOffset, pnode->id);
                     if (nBytes)
-                        RecordBytesSent(nBytes);
+                        RecordBytesSent(nBytes);  // REBTODO - can this be compared with OptimisticallySent?
                 }
             }
 

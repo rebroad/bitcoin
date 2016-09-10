@@ -349,7 +349,7 @@ private:
 
     void DeleteNode(CNode* pnode);
 
-    NodeId GetNewNodeId();
+    NodeId GetNewNodeId();     // REBTODO - check this function
 
     //!check is the banlist has unwritten changes
     bool BannedSetIsDirty();

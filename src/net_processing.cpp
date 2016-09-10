@@ -457,7 +457,7 @@ void MaybeSetPeerAsAnnouncingHeaderAndIDs(const CNodeState* nodestate, CNode* pf
     if (nodestate->fProvidesHeaderAndIDs) {
         for (std::list<NodeId>::iterator it = lNodesAnnouncingHeaderAndIDs.begin(); it != lNodesAnnouncingHeaderAndIDs.end(); it++) {
             if (*it == pfrom->GetId()) {
-                lNodesAnnouncingHeaderAndIDs.erase(it);
+                lNodesAnnouncingHeaderAndIDs.erase(it); // REBTODO - why does it erase and then re-add?!
                 lNodesAnnouncingHeaderAndIDs.push_back(pfrom->GetId());
                 return;
             }
@@ -969,7 +969,7 @@ static void RelayAddress(const CAddress& addr, bool fReachable, CConnman& connma
 void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParams, CConnman& connman)
 {
     std::deque<CInv>::iterator it = pfrom->vRecvGetData.begin();
-    unsigned int nMaxSendBufferSize = connman.GetSendBufferSize();
+    unsigned int nMaxSendBufferSize = connman.GetSendBufferSize(); // REBTODO - debug this! - show on Disconnect...
     vector<CInv> vNotFound;
     CNetMsgMaker msgMaker(pfrom->GetSendVersion());
     LOCK(cs_main);
@@ -1528,10 +1528,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 pfrom->AddInventoryKnown(inv);
                 if (fBlocksOnly)
                     LogPrint("tx", "recv inv %s in violation of protocol peer=%d\n", inv.ToString(), pfrom->id);
-                else if (!fAlreadyHave && !fImporting && !fReindex && !IsInitialBlockDownload())
-                    pfrom->AskFor(inv);
-            } else
-            if (inv.type == MSG_BLOCK) {
+                else if (fAlreadyHave)
+                    // REBTODO - update stats (alreadyhave tx invs) for this peer
+                else if (!fImporting && !fReindex && !IsInitialBlockDownload())
+                    pfrom->AskFor(inv); // REBTODO - update stats (new tx invs) for this peer
+            } else if (inv.type == MSG_BLOCK) {
                 BlockMap::iterator it = mapBlockIndex.find(inv.hash);
                 bool fAlreadyHave = false;
                 if (it == mapBlockIndex.end())
@@ -1555,7 +1556,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             // Track requests for our stuff
             GetMainSignals().Inventory(inv.hash);
 
-            if (pfrom->nSendSize > (nMaxSendBufferSize * 2)) {
+            if (pfrom->nSendSize > (nMaxSendBufferSize * 2)) {  // REBTODO where is nSendSize set?
                 LogPrintf("recv inv nSendSize (%d)>nMaxSendBufferSize(%d)*2 peer=%d\n", pfrom->nSendSize, nMaxSendBufferSize, pfrom->id);
                 Misbehaving(pfrom->GetId(), 50);
                 return true;
@@ -2172,7 +2173,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         headers.resize(nCount);
         for (unsigned int n = 0; n < nCount; n++) {
             vRecv >> headers[n];
-            ReadCompactSize(vRecv); // ignore tx count; assume it is 0.
+            ReadCompactSize(vRecv); // ignore tx count; assume it is 0. // REBTODO - what does this do?
         }
 
         if (nCount == 0) {
@@ -2649,6 +2650,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
     else if (strCommand == NetMsgType::NOTFOUND) {
+        // REBTODO - process for blocks - flag as purged node - use disconnect logic to re-request blocks from other nodes.
         vector<CInv> vInv;
         vRecv >> vInv;
         if (vInv.size() > MAX_INV_SZ)
@@ -2711,7 +2713,7 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman)
     std::deque<CNetMessage>::iterator it = pfrom->vRecvMsg.begin();
     while (!pfrom->fDisconnect && it != pfrom->vRecvMsg.end()) {
         // Don't bother if send buffer is too full to respond anyway
-        if (pfrom->nSendSize >= nMaxSendBufferSize)
+        if (pfrom->nSendSize >= nMaxSendBufferSize)    // REBTODO debug this!
             break;
 
         // get next message
@@ -3101,7 +3103,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
                     }
 
                     // If the peer's chain has this block, don't inv it back.
-                    if (!PeerHasHeader(&state, pindex)) {
+                    if (!PeerHasHeader(&state, pindex)) {   // REBTODO - see what this function does
                         vector<CInv> vInv;
                         vInv.push_back(CInv(MSG_BLOCK, hashToAnnounce));
                         connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
@@ -3142,7 +3144,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
             // Time to send but the peer has requested we not relay transactions.
             if (fSendTrickle) {
                 LOCK(pto->cs_filter);
-                if (!pto->fRelayTxes) pto->setInventoryTxToSend.clear();
+                if (!pto->fRelayTxes) pto->setInventoryTxToSend.clear(); // REBTODO - don't add txs to this list in the first place!
             }
 
             // Respond to BIP35 mempool requests
