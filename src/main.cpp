@@ -493,7 +493,7 @@ void MaybeSetPeerAsAnnouncingHeaderAndIDs(const CNodeState* nodestate, CNode* pf
                 return true;
             });
             if(found)
-                lNodesAnnouncingHeaderAndIDs.pop_front();
+                lNodesAnnouncingHeaderAndIDs.pop_front();  // REBTODO - what does this do?!
         }
         fAnnounceUsingCMPCTBLOCK = true;
         LogPrint("block", "sending SENDCMPCT (announce) to peer %s\n", pfrom->id);
@@ -4802,7 +4802,7 @@ static void RelayAddress(const CAddress& addr, bool fReachable, CConnman& connma
 void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParams, CConnman& connman)
 {
     std::deque<CInv>::iterator it = pfrom->vRecvGetData.begin();
-    unsigned int nMaxSendBufferSize = connman.GetSendBufferSize();
+    unsigned int nMaxSendBufferSize = connman.GetSendBufferSize(); // TODO - debug this! - show on Disconnect...
 
     vector<CInv> vNotFound;
 
@@ -5876,7 +5876,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         for (unsigned int n = 0; n < nCount; n++) {
             vRecv >> headers[n];
             ReadCompactSize(vRecv); // ignore tx count; assume it is 0.
-        }
+        } // REBTODO log headers recv
 
         {
         LOCK(cs_main);
@@ -6267,6 +6267,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::NOTFOUND) {
         // We do not care about the NOTFOUND message, but logging an Unknown Command
         // message would be undesirable as we transmit it ourselves.
+//REBTODO - process for blocks - flag as purged node - use disconnect logic to re-request blocks from other nodes.
     }
 
     else {

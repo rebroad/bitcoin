@@ -917,7 +917,7 @@ bool CConnman::AttemptToEvictConnection()
     if (vEvictionCandidates.empty()) return false;
 
     // Protect 4 nodes that most recently sent us blocks.
-    // An attacker cannot manipulate this metric without performing useful work.
+    // An attacker cannot manipulate this metric without performing useful work. - TODO: make this statement true!
     std::sort(vEvictionCandidates.begin(), vEvictionCandidates.end(), CompareNodeBlockTime);
     vEvictionCandidates.erase(vEvictionCandidates.end() - std::min(4, static_cast<int>(vEvictionCandidates.size())), vEvictionCandidates.end());
 
