@@ -68,6 +68,8 @@ int64_t nTimeBestReceived = 0;
 CWaitableCriticalSection csBestBlock;
 CConditionVariable cvBlockChange;
 int nScriptCheckThreads = 0;
+unsigned int nChecksum = 0;
+unsigned int nMessageSize = 0;
 bool fImporting = false;
 bool fReindex = false;
 bool fTxIndex = false;
@@ -3776,11 +3778,11 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, C
         bool ret = AcceptBlock(*pblock, state, chainparams, &pindex, fRequested, dbp, &fNewBlock);
         if (pfrom) {
             if (pindex) {
-                LogPrint("block", "recv block %s (%d) peer=%d\n", pblock->GetHash().ToString(), pindex->nHeight, pfrom->id);
+                LogPrint("block", "recv block %s (%d) size=%d chk=%08x peer=%d\n", pblock->GetHash().ToString(), pindex->nHeight, nMessageSize, nChecksum, pfrom->id);
                 mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
                 if (fNewBlock) pfrom->nLastBlockTime = GetTime();
             } else
-                LogPrint("block", "recv block %s peer=%d\n", pblock->GetHash().ToString(), pfrom->id);
+                LogPrint("block", "recv block %s size=%d chk=%08x peer=%d\n", pblock->GetHash().ToString(), nMessageSize, nChecksum, pfrom->id);
         }
         CheckBlockIndex(chainparams.GetConsensus());
         if (!ret)
@@ -6350,12 +6352,12 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman)
         string strCommand = hdr.GetCommand();
 
         // Message size
-        unsigned int nMessageSize = hdr.nMessageSize;
+        nMessageSize = hdr.nMessageSize;
 
         // Checksum
         CDataStream& vRecv = msg.vRecv;
         uint256 hash = Hash(vRecv.begin(), vRecv.begin() + nMessageSize);
-        unsigned int nChecksum = ReadLE32((unsigned char*)&hash);
+        nChecksum = ReadLE32((unsigned char*)&hash);
         if (nChecksum != hdr.nChecksum)
         {
             LogPrintf("%s(%s, %u bytes): CHECKSUM ERROR nChecksum=%08x hdr.nChecksum=%08x\n", __func__,
