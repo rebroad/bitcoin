@@ -1008,7 +1008,7 @@ bool CConnman::AttemptToEvictConnection()
     if (vEvictionCandidates.empty()) return false;
 
     // Protect 4 nodes that most recently sent us blocks.
-    // An attacker cannot manipulate this metric without performing useful work.
+    // An attacker cannot manipulate this metric without performing useful work - REBTODO: make this statement true!
     std::sort(vEvictionCandidates.begin(), vEvictionCandidates.end(), CompareNodeBlockTime);
     vEvictionCandidates.erase(vEvictionCandidates.end() - std::min(4, static_cast<int>(vEvictionCandidates.size())), vEvictionCandidates.end());
 
@@ -1122,7 +1122,7 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
         }
     }
 
-    NodeId id = GetNewNodeId();
+    NodeId id = GetNewNodeId(); // REBTODO - check out GetNewNodeId()
     uint64_t nonce = GetDeterministicRandomizer(RANDOMIZER_ID_LOCALHOSTNONCE).Write(id).Finalize();
 
     CNode* pnode = new CNode(id, nLocalServices, GetBestHeight(), hSocket, addr, CalculateKeyedNetGroup(addr), nonce, "", true);
@@ -1309,7 +1309,7 @@ void CConnman::ThreadSocketHandler()
             LOCK(cs_vNodes);
             vNodesCopy = vNodes;
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
-                pnode->AddRef();
+                pnode->AddRef(); // REBTODO - what does this do?
         }
         BOOST_FOREACH(CNode* pnode, vNodesCopy)
         {

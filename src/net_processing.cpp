@@ -1787,7 +1787,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
             // Track requests for our stuff
             GetMainSignals().Inventory(inv.hash);
-        }
+        } // loop through each inv
 
         if (!vToFetch.empty())
             connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETDATA, vToFetch));
@@ -2011,7 +2011,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 vWorkQueue.emplace_back(inv.hash, i);
             }
 
-            pfrom->nLastTXTime = GetTime();
+            pfrom->nLastTXTime = GetTime(); // REBTODO - update stats for useful txs
 
             LogPrint("tx", "recv tx(%d,%d,%d) %s size=%u accepted (poolsz %u txn, %u kB) peer=%d\n",
                 pfrom->mapAskFor.size(), pfrom->setAskFor.size(), mapAlreadyAskedFor.size(),
@@ -2043,7 +2043,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     if (setMisbehaving.count(fromPeer))
                         continue;
                     if (AcceptToMemoryPool(mempool, stateDummy, porphanTx, true, &fMissingInputs2, &lRemovedTxn)) {
-                        LogPrint("tx", "   accepted orphan tx %s (poolsz %u) peer=%d\n", orphanHash.ToString(), mempool.size(), fromPeer);
+                        LogPrint("tx", "   accepted orphan tx %s (poolsz %u) peer=%d\n", orphanHash.ToString(), mempool.size(), fromPeer); // REBTODO - update stats for useful TXs (orphans that found parents) for this peer
                         RelayTransaction(orphanTx, connman);
                         for (unsigned int i = 0; i < orphanTx.vout.size(); i++) {
                             vWorkQueue.emplace_back(orphanHash, i);
@@ -2052,6 +2052,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     }
                     else if (!fMissingInputs2)
                     {
+                        // REBTODO - update stats for invalid TXs for this peer
                         int nDos = 0;
                         if (stateDummy.IsInvalid(nDos) && nDos > 0) {
                             // Punish peer that gave us an invalid orphan tx
@@ -2070,7 +2071,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                             assert(recentRejects);
                             recentRejects->insert(orphanHash);
                         }
-                    } else
+                    } else // REBTODO - update stats for tricky orphan TXs for this peer
                         LogPrint("tx", "   waiting orphan tx %s peer=%d\n", orphanHash.ToString(), fromPeer);
                     mempool.check(pcoinsTip);
                 }
@@ -2080,7 +2081,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 EraseOrphanTx(hash);
         }
         else if (fMissingInputs)
-        {
+        { // not accepted as missing inputs, i.e. an orphan
+            // REBTODO - update stats for orphan txs from this peer
             bool fRejectedParents = false; // It may be the case that the orphans parents have all been rejected
             BOOST_FOREACH(const CTxIn& txin, tx.vin) {
                 if (recentRejects->contains(txin.prevout.hash)) {
@@ -2113,7 +2115,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 // parents so avoid re-requesting it from other peers.
                 recentRejects->insert(tx.GetHash());
             }
-        } else {
+        } else { // not accepted and not missing inputs, i.e. invalid
+            // REBTODO - update stats of invalid txs from this peer
             if (!tx.HasWitness() && !state.CorruptionPossible()) {
                 // Do not use rejection cache for witness transactions or
                 // witness-stripped transactions, as they can have been malleated.
@@ -2465,7 +2468,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         headers.resize(nCount);
         for (unsigned int n = 0; n < nCount; n++) {
             vRecv >> headers[n];
-            ReadCompactSize(vRecv); // ignore tx count; assume it is 0.
+            ReadCompactSize(vRecv); // ignore tx count; assume it is 0. // REBTODO - what does this do?
         }
 
         if (nCount == 0) {
@@ -2911,6 +2914,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
     }
 
     else if (strCommand == NetMsgType::NOTFOUND) {
+        // REBTODO - process for blocks - flag as purged node - use disconnect logic to re-request blocks from other nodes.
         std::vector<CInv> vInv;
         vRecv >> vInv;
         if (vInv.size() > MAX_INV_SZ)
@@ -3382,7 +3386,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                     }
 
                     // If the peer's chain has this block, don't inv it back.
-                    if (!PeerHasHeader(&state, pindex)) {
+                    if (!PeerHasHeader(&state, pindex)) {   // REBTODO - see what this function does
                         std::vector<CInv> vInv;
                         vInv.push_back(CInv(MSG_BLOCK, hashToAnnounce));
                         connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
@@ -3423,7 +3427,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
             // Time to send but the peer has requested we not relay transactions.
             if (fSendTrickle) {
                 LOCK(pto->cs_filter);
-                if (!pto->fRelayTxes) pto->setInventoryTxToSend.clear();
+                if (!pto->fRelayTxes) pto->setInventoryTxToSend.clear(); // REBTODO - don't add txs to this list in the first place!
             }
 
             // Respond to BIP35 mempool requests
