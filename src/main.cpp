@@ -4921,8 +4921,10 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         pfrom->PushMessage(NetMsgType::INV, vInv);
                         pfrom->hashContinue.SetNull();
                     }
-                } else if (send)
+                } else if (send) {
                     LogPrint("block", "send notfound %s (%d) peer=%d\n", inv.ToString(), nHeight, pfrom->id);
+                    vNotFound.push_back(inv);
+                }
             }
             else if (inv.type == MSG_TX || inv.type == MSG_WITNESS_TX)
             {
