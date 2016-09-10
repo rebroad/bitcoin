@@ -208,7 +208,7 @@ public:
     void SetServices(const CService &addr, ServiceFlags nServices);
     void MarkAddressGood(const CAddress& addr);
     void AddNewAddress(const CAddress& addr, const CAddress& addrFrom, int64_t nTimePenalty = 0);
-    void AddNewAddresses(const std::vector<CAddress>& vAddr, const CAddress& addrFrom, int64_t nTimePenalty = 0);
+    void AddNewAddresses(const std::vector<CAddress>& vAddr, const CAddress& addrFrom, NodeId nodeid, int64_t nTimePenalty = 0);
     std::vector<CAddress> GetAddresses();
     void AddressCurrentlyConnected(const CService& addr);
 
