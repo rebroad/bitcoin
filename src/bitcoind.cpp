@@ -50,6 +50,7 @@ void WaitForShutdown(boost::thread_group* threadGroup)
         MilliSleep(200);
         fShutdown = ShutdownRequested();
     }
+    LogPrintf("%s: ShutdownRequested()\n", __func__);
     if (threadGroup)
     {
         Interrupt(*threadGroup);
