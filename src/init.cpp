@@ -133,6 +133,7 @@ std::atomic<bool> fDumpMempoolLater(false);
 
 void StartShutdown()
 {
+    LogPrintf("%s: Setting fRequestShutdown to true\n");
     fRequestShutdown = true;
 }
 bool ShutdownRequested()
@@ -198,31 +199,45 @@ void Shutdown()
     RenameThread("bitcoin-shutoff");
     mempool.AddTransactionsUpdated(1);
 
+    LogPrintf("%s: Calling StopHTTPRPC()\n", __func__);
     StopHTTPRPC();
+    LogPrintf("%s: Calling StopREST()\n", __func__);
     StopREST();
+    LogPrintf("%s: Calling StopRPC()\n", __func__);
     StopRPC();
+    LogPrintf("%s: Calling StopHTTPServer()\n", __func__);
     StopHTTPServer();
 #ifdef ENABLE_WALLET
-    if (pwalletMain)
+    if (pwalletMain) {
+        LogPrintf("%s: Calling pwalletMain->Flush()\n", __func__);
         pwalletMain->Flush(false);
+    }
 #endif
     MapPort(false);
+    LogPrintf("%s: Calling UnregisterCalidationInterface()\n", __func__);
     UnregisterValidationInterface(peerLogic.get());
+    LogPrintf("%s: Calling peerLogic.reset()\n", __func__);
     peerLogic.reset();
+    LogPrintf("%s: Calling g_connman.reset()\n", __func__);
     g_connman.reset();
 
+    LogPrintf("%s: Calling StopTorControl()\n", __func__);
     StopTorControl();
+    LogPrintf("%s: Calling UnregisterNodeSignals()\n", __func__);
     UnregisterNodeSignals(GetNodeSignals());
-    if (fDumpMempoolLater)
+    if (fDumpMempoolLater) {
+        LogPrintf("%s: Calling DumpMempool()\n", __func__);
         DumpMempool();
+    }
 
     if (fFeeEstimatesInitialized)
     {
         boost::filesystem::path est_path = GetDataDir() / FEE_ESTIMATES_FILENAME;
         CAutoFile est_fileout(fopen(est_path.string().c_str(), "wb"), SER_DISK, CLIENT_VERSION);
-        if (!est_fileout.IsNull())
+        if (!est_fileout.IsNull()) {
+            LogPrintf("%s: Calling mempool.WriteFeeEstimates()\n", __func__);
             mempool.WriteFeeEstimates(est_fileout);
-        else
+        } else
             LogPrintf("%s: Failed to write fee estimates to %s\n", __func__, est_path.string());
         fFeeEstimatesInitialized = false;
     }
@@ -230,6 +245,7 @@ void Shutdown()
     {
         LOCK(cs_main);
         if (pcoinsTip != NULL) {
+            LogPrintf("%s: Calling FlushStateToDisk()\n", __func__);
             FlushStateToDisk();
         }
         delete pcoinsTip;
@@ -242,12 +258,15 @@ void Shutdown()
         pblocktree = NULL;
     }
 #ifdef ENABLE_WALLET
-    if (pwalletMain)
+    if (pwalletMain) {
+        LogPrintf("%s: Calling pwalletMain->Flush()\n", __func__);
         pwalletMain->Flush(true);
+    }
 #endif
 
 #if ENABLE_ZMQ
     if (pzmqNotificationInterface) {
+        LogPrintf("%s: Calling UnregisterValidationInterface()\n", __func__);
         UnregisterValidationInterface(pzmqNotificationInterface);
         delete pzmqNotificationInterface;
         pzmqNotificationInterface = NULL;
@@ -261,12 +280,15 @@ void Shutdown()
         LogPrintf("%s: Unable to remove pidfile: %s\n", __func__, e.what());
     }
 #endif
+    LogPrintf("%s: Calling UnregisterAllValidationInterfaces()\n", __func__);
     UnregisterAllValidationInterfaces();
 #ifdef ENABLE_WALLET
     delete pwalletMain;
     pwalletMain = NULL;
 #endif
+    LogPrintf("%s: Calling globalVerifyHandle.reset()\n", __func__);
     globalVerifyHandle.reset();
+    LogPrintf("%s: Calling ECC_Stop()\n", __func__);
     ECC_Stop();
     LogPrintf("%s: done\n", __func__);
 }

@@ -215,13 +215,13 @@ template <typename Callable> void TraceThread(const char* name,  Callable func)
     RenameThread(s.c_str());
     try
     {
-        LogPrintf("%s thread start\n", name);
+        LogPrintf("%s: %s thread start\n", __func__, name);
         func();
-        LogPrintf("%s thread exit\n", name);
+        LogPrintf("%s: %s thread exit\n", __func__, name);
     }
     catch (const boost::thread_interrupted&)
     {
-        LogPrintf("%s thread interrupt\n", name);
+        LogPrintf("%s: %s thread interrupt\n", __func__, name);
         throw;
     }
     catch (const std::exception& e) {

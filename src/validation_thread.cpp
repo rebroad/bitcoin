@@ -29,5 +29,6 @@ void CConnman::ThreadValidation()
     }
 
     } // end IOPRIO_IDLER scope
+    LogPrintf("%s: Exiting\n", __func__);
 }
 

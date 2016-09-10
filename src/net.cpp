@@ -2470,6 +2470,7 @@ instance_of_cnetcleanup;
 
 void CConnman::Interrupt()
 {
+    LogPrintf("%s: Start\n", __PRETTY_FUNCTION__);
     {
         std::lock_guard<std::mutex> lock(mutexMsgProc);
         flagInterruptMsgProc = true;
@@ -2492,40 +2493,60 @@ void CConnman::Interrupt()
             semAddnode->post();
         }
     }
+    LogPrintf("%s: End\n", __PRETTY_FUNCTION__);
 }
 
 void CConnman::Stop()
 {
-    if (threadValidation.joinable())
+    LogPrintf("%s: Start\n", __PRETTY_FUNCTION__);
+    if (threadValidation.joinable()) {
+        LogPrintf("%s: Before threadValidation.join()\n", __PRETTY_FUNCTION__);
         threadValidation.join();
-    if (threadMessageHandler.joinable())
+    }
+    if (threadMessageHandler.joinable()) {
+        LogPrintf("%s: Before threadMessageHandler.join()\n", __PRETTY_FUNCTION__);
         threadMessageHandler.join();
-    if (threadOpenConnections.joinable())
+    }
+    if (threadOpenConnections.joinable()) {
+        LogPrintf("%s: Before threadOpenConnections.join()\n", __PRETTY_FUNCTION__);
         threadOpenConnections.join();
-    if (threadOpenAddedConnections.joinable())
+    }
+    if (threadOpenAddedConnections.joinable()) {
+        LogPrintf("%s: Before threadOpenAddedConnections.join()\n", __PRETTY_FUNCTION__);
         threadOpenAddedConnections.join();
-    if (threadDNSAddressSeed.joinable())
+    }
+    if (threadDNSAddressSeed.joinable()) {
+        LogPrintf("%s: Before threadDNSAddressSeed.join()\n", __PRETTY_FUNCTION__);
         threadDNSAddressSeed.join();
-    if (threadBitnodesAddressSeed.joinable())
+    }
+    if (threadBitnodesAddressSeed.joinable()) {
+        LogPrintf("%s: Before threadBitnodesAddressSeed.join()\n", __PRETTY_FUNCTION__);
         threadBitnodesAddressSeed.join();
-    if (threadSocketHandler.joinable())
+    }
+    if (threadSocketHandler.joinable()) {
+        LogPrintf("%s: Before threadSocketHandler.join()\n", __PRETTY_FUNCTION__);
         threadSocketHandler.join();
+    }
 
     if (fAddressesInitialized)
     {
+        LogPrintf("%s: Before DumpData()\n", __PRETTY_FUNCTION__);
         DumpData();
         fAddressesInitialized = false;
     }
 
     // Close sockets
+    LogPrintf("%s: Before CloseSocketDisconnect()\n", __PRETTY_FUNCTION__);
     BOOST_FOREACH(CNode* pnode, vNodes)
         pnode->CloseSocketDisconnect();
+    LogPrintf("%s: Before CloseSocket()\n", __PRETTY_FUNCTION__);
     BOOST_FOREACH(ListenSocket& hListenSocket, vhListenSocket)
         if (hListenSocket.socket != INVALID_SOCKET)
             if (!CloseSocket(hListenSocket.socket))
                 LogPrintf("CloseSocket(hListenSocket) failed with error %s\n", NetworkErrorString(WSAGetLastError()));
 
     // clean up some globals (to help leak detection)
+    LogPrintf("%s: Before DeleteNode()\n", __PRETTY_FUNCTION__);
     BOOST_FOREACH(CNode *pnode, vNodes) {
         DeleteNode(pnode);
     }
@@ -2539,6 +2560,7 @@ void CConnman::Stop()
     semOutbound = NULL;
     delete semAddnode;
     semAddnode = NULL;
+    LogPrintf("%s: End\n", __PRETTY_FUNCTION__);
 }
 
 void CConnman::DeleteNode(CNode* pnode)
