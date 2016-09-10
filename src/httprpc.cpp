@@ -259,4 +259,5 @@ void StopHTTPRPC()
         delete httpRPCTimerInterface;
         httpRPCTimerInterface = 0;
     }
+    LogPrint("rpc", "%s: Finished\n", __func__);
 }

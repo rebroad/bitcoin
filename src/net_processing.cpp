@@ -308,6 +308,7 @@ void InitializeNode(CNode *pnode, CConnman& connman) {
 }
 
 void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
+    LogPrintf("%s: Start peer=%d\n", __func__, pnode->id);
     if (ShutdownRequested())
         return;
 

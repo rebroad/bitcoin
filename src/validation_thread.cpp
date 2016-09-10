@@ -27,6 +27,7 @@ void CConnman::ThreadValidation()
         if (!interruptNet.sleep_for(std::chrono::milliseconds(nSleep)))
             return;
     }
+    LogPrintf("%s: Exiting\n", __func__);
 
     } // end IOPRIO_IDLER scope
 }

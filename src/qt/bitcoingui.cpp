@@ -1146,6 +1146,7 @@ void BitcoinGUI::detectShutdown()
 
 void BitcoinGUI::shouldQuit()
 {
+    LogPrintf("%s\n", __PRETTY_FUNCTION__);
     if (!ShutdownRequested())
     {
         StartShutdown();

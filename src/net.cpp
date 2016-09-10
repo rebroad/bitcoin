@@ -1136,6 +1136,7 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
 
 void CConnman::ThreadSocketHandler()
 {
+    LogPrintf("%s: Start\n", __PRETTY_FUNCTION__);
     unsigned int nPrevNodeCount = 0;
     while (!interruptNet)
     {
@@ -2029,6 +2030,7 @@ bool CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
 
 void CConnman::ThreadMessageHandler()
 {
+    LogPrintf("%s: Start\n", __func__);
     while (!flagInterruptMsgProc || nBlocksToBeProcessed > 0)
     {
         std::vector<CNode*> vNodesCopy;
@@ -2080,6 +2082,7 @@ void CConnman::ThreadMessageHandler()
         }
         fMsgProcWake = false;
     }
+    LogPrintf("%s: End\n", __func__);
 }
 
 
@@ -2280,6 +2283,7 @@ NodeId CConnman::GetNewNodeId()
 
 bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options connOptions)
 {
+    LogPrintf("CConnman::Start: Start\n");
     nTotalBytesRecv = 0;
     nTotalBytesSent = 0;
     nMaxOutboundTotalBytesSentInCycle = 0;
@@ -2334,6 +2338,7 @@ bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options c
         DumpBanlist();
     }
 
+    LogPrintf("CConnman::Start: Starting network threads...\n");
     uiInterface.InitMessage(_("Starting network threads..."));
 
     fAddressesInitialized = true;
@@ -2388,6 +2393,7 @@ bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options c
     // Dump network addresses
     scheduler.scheduleEvery(boost::bind(&CConnman::DumpData, this), DUMP_ADDRESSES_INTERVAL);
 
+    LogPrintf("CConnman::Start: End\n");
     return true;
 }
 
@@ -2408,6 +2414,7 @@ instance_of_cnetcleanup;
 
 void CConnman::Interrupt()
 {
+    LogPrintf("%s: Start\n", __PRETTY_FUNCTION__);
     {
         std::lock_guard<std::mutex> lock(mutexMsgProc);
         flagInterruptMsgProc = true;
@@ -2428,40 +2435,60 @@ void CConnman::Interrupt()
             semAddnode->post();
         }
     }
+    LogPrintf("%s: End\n", __PRETTY_FUNCTION__);
 }
 
 void CConnman::Stop()
 {
-    if (threadValidation.joinable())
+    LogPrintf("%s: Start\n", __PRETTY_FUNCTION__);
+    if (threadValidation.joinable()) {
+        LogPrintf("%s: Before threadValidation.join()\n", __PRETTY_FUNCTION__);
         threadValidation.join();
-    if (threadMessageHandler.joinable())
+    }
+    if (threadMessageHandler.joinable()) {
+        LogPrintf("%s: Before threadMessageHandler.join()\n", __PRETTY_FUNCTION__);
         threadMessageHandler.join();
-    if (threadOpenConnections.joinable())
+    }
+    if (threadOpenConnections.joinable()) {
+        LogPrintf("%s: Before threadOpenConnections.join()\n", __PRETTY_FUNCTION__);
         threadOpenConnections.join();
-    if (threadOpenAddedConnections.joinable())
+    }
+    if (threadOpenAddedConnections.joinable()) {
+        LogPrintf("%s: Before threadOpenAddedConnections.join()\n", __PRETTY_FUNCTION__);
         threadOpenAddedConnections.join();
-    if (threadDNSAddressSeed.joinable())
+    }
+    if (threadDNSAddressSeed.joinable()) {
+        LogPrintf("%s: Before threadDNSAddressSeed.join()\n", __PRETTY_FUNCTION__);
         threadDNSAddressSeed.join();
-    if (threadBitnodesAddressSeed.joinable())
+    }
+    if (threadBitnodesAddressSeed.joinable()) {
+        LogPrintf("%s: Before threadBitnodesAddressSeed.join()\n", __PRETTY_FUNCTION__);
         threadBitnodesAddressSeed.join();
-    if (threadSocketHandler.joinable())
+    }
+    if (threadSocketHandler.joinable()) {
+        LogPrintf("%s: Before threadSocketHandler.join()\n", __PRETTY_FUNCTION__);
         threadSocketHandler.join();
+    }
 
     if (fAddressesInitialized)
     {
+        LogPrintf("%s: Before DumpData()\n", __PRETTY_FUNCTION__);
         DumpData();
         fAddressesInitialized = false;
     }
 
     // Close sockets
+    LogPrintf("%s: Before CloseSocketDisconnect()\n", __PRETTY_FUNCTION__);
     BOOST_FOREACH(CNode* pnode, vNodes)
         pnode->CloseSocketDisconnect();
+    LogPrintf("%s: Before CloseSocket()\n", __PRETTY_FUNCTION__);
     BOOST_FOREACH(ListenSocket& hListenSocket, vhListenSocket)
         if (hListenSocket.socket != INVALID_SOCKET)
             if (!CloseSocket(hListenSocket.socket))
                 LogPrintf("CloseSocket(hListenSocket) failed with error %s\n", NetworkErrorString(WSAGetLastError()));
 
     // clean up some globals (to help leak detection)
+    LogPrintf("%s: Before DeleteNode()\n", __PRETTY_FUNCTION__);
     BOOST_FOREACH(CNode *pnode, vNodes) {
         DeleteNode(pnode);
     }
@@ -2475,6 +2502,7 @@ void CConnman::Stop()
     semOutbound = NULL;
     delete semAddnode;
     semAddnode = NULL;
+    LogPrintf("%s: End\n", __PRETTY_FUNCTION__);
 }
 
 void CConnman::DeleteNode(CNode* pnode)
