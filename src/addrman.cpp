@@ -50,7 +50,7 @@ bool CAddrInfo::IsTerrible(int64_t nNow) const
     return false;
 }
 
-double CAddrInfo::GetChance(int64_t nNow) const
+double CAddrInfo::GetChance(int64_t nNow) const  // REBTODO - where is this used? Use nRating?
 {
     double fChance = 1.0;
     int64_t nSinceLastTry = std::max<int64_t>(nNow - nLastTry, 0);
@@ -121,7 +121,7 @@ void CAddrMan::SwapRandom(unsigned int nRndPos1, unsigned int nRndPos2)
     vRandom[nRndPos2] = nId1;
 }
 
-void CAddrMan::Delete(int nId)
+void CAddrMan::Delete(int nId) // REBTODO - Log this!
 {
     assert(mapInfo.count(nId) != 0);
     CAddrInfo& info = mapInfo[nId];
@@ -248,7 +248,7 @@ void CAddrMan::Good_(const CService& addr, int64_t nTime)
     LogPrint("addrman", "Moving %s to tried\n", addr.ToString());
 
     // move nId to the tried tables
-    MakeTried(info, nId);
+    MakeTried(info, nId);  // REBTODO - see what this does
 }
 
 bool CAddrMan::Add_(const CAddress& addr, const CNetAddr& source, int64_t nTimePenalty)
@@ -342,7 +342,7 @@ void CAddrMan::Attempt_(const CService& addr, bool fCountFailure, int64_t nTime)
     info.nLastTry = nTime;
     if (fCountFailure && info.nLastCountAttempt < nLastGood) {
         info.nLastCountAttempt = nTime;
-        info.nAttempts++;
+        info.nAttempts++;  // REBTODO - debug this somehow/somewhere
     }
 }
 

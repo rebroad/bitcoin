@@ -316,7 +316,7 @@ private:
 
     void DeleteNode(CNode* pnode);
 
-    NodeId GetNewNodeId();
+    NodeId GetNewNodeId();     // REBTODO - check this function
 
     size_t SocketSendData(CNode *pnode) const;
     //!check is the banlist has unwritten changes
