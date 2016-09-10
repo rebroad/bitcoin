@@ -926,7 +926,7 @@ bool CConnman::AttemptToEvictConnection()
     if (vEvictionCandidates.empty()) return false;
 
     // Protect 4 nodes that most recently sent us blocks.
-    // An attacker cannot manipulate this metric without performing useful work.
+    // An attacker cannot manipulate this metric without performing useful work - REBTODO: make this statement true!
     std::sort(vEvictionCandidates.begin(), vEvictionCandidates.end(), CompareNodeBlockTime);
     vEvictionCandidates.erase(vEvictionCandidates.end() - std::min(4, static_cast<int>(vEvictionCandidates.size())), vEvictionCandidates.end());
 
@@ -1034,7 +1034,7 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
         }
     }
 
-    NodeId id = GetNewNodeId();
+    NodeId id = GetNewNodeId(); // REBTODO - check out GetNewNodeId()
     uint64_t nonce = GetDeterministicRandomizer(RANDOMIZER_ID_LOCALHOSTNONCE).Write(id).Finalize();
 
     CNode* pnode = new CNode(id, nLocalServices, GetBestHeight(), hSocket, addr, CalculateKeyedNetGroup(addr), nonce, "", true);
@@ -1303,7 +1303,7 @@ void CConnman::ThreadSocketHandler()
                 if (lockSend) {
                     size_t nBytes = SocketSendData(pnode);
                     if (nBytes)
-                        RecordBytesSent(nBytes);
+                        RecordBytesSent(nBytes);  // REBTODO - can this be compared with OptimisticallySent?
                 }
             }
 
@@ -2181,7 +2181,7 @@ bool CConnman::Start(boost::thread_group& threadGroup, CScheduler& scheduler, st
         CNetAddr local;
         LookupHost("127.0.0.1", local, false);
 
-        NodeId id = GetNewNodeId();
+        NodeId id = GetNewNodeId(); // REBTODO - Now does GetNewNodeId() work?
         uint64_t nonce = GetDeterministicRandomizer(RANDOMIZER_ID_LOCALHOSTNONCE).Write(id).Finalize();
 
         pnodeLocalHost = new CNode(id, nLocalServices, GetBestHeight(), INVALID_SOCKET, CAddress(CService(local, 0), nLocalServices), 0, nonce);
@@ -2752,7 +2752,7 @@ int CNode::EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
     if (it == vSendMsg.begin()) {
         nOptimisticDelta = SocketSendData(this);
 	strOptim += strprintf(" optim=%d", nOptimisticDelta);
-        nOptimisticBytesWritten += nOptimisticDelta;
+        nOptimisticBytesWritten += nOptimisticDelta; // REBTODO - where is this used?
     }
     std::string strSendSize;
     if (nSendSize)
