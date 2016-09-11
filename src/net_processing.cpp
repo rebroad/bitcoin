@@ -2669,6 +2669,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
             pfrom->PushAddress(addr, insecure_rand);
             ++nCount;
         }
+        pfrom->nNextAddrSend = 0; // Ensure it's sent right away
         LogPrint("addrman", "recv getaddr. Pushing %d (of %d) addresses. peer=%d\n", nCount, nTotal, pfrom->id);
     }
 
