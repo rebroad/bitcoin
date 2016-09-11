@@ -1033,6 +1033,11 @@ void ThreadSocketHandler()
                 if (pnode->fDisconnect ||
                     (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() && pnode->nSendSize == 0 && pnode->ssSend.empty()))
                 {
+                    if (pnode->fDisconnect) {
+                        if (pnode->GetRefCount() != 1 || !pnode->vRecvMsg.empty() || !pnode->vSendMsg.empty() || pnode->nSendSize || pnode->nOptimisticBytesWritten || pnode->ssSend.size() )  // REBTEMP
+                            LogPrint("net", "%s: peer=%d fDisconnect=1 RefCount=%d vRecvMsgs=%d vSendMsgs=%d nSendSize=%d (optimistic=%d) ssSend=%d\n", __func__, pnode->id, pnode->GetRefCount(), pnode->vRecvMsg.size(), pnode->vSendMsg.size(), pnode->nSendSize, pnode->nOptimisticBytesWritten, pnode->ssSend.size());
+                    } else
+                        LogPrint("net", "%s: peer=%d fDisconnect=0 nOptimistic=%d vSendMsgs=%d\n", __func__, pnode->id, pnode->nOptimisticBytesWritten, pnode->vSendMsg.size());
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
 
@@ -1074,6 +1079,7 @@ void ThreadSocketHandler()
                     if (fDelete)
                     {
                         vNodesDisconnected.remove(pnode);
+                        LogPrint("net", "Deleting peer=%d\n", pnode->id);
                         delete pnode;
                     }
                 }
@@ -1209,8 +1215,10 @@ void ThreadSocketHandler()
                         int nBytes = recv(pnode->hSocket, pchBuf, sizeof(pchBuf), MSG_DONTWAIT);
                         if (nBytes > 0)
                         {
-                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes))
+                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes)) {
+                                LogPrint("net", "ReceiveMsgBytes failed. peer=%d\n", pnode->id);
                                 pnode->CloseSocketDisconnect();
+                            }
                             pnode->nLastRecv = GetTime();
                             pnode->nRecvBytes += nBytes;
                             pnode->RecordBytesRecv(nBytes);
@@ -1218,8 +1226,7 @@ void ThreadSocketHandler()
                         else if (nBytes == 0)
                         {
                             // socket closed gracefully
-                            if (!pnode->fDisconnect)
-                                LogPrint("net2", "socket closed\n");
+                            LogPrint("net", "socket closed gracefully. fDisconnect=%d peer=%d\n", pnode->fDisconnect ? 1:0, pnode->id);
                             pnode->CloseSocketDisconnect();
                         }
                         else if (nBytes < 0)
@@ -1228,8 +1235,7 @@ void ThreadSocketHandler()
                             int nErr = WSAGetLastError();
                             if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                             {
-                                if (!pnode->fDisconnect)
-                                    LogPrintf("socket recv error %s\n", NetworkErrorString(nErr));
+                                LogPrintf("socket recv error=%s, fDisconnect=%d peer=%d\n", NetworkErrorString(nErr), pnode->fDisconnect ? 1:0, pnode->id);
                                 pnode->CloseSocketDisconnect();
                             }
                         }
@@ -1744,8 +1750,10 @@ void ThreadMessageHandler()
                 TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
                 if (lockRecv)
                 {
-                    if (!g_signals.ProcessMessages(pnode))
+                    if (!g_signals.ProcessMessages(pnode)) {
+                        LogPrint("net", "g_signals.ProcessMessages() failed. peer=%d\n", pnode->id);
                         pnode->CloseSocketDisconnect();
+                    }
 
                     if (pnode->nSendSize < SendBufferSize())
                     {
