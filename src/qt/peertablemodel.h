@@ -56,7 +56,8 @@ public:
         NetNodeId = 0,
         Address = 1,
         Subversion = 2,
-        Ping = 3
+        Ping = 3,
+        Rating = 4
     };
 
     /** @name Methods overridden from QAbstractTableModel
