@@ -5415,7 +5415,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 break;
             }
         }
-        LogPrint("block", "from peer=%d getblocks to %s. sending %d block invs (height %d to %d) to peer=%d\n", pfrom->id, hashStop.IsNull() ? "end" : hashStop.ToString(), nCount, nHeightStart, nHeightEnd);
+        LogPrint("block", "recv getblocks to %s. send %d block invs (height %d to %d) peer=%d\n", hashStop.IsNull() ? "end" : hashStop.ToString(), nCount, nHeightStart, nHeightEnd, pfrom->id);
     }
 
 
