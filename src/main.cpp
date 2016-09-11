@@ -6057,6 +6057,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         int nOldToSend = pfrom->vAddrToSend.size();
         pfrom->vAddrToSend.clear();
         vector<CAddress> vAddr = connman.GetAddresses();
+        int nCount = 0;
         BOOST_FOREACH(const CAddress &addr, vAddr) {
             pfrom->PushAddress(addr);
             nCount++;
