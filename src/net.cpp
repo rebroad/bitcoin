@@ -2684,7 +2684,7 @@ void CNode::EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
 
     // If write queue empty, attempt "optimistic write"
     if (it == vSendMsg.begin())
-        nOptimisticBytesWritten += SocketSendData(this);
+        nOptimisticBytesWritten += SocketSendData(this);  // REBTODO - where is this used?
 
     LEAVE_CRITICAL_SECTION(cs_vSend);
 }
