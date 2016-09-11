@@ -1288,7 +1288,7 @@ void CConnman::ThreadSocketHandler()
                 if (lockSend) {
                     size_t nBytes = SocketSendData(pnode);
                     if (nBytes)
-                        RecordBytesSent(nBytes);
+                        RecordBytesSent(nBytes);  // REBTODO - can this be compared with OptimisticallySent?
                 }
             }
 
