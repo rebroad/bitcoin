@@ -5688,10 +5688,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         LOCK(cs_main);
 
         if (mapBlockIndex.find(cmpctblock.header.hashPrevBlock) == mapBlockIndex.end()) {
-            LogPrint("block", "from peer %d: cmpctblock %s. prev %s not found.\n", pfrom->id, cmpctblock.header.GetHash().ToString(), cmpctblock.header.hashPrevBlock.ToString());
             // Doesn't connect (or is genesis), instead of DoSing in AcceptBlockHeader, request deeper headers
             if (!IsInitialBlockDownload()) {
-                LogPrint("block", "to peer %d: getheaders (%d)\n", pfrom->id, pindexBestHeader->nHeight);
+                LogPrint("block", "recv cmpctblock %s. prev %s not found. send getheaders (%d) peer=%d\n", cmpctblock.header.GetHash().ToString(), cmpctblock.header.hashPrevBlock.ToString(), pindexBestHeader->nHeight, pfrom->id);
                 pfrom->PushMessage(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), uint256());
                 State(pfrom->id)->fExpectingHeaders = true;
             }
@@ -5701,14 +5700,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         CBlockIndex *pindex = NULL;
         CValidationState state;
         if (!AcceptBlockHeader(cmpctblock.header, state, chainparams, &pindex)) {
-            LogPrint("block", "from peer %d: cmpctblock %s\n", pfrom->id, cmpctblock.header.GetHash().ToString());
             int nDoS;
             if (state.IsInvalid(nDoS)) {
+                LogPrintf("recv cmpctblock %s INVALID HEADER peer=%d\n", cmpctblock.header.GetHash().ToString(), pfrom->id);
                 if (nDoS > 0)
                     Misbehaving(pfrom->GetId(), nDoS);
-                LogPrintf("Peer %d sent us invalid header via cmpctblock\n", pfrom->id);
                 return true;
             }
+            LogPrint("block", "recv cmpctblock %s peer=%d\n", cmpctblock.header.GetHash().ToString(), pfrom->id);
         }
 
         // If AcceptBlockHeader returned true, it set pindex
