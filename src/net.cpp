@@ -1030,7 +1030,7 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
         }
     }
 
-    CNode* pnode = new CNode(GetNewNodeId(), nLocalServices, GetBestHeight(), hSocket, addr, "", true);
+    CNode* pnode = new CNode(GetNewNodeId(), nLocalServices, GetBestHeight(), hSocket, addr, "", true); // REBTODO - checkout GetNewNodeId()
     GetNodeSignals().InitializeNode(pnode->GetId(), pnode);
     pnode->AddRef();
     pnode->fWhitelisted = whitelisted;
