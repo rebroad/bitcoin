@@ -6307,7 +6307,7 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman)
     std::deque<CNetMessage>::iterator it = pfrom->vRecvMsg.begin();
     while (!pfrom->fDisconnect && it != pfrom->vRecvMsg.end()) {
         // Don't bother if send buffer is too full to respond anyway
-        if (pfrom->nSendSize >= nMaxSendBufferSize)
+        if (pfrom->nSendSize >= nMaxSendBufferSize)    // REBTODO debug this!
             break;
 
         // get next message
