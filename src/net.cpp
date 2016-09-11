@@ -1055,10 +1055,13 @@ void CConnman::ThreadSocketHandler()
             std::vector<CNode*> vNodesCopy = vNodes;
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
             {
+                if (pnode->fDisconnect) // REBTEMP
+                    LogPrint("net", %s: fDisconnect=1 RefCount=%d vRecvMsgs=%d nSendSize=%d ssSend=%d\n", pnode->GetRefCount(), pnode->vRecvMsg.size(), pnode->nSendSize, pnode->ssSend.size());
                 if (pnode->fDisconnect ||
                     (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() && pnode->nSendSize == 0 && pnode->ssSend.empty()))
                 {
-                    LogPrint("net", "%s: Disconnecting peer=%d fDisconnect=%s\n", __func__, pnode->id, fDisconnect ? "y" : "n");
+                    if (!pnode->fDisconnect)
+                        LogPrint("net", "%s: Disconnecting peer=%d. fDisconnect is false\n", __func__, pnode->id);
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
 
@@ -1100,6 +1103,7 @@ void CConnman::ThreadSocketHandler()
                     if (fDelete)
                     {
                         vNodesDisconnected.remove(pnode);
+                        LogPrint("net", "Deleting peer=%d\n", pnode->id);
                         DeleteNode(pnode);
                     }
                 }
