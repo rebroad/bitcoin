@@ -1058,6 +1058,7 @@ void CConnman::ThreadSocketHandler()
                 if (pnode->fDisconnect ||
                     (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() && pnode->nSendSize == 0 && pnode->ssSend.empty()))
                 {
+                    LogPrint("net", "%s: Disconnecting peer=%d fDisconnect=%s\n", __func__, pnode->id, fDisconnect ? "y" : "n");
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
 
