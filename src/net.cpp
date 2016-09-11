@@ -1056,7 +1056,7 @@ void CConnman::ThreadSocketHandler()
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
             {
                 if (pnode->fDisconnect) // REBTEMP
-                    LogPrint("net", %s: fDisconnect=1 RefCount=%d vRecvMsgs=%d nSendSize=%d ssSend=%d\n", pnode->GetRefCount(), pnode->vRecvMsg.size(), pnode->nSendSize, pnode->ssSend.size());
+                    LogPrint("net", %s: fDisconnect=1 RefCount=%d vRecvMsgs=%d vSendMsgs=%d nSendSize=%d ssSend=%d\n", pnode->GetRefCount(), pnode->vRecvMsg.size(), pnode->vSendMsg.size(), pnode->nSendSize, pnode->ssSend.size());
                 if (pnode->fDisconnect ||
                     (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() && pnode->nSendSize == 0 && pnode->ssSend.empty()))
                 {
