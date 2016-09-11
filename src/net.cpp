@@ -2119,7 +2119,7 @@ bool CConnman::Start(boost::thread_group& threadGroup, CScheduler& scheduler, st
 
     if (pnodeLocalHost == NULL) {
         CNetAddr local;
-        LookupHost("127.0.0.1", local, false);
+        LookupHost("127.0.0.1", local, false);  // REBTODO - How does GetNewNodeId() work?
         pnodeLocalHost = new CNode(GetNewNodeId(), nLocalServices, GetBestHeight(), INVALID_SOCKET, CAddress(CService(local, 0), nLocalServices));
         GetNodeSignals().InitializeNode(pnodeLocalHost->GetId(), pnodeLocalHost);
     }
