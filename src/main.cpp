@@ -5340,7 +5340,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             // Track requests for our stuff
             GetMainSignals().Inventory(inv.hash);
 
-            if (pfrom->nSendSize > (nMaxSendBufferSize * 2)) {
+            if (pfrom->nSendSize > (nMaxSendBufferSize * 2)) {  // REBTODO where is nSendSize set?
                 Misbehaving(pfrom->GetId(), 50);
                 return error("send buffer size() = %u", pfrom->nSendSize);
             }
