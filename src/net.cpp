@@ -622,6 +622,7 @@ void CNode::copyStats(CNodeStats &stats)
     X(nTimeOffset);
     X(addrName);
     X(nVersion);
+    X(nRating);
     X(cleanSubVer);
     X(fInbound);
     X(nStartingHeight);
@@ -2506,6 +2507,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     nTimeOffset = 0;
     addrName = addrNameIn == "" ? addr.ToStringIPPort() : addrNameIn;
     nVersion = 0;
+    nRating = 0;
     strSubVer = "";
     fWhitelisted = false;
     fOneShot = false;
