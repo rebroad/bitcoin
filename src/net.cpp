@@ -775,10 +775,14 @@ int CNetMessage::readData(const char *pch, unsigned int nBytes)
 // requires LOCK(cs_vSend)
 size_t SocketSendData(CNode *pnode)
 {
+    int nMessages = pnode->vSendMsg.size();
+    int nMessage = 0;
+
     std::deque<CSerializeData>::iterator it = pnode->vSendMsg.begin();
     size_t nSentSize = 0;
 
     while (it != pnode->vSendMsg.end()) {
+        nMessage++; // REBTODO - debug log this!
         const CSerializeData &data = *it;
         assert(data.size() > pnode->nSendOffset);
         int nBytes = send(pnode->hSocket, &data[pnode->nSendOffset], data.size() - pnode->nSendOffset, MSG_NOSIGNAL | MSG_DONTWAIT);
