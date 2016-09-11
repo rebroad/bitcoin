@@ -540,6 +540,7 @@ public:
     int64_t nTimeOffset;
     std::string addrName;
     int nVersion;
+    int nRating;
     std::string cleanSubVer;
     bool fInbound;
     bool fAddnode;
@@ -636,6 +637,7 @@ public:
     std::string addrName;
     CService addrLocal;
     int nVersion;
+    int nRating;
     // strSubVer is whatever byte array we read from the wire. However, this field is intended
     // to be printed out, displayed to humans in various forms and so on. So we sanitize it and
     // store the sanitized version in cleanSubVer. The original should be used when dealing with
