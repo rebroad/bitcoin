@@ -815,7 +815,7 @@ size_t CConnman::SocketSendData(CNode *pnode)
                 int nErr = WSAGetLastError();
                 if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                 {
-                    LogPrintf("socket send error %s peer=%d\n", NetworkErrorString(nErr), pnode->id);
+                    LogPrint("net", "socket send error=%s, fDisconnect=%d peer=%d\n", NetworkErrorString(nErr), pnode->fDisconnect, pnode->id);
                     pnode->CloseSocketDisconnect();
                 }
             }
@@ -1076,6 +1076,11 @@ void CConnman::ThreadSocketHandler()
             {
                 if (pnode->fDisconnect)
                 {
+                    if (pnode->fDisconnect) {
+                        if (pnode->GetRefCount() != 1 || !pnode->vRecvMsg.empty() || !pnode->vSendMsg.empty() || pnode->nSendSize)  // REBTEMP
+                            LogPrint("net", "%s: peer=%d fDisconnect=1 RefCount=%d vRecvMsgs=%d vSendMsgs=%d nSendSize=%d\n", __func__, pnode->id, pnode->GetRefCount(), pnode->vRecvMsg.size(), pnode->vSendMsg.size(), pnode->nSendSize);
+                    } else
+                        LogPrint("net", "%s: peer=%d fDisconnect=0 vSendMsgs=%d\n", __func__, pnode->id, pnode->vSendMsg.size());
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
 
@@ -1112,6 +1117,7 @@ void CConnman::ThreadSocketHandler()
                     if (fDelete)
                     {
                         vNodesDisconnected.remove(pnode);
+                        //LogPrint("net", "Deleting peer=%d\n", pnode->id);
                         DeleteNode(pnode);
                     }
                 }
@@ -1249,8 +1255,10 @@ void CConnman::ThreadSocketHandler()
                         if (nBytes > 0)
                         {
                             bool notify = false;
-                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify))
+                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify)) {
+                                LogPrint("net", "ReceiveMsgBytes failed. peer=%d\n", pnode->id);
                                 pnode->CloseSocketDisconnect();
+                            }
                             RecordBytesRecv(nBytes);
                             if (notify) {
                                 size_t nSizeAdded = 0;
@@ -1272,8 +1280,14 @@ void CConnman::ThreadSocketHandler()
                         else if (nBytes == 0)
                         {
                             // socket closed gracefully
-                            if (!pnode->fDisconnect)
-                                LogPrint("net", "socket closed\n");
+                            std::string strSendSize;
+                            if (pnode->nSendSize) strSendSize += strprintf(" nSendSize=%d", pnode->nSendSize);
+                            std::string strDisconnect;
+                            if (pnode->fDisconnect) strDisconnect += " fDisconnect=1";
+	                    int nTimeConnected = GetTime() - pnode->nTimeConnected;
+			    std::string strTimeConn;
+			    if (nTimeConnected) strTimeConn += strprintf(" nTimeConn=%d", nTimeConnected);
+                            LogPrint("net", "%s socket closed gracefully.%s%s%s %s ver=%d %speer=%d\n", pnode->fInbound ? "Inbound" : "Outbound", strDisconnect, strTimeConn, strSendSize, pnode->cleanSubVer, pnode->nVersion, fLogIPs ? pnode->addrName + " " : "", pnode->id);
                             pnode->CloseSocketDisconnect();
                         }
                         else if (nBytes < 0)
@@ -1282,8 +1296,7 @@ void CConnman::ThreadSocketHandler()
                             int nErr = WSAGetLastError();
                             if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                             {
-                                if (!pnode->fDisconnect)
-                                    LogPrintf("socket recv error %s\n", NetworkErrorString(nErr));
+                                LogPrintf("socket recv error=%s, fDisconnect=%d peer=%d\n", NetworkErrorString(nErr), pnode->fDisconnect, pnode->id);
                                 pnode->CloseSocketDisconnect();
                             }
                         }
