@@ -431,10 +431,7 @@ void CNode::CloseSocketDisconnect()
 {
     LOCK(cs_hSocket);
     if (hSocket != INVALID_SOCKET)
-    {
-        LogPrint(fFeeler ? "feeler" : "conn", "disconnecting %s%speer=%d\n", fDisconnect ? "(as requested) " : "", fFeeler ? "feeler " : "", id);
         CloseSocket(hSocket);
-    }
     fDisconnect = true;
 }
 
@@ -887,7 +884,7 @@ size_t CConnman::SocketSendData(CNode *pnode) const
                 int nErr = WSAGetLastError();
                 if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                 {
-                    LogPrintf("socket send error %s peer=%d\n", NetworkErrorString(nErr), pnode->id);
+                    LogPrint("net", "socket send error=%s, fDisconnect=%d peer=%d\n", NetworkErrorString(nErr), pnode->fDisconnect, pnode->id);
                     pnode->CloseSocketDisconnect();
                 }
             }
@@ -1182,6 +1179,7 @@ void CConnman::ThreadSocketHandler()
                     }
                     if (fDelete) {
                         vNodesDisconnected.remove(pnode);
+                        //LogPrint("net", "Deleting peer=%d\n", pnode->id);
                         DeleteNode(pnode);
                     }
                 }
@@ -1338,8 +1336,10 @@ void CConnman::ThreadSocketHandler()
                         if (nBytes > 0)
                         {
                             bool notify = false;
-                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify, pnode->tLastRecvBlk))
+                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify, pnode->tLastRecvBlk)) {
+                                LogPrint("net", "ReceiveMsgBytes failed. peer=%d\n", pnode->id);
                                 pnode->CloseSocketDisconnect();
+                            }
                             RecordBytesRecv(nBytes);
                             if (notify) { // at least one complete message received
                                 size_t nSizeAdded = 0;
@@ -1365,8 +1365,14 @@ void CConnman::ThreadSocketHandler()
                         else if (nBytes == 0)
                         {
                             // socket closed gracefully
-                            if (!pnode->fDisconnect)
-                                LogPrint("net", "socket closed\n");
+                            std::string strSendSize;
+                            if (pnode->nSendSize) strSendSize += strprintf(" nSendSize=%d", pnode->nSendSize);
+                            std::string strDisconnect;
+                            if (pnode->fDisconnect) strDisconnect += " fDisconnect=1";
+	                    int nTimeConnected = GetTime() - pnode->nTimeConnected;
+			    std::string strTimeConn;
+			    if (nTimeConnected) strTimeConn += strprintf(" nTimeConn=%d", nTimeConnected);
+                            LogPrint("net", "%s socket closed gracefully.%s%s%s %s ver=%d %speer=%d\n", pnode->fInbound ? "Inbound" : "Outbound", strDisconnect, strTimeConn, strSendSize, pnode->cleanSubVer.empty() ? "." : pnode->cleanSubVer, pnode->nVersion, fLogIPs ? pnode->addrName + " " : "", pnode->id);
 			    if (pnode->fInbound && (nTimeConnected == 30 || pnode->nVersion == 0 || pnode->cleanSubVer.empty())) {
                                 LogPrint("net", "Banning %s\n", pnode->addrName);
 			        Ban(pnode->addr, BanReasonNodeMisbehaving);
@@ -1379,8 +1385,7 @@ void CConnman::ThreadSocketHandler()
                             int nErr = WSAGetLastError();
                             if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                             {
-                                if (!pnode->fDisconnect)
-                                    LogPrintf("socket recv error %s\n", NetworkErrorString(nErr));
+                                LogPrintf("socket recv error=%s, fDisconnect=%d peer=%d\n", NetworkErrorString(nErr), pnode->fDisconnect, pnode->id);
                                 pnode->CloseSocketDisconnect();
                             }
                         }
