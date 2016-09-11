@@ -736,7 +736,7 @@ void EraseOrphansFor(NodeId peer)
             nErased += EraseOrphanTx(maybeErase->second.tx.GetHash());
         }
     }
-    if (nErased > 0) LogPrint("mempool", "Erased %d orphan tx from peer %d\n", nErased, peer);
+    if (nErased > 0) LogPrint("mempool", "Erased %d orphan tx from peer=%d\n", nErased, peer);
 }
 
 
@@ -3744,11 +3744,11 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, C
         bool ret = AcceptBlock(*pblock, state, chainparams, &pindex, fRequested, dbp, &fNewBlock);
         if (pfrom) {
             if (pindex) {
-                LogPrint("block", "from peer %d: block %s (%d)\n", pfrom->id, pblock->GetHash().ToString(), pindex->nHeight);
+                LogPrint("block", "recv block %s (%d) peer=%d\n", pblock->GetHash().ToString(), pindex->nHeight, pfrom->id);
                 mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
                 if (fNewBlock) pfrom->nLastBlockTime = GetTime();
             } else
-                LogPrint("block", "from peer %d: block %s\n", pfrom->id, pblock->GetHash().ToString());
+                LogPrint("block", "recv block %s peer=%d\n", pblock->GetHash().ToString(), pfrom->id);
         }
         CheckBlockIndex(chainparams.GetConsensus());
         if (!ret)
@@ -4810,7 +4810,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         }
                     }
                 } else
-                    LogPrint("net", "from peer %d: getdata %d - notfound!\n", pfrom->id, inv.ToString());
+                    LogPrint("net", "recv getdata %d - unknown! peer=%d\n", inv.ToString(), pfrom->id);
                 // disconnect node in case we have reached the outbound limit for serving historical blocks
                 // never disconnect whitelisted nodes
                 static const int nOneWeek = 7 * 24 * 60 * 60; // assume > 1 week = historical
@@ -4831,13 +4831,12 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                     if (!ReadBlockFromDisk(block, (*mi).second, consensusParams))
                         assert(!"cannot load block from disk");
                     if (inv.type == MSG_BLOCK) {
-                        LogPrint(fRecent ? "block" : "block2", "to peer %d: %s (%d)\n", pfrom->id, inv.ToString(), nHeight);
+                        LogPrint(fRecent ? "block" : "block2", "send %s (%d) peer=%d\n", inv.ToString(), nHeight, pfrom->id);
                         pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block);
                     } else if (inv.type == MSG_WITNESS_BLOCK) {
-                        LogPrint(fRecent ? "block" : "block2", "to peer %d: witness %s (%d)\n", pfrom->id, inv.ToString(), nHeight);
+                        LogPrint(fRecent ? "block" : "block2", "send witness %s (%d) peer=%d\n", inv.ToString(), nHeight, pfrom->id);
                         pfrom->PushMessage(NetMsgType::BLOCK, block);
-                    else if (inv.type == MSG_FILTERED_BLOCK)
-                    {
+                    } else if (inv.type == MSG_FILTERED_BLOCK) {
                         bool sendMerkleBlock = false;
                         CMerkleBlock merkleBlock;
                         {
@@ -4848,7 +4847,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             }
                         }
                         if (sendMerkleBlock) {
-                            LogPrint(fRecent ? "block" : "block2", "to peer %d:  merkle %s (%d)\n", pfrom->id, inv.ToString(), nHeight);
+                            LogPrint(fRecent ? "block" : "block2", "send merkle %s (%d) peer=%d\n", inv.ToString(), nHeight, pfrom->id);
                             pfrom->PushMessage(NetMsgType::MERKLEBLOCK, merkleBlock);
                             // CMerkleBlock just contains hashes, so also push any transactions in the block the client did not see
                             // This avoids hurting performance by pointlessly requiring a round-trip
@@ -4871,10 +4870,10 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         // instead we respond with the full, non-compact block.
                         if (mi->second->nHeight >= chainActive.Height() - 10) {
                             CBlockHeaderAndShortTxIDs cmpctblock(block);
-                            LogPrint(fRecent ? "block" : "block2", "to peer %d: compact %s (%d) size=%d\n", pfrom->id, inv.ToString(), nHeight, sizeof(cmpctblock));
+                            LogPrint(fRecent ? "block" : "block2", "send compact %s (%d) size=%d peer=%d\n", inv.ToString(), nHeight, sizeof(cmpctblock), pfrom->id);
                             pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::CMPCTBLOCK, cmpctblock);
                         } else
-                            LogPrint("block2", "to peer %d: %s (%d)\n", pfrom->id, inv.ToString(), nHeight);
+                            LogPrint("block2", "send %s (%d) peer=%d\n", inv.ToString(), nHeight, pfrom->id);
                             pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block);
                     }
 
@@ -4889,12 +4888,12 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         pfrom->PushMessage(NetMsgType::INV, vInv);
                         pfrom->hashContinue.SetNull();
                     }
-                } else
-                    LogPrint("block", "not sending %s (%d) to peer=%d\n", inv.ToString(), nHeight, pfrom->id);
+                } else if (send)
+                    LogPrint("block", "send notfound %s (%d) peer=%d\n", inv.ToString(), nHeight, pfrom->id);
             }
             else if (inv.type == MSG_TX || inv.type == MSG_WITNESS_TX)
             {
-                LogPrint("tx2", "from peer %d: getdata %s\n", pfrom->id, inv.ToString());
+                LogPrint("tx2", "recv getdata %s peer=%d\n", inv.ToString(), pfrom->id);
                 // Send stream from relay memory
                 bool push = false;
                 auto mi = mapRelay.find(inv.hash);
@@ -4912,10 +4911,10 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                 }
                 if (!push) {
                     vNotFound.push_back(inv);
-                    LogPrint("tx", "to peer %d: notfound %s\n", pfrom->id, inv.ToString());
+                    LogPrint("tx", "send notfound %s peer=%d\n", inv.ToString(), pfrom->id);
                 }
             } else
-                LogPrint("net", "from peer %d: getdata %s\n", pfrom->id, SanitizeString(inv.ToString()));
+                LogPrint("net", "recv getdata %s peer=%d\n", inv.ToString(), pfrom->id); // Should never get here
 
             // Track requests for our stuff.
             GetMainSignals().Inventory(inv.hash);
