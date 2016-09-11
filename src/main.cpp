@@ -5448,7 +5448,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             }
             resp.txn[i] = block.vtx[req.indexes[i]];
         }
-        LogPrint("block", "from peer %d: getblocktxn %s (%d). Sending blocktxn (%d indexes)\n", pfrom->id, req.blockhash.ToString(), it->second->nHeight, i);
+        LogPrint("block", "recv getblocktxn %s (%d). send blocktxn (%d indexes) peer=%d\n", req.blockhash.ToString(), it->second->nHeight, i, pfrom->id);
         pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCKTXN, resp);
     }
 
