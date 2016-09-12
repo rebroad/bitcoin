@@ -265,6 +265,8 @@ struct CNodeState {
     int64_t nDownloadingSince;
     int nBlocksInFlight;
     int nBlocksInFlightValidHeaders;
+    //! Whether we have requested headers.
+    bool fExpectingHeaders;
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload;
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -283,6 +285,7 @@ struct CNodeState {
         nDownloadingSince = 0;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
+        fExpectingHeaders = false;
         fPreferredDownload = false;
         fPreferHeaders = false;
     }
@@ -4737,6 +4740,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     // not a direct successor.
                     pfrom->PushMessage(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), inv.hash);
                     CNodeState *nodestate = State(pfrom->GetId());
+                    nodestate->fExpectingHeaders = true;
                     if (CanDirectFetch(chainparams.GetConsensus()) &&
                         nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
                         // BUIP010 Xtreme Thinblocks: begin section
@@ -5102,7 +5106,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     return error("invalid header received");
                 }
             }
+            LogPrint(nodestate->fExpectingHeaders ? "block2" : "block", "recv header %s (%d) peer=%d\n", header.GetHash().ToString(), pindexLast->nHeight, pfrom->id);
         }
+        nodestate->fExpectingHeaders = false;
 
         if (pindexLast)
             UpdateBlockAvailability(pfrom->GetId(), pindexLast->GetBlockHash());
@@ -5113,6 +5119,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             // from there instead.
             LogPrint("block", "send more getheaders (%d) to end peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
             pfrom->PushMessage(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexLast), uint256());
+            nodestate->fExpectingHeaders = true;
         }
 
         bool fCanDirectFetch = CanDirectFetch(chainparams.GetConsensus());
@@ -5898,6 +5905,7 @@ bool SendMessages(CNode* pto)
                     pindexStart = pindexStart->pprev;
                 LogPrint("block", "send getheaders (%d) to end peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);
                 pto->PushMessage(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexStart), uint256());
+                state.fExpectingHeaders = true;
             }
         }
 
