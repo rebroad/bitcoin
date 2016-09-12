@@ -184,9 +184,8 @@ void AdvertiseLocal(CNode *pnode)
         {
             addrLocal.SetIP(pnode->GetAddrLocal());
         }
-        if (addrLocal.IsRoutable())
-        {
-            LogPrint("net", "AdvertiseLocal: advertising address %s\n", addrLocal.ToString());
+        if (addrLocal.IsRoutable()) {
+            LogPrint("net", "%s: advertising local routable address %s to peer=%d\n", __func__, addrLocal.ToString(), pnode->id);
             FastRandomContext insecure_rand;
             pnode->PushAddress(addrLocal, insecure_rand);
         }
@@ -707,7 +706,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
                 return false;
 
         if (msg.in_data && msg.hdr.nMessageSize > MAX_PROTOCOL_MESSAGE_LENGTH) {
-            LogPrint("net", "Oversized message from peer=%i, disconnecting\n", GetId());
+            LogPrint("net", "Oversized message. Disconnecting peer=%i\n", GetId());
             return false;
         }
 
@@ -2782,7 +2781,7 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 {
     size_t nMessageSize = msg.data.size();
     size_t nTotalSize = nMessageSize + CMessageHeader::HEADER_SIZE;
-    LogPrint("net", "sending %s (%d bytes) peer=%d\n",  SanitizeString(msg.command.c_str()), nMessageSize, pnode->id);
+    LogPrint("net", "sending: %s (%d bytes) peer=%d\n",  SanitizeString(msg.command.c_str()), nMessageSize, pnode->id);
 
     std::vector<unsigned char> serializedHeader;
     serializedHeader.reserve(CMessageHeader::HEADER_SIZE);
