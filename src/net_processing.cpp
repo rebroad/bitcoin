@@ -1073,7 +1073,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                 static const int nOneWeek = 7 * 24 * 60 * 60; // assume > 1 week = historical
                 if (send && connman.OutboundTargetReached(true) && ( ((pindexBestHeader != NULL) && (pindexBestHeader->GetBlockTime() - mi->second->GetBlockTime() > nOneWeek)) || inv.type == MSG_FILTERED_BLOCK) && !pfrom->fWhitelisted)
                 {
-                    LogPrint("net", "historical block serving limit reached, disconnect peer=%d\n", pfrom->GetId());
+                    LogPrint("block", "historical block serving limit reached, disconnect peer=%d\n", pfrom->GetId());
 
                     //disconnect node
                     pfrom->fDisconnect = true;
@@ -1602,14 +1602,20 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             if (interruptMsgProc)
                 return true;
 
-            bool fAlreadyHave = AlreadyHave(inv);
-            LogPrint("net", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
-
             if (inv.type == MSG_TX) {
+                bool fAlreadyHave = AlreadyHave(inv);
                 inv.type |= nFetchFlags;
             }
 
             if (inv.type == MSG_BLOCK) {
+                BlockMap::iterator it = mapBlockIndex.find(inv.hash);
+                bool fAlreadyHave = false;
+                if (it == mapBlockIndex.end())
+                    LogPrint("block", "recv inv %s (new) peer=%d\n", inv.ToString(), pfrom->id);
+                else {
+                    fAlreadyHave = true; // already have the headers
+                    LogPrint("block", "recv inv %s (%d) peer=%d\n", inv.ToString(), it->second->nHeight, pfrom->id);
+                }
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
                 if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
                     // We used to request the full block here, but since headers-announcements are now the
@@ -2424,7 +2430,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             // the main chain -- this shouldn't really happen.  Bail out on the
             // direct fetch and rely on parallel download instead.
             if (!chainActive.Contains(pindexWalk)) {
-                LogPrint("net", "Large reorg, won't direct fetch to %s (%d)\n",
+                LogPrint("block", "Large reorg, won't direct fetch to %s (%d)\n",
                         pindexLast->GetBlockHash().ToString(),
                         pindexLast->nHeight);
             } else {
@@ -3117,8 +3123,8 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                     // If the peer's chain has this block, don't inv it back.
                     if (!PeerHasHeader(&state, pindex)) {
                         pto->PushInventory(CInv(MSG_BLOCK, hashToAnnounce));
-                        LogPrint("block", "send inv block %s (%d) peer=%d\n",
-                            hashToAnnounce.ToString(), pindex->nHeight, pto->id);
+                        LogPrint("block", "send inv block %s %s peer=%d\n",
+                            hashToAnnounce.ToString(), strBlkInfo(pindex), pto->id);
                     }
                 }
             }
@@ -3301,7 +3307,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->nStallingSince == 0) {
                     State(staller)->nStallingSince = nNow;
-                    LogPrint("net", "Stall started peer=%d\n", staller);
+                    LogPrint("block", "Stall started peer=%d\n", staller);
                 }
             }
         }
