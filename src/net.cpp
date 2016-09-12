@@ -45,6 +45,8 @@
 
 // We add a random period time (0 to 1 seconds) to feeler connections to prevent synchronization.
 #define FEELER_SLEEP_WINDOW 1
+// Run the feeler connection loop once every minute or 60 seconds.
+static const int FEELER_INTERVAL = 60;
 
 #if !defined(HAVE_MSG_NOSIGNAL) && !defined(MSG_NOSIGNAL)
 #define MSG_NOSIGNAL 0
