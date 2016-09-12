@@ -261,7 +261,7 @@ void PushNodeVersion(CNode *pnode, CConnman& connman, int64_t nTime)
     std::string strThem;
     if (fLogIPs)
         strThem += strprintf("them=%s, ", addrYou.ToString());
-    LogPrint(pnode->fFeeler ? "feeler" : "net", "send version message: version %d, blocks=%d, relay=%s, us=%s, %speer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, fRelay ? "1" : "0", addrMe.ToString(), strThem, nodeid);
+    LogPrint(pnode->fFeeler ? "feeler" : "net", "send version %d, blocks=%d, relay=%s, services=0x%x, us=%s, %speer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, fRelay ? "1" : "0", nLocalNodeServices, addrMe.ToString(), strThem, nodeid);
 }
 
 void InitializeNode(CNode *pnode, CConnman& connman) {
@@ -1298,7 +1298,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
         }
         if (!pfrom->fFeeler && pfrom->nServicesExpected & ~pfrom->nServices)
         {
-            LogPrint("net", "recv version does not offer the expected services (%08x offered, %08x expected); disconnecting peer=%d\n", pfrom->nServices, pfrom->nServicesExpected, pfrom->id);
+            LogPrint("net", "recv version does not offer the expected services (0x%x offered, 0x%x expected); disconnecting peer=%d\n", pfrom->nServices, pfrom->nServicesExpected, pfrom->id);
             connman.PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
                                strprintf("Expected to offer services %08x", pfrom->nServicesExpected)));
             pfrom->fDisconnect = true;
@@ -1404,9 +1404,10 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
         if (fLogIPs)
             remoteAddr = ", them=" + pfrom->addr.ToString();
 
-        LogPrint(fFeeler ? "feeler" : "net", "recv version: %s: version %d, blocks=%d, us=%s%s, peer=%d\n",
+        LogPrint(fFeeler ? "feeler" : "net", "recv version: %s: version %d, blocks=%d, relay=%s, services=0x%x us=%s%s, peer=%d\n",
                   pfrom->cleanSubVer, pfrom->nVersion,
-                  pfrom->nStartingHeight, addrMe.ToString(), remoteAddr, pfrom->id);
+                  pfrom->nStartingHeight, pfrom->fRelayTxes ? "1" : "0", nServiceInt, addrMe.ToString(),
+                  remoteAddr, pfrom->id);
 
         int64_t nTimeOffset = nTime - GetTime();
         pfrom->nTimeOffset = nTimeOffset;
