@@ -170,11 +170,10 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         return READ_STATUS_CHECKBLOCK_FAILED;
     }
 
-    LogPrint("cmpctblock", "Successfully reconstructed block %s with %lu txn prefilled, %lu txn from mempool and %lu txn requested\n", header.GetHash().ToString(), prefilled_count, mempool_count, vtx_missing.size());
-    if (vtx_missing.size() < 5) {
-        for (const auto& tx : vtx_missing)
-            LogPrint("cmpctblock", "Reconstructed block %s required tx %s\n", header.GetHash().ToString(), tx->GetHash().ToString());
-    }
+    std::string strPrefilled;
+    if (prefilled_count != 1) // Doesn't this always equal 1?
+        strPrefilled += strprintf("prefilled=%lu ", prefilled_count);
+    LogPrint("block", "made block %s size=%d txs: %smempool=%lu req=%lu\n", header.GetHash().ToString(), ::GetSerializeSize(block, SER_DISK, PROTOCOL_VERSION), strPrefilled, mempool_count, vtx_missing.size());
 
     return READ_STATUS_OK;
 }
