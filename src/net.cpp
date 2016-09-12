@@ -364,7 +364,7 @@ static CAddress GetBindAddress(SOCKET sock)
     return addr_bind;
 }
 
-CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure)
+CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure, bool fFeeler)
 {
     if (pszDest == nullptr) {
         if (IsLocal(addrConnect))
@@ -380,7 +380,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     }
 
     /// debug print
-    LogPrint(BCLog::NET, "trying connection %s lastseen=%s\n",
+    LogPrint(BCLog::NET, "%s connection %s lastseen=%s\n", fFeeler ? "feeler" : "trying",
         pszDest ? pszDest : addrConnect.ToString(),
         pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
@@ -1835,7 +1835,6 @@ void CConnman::ThreadOpenConnections()
                 int randsleep = GetRandInt(FEELER_SLEEP_WINDOW * 1000);
                 if (!interruptNet.sleep_for(std::chrono::milliseconds(randsleep)))
                     return;
-                LogPrint(BCLog::NET, "Making feeler connection to %s\n", addrConnect.ToString());
             }
 
             int64_t nStartTime = GetTimeMicros();
@@ -1958,7 +1957,7 @@ bool CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
     } else if (FindNode(std::string(pszDest)))
         return false;
 
-    CNode* pnode = ConnectNode(addrConnect, pszDest, fCountFailure);
+    CNode* pnode = ConnectNode(addrConnect, pszDest, fCountFailure, fFeeler);
 
     if (!pnode)
         return false;
