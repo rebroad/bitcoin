@@ -4743,6 +4743,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     // time the block arrives, the header chain leading up to it is already validated. Not
                     // doing this will result in the received block being rejected as an orphan in case it is
                     // not a direct successor.
+                    LogPrint("block", "send getheaders (%d) %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                     pfrom->PushMessage(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), inv.hash);
                     CNodeState *nodestate = State(pfrom->GetId());
                     nodestate->fExpectingHeaders = true;
@@ -4765,7 +4766,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                                     ss << filterMemPool;
                                     pfrom->PushMessage(NetMsgType::GET_XTHIN, ss);
                                     MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
-                                    LogPrint("thin", "Requesting Thinblock %s from peer %s (%d)\n", inv2.hash.ToString(), pfrom->addrName.c_str(),pfrom->id);
+                                    LogPrint("thin", "send get_xthin %s peer=%d\n", inv2.hash.ToString(), pfrom->id); // REBTODO - move to conform commit
                                 }
                             }
                             else {
@@ -4780,10 +4781,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                                     ss << inv2;
                                     ss << filterMemPool;
                                     pfrom->PushMessage(NetMsgType::GET_XTHIN, ss);
-                                    LogPrint("thin", "Requesting Thinblock %s from peer %s (%d)\n", inv2.hash.ToString(), pfrom->addrName.c_str(),pfrom->id);
+                                    LogPrint("thin", "send get_xthin %s peer=%d\n", inv2.hash.ToString(), pfrom->id); // REBTODO - move to conform commit
                                 }
                                 else {
-                                    LogPrint("thin", "Requesting Regular Block %s from peer %s (%d)\n", inv2.hash.ToString(), pfrom->addrName.c_str(),pfrom->id);
+                                    LogPrint("thin", "send getdata block %s peer=%d\n", inv2.hash.ToString(), pfrom->id); // REBTODO - move to conform commit
                                     vToFetch.push_back(inv2);
                                 }
                                 MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
@@ -4792,11 +4793,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         else {
                             vToFetch.push_back(inv2);
                             MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
-                            LogPrint("thin", "Requesting Regular Block %s from peer %s (%d)\n", inv2.hash.ToString(), pfrom->addrName.c_str(),pfrom->id);
+                            LogPrint("thin", "send getdata block %s peer=%d\n", inv2.hash.ToString(), pfrom->id);
                         }
                         // BUIP010 Xtreme Thinblocks: end section
                     }
-                    LogPrint("block", "send getheaders (%d) to %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                 }
             } else
                 LogPrint("net2", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
