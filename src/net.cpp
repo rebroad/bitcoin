@@ -2596,7 +2596,7 @@ void CNode::AskFor(const CInv& inv)
     else
         mapAlreadyAskedFor.insert(std::make_pair(inv.hash, nRequestTime));
     mapAskFor.insert(std::make_pair(nRequestTime, inv));
-    LogPrint("net", "askfor(%d,%d,%d) %s  (t-%s) peer=%d\n", mapAskFor.size(), setAskFor.size(), mapAlreadyAskedFor.size(), inv.ToString(), strAge((nRequestTime-nNow)/1000000), id);
+    LogPrint("tx", "askfor(%d,%d,%d) %s  (t-%s) peer=%d\n", mapAskFor.size(), setAskFor.size(), mapAlreadyAskedFor.size(), inv.ToString(), strAge((nRequestTime-nNow)/1000000), id);
 }
 
 void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
