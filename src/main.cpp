@@ -4297,9 +4297,13 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                     || inv.type == MSG_THINBLOCK || inv.type == MSG_XTHINBLOCK)
             {
                 bool send = false;
+                bool fRecent = false;
+                int nHeight = 0;
                 BlockMap::iterator mi = mapBlockIndex.find(inv.hash);
-                if (mi != mapBlockIndex.end())
-                {
+                if (mi != mapBlockIndex.end()) {
+                    nHeight = mi->second->nHeight;
+                    if (nHeight > chainActive.Height()-3)
+                        fRecent=true;
                     if (chainActive.Contains(mi->second)) {
                         send = true;
                     } else {
@@ -4347,8 +4351,8 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             if (nSizeThinBlock < nSizeBlock) {
                                 pfrom->PushMessage(NetMsgType::XTHINBLOCK, xThinBlock);
                                 sendFullBlock = false;
-                                LogPrint("thin", "Sent xthinblock - size: %d vs block size: %d => tx hashes: %d transactions: %d  peerid=%d\n",
-                                         nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(), pfrom->id);
+                                LogPrint("thin", "recv getdata %s (%d). send xthinblock - size: %d vs block size: %d => tx hashes: %d transactions: %d peerid=%d\n",
+                                         inv.ToString(), nHeight, nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(), pfrom->id);
                             }
                         }
                     }
