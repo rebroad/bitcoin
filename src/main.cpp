@@ -4314,7 +4314,8 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             LogPrintf("%s: ignoring request from peer=%i for old block that isn't in the main chain\n", __func__, pfrom->GetId());
                         }
                     }
-                }
+                } else // Should be considered misbehaviour?
+                    LogPrint("block2", "recv getdata %d - UNKNOWN! peer=%d\n", inv.ToString(), pfrom->id);
                 // disconnect node in case we have reached the outbound limit for serving historical blocks
                 // never disconnect whitelisted nodes
                 static const int nOneWeek = 7 * 24 * 60 * 60; // assume > 1 week = historical
@@ -4384,10 +4385,12 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         pfrom->PushMessage(NetMsgType::INV, vInv);
                         pfrom->hashContinue.SetNull();
                     }
-                }
+                } else if (send)
+                    LogPrint("block2", "recv getdata %s (%d). NO DATA. peer=%d\n", inv.ToString(), mi->second->nHeight, pfrom->id);
             }
             else if (inv.IsKnownType())
             {
+                LogPrint("tx2", "recv getdata %s peer=%d\n", inv.ToString(), pfrom->id);
                 // Send stream from relay memory
                 bool pushed = false;
                 {
@@ -4409,8 +4412,10 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                 }
                 if (!pushed) {
                     vNotFound.push_back(inv);
+                    LogPrint("tx2", "recv getdata %s. send notfound. peer=%d\n", inv.ToString(), pfrom->id);
                 }
-            }
+            } else
+                LogPrint("net2", "recv getdata %s peer=%d\n", inv.ToString(), pfrom->id); // Should never get here
 
             // Track requests for our stuff.
             GetMainSignals().Inventory(inv.hash);
@@ -4824,12 +4829,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             Misbehaving(pfrom->GetId(), 20);
             return error("message getdata size() = %u", vInv.size());
         }
-
-        if (fDebug || (vInv.size() != 1))
-            LogPrint("net2", "received getdata (%u invsz) peer=%d\n", vInv.size(), pfrom->id);
-
-        if ((fDebug && vInv.size() > 0) || (vInv.size() == 1))
-            LogPrint("net2", "received getdata for: %s peer=%d\n", vInv[0].ToString(), pfrom->id);
 
         pfrom->vRecvGetData.insert(pfrom->vRecvGetData.end(), vInv.begin(), vInv.end());
         ProcessGetData(pfrom, chainparams.GetConsensus());
