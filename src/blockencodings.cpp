@@ -170,11 +170,7 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         return READ_STATUS_INVALID;
     }
 
-    LogPrint("cmpctblock", "Successfully reconstructed block %s with %lu txn prefilled, %lu txn from mempool and %lu txn requested\n", header.GetHash().ToString(), prefilled_count, mempool_count, vtx_missing.size());
-    if (vtx_missing.size() < 5) {
-        for(const CTransaction& tx : vtx_missing)
-            LogPrint("cmpctblock", "Reconstructed block %s required tx %s\n", header.GetHash().ToString(), tx.GetHash().ToString());
-    }
+    LogPrint("block", "made block %s size=%d with txns: prefilled=%lu mempool=%lu requested=%lu\n", header.GetHash().ToString(), ::GetSerializeSize(block, SER_DISK, PROTOCOL_VERSION), prefilled_count, mempool_count, vtx_missing.size());
 
     return READ_STATUS_OK;
 }
