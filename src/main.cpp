@@ -3397,8 +3397,13 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, c
         // Store to disk
         CBlockIndex *pindex = NULL;
         bool ret = AcceptBlock(*pblock, state, chainparams, &pindex, fRequested, dbp);
-        if (pindex && pfrom) {
-            mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
+        if (pfrom) {
+            if (pindex) {
+                LogPrint("block", "recv block %s (%d) peer=%d\n", pblock->GetHash().ToString(), pindex->nHeight, pfrom->id);
+                mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
+                if (fNewBlock) pfrom->nLastBlockTime = GetTime();
+            } else
+                LogPrint("block", "recv block %s peer=%d\n", pblock->GetHash().ToString(), pfrom->id);
         }
         CheckBlockIndex(chainparams.GetConsensus());
         if (!ret)
@@ -5334,7 +5339,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         CInv inv(MSG_XTHINBLOCK, thinBlockTx.blockhash);
         LogPrint("net", "received blocktxs for %s peer=%d\n", inv.hash.ToString(), pfrom->id);
         if (!pfrom->mapThinBlocksInFlight.count(inv.hash)) {
-            LogPrint("thin", "ThinblockTx received but not requested %s  peer=%d\n",inv.hash.ToString(), pfrom->id);
+            LogPrint("thin", "recv xblocktx %s was not requested. peer=%d\n",inv.hash.ToString(), pfrom->id);
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 20);
         }
@@ -5390,7 +5395,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // We use MSG_TX here even though we refer to blockhash because we need to track
         // how many xblocktx requests we make in case of DOS
         CInv inv(MSG_TX, thinRequestBlockTx.blockhash);
-        LogPrint("thin", "recv get_xblocktx %s peer=%d\n", inv.hash.ToString(), pfrom->id);
+        LogPrint("thin", "recv get_xblocktx %s peer=%d\n", inv.hash.ToString(), pfrom->id); // REBTODO - move to the correct commit
 
         // Check for Misbehaving and DOS
         // If they make more than 20 requests in 10 minutes then disconnect them
@@ -5439,7 +5444,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         vRecv >> block;
 
         CInv inv(MSG_BLOCK, block.GetHash());
-        LogPrint("block", "recv block %s peer=%d\n", inv.hash.ToString(), pfrom->id);
 
         pfrom->AddInventoryKnown(inv);
 
