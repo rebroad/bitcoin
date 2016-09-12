@@ -2172,8 +2172,7 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
       strAge(GetAdjustedTime()-chainActive.Tip()->GetBlockTime()), log(chainActive.Tip()->nChainWork.getdouble())/log(2.0),
       pindexBestHeader->nHeight - chainActive.Height(), (unsigned long)chainActive.Tip()->nTx);
     if (!warningMessages.empty())
-        LogPrintf(" warning='%s'", boost::algorithm::join(warningMessages, ", "));
-    LogPrintf("\n");
+        LogPrintf(" warning='%s'\n", boost::algorithm::join(warningMessages, ", "));
 
 }
 
