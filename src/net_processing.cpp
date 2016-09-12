@@ -1275,7 +1275,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         {
             connman.SetServices(pfrom->addr, pfrom->nServices);
         }
-        if (pfrom->nServicesExpected & ~pfrom->nServices)
+        if (!pfrom->fFeeler && pfrom->nServicesExpected & ~pfrom->nServices)
         {
             LogPrint("net", "recv version does not offer the expected services (%08x offered, %08x expected); disconnecting peer=%d\n", pfrom->nServices, pfrom->nServicesExpected, pfrom->id);
             connman.PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
