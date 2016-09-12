@@ -666,7 +666,7 @@ void EraseOrphansFor(NodeId peer)
             ++nErased;
         }
     }
-    if (nErased > 0) LogPrint("mempool", "Erased %d orphan tx from peer %d\n", nErased, peer);
+    if (nErased > 0) LogPrint("mempool", "Erased %d orphan tx from peer=%d\n", nErased, peer);
 }
 
 
@@ -4431,7 +4431,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 {
     const CChainParams& chainparams = Params();
     RandAddSeedPerfmon();
-    LogPrint("net2", "received: %s (%u bytes) peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->id);
+    LogPrint("net2", "recv %s (%u bytes) peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->id);
     if (mapArgs.count("-dropmessagestest") && GetRand(atoi(mapArgs["-dropmessagestest"])) == 0)
     {
         LogPrintf("dropmessagestest DROPPING RECV MESSAGE\n");
@@ -4706,7 +4706,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->AddInventoryKnown(inv);
 
             bool fAlreadyHave = AlreadyHave(inv);
-            LogPrint("net2", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
+            LogPrint("net2", "recv inv %s (%s) peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
 
             if (inv.type == MSG_TX) {
                 if (fBlocksOnly)
@@ -4778,7 +4778,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         }
                         // BUIP010 Xtreme Thinblocks: end section
                     }
-                    LogPrint("block", "getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
+                    LogPrint("block", "send getheaders (%d) to %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                 }
             }
 
@@ -4832,7 +4832,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (pindex)
             pindex = chainActive.Next(pindex);
         int nLimit = 500;
-        LogPrint("block", "getblocks %d to %s limit %d from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), nLimit, pfrom->id);
+        LogPrint("block", "recv getblocks %d to %s limit %d peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), nLimit, pfrom->id);
         for (; pindex; pindex = chainActive.Next(pindex))
         {
             if (pindex->GetBlockHash() == hashStop)
@@ -4869,7 +4869,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         LOCK(cs_main);
         if (IsInitialBlockDownload() && !pfrom->fWhitelisted) {
-            LogPrint("block", "Ignoring getheaders from peer=%d because node is in initial block download\n", pfrom->id);
+            LogPrint("block", "recv getheaders. Ignoring because node is in initial block download. peer=%d\n", pfrom->id);
             return true;
         }
 
@@ -4894,7 +4894,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // we must use CBlocks, as CBlockHeaders won't include the 0x00 nTx count at the end
         vector<CBlock> vHeaders;
         int nLimit = MAX_HEADERS_RESULTS;
-        LogPrint("block", "getheaders %d to %s from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), pfrom->id);
+        LogPrint("block", "recv getheaders (%d) to %s peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), pfrom->id);
         for (; pindex; pindex = chainActive.Next(pindex))
         {
             vHeaders.push_back(pindex->GetBlockHeader());
@@ -5101,7 +5101,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             // Headers message had its maximum size; the peer may have more headers.
             // TODO: optimize: if pindexLast is an ancestor of chainActive.Tip or pindexBestHeader, continue
             // from there instead.
-            LogPrint("block", "more getheaders (%d) to end to peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
+            LogPrint("block", "send more getheaders (%d) to end peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
             pfrom->PushMessage(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexLast), uint256());
         }
 
@@ -5139,12 +5139,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     }
                     vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
                     MarkBlockAsInFlight(pfrom->GetId(), pindex->GetBlockHash(), chainparams.GetConsensus(), pindex);
-                    LogPrint("block", "Requesting block %s from  peer=%d\n",
-                            pindex->GetBlockHash().ToString(), pfrom->id);
-                }
-                if (vGetData.size() > 1) {
-                    LogPrint("block", "Downloading blocks toward %s (%d) via headers direct fetch\n",
-                            pindexLast->GetBlockHash().ToString(), pindexLast->nHeight);
+                    LogPrint("block", "send getdata block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(), pindex->nHeight, pfrom->id);
                 }
                 if (vGetData.size() > 0) {
                     pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
@@ -5378,7 +5373,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // We use MSG_TX here even though we refer to blockhash because we need to track
         // how many xblocktx requests we make in case of DOS
         CInv inv(MSG_TX, thinRequestBlockTx.blockhash);
-        LogPrint("thin", "received get_xblocktx for %s peer=%d\n", inv.hash.ToString(), pfrom->id);
+        LogPrint("thin", "recv get_xblocktx %s peer=%d\n", inv.hash.ToString(), pfrom->id);
 
         // Check for Misbehaving and DOS
         // If they make more than 20 requests in 10 minutes then disconnect them
@@ -5427,7 +5422,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         vRecv >> block;
 
         CInv inv(MSG_BLOCK, block.GetHash());
-        LogPrint("block", "received block %s peer=%d\n", inv.hash.ToString(), pfrom->id);
+        LogPrint("block", "recv block %s peer=%d\n", inv.hash.ToString(), pfrom->id);
 
         pfrom->AddInventoryKnown(inv);
 
@@ -5633,14 +5628,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     ss << ": hash " << hash.ToString();
                 }
                 if (strMsg == NetMsgType::BLOCK)
-                    LogPrint("block", "Reject from peer=%d %s\n", pfrom->id, SanitizeString(ss.str()));
+                    LogPrint("block", "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->id);
                 else if (strMsg == NetMsgType::TX)
-                    LogPrint("tx", "Reject from peer=%d %s\n", pfrom->id, SanitizeString(ss.str()));
+                    LogPrint("tx", "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->id);
                 else
-                    LogPrint("net", "Reject from peer=%d %s\n", pfrom->id, SanitizeString(ss.str()));
+                    LogPrint("net", "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->id);
             } catch (const std::ios_base::failure&) {
                 // Avoid feedback loops by preventing reject messages from triggering a new reject message.
-                LogPrint("net", "Unparseable reject message received\n");
+                LogPrint("net", "recv reject. unable to parse. peer=%d\n", pfrom->id);
             }
         }
     }
@@ -5891,7 +5886,7 @@ bool SendMessages(CNode* pto)
                    got back an empty response.  */
                 if (pindexStart->pprev)
                     pindexStart = pindexStart->pprev;
-                LogPrint("block", "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);
+                LogPrint("block", "send getheaders (%d) to end peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);
                 pto->PushMessage(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexStart), uint256());
             }
         }
@@ -5992,18 +5987,18 @@ bool SendMessages(CNode* pto)
                     // setInventoryKnown to track this.)
                     if (!PeerHasHeader(&state, pindex)) {
                         pto->PushInventory(CInv(MSG_BLOCK, hashToAnnounce));
-                        LogPrint("block", "%s: sending inv peer=%d hash=%s\n", __func__,
-                            pto->id, hashToAnnounce.ToString());
+                        LogPrint("block", "send inv block %s (%d) peer=%d\n",
+                            hashToAnnounce.ToString(), pindex->nHeight, pto->id);
                     }
                 }
             } else if (!vHeaders.empty()) {
                 if (vHeaders.size() > 1) {
-                    LogPrint("block", "%s: %u headers, range (%s, %s), to peer=%d\n", __func__,
+                    LogPrint("block", "send %u headers (%s, %s) peer=%d\n",
                             vHeaders.size(),
                             vHeaders.front().GetHash().ToString(),
                             vHeaders.back().GetHash().ToString(), pto->id);
                 } else {
-                    LogPrint("block", "%s: sending header %s to peer=%d\n", __func__,
+                    LogPrint("block", "send header %s peer=%d\n",
                             vHeaders.front().GetHash().ToString(), pto->id);
                 }
                 pto->PushMessage(NetMsgType::HEADERS, vHeaders);
@@ -6110,8 +6105,8 @@ bool SendMessages(CNode* pto)
                             ss << filterMemPool;
                             pto->PushMessage(NetMsgType::GET_XTHIN, ss);
                             MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), consensusParams, pindex);
-                            LogPrint("thin", "Requesting thinblock %s (%d) from peer %s (%d)\n", pindex->GetBlockHash().ToString(),
-                                     pindex->nHeight, pto->addrName.c_str(), pto->id);
+                            LogPrint("thin", "send get_xthin %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
+                                     pindex->nHeight, pto->id);
                         }
                     }
                     else {
@@ -6125,13 +6120,13 @@ bool SendMessages(CNode* pto)
                             ss << CInv(MSG_XTHINBLOCK, pindex->GetBlockHash());
                             ss << filterMemPool;
                             pto->PushMessage(NetMsgType::GET_XTHIN, ss);
-                            LogPrint("thin", "Requesting Thinblock %s (%d) from peer %s (%d)\n", pindex->GetBlockHash().ToString(),
-                                     pindex->nHeight, pto->addrName.c_str(), pto->id);
+                            LogPrint("thin", "send get_xthin %s (%d) peer%d\n", pindex->GetBlockHash().ToString(),
+                                     pindex->nHeight, pto->id);
                         }
                         else {
                             vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
-                            LogPrint("net", "Requesting block %s (%d) from peer %s (%d)\n", pindex->GetBlockHash().ToString(),
-                                     pindex->nHeight, pto->addrName.c_str(), pto->id);
+                            LogPrint("net", "send getdata block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
+                                     pindex->nHeight, pto->id);
                         }
                         MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), consensusParams, pindex);
                     }
@@ -6139,7 +6134,7 @@ bool SendMessages(CNode* pto)
                 else {
                     vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
                     MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), consensusParams, pindex);
-                    LogPrint("block", "Requesting block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
+                    LogPrint("block", "send getdata block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
                                      pindex->nHeight, pto->id);
                 }
                 // BUIP010 Xtreme Thinblocks: end section
@@ -6160,8 +6155,7 @@ bool SendMessages(CNode* pto)
             const CInv& inv = (*pto->mapAskFor.begin()).second;
             if (!AlreadyHave(inv))
             {
-                if (fDebug)
-                    LogPrint("tx2", "Requesting %s peer=%d\n", inv.ToString(), pto->id);
+                LogPrint("tx2", "send getdata %s peer=%d\n", inv.ToString(), pto->id);
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
                 {
