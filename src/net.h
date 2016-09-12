@@ -348,6 +348,7 @@ public:
     // the network or wire types and the cleaned string used when displayed or logged.
     std::string strSubVer, cleanSubVer;
     bool fWhitelisted; // This peer can bypass DoS banning.
+    unsigned int nBlockSize; // Used by ProcessNewBlock() for debug message.
     bool fOneShot;
     bool fClient;
     bool fInbound;
