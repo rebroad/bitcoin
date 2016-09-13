@@ -1643,8 +1643,12 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             if (inv.type == MSG_TX) {
                 bool fAlreadyHave = AlreadyHave(inv);
                 inv.type |= nFetchFlags;
-            }
-
+                pfrom->AddInventoryKnown(inv);
+                if (fBlocksOnly)
+                    LogPrint("tx", "recv inv %s in violation of protocol peer=%d\n", inv.ToString(), pfrom->id);
+                else if (!fAlreadyHave && !fImporting && !fReindex && !IsInitialBlockDownload())
+                    pfrom->AskFor(inv);
+            } else
             if (inv.type == MSG_BLOCK) {
                 BlockMap::iterator it = mapBlockIndex.find(inv.hash);
                 bool fAlreadyHave = false;
@@ -1664,14 +1668,6 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), inv.hash));
                     LogPrint("block", "send getheaders (%d) to %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                 }
-            }
-            else
-            {
-                pfrom->AddInventoryKnown(inv);
-                if (fBlocksOnly)
-                    LogPrint("tx", "recv inv %s in violation of protocol peer=%d\n", inv.ToString(), pfrom->id);
-                else if (!fAlreadyHave && !fImporting && !fReindex && !IsInitialBlockDownload())
-                    pfrom->AskFor(inv);
             }
 
             // Track requests for our stuff
