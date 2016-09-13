@@ -4706,17 +4706,26 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->AddInventoryKnown(inv);
 
             bool fAlreadyHave = AlreadyHave(inv);
-            LogPrint("net2", "recv inv %s (%s) peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
 
             if (inv.type == MSG_TX) {
                 if (fBlocksOnly)
-                    LogPrint("tx", "transaction (%s) inv sent in violation of protocol peer=%d\n", inv.hash.ToString(), pfrom->id);
-                else if (!fAlreadyHave && !fImporting && !fReindex)
+                    LogPrint("tx", "recv inv %s in violation of protocol peer=%d\n", inv.ToString(), pfrom->id);
+                else if (!fAlreadyHave && !fImporting && !fReindex) {
+                    LogPrint("tx2", "recv inv %s (%s) peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
                     pfrom->AskFor(inv);
+                }
             }
             else
             if (inv.type == MSG_BLOCK) {
-                UpdateBlockAvailability(pfrom->GetId(), inv.hash);
+                UpdateBlockAvailability(pfrom->GetId(), inv.hash); // update pindexBestKnownBlock
+                if (!fAlreadyHave) {
+                    LogPrint("block", "recv inv %s (new) peer=%d\n", inv.ToString(), pfrom->id);
+                } else {
+                    int theirheight = State(pfrom->id)->pindexBestKnownBlock ? State(pfrom->id)->pindexBestKnownBlock->nHeight : -1;
+                    bool fRecent = false;
+                    if (theirheight >= chainActive.Height()-2) fRecent = true;
+                    LogPrint(fRecent ? "block" : "block2", "recv inv %s (%d) peer=%d\n", inv.ToString(), theirheight, pfrom->id);
+                }
                 if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
                     // First request the headers preceding the announced block. In the normal fully-synced
                     // case where a new block is announced that succeeds the current tip (no reorganization),
@@ -4780,7 +4789,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     }
                     LogPrint("block", "send getheaders (%d) to %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                 }
-            }
+            } else
+                LogPrint("net2", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
 
             // Track requests for our stuff
             GetMainSignals().Inventory(inv.hash);
