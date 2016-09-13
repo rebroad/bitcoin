@@ -5943,6 +5943,8 @@ bool SendMessages(CNode* pto)
             CBlockIndex *pBestIndex = NULL; // last header queued for delivery
             ProcessBlockAvailability(pto->id); // ensure pindexBestKnownBlock is up-to-date
 
+            int nHeightStart = 0;
+            int nHeightEnd = 0;
             if (!fRevertToInv) {
                 bool fFoundStartingHeader = false;
                 // Try to find first header that our peer doesn't have, and
@@ -5976,6 +5978,8 @@ bool SendMessages(CNode* pto)
                     if (fFoundStartingHeader) {
                         // add this to the headers message
                         vHeaders.push_back(pindex->GetBlockHeader());
+                        if (!nHeightStart || pindex->nHeight < nHeightStart) nHeightStart = pindex->nHeight;
+                        if (pindex->nHeight > nHeightEnd) nHeightEnd = pindex->nHeight;
                     } else if (PeerHasHeader(&state, pindex)) {
                         continue; // keep looking for the first new block
                     } else if (pindex->pprev == NULL || PeerHasHeader(&state, pindex->pprev)) {
@@ -5983,6 +5987,8 @@ bool SendMessages(CNode* pto)
                         // Start sending headers.
                         fFoundStartingHeader = true;
                         vHeaders.push_back(pindex->GetBlockHeader());
+                        if (!nHeightStart || pindex->nHeight < nHeightStart) nHeightStart = pindex->nHeight;
+                        if (pindex->nHeight > nHeightEnd) nHeightEnd = pindex->nHeight;
                     } else {
                         // Peer doesn't have this header or the prior one -- nothing will
                         // connect, so bail out.
