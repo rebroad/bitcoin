@@ -351,6 +351,7 @@ public:
     std::string strSubVer, cleanSubVer;
     bool fWhitelisted; // This peer can bypass DoS banning.
     unsigned int nBlockSize; // Used by ProcessNewBlock() for debug message.
+    unsigned int nChecksum;  // Used by ProcessNewBlock() for debug message.
     bool fOneShot;
     bool fClient;
     bool fInbound;

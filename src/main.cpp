@@ -3427,11 +3427,12 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, c
         unsigned int ret = AcceptBlock(*pblock, state, chainparams, &pindex, fRequested, dbp);
         unsigned int nSize = pfrom->nBlockSize;
         if (!nSize) nSize = ret;
+        unsigned int nChk = pfrom->nChecksum;
         if (pfrom) {
             if (pindex)
-                LogPrint("block", "%s block %s (%d) size=%d peer=%d\n", pfrom->nBlockSize ? "recv" : "made", pblock->GetHash().ToString(), pindex->nHeight, nSize, pfrom->id);
+                LogPrint("block", "%s block %s (%d) size=%d chk=%08x peer=%d\n", pfrom->nBlockSize ? "recv" : "made", pblock->GetHash().ToString(), pindex->nHeight, nSize, nChk, pfrom->id);
             else
-                LogPrint("block", "%s block %s size=%d peer=%d\n", pfrom->nBlockSize ? "recv" : "made", pblock->GetHash().ToString(), nSize, pfrom->id);
+                LogPrint("block", "%s block %s size=%d chk=%08x peer=%d\n", pfrom->nBlockSize ? "recv" : "made", pblock->GetHash().ToString(), nSize, nChk, pfrom->id);
             if (ret > 1 && nSize && ret != nSize)
                 LogPrint("block", "block size received (%d) differs from serialized block size (%d) peer=%d\n", pfrom->nBlockSize, ret, pfrom->id);
         }
@@ -5776,8 +5777,10 @@ bool ProcessMessages(CNode* pfrom)
         if (!msg.complete()) {
             if (msg.in_data && msg.nLastDataPos < 0) {
                 string strCommand = msg.hdr.GetCommand();
-                if (strCommand == NetMsgType::BLOCK)
+                if (strCommand == NetMsgType::BLOCK) {
                     LogPrint("partial", "Incoming block (%u of %u bytes) chk=%08x from peer=%d\n", msg.nDataPos, msg.hdr.nMessageSize, msg.hdr.nChecksum, pfrom->id);
+                    pfrom->nChecksum = msg.hdr.nChecksum;
+                }
                 msg.nLastDataPos = msg.nDataPos;
             }
             break;
