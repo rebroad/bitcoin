@@ -4949,7 +4949,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // We are in blocks only mode and peer is either not whitelisted or whitelistrelay is off
         if (GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY) && (!pfrom->fWhitelisted || !GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY)))
         {
-            LogPrint("tx", "transaction sent in violation of protocol peer=%d\n", pfrom->id);
+            LogPrint("tx", "recv tx (%d bytes). sent in violation of protocol peer=%d\n", vRecv.size(), pfrom->id);
             return true;
         }
 
