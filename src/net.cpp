@@ -1194,6 +1194,8 @@ void CConnman::ThreadSocketHandler()
             nPrevNodeCount = vNodesSize;
             if(clientInterface)
                 clientInterface->NotifyNumConnectionsChanged(nPrevNodeCount);
+            if (!vNodesSize)
+                LogPrint("net", "%s: NO PEERS CONNECTED.\n", __func__); // REBTODO - reset NodeId?
         }
 
         //
