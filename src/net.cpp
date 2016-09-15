@@ -947,6 +947,7 @@ static bool AttemptToEvictConnection(bool fPreferNewConnection) {
 
     // Disconnect from the network group with the most connections
     vEvictionCandidates[0]->fDisconnect = true;
+    LogPrint("net", "Evicting peer %d\n", vEvictionCandidates[0]->id);
 
     return true;
 }
