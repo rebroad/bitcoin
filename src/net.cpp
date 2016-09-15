@@ -1116,8 +1116,6 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
     pnode->fWhitelisted = whitelisted;
     GetNodeSignals().InitializeNode(pnode, *this);
 
-    LogPrint(BCLog::NET, "connection from %s accepted\n", addr.ToString());
-
     {
         LOCK(cs_vNodes);
         vNodes.push_back(pnode);
@@ -2754,11 +2752,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
         mapRecvBytesPerMsgCmd[msg] = 0;
     mapRecvBytesPerMsgCmd[NET_MESSAGE_COMMAND_OTHER] = 0;
 
-    if (fLogIPs) {
-        LogPrint(BCLog::NET, "Added connection to %s peer=%d\n", addrName, id);
-    } else {
-        LogPrint(BCLog::NET, "Added connection peer=%d\n", id);
-    }
+    LogPrint(BCLog::NET, "Added %s connection %speer=%d\n", fInbound ? "Inbound" : "Outbound", fLogIPs ? addrName + " " : "", id);
 }
 
 CNode::~CNode()
