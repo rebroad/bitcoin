@@ -1384,6 +1384,13 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             return true;
         }
 
+        std::string remoteAddr;
+        if (fLogIPs)
+            remoteAddr = ", them=" + pfrom->addr.ToString();
+
+        LogPrint(pfrom->fFeeler ? "feeler" : "net", "recv version: %s: version %d, blocks=%d, relay=%s, services=0x%x us=%s%s, peer=%d\n",
+                  cleanSubVer, nVersion, nStartingHeight, fRelay ? "1" : "0", nServiceInt, addrMe.ToString(), remoteAddr, pfrom->id);
+
         if (pfrom->fInbound && addrMe.IsRoutable())
         {
             SeenLocal(addrMe);
@@ -1451,15 +1458,6 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             }
             connman.MarkAddressGood(pfrom->addr);
         }
-
-        std::string remoteAddr;
-        if (fLogIPs)
-            remoteAddr = ", them=" + pfrom->addr.ToString();
-
-        LogPrint(pfrom->fFeeler ? "feeler" : "net", "recv version: %s: version %d, blocks=%d, relay=%s, services=0x%x us=%s%s, peer=%d\n",
-                  cleanSubVer, pfrom->nVersion,
-                  pfrom->nStartingHeight, pfrom->fRelayTxes ? "1" : "0", nServiceInt, addrMe.ToString(),
-                  remoteAddr, pfrom->id);
 
         int64_t nTimeOffset = nTime - GetTime();
         pfrom->nTimeOffset = nTimeOffset;
