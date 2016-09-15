@@ -1036,6 +1036,7 @@ bool CConnman::AttemptToEvictConnection()
     LOCK(cs_vNodes);
     for(std::vector<CNode*>::const_iterator it(vNodes.begin()); it != vNodes.end(); ++it) {
         if ((*it)->GetId() == evicted) {
+            LogPrint(BCLog::NET, "Evicting peer %d\n", evicted);
             (*it)->fDisconnect = true;
             return true;
         }
