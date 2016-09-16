@@ -4013,6 +4013,7 @@ CBlockIndex * InsertBlockIndex(uint256 hash)
 
 bool static LoadBlockIndexDB(const CChainParams& chainparams)
 {
+    LogPrintf("Start LoadBlockIndexDB()\n");
     if (!pblocktree->LoadBlockIndexGuts(InsertBlockIndex))
         return false;
 
