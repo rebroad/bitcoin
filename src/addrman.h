@@ -162,7 +162,7 @@ public:
 #define ADDRMAN_MIN_FAIL_DAYS 7
 
 //! the maximum percentage of nodes to return in a getaddr call
-#define ADDRMAN_GETADDR_MAX_PCT 23
+#define ADDRMAN_GETADDR_MAX_PCT 100
 
 //! the maximum number of nodes to return in a getaddr call
 #define ADDRMAN_GETADDR_MAX 5000
@@ -354,7 +354,6 @@ public:
             s >> info;
             mapAddr[info] = n;
             info.nRandomPos = vRandom.size();
-            vRandom.push_back(n);
             if (nVersion != 1 || nUBuckets != ADDRMAN_NEW_BUCKET_COUNT) {
                 // In case the new table data cannot be used (nVersion unknown, or bucket count wrong),
                 // immediately try to give them a reference based on their primary source address.

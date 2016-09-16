@@ -383,7 +383,7 @@ int CAddrMan::Check_()
     std::set<int> setTried;
     std::map<int, int> mapNew;
 
-    if (vRandom.size() != nTried + nNew)
+    if (vRandom.size() != nTried)
         return -7;
 
     for (std::map<int, CAddrInfo>::iterator it = mapInfo.begin(); it != mapInfo.end(); it++) {
@@ -466,8 +466,6 @@ void CAddrMan::GetAddr_(std::vector<CAddress>& vAddr)
         if (vAddr.size() >= nNodes)
             break;
 
-        int nRndPos = GetRandInt(vRandom.size() - n) + n;
-        SwapRandom(n, nRndPos);
         assert(mapInfo.count(vRandom[n]) == 1);
 
         const CAddrInfo& ai = mapInfo[vRandom[n]];
