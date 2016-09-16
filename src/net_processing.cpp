@@ -1306,7 +1306,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
             connman.PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
                                strprintf("Expected to offer services %08x", pfrom->nServicesExpected)));
             pfrom->fDisconnect = true;
-            return false;
+            return true;
         }
 
         if (pfrom->nVersion < MIN_PEER_PROTO_VERSION) {
@@ -1442,7 +1442,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
         LOCK(cs_main);
         LogPrintf("recv %s but not yet received version. peer=%d\n", SanitizeString(strCommand), pfrom->id);
         Misbehaving(pfrom->GetId(), 1);
-        return false;
+        return true;
     }
 
     // At this point, the outgoing message serialization version can't change.
