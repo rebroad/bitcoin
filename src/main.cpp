@@ -5111,7 +5111,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->PushMessage(NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
                                strprintf("Expected to offer services %08x", pfrom->nServicesExpected));
             pfrom->fDisconnect = true;
-            return false;
+            return true;
         }
 
         if (pfrom->nVersion < MIN_PEER_PROTO_VERSION) {
