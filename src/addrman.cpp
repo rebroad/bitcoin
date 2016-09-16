@@ -95,7 +95,18 @@ void CAddrMan::SwapRandom(unsigned int nRndPos1, unsigned int nRndPos2)
     if (nRndPos1 == nRndPos2)
         return;
 
-    assert(nRndPos1 < vRandom.size() && nRndPos2 < vRandom.size());
+    if (vRandom.size() < 1) {
+        LogPrintf("%s: vRandom.size() < 1\n", __func__);
+        return;
+    }
+
+    if (nRndPos1 >= vRandom.size())
+        return;
+
+    if (nRndPos2 >= vRandom.size()) {
+        LogPrintf("%s: nRndPos2 > vRandom.size()\n", __func__);
+        return;
+    }
 
     int nId1 = vRandom[nRndPos1];
     int nId2 = vRandom[nRndPos2];
@@ -388,7 +399,7 @@ int CAddrMan::Check_()
     std::set<int> setTried;
     std::map<int, int> mapNew;
 
-    if (vRandom.size() != nTried + nNew)
+    if (vRandom.size() != nTried)
         return -7;
 
     for (std::map<int, CAddrInfo>::iterator it = mapInfo.begin(); it != mapInfo.end(); it++) {
@@ -471,8 +482,6 @@ void CAddrMan::GetAddr_(std::vector<CAddress>& vAddr)
         if (vAddr.size() >= nNodes)
             break;
 
-        int nRndPos = RandomInt(vRandom.size() - n) + n;
-        SwapRandom(n, nRndPos);
         assert(mapInfo.count(vRandom[n]) == 1);
 
         const CAddrInfo& ai = mapInfo[vRandom[n]];
