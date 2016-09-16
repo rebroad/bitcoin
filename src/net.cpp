@@ -756,7 +756,7 @@ void SocketSendData(CNode *pnode)
     std::deque<CSerializeData>::iterator it = pnode->vSendMsg.begin();
 
     while (it != pnode->vSendMsg.end()) {
-        nMessage++; // REBTODO - debug log this!
+        nMessage++;
         const CSerializeData &data = *it;
         assert(data.size() > pnode->nSendOffset);
         int nBytes = send(pnode->hSocket, &data[pnode->nSendOffset], data.size() - pnode->nSendOffset, MSG_NOSIGNAL | MSG_DONTWAIT);
@@ -770,6 +770,7 @@ void SocketSendData(CNode *pnode)
                 pnode->nSendSize -= data.size();
                 it++;
             } else {
+                LogPrint("net", "%s: Msg %d of %d (%s) nBytes=%d nSendOffSet=%d != datasize=%d peer=%d\n", __func__, nMessage, nMessages, pnode->strCommand, nBytes, pnode->nSendOffset, data.size(), pnode->id); // REBTEMP
                 // could not send full message; stop sending more
                 break;
             }
@@ -783,6 +784,7 @@ void SocketSendData(CNode *pnode)
                     pnode->CloseSocketDisconnect();
                 }
             }
+            LogPrint("net", "%s: Msg %d of %d (%s) nBytes=%d datasize=%d peer=%d\n", __func__, nMessage, nMessages, pnode->strCommand, nBytes, data.size(), pnode->id); // REBTEMP
             // couldn't send anything at all
             break;
         }
@@ -2514,9 +2516,10 @@ void CNode::AskFor(const CInv& inv)
 void CNode::BeginMessage(const char* pszCommand) EXCLUSIVE_LOCK_FUNCTION(cs_vSend)
 {
     ENTER_CRITICAL_SECTION(cs_vSend);
+    strCommand = pszCommand;
     assert(ssSend.size() == 0);
     ssSend << CMessageHeader(Params().MessageStart(), pszCommand, 0);
-    LogPrint("net2", "sending: %s ", SanitizeString(pszCommand));
+    LogPrint("net2", "sending: %s ", pszCommand);
 }
 
 void CNode::AbortMessage() UNLOCK_FUNCTION(cs_vSend)
@@ -2525,7 +2528,7 @@ void CNode::AbortMessage() UNLOCK_FUNCTION(cs_vSend)
 
     LEAVE_CRITICAL_SECTION(cs_vSend);
 
-    LogPrint("net2", "(aborted)\n");
+    LogPrint("net2", "(aborted) peer=%d\n", id);
 }
 
 void CNode::EndMessage() UNLOCK_FUNCTION(cs_vSend)

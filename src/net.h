@@ -342,6 +342,7 @@ public:
     int64_t nTimeOffset;
     CAddress addr;
     std::string addrName;
+    std::string strCommand;
     CService addrLocal;
     int nVersion;
     // strSubVer is whatever byte array we read from the wire. However, this field is intended
