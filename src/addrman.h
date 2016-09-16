@@ -377,7 +377,6 @@ public:
             s >> info;
             mapAddr[info] = n;
             info.nRandomPos = vRandom.size();
-            vRandom.push_back(n);
             if (nVersion != 1 || nUBuckets != ADDRMAN_NEW_BUCKET_COUNT) {
                 // In case the new table data cannot be used (nVersion unknown, or bucket count wrong),
                 // immediately try to give them a reference based on their primary source address.
