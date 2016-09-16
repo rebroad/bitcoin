@@ -1299,7 +1299,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             connman.PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
                                strprintf("Expected to offer services %08x", pfrom->nServicesExpected)));
             pfrom->fDisconnect = true;
-            return false;
+            return true;
         }
 
         if (nServices & ((1 << 7) | (1 << 5))) {
@@ -1445,7 +1445,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         // Must have a version message before anything else
         LOCK(cs_main);
         Misbehaving(pfrom->GetId(), 1);
-        return false;
+        return true;
     }
 
     // At this point, the outgoing message serialization version can't change.
