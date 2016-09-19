@@ -37,6 +37,7 @@
 
 
 #include <math.h>
+#include <bitnodes.h>
 
 // Dump addresses to peers.dat and banlist.dat every 15 minutes (900s)
 #define DUMP_ADDRESSES_INTERVAL 900
@@ -1561,9 +1562,42 @@ void MapPort(bool)
 }
 #endif
 
+void CConnman::ThreadBitnodesAddressSeed()
+{
+    // Get nodes from websites offering Bitnodes API
+    if ((addrman.size() > 0) &&
+        (!GetBoolArg("-forcebitnodes", DEFAULT_FORCEBITNODES))) {
+        MilliSleep(11 * 1000);
+        LOCK(cs_vNodes);
+        if (vNodes.size() >= 2) {
+            LogPrintf("P2P peers available. Skipped Bitnodes seeding.\n");
+            return;
+        }
+    }
 
+    LogPrintf("Loading addresses from Bitnodes API\n");
 
+    std::vector<std::string> vIPs;
+    std::vector<CAddress> vAdd;
+    if (GetLeaderboardFromBitnodes(vIPs)) {
+        int port;
+        BOOST_FOREACH(const std::string &seed, vIPs) {
+            std::string host;
+            SplitHostPort(seed, port, host);
+	    CNetAddr resolved;
+	    if (LookupHost(host.c_str(), resolved, false)) {
+                CAddress addr = CAddress(CService(resolved, port), nRelevantServices);
+                addr.nTime = GetTime();
+                vAdd.push_back(addr);
+            }
+        }
+        CNetAddr resolved;
+        LookupHost("bitnodes.io", resolved, false);
+        addrman.Add(vAdd, resolved);
+    }
 
+    LogPrintf("%d addresses found from Bitnodes API\n", vAdd.size());
+}
 
 
 static std::string GetDNSHost(const CDNSSeedData& data, ServiceFlags* requiredServiceBits)
@@ -2317,6 +2351,11 @@ bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options c
     // Send and receive from sockets, accept connections
     threadSocketHandler = std::thread(&TraceThread<std::function<void()> >, "net", std::function<void()>(std::bind(&CConnman::ThreadSocketHandler, this)));
 
+    if (!GetBoolArg("-bitnodes", true))
+        LogPrintf("Bitnodes API seeding disabled\n");
+    else
+        threadBitnodesAddressSeed = std::thread(&TraceThread<boost::function<void()> >, "bitnodes", boost::function<void()>(boost::bind(&CConnman::ThreadBitnodesAddressSeed, this)));
+
     if (!GetBoolArg("-dnsseed", true))
         LogPrintf("DNS seeding disabled\n");
     else
@@ -2392,6 +2431,8 @@ void CConnman::Stop()
         threadOpenAddedConnections.join();
     if (threadDNSAddressSeed.joinable())
         threadDNSAddressSeed.join();
+    if (threadBitnodesAddressSeed.joinable())
+        threadBitnodesAddressSeed.join();
     if (threadSocketHandler.joinable())
         threadSocketHandler.join();
 
