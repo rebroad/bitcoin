@@ -1849,6 +1849,7 @@ void ThreadOpenConnections()
             }
 
             OpenNetworkConnection(addrConnect, &grant, NULL, false, fFeeler);
+        }
     }
 }
 
