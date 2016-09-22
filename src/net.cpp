@@ -2813,7 +2813,7 @@ void CNode::EndMessage() UNLOCK_FUNCTION(cs_vSend)
     assert(ssSend.size () >= CMessageHeader::CHECKSUM_OFFSET + sizeof(nChecksum));
     memcpy((char*)&ssSend[CMessageHeader::CHECKSUM_OFFSET], &nChecksum, sizeof(nChecksum));
 
-    LogPrint("net", "(%d bytes) peer=%d\n", nSize, id);
+    LogPrint("net2", "(%d bytes) peer=%d\n", nSize, id);
 
     // BU: connection slot attack mitigation.  We don't want to add bytes for outgoing INV or PING
     //     messages since attackers will often just connect and listen to INV messages.  We want to make
