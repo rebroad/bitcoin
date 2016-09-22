@@ -5169,24 +5169,29 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->AddInventoryKnown(inv);
 
             bool fAlreadyHave = AlreadyHave(inv);
-            LogPrint("net2", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
 
             if (inv.type == MSG_BLOCK) {
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
+                if (!fAlreadyHave) {
+                    LogPrint("block", "recv inv %s (new) peer=%d\n", inv.ToString(), pfrom->id);
+                } else {
+                    int theirheight = State(pfrom->id)->pindexBestKnownBlock ? State(pfrom->id)->pindexBestKnownBlock->nHeight : -1;
+                    bool fRecent = false;
+                    if (theirheight >= chainActive.Height()-2) fRecent = true;
+                    LogPrint(fRecent ? "block" : "block2", "recv inv %s (%d) peer=%d\n", inv.ToString(), theirheight, pfrom->id);
+                }
                 if (!fAlreadyHave && !fImporting && !fReindex) {  // BU request manager keeps track of all sources so no need for: && !mapBlocksInFlight.count(inv.hash)) {
 		    requester.AskFor(inv, pfrom);
-                }
-                else
-		  {
+                } else {
 		    LogPrint("net", "skipping request of block %s.  already have: %d  importing: %d  reindex: %d  isChainNearlySyncd: %d\n",inv.hash.ToString(),fAlreadyHave,fImporting,fReindex,IsChainNearlySyncd());
-		  }
-            }
-            else
-            {
+                }
+            } else {
                 if (fBlocksOnly)
                     LogPrint("net", "transaction (%s) inv sent in violation of protocol peer=%d\n", inv.hash.ToString(), pfrom->id);
-                else if (!fAlreadyHave && !fImporting && !fReindex)
-                  requester.AskFor(inv,pfrom); // BU manage outgoing requests.  was: pfrom->AskFor(inv);
+                else if (!fAlreadyHave && !fImporting && !fReindex) {
+                    LogPrint("tx", "recv inv %s (%s) peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
+                    requester.AskFor(inv,pfrom); // BU manage outgoing requests.  was: pfrom->AskFor(inv);
+                }
             }
 
             // Track requests for our stuff
