@@ -46,6 +46,11 @@
 
 // Dump addresses to peers.dat every 15 minutes (900s)
 #define DUMP_ADDRESSES_INTERVAL 900
+// Reload address from seed nodes every 6 hours (21600s)
+#define RESEED_INTERVAL 21600
+// Feeler intervals
+#define FEELER_SLEEP_WINDOW 1
+static const int FEELER_INTERVAL = 60;
 
 #if !defined(HAVE_MSG_NOSIGNAL) && !defined(MSG_NOSIGNAL)
 #define MSG_NOSIGNAL 0
@@ -392,7 +397,7 @@ CNode* FindNode(const CService& addr)
     return NULL;
 }
 
-CNode* ConnectNode(CAddress addrConnect, const char* pszDest)
+CNode* ConnectNode(CAddress addrConnect, const char* pszDest, bool fFeeler)
 {
     if (pszDest == NULL) {
         if (IsLocal(addrConnect))
@@ -408,9 +413,9 @@ CNode* ConnectNode(CAddress addrConnect, const char* pszDest)
     }
 
     /// debug print
-    LogPrint("net", "trying connection %s lastseen=%.1fhrs\n",
+    LogPrint("net", "%s connection %s lastseen=%.1fdays\n", fFeeler ? "feeler" : "trying",
         pszDest ? pszDest : addrConnect.ToString(),
-        pszDest ? 0.0 : (double)(GetAdjustedTime() - addrConnect.nTime)/3600.0);
+        pszDest ? 0.0 : (double)(GetAdjustedTime() - addrConnect.nTime)/86400.0);
 
     // Connect
     SOCKET hSocket;
@@ -1216,6 +1221,12 @@ void ThreadSocketHandler()
             BOOST_FOREACH (CNode* pnode, vNodesCopy) {
                 if (pnode->fDisconnect ||
                     (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() && pnode->nSendSize == 0 && pnode->ssSend.empty())) {
+                    if (pnode->fDisconnect) {
+                        if (pnode->GetRefCount() != 1 || !pnode->vRecvMsg.empty() || !pnode->vSendMsg.empty() || pnode->nSendSize || pnode->nOptimisticBytesWritten || pnode->ssSend.size() )  // REBTEMP
+                            LogPrint("net", "%s: peer=%d fDisconnect=1 RefCount=%d vRecvMsgs=%d vSendMsgs=%d nSendSize=%d (optimistic=%d) ssSend=%d\n", __func__, pnode->id, pnode->GetRefCount(), pnode->vRecvMsg.size(), pnode->vSendMsg.size(), pnode->nSendSize, pnode->nOptimisticBytesWritten, pnode->ssSend.size());
+                    } else
+                        LogPrint("net", "%s: peer=%d fDisconnect=0 nOptimistic=%d vSendMsgs=%d\n", __func__, pnode->id, pnode->nOptimisticBytesWritten, pnode->vSendMsg.size());
+
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
 
@@ -1252,6 +1263,7 @@ void ThreadSocketHandler()
                     }
                     if (fDelete) {
                         vNodesDisconnected.remove(pnode);
+                        LogPrint("net", "Deleting peer=%d\n", pnode->id);
                         delete pnode;
                     }
                 }
@@ -1393,8 +1405,10 @@ void ThreadSocketHandler()
                         int nBytes = recv(hSocket, recvMsgBuf, amt, MSG_DONTWAIT);
                         if (nBytes > 0) {
                             receiveShaper.leak(nBytes);
-                            if (!pnode->ReceiveMsgBytes(recvMsgBuf, nBytes))
+                            if (!pnode->ReceiveMsgBytes(recvMsgBuf, nBytes)) {
+                                LogPrint("net", "ReceiveMsgBytes failed. peer=%d\n", pnode->id);
                                 pnode->CloseSocketDisconnect();
+                            }
                             int64_t tmp = GetTime();
                             pnode->recvGap << (tmp - pnode->nLastRecv);
                             pnode->nLastRecv = tmp;
@@ -1403,15 +1417,13 @@ void ThreadSocketHandler()
                             pnode->RecordBytesRecv(nBytes);
                         } else if (nBytes == 0) {
                             // socket closed gracefully
-                            if (!pnode->fDisconnect)
-			      LogPrint("net", "Node %s socket closed\n",pnode->addrName.c_str());
+                            LogPrintf("socket closed gracefully. fDisconnect=%d peer=%d\n", pnode->fDisconnect, pnode->id);
                             pnode->CloseSocketDisconnect();
                         } else if (nBytes < 0) {
                             // error
                             int nErr = WSAGetLastError();
                             if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS) {
-                                if (!pnode->fDisconnect)
-				  LogPrintf("Node %s socket recv error '%s'\n", pnode->addrName.c_str(), NetworkErrorString(nErr));
+                                LogPrintf("socket recv error %s, fDisconnect=%d peer=%d\n", NetworkErrorString(nErr), pnode->fDisconnect, pnode->id);
                                 pnode->CloseSocketDisconnect();
                             }
                         }
@@ -1603,7 +1615,7 @@ void ThreadBitnodesAddressSeed()
             addr.nTime = GetTime();
             vAdd.push_back(addr);
         }
-        addrman.Add(vAdd, CNetAddr("bitnodes.21.co", true));
+        addrman.Add(vAdd, CNetAddr("bitnodes.21.co", true), 0);
     }
 
     LogPrintf("%d addresses found from Bitnodes API\n", vAdd.size());
@@ -1664,7 +1676,7 @@ void ThreadDNSAddressSeed()
                     found++;
                 }
             }
-            addrman.Add(vAdd, CNetAddr(seed.name, true));
+            addrman.Add(vAdd, CNetAddr(seed.name, true), 0);
         }
     }
 
@@ -1760,7 +1772,7 @@ void ThreadOpenConnections()
             static bool done = false;
             if (!done) {
                 LogPrintf("Adding fixed seed nodes as DNS doesn't seem to be available.\n");
-                addrman.Add(convertSeed6(Params().FixedSeeds()), CNetAddr("127.0.0.1"));
+                addrman.Add(convertSeed6(Params().FixedSeeds()), CNetAddr("127.0.0.1"), 0);
                 done = true;
             }
         }
@@ -1932,7 +1944,7 @@ bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant* grantOu
     } else if (FindNode(std::string(pszDest)))
         return false;
 
-    CNode* pnode = ConnectNode(addrConnect, pszDest);
+    CNode* pnode = ConnectNode(addrConnect, pszDest, fFeeler);
     boost::this_thread::interruption_point();
 
     if (!pnode)
@@ -1985,8 +1997,10 @@ void ThreadMessageHandler()
             {
                 TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
                 if (lockRecv) {
-                    if (!g_signals.ProcessMessages(pnode))
+                    if (!g_signals.ProcessMessages(pnode)) {
+                        LogPrint("net", "ProcessMessages() failed. peer=%d\n", pnode->id);
                         pnode->CloseSocketDisconnect();
+                    }
 
                     if (pnode->nSendSize < SendBufferSize()) {
                         if (!pnode->vRecvGetData.empty() || (!pnode->vRecvMsg.empty() && pnode->vRecvMsg[0].complete())) {

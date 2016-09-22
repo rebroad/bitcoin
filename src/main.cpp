@@ -4001,6 +4001,7 @@ CBlockIndex * InsertBlockIndex(uint256 hash)
 
 bool static LoadBlockIndexDB()
 {
+    LogPrintf("Start LoadBlockIndexDB()\n");
     const CChainParams& chainparams = Params();
     if (!pblocktree->LoadBlockIndexGuts())
         return false;
@@ -4969,16 +4970,17 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             }
 
             // Get recent addresses
-            if (pfrom->fOneShot || pfrom->nVersion >= CADDR_TIME_VERSION || addrman.size() < 1000)
+            if (pfrom->fOneShot)
             {
                 pfrom->PushMessage(NetMsgType::GETADDR);
+                LogPrint("net", "send getaddr peer=%d\n", pfrom->id);
                 pfrom->fGetAddr = true;
             }
             addrman.Good(pfrom->addr);
         } else {
             if (((CNetAddr)pfrom->addr) == (CNetAddr)addrFrom)
             {
-                addrman.Add(addrFrom, addrFrom);
+                addrman.Add(addrFrom, addrFrom, pfrom->id);
                 addrman.Good(addrFrom);
             }
         }
@@ -5053,6 +5055,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // Don't want addr from older versions unless seeding
         if (pfrom->nVersion < CADDR_TIME_VERSION && addrman.size() > 1000)
             return true;
+        if (!pfrom->fGetAddr) return true;
         if (vAddr.size() > 1000)
         {
             Misbehaving(pfrom->GetId(), 20);
@@ -5104,7 +5107,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             if (fReachable)
                 vAddrOk.push_back(addr);
         }
-        addrman.Add(vAddrOk, pfrom->addr, 2 * 60 * 60);
+        addrman.Add(vAddrOk, pfrom->addr, pfrom->id, 2 * 60 * 60);
         if (vAddr.size() < 1000)
             pfrom->fGetAddr = false;
         if (pfrom->fOneShot)
@@ -5917,8 +5920,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     {
         pfrom->vAddrToSend.clear();
         vector<CAddress> vAddr = addrman.GetAddr();
-        BOOST_FOREACH(const CAddress &addr, vAddr)
+        int nCount = 0;
+        int nTotal = vAddr.size()
+        BOOST_FOREACH(const CAddress &addr, vAddr) {
             pfrom->PushAddress(addr);
+            ++nCount;
+        }
+        pfrom->nNextAddrSend = 0; // Ensure it's sent right away.
+        LogPrint("addrman", "recv getaddr. Pushing %d (of %d) addresses. peer=%d\n", nCount, nTotal, pfrom->id);
     }
 
 

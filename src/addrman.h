@@ -161,10 +161,10 @@ public:
 #define ADDRMAN_MIN_FAIL_DAYS 7
 
 //! the maximum percentage of nodes to return in a getaddr call
-#define ADDRMAN_GETADDR_MAX_PCT 23
+#define ADDRMAN_GETADDR_MAX_PCT 50
 
 //! the maximum number of nodes to return in a getaddr call
-#define ADDRMAN_GETADDR_MAX 2500
+#define ADDRMAN_GETADDR_MAX 5000
 
 /** 
  * Stochastical (IP) address manager 
@@ -227,7 +227,7 @@ protected:
     void Good_(const CService &addr, int64_t nTime);
 
     //! Add an entry to the "new" table.
-    bool Add_(const CAddress &addr, const CNetAddr& source, int64_t nTimePenalty);
+    bool Add_(const CAddress &addr, const CNetAddr& source, int nodeid, int64_t nTimePenalty);
 
     //! Mark an entry as attempted to connect.
     void Attempt_(const CService &addr, int64_t nTime);
@@ -479,7 +479,7 @@ public:
     }
 
     //! Add a single address.
-    bool Add(const CAddress &addr, const CNetAddr& source, int64_t nTimePenalty = 0)
+    bool Add(const CAddress &addr, const CNetAddr& source, int nodeid, int64_t nTimePenalty = 0)
     {
         bool fRet = false;
         {
@@ -488,13 +488,17 @@ public:
             fRet |= Add_(addr, source, nTimePenalty);
             Check();
         }
-        if (fRet)
-            LogPrint("addrman", "Added %s from %s: %i tried, %i new\n", addr.ToStringIPPort(), source.ToString(), nTried, nNew);
+        if (fRet) {
+            if (nodeid)
+                LogPrint("addrman", "Added %s from peer=%d: %i tried, %i new\n", addr.ToStringIPPort(), nodeid, nTried, nNew);
+            else
+                LogPrint("addrman", "Added %s from %s: %i tried, %i new\n", addr.ToStringIPPort(), source.ToString(), nTried, nNew);
+        }
         return fRet;
     }
 
     //! Add multiple addresses.
-    bool Add(const std::vector<CAddress> &vAddr, const CNetAddr& source, int64_t nTimePenalty = 0)
+    bool Add(const std::vector<CAddress> &vAddr, const CNetAddr& source, int nodeid, int64_t nTimePenalty = 0)
     {
         int nAdd = 0;
         {
@@ -504,8 +508,12 @@ public:
                 nAdd += Add_(*it, source, nTimePenalty) ? 1 : 0;
             Check();
         }
-        if (nAdd)
-            LogPrint("addrman", "Added %i addresses from %s: %i tried, %i new\n", nAdd, source.ToString(), nTried, nNew);
+        if (nAdd) {
+            if (nodeid)
+                LogPrint("addrman", "Added %i addresses from peer=%d: %i tried, %i new\n", nAdd, nodeid, nTried, nNew);
+            else
+                LogPrint("addrman", "Added %i addresses from %s: %i tried, %i new\n", nAdd, source.ToString(), nTried, nNew);
+        }
         return nAdd > 0;
     }
 
