@@ -50,7 +50,7 @@
 #define RESEED_INTERVAL 21600
 // Feeler intervals
 #define FEELER_SLEEP_WINDOW 1
-static const int FEELER_INTERVAL = 60;
+#define FEELER_INTERVAL 40
 
 #if !defined(HAVE_MSG_NOSIGNAL) && !defined(MSG_NOSIGNAL)
 #define MSG_NOSIGNAL 0
@@ -1763,7 +1763,7 @@ void ThreadOpenConnections()
     // Initiate network connections
     int64_t nStart = GetTime();
 
-    int64_t nNextFeeler = PoissonNextSend(nStart*1000*1000, FEELER_INTERVAL);
+    int64_t nNextFeeler = nStart + FEELER_INTERVAL;
     while (true) {
         ProcessOneShot();
 
@@ -1803,9 +1803,9 @@ void ThreadOpenConnections()
 
         bool fFeeler = false;
         if (nOutbound >= nMaxOutConnections) {
-            int64_t nTime = GetTimeMicros();
+            int64_t nTime = GetTime();
             if (nTime > nNextFeeler) {
-                nNextFeeler = PoissonNextTime(nTime, FEELER_INTERVAL);
+                nNextFeeler = nStart + FEELER_INTERVAL;
                 fFeeler = true;
             } else
                 continue;
