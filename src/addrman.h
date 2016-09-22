@@ -227,7 +227,7 @@ protected:
     void Good_(const CService &addr, int64_t nTime);
 
     //! Add an entry to the "new" table.
-    bool Add_(const CAddress &addr, const CNetAddr& source, int nodeid, int64_t nTimePenalty);
+    bool Add_(const CAddress &addr, const CNetAddr& source, int64_t nTimePenalty);
 
     //! Mark an entry as attempted to connect.
     void Attempt_(const CService &addr, int64_t nTime);

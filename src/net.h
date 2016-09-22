@@ -47,7 +47,7 @@ static const int TIMEOUT_INTERVAL = 20 * 60;
 /** The maximum number of entries in an 'inv' protocol message */
 static const unsigned int MAX_INV_SZ = 50000;
 /** The maximum number of new addresses to accumulate before announcing. */
-static const unsigned int MAX_ADDR_TO_SEND = 1000;
+static const unsigned int MAX_ADDR_TO_SEND = 6000;
 /** The maximum # of bytes to receive at once */
 static const int64_t MAX_RECV_CHUNK = 256 * 1024;
 /** Maximum length of incoming protocol messages (no message over 2 MiB is currently acceptable). */
@@ -96,7 +96,7 @@ CNode* FindNode(const CNetAddr& ip);
 CNode* FindNode(const CSubNet& subNet);
 CNode* FindNode(const std::string& addrName);
 CNode* FindNode(const CService& ip);
-CNode* ConnectNode(CAddress addrConnect, const char* pszDest = NULL, bool fFeeler);
+CNode* ConnectNode(CAddress addrConnect, const char* pszDest = NULL, bool fFeeler = false);
 bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant* grantOutbound = NULL, const char* strDest = NULL, bool fOneShot = false);
 void MapPort(bool fUseUPnP);
 unsigned short GetListenPort();
@@ -234,6 +234,7 @@ public:
 
     CDataStream vRecv; // received message data
     unsigned int nDataPos;
+    int nLastDataPos;
 
     int64_t nTime; // time (in microseconds) of message receipt.
 
@@ -243,6 +244,7 @@ public:
         in_data = false;
         nHdrPos = 0;
         nDataPos = 0;
+        nLastDataPos = -1;
         nTime = 0;
     }
 
@@ -343,6 +345,7 @@ public:
     CDataStream ssSend;
     size_t nSendSize;   // total size of all vSendMsg entries
     size_t nSendOffset; // offset inside the first vSendMsg already sent
+    uint64_t nOptimisticBytesWritten;
     uint64_t nSendBytes;
     std::deque<CSerializeData> vSendMsg;
     CCriticalSection cs_vSend;
@@ -372,6 +375,8 @@ public:
     // the network or wire types and the cleaned string used when displayed or logged.
     std::string strSubVer, cleanSubVer;
     bool fWhitelisted; // This peer can bypass DoS banning.
+    bool fFeeler; // If true ths node is being used as a short lived feeler.
+    unsigned int nBlockSize; // Used by ProcessNewBlock() for debug message.
     bool fOneShot;
     bool fClient;
     bool fInbound;

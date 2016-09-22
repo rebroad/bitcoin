@@ -1873,10 +1873,10 @@ void Misbehaving(NodeId pnode, int howmuch)
     int banscore = GetArg("-banscore", DEFAULT_BANSCORE_THRESHOLD);
     if (state->nMisbehavior >= banscore && state->nMisbehavior - howmuch < banscore)
     {
-        LogPrintf("%s: %s (%d -> %d) BAN THRESHOLD EXCEEDED\n", __func__, state->name, state->nMisbehavior-howmuch, state->nMisbehavior);
+        LogPrintf("%s: peer=%d (%d -> %d) BAN THRESHOLD EXCEEDED\n", __func__, pnode, state->nMisbehavior-howmuch, state->nMisbehavior);
         state->fShouldBan = true;
     } else
-        LogPrintf("%s: %s (%d -> %d)\n", __func__, state->name, state->nMisbehavior-howmuch, state->nMisbehavior);
+        LogPrintf("%s: peer=%d (%d -> %d)\n", __func__, pnode, state->nMisbehavior-howmuch, state->nMisbehavior);
 }
 
 void static InvalidChainFound(CBlockIndex* pindexNew)
@@ -3639,7 +3639,7 @@ bool ContextualCheckBlock(const CBlock& block, CValidationState& state, CBlockIn
     return true;
 }
 
-static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex=NULL)
+static int AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex=NULL)
 {
     AssertLockHeld(cs_main);
     // Check for duplicate
@@ -3726,10 +3726,11 @@ static bool AcceptBlock(const CBlock& block, CValidationState& state, const CCha
     }
 
     int nHeight = pindex->nHeight;
+    unsigned int nBlockSize = 0;
 
     // Write block to history file
     try {
-        unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
+        nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
         CDiskBlockPos blockPos;
         if (dbp != NULL)
             blockPos = *dbp;
@@ -3747,7 +3748,7 @@ static bool AcceptBlock(const CBlock& block, CValidationState& state, const CCha
     if (fCheckForPruning)
         FlushStateToDisk(state, FLUSH_STATE_NONE); // we just allocated more disk space for block files
 
-    return true;
+    return nBlockSize;
 }
 
 static bool IsSuperMajority(int minVersion, const CBlockIndex* pstart, unsigned nRequired, const Consensus::Params& consensusParams)
@@ -3773,7 +3774,6 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, c
         LogPrintf("Invalid block: ver:%x time:%d Tx size:%d len:%d\n", pblock->nVersion, pblock->nTime, pblock->vtx.size(),byteLen);
       }
 
-    LogPrint("thin", "Processing new block %s from peer %s (%d).\n", pblock->GetHash().ToString(), pfrom ? pfrom->addrName.c_str():"myself",pfrom ? pfrom->id: 0);
     if (IsChainNearlySyncd()) SendExpeditedBlock(*pblock,pfrom);
 
     {
@@ -3786,7 +3786,24 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, c
 
         // Store to disk
         CBlockIndex *pindex = NULL;
-        bool ret = AcceptBlock(*pblock, state, chainparams, &pindex, fRequested, dbp);
+        unsigned int ret = AcceptBlock(*pblock, state, chainparams, &pindex, fRequested, dbp);
+        unsigned int nSize = 0;
+        string fromPeer;
+        string method = "made";
+        if (pfrom) {
+            nSize = pfrom->nBlockSize;
+            fromPeer = " peer=" + pfrom->id;
+        }
+        if (!nSize)
+            nSize = ret;
+        else
+            method = "recv";
+        if (pindex)
+            LogPrint("block", "%s block %s (%d) size=%d%s\n", method, pblock->GetHash().ToString(), pindex->nHeight, nSize, fromPeer);
+        else
+            LogPrint("block", "%s block %s size=%d%s\n", method, pblock->GetHash().ToString(), nSize, fromPeer);
+        if (ret > 1 && nSize && ret != nSize)
+                LogPrint("block", "block size received (%d) differs from serialized block size (%d) peer=%d\n", pfrom->nBlockSize, ret, pfrom->id);
         if (pindex && pfrom) {
             mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
         }
@@ -4867,23 +4884,23 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         return true;
     }
 
-    if (!(nLocalServices & NODE_BLOOM) &&
+    if (!pfrom->fWhitelisted && !(nLocalServices & NODE_BLOOM) &&
               (strCommand == NetMsgType::FILTERLOAD ||
-               strCommand == NetMsgType::FILTERADD ||
-               strCommand == NetMsgType::FILTERCLEAR))
+               strCommand == NetMsgType::FILTERADD))
     {
-        if (pfrom->nVersion >= NO_BLOOM_VERSION) {
-            Misbehaving(pfrom->GetId(), 100);
-            return false;
-        } else if (GetBoolArg("-enforcenodebloom", false)) {
-            pfrom->fDisconnect = true;
-            return false;
-        }
+        pfrom->fDisconnect = true;
+        return false;
     }
 
 
     if (strCommand == NetMsgType::VERSION)
     {
+        // Feeler connections exist only to verify if address is online.
+        if (pfrom->fFeeler) {
+            assert(pfrom->fInbound == false);
+            pfrom->fDisconnect = true;
+        }
+
         // Each connection can only send one version message
         if (pfrom->nVersion != 0)
         {
@@ -4960,11 +4977,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 CAddress addr = GetLocalAddress(&pfrom->addr);
                 if (addr.IsRoutable())
                 {
-                    LogPrintf("ProcessMessages: advertising address %s\n", addr.ToString());
+                    LogPrintf("%s: advertising routable address %s to peer=%d\n", __func__, addr.ToString(), pfrom->id);
                     pfrom->PushAddress(addr);
                 } else if (IsPeerAddrLocalGood(pfrom)) {
                     addr.SetIP(pfrom->addrLocal);
-                    LogPrintf("ProcessMessages: advertising address %s\n", addr.ToString());
+                    LogPrintf("%s: advertising local address %s to peer=%d\n", __func__, addr.ToString(), pfrom->id);
                     pfrom->PushAddress(addr);
                 }
             }
@@ -4996,12 +5013,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         string remoteAddr;
         if (fLogIPs)
-            remoteAddr = ", peeraddr=" + pfrom->addr.ToString();
+            remoteAddr = ", them=" + pfrom->addr.ToString();
 
-        LogPrint("net", "receive version message: %s: version %d, blocks=%d, us=%s, peer=%d%s\n",
-                  pfrom->cleanSubVer, pfrom->nVersion,
-                  pfrom->nStartingHeight, addrMe.ToString(), pfrom->id,
-                  remoteAddr);
+        LogPrint("net", "recv version: %s: protocol=%d blocks=%d relay=%d us=%s%s peer=%d\n",
+                  pfrom->cleanSubVer, pfrom->nVersion, pfrom->nStartingHeight, pfrom->fRelayTxes,
+                  pfrom->nServices, addrMe.ToString(), remoteAddr, pfrom->id);
 
         int64_t nTimeOffset = nTime - GetTime();
         pfrom->nTimeOffset = nTimeOffset;
@@ -5153,7 +5169,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->AddInventoryKnown(inv);
 
             bool fAlreadyHave = AlreadyHave(inv);
-            LogPrint("net", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
+            LogPrint("net2", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
 
             if (inv.type == MSG_BLOCK) {
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
@@ -5198,10 +5214,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
 
         if (fDebug || (vInv.size() != 1))
-            LogPrint("net", "received getdata (%u invsz) peer=%d\n", vInv.size(), pfrom->id);
+            LogPrint("net2", "received getdata (%u invsz) peer=%d\n", vInv.size(), pfrom->id);
 
         if ((fDebug && vInv.size() > 0) || (vInv.size() == 1))
-            LogPrint("net", "received getdata for: %s peer=%d\n", vInv[0].ToString(), pfrom->id);
+            LogPrint("net2", "received getdata for: %s peer=%d\n", vInv[0].ToString(), pfrom->id);
 
         pfrom->vRecvGetData.insert(pfrom->vRecvGetData.end(), vInv.begin(), vInv.end());
         ProcessGetData(pfrom, chainparams.GetConsensus());
@@ -5893,10 +5909,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::BLOCK && !fImporting && !fReindex) // Ignore blocks received while importing
     {
         CBlock block;
+        pfrom->nBlockSize = vRecv.size(); // Used by ProcessNewBlock() debug
         vRecv >> block;
 
         CInv inv(MSG_BLOCK, block.GetHash());
-        LogPrint("net", "received block %s peer=%d\n", inv.hash.ToString(), pfrom->id);
         UnlimitedLogBlock(block,inv.hash.ToString(),receiptTime);
 
         pfrom->AddInventoryKnown(inv);
@@ -5905,6 +5921,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         requester.Received(inv, pfrom, msgSize);
         // BUIP010 Extreme Thinblocks: Handle Block Message
         HandleBlockMessage(pfrom, strCommand, block, inv);
+        pfrom->nBlockSize = 0; // Reset back to zero
         LOCK(cs_orphancache);
         for (unsigned int i = 0; i < block.vtx.size(); i++)
             EraseOrphanTx(block.vtx[i].GetHash());
@@ -5918,10 +5935,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     // the getaddr message mitigates the attack.
     else if ((strCommand == NetMsgType::GETADDR) && (pfrom->fInbound))
     {
+        if (pfrom->nVersion != 70002) {
+            LogPrint("addrman", "recv getaddr. Ignoring as nVersion (%d) != 70002. peer=%d\n", pfrom->nVersion, pfrom->id);
+            return true;
+        }
         pfrom->vAddrToSend.clear();
         vector<CAddress> vAddr = addrman.GetAddr();
         int nCount = 0;
-        int nTotal = vAddr.size()
+        int nTotal = vAddr.size();
         BOOST_FOREACH(const CAddress &addr, vAddr) {
             pfrom->PushAddress(addr);
             ++nCount;
@@ -6222,8 +6243,14 @@ bool ProcessMessages(CNode* pfrom)
         //            msg.complete() ? "Y" : "N");
 
         // end, if an incomplete message is found
-        if (!msg.complete())
+        if (!msg.complete()) {
+            if (msg.in_data && msg.nLastDataPos < 0) {
+                if (msg.hdr.GetCommand() == NetMsgType::BLOCK)
+                    LogPrint("partal", "Incoming block (%u of %u bytes) chk=%08x peer=%d\n", msg.nDataPos, msg.hdr.nMessageSize, msg.hdr.nChecksum, pfrom->id);
+                msg.nLastDataPos = msg.nDataPos;
+            }
             break;
+        }
 
         // at this point, any failure means we can delete the current message
         it++;
@@ -6370,13 +6397,16 @@ bool SendMessages(CNode* pto)
         if (pto->nNextAddrSend < nNow) {
             pto->nNextAddrSend = PoissonNextSend(nNow, AVG_ADDRESS_BROADCAST_INTERVAL);
             vector<CAddress> vAddr;
-            vAddr.reserve(pto->vAddrToSend.size());
+            int nAddrToSend = pto->vAddrToSend.size();
+            int nCount = 0;
+            vAddr.reserve(nAddrToSend);
             BOOST_FOREACH(const CAddress& addr, pto->vAddrToSend)
             {
                 if (!pto->addrKnown.contains(addr.GetKey()))
                 {
                     pto->addrKnown.insert(addr.GetKey());
                     vAddr.push_back(addr);
+                    ++nCount;
                     // receiver rejects addr messages larger than 1000
                     if (vAddr.size() >= 1000)
                     {
@@ -6386,6 +6416,8 @@ bool SendMessages(CNode* pto)
                 }
             }
             pto->vAddrToSend.clear();
+            if (nCount)
+                LogPrint("addrman", "send addr %d of %d entried. peer=%d\n", nCount, nAddrToSend, pto->id);
             if (!vAddr.empty())
                 pto->PushMessage(NetMsgType::ADDR, vAddr);
         }

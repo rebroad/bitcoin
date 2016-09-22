@@ -71,6 +71,7 @@ using namespace std;
 
 namespace {
     // BU replaced this with a configuration option const int MAX_OUTBOUND_CONNECTIONS = 8;
+    const int MAX_FEELER_CONNECTIONS = 2;
 
     struct ListenSocket {
         SOCKET socket;
@@ -454,11 +455,13 @@ CNode* ConnectNode(CAddress addrConnect, const char* pszDest, bool fFeeler)
 
 void CNode::CloseSocketDisconnect()
 {
-    fDisconnect = true;
     if (hSocket != INVALID_SOCKET) {
-        LogPrint("net", "disconnecting peer=%d\n", id);
+        if (fDisconnect)
+            LogPrint("net", "disconnecting (as requested) peer=%d\n", id);
+        fDisconnect = true;
         CloseSocket(hSocket);
-    }
+    } else
+        fDisconnect = true;
 
     // in case this fails, we'll empty the recv buffer when the CNode is deleted
     TRY_LOCK(cs_vRecvMsg, lockRecv);
@@ -474,13 +477,12 @@ void CNode::PushVersion()
     CAddress addrYou = (addr.IsRoutable() && !IsProxy(addr) ? addr : CAddress(CService("0.0.0.0", 0)));
     CAddress addrMe = GetLocalAddress(&addr);
     GetRandBytes((unsigned char*)&nLocalHostNonce, sizeof(nLocalHostNonce));
-    if (fLogIPs)
-        LogPrint("net", "send version message: version %d, blocks=%d, us=%s, them=%s, peer=%d\n", PROTOCOL_VERSION, nBestHeight, addrMe.ToString(), addrYou.ToString(), id);
-    else
-        LogPrint("net", "send version message: version %d, blocks=%d, us=%s, peer=%d\n", PROTOCOL_VERSION, nBestHeight, addrMe.ToString(), id);
 
-    // BUIP005 add our special subversion string
-    PushMessage(NetMsgType::VERSION, PROTOCOL_VERSION, nLocalServices, nTime, addrYou, addrMe,
+    if (fLogIPs)
+        LogPrint("net2", "send version message: version %d, blocks=%d, us=%s, them=%s, peer=%d\n", std::min(std::max(nVersion, 70012), PROTOCOL_VERSION), nBestHeight, addrMe.ToString(), addrYou.ToString(), id);
+    else
+        LogPrint("net2", "send version message: version %d, blocks=%d, us=%s, peer=%d\n", std::min(std::max(nVersion, 70012), PROTOCOL_VERSION), nBestHeight, addrMe.ToString(), id);
+    PushMessage(NetMsgType::VERSION, std::min(std::max(nVersion, 70012), PROTOCOL_VERSION), (uint64_t)nLocalServices, nTime, addrYou, addrMe,
                 nLocalHostNonce, FormatSubVersion(CLIENT_NAME, CLIENT_VERSION, BUComments),
                 nBestHeight, !GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY));
 }
@@ -1096,7 +1098,7 @@ static void AcceptConnection(const ListenSocket& hListenSocket) {
         LOCK(cs_vAddedNodes);
         nMaxAddNodeOutbound = std::min((int)vAddedNodes.size(), nMaxOutConnections);
     }
-    int nMaxInbound = nMaxConnections - nMaxOutConnections - nMaxAddNodeOutbound;
+    int nMaxInbound = nMaxConnections - nMaxOutConnections - nMaxAddNodeOutbound + MAX_FEELER_CONNECTIONS;
     //REVISIT: a. This doesn't take into account RPC "addnode <node> onetry" outbound connections as those aren't tracked
     //         b. This also doesn't take into account whether or not the tracked vAddedNodes are valid or connected
     //         c. There is also an edge case where if less than nMaxOutConnections entries exist in vAddedNodes
@@ -1191,8 +1193,6 @@ static void AcceptConnection(const ListenSocket& hListenSocket) {
     CNode* pnode = new CNode(hSocket, addr, "", true);
     pnode->AddRef();
     pnode->fWhitelisted = whitelisted;
-
-    LogPrint("net", "connection from %s accepted\n", addr.ToString());
 
     {
         LOCK(cs_vNodes);
@@ -1325,9 +1325,12 @@ void ThreadSocketHandler()
                 // * We process a message in the buffer (message handler thread).
                 {
                     TRY_LOCK(pnode->cs_vSend, lockSend);
-                    if (lockSend && !pnode->vSendMsg.empty()) {
-                        FD_SET(hSocket, &fdsetSend);
-                        continue;
+                    if (lockSend) {
+                        pnode->nOptimisticBytesWritten = 0;
+                        if(!pnode->vSendMsg.empty()) {
+                            FD_SET(hSocket, &fdsetSend);
+                            continue;
+                        }
                     }
                 }
                 {
@@ -1759,6 +1762,8 @@ void ThreadOpenConnections()
 
     // Initiate network connections
     int64_t nStart = GetTime();
+
+    int64_t nNextFeeler = PoissonNextSend(nStart*1000*1000, FEELER_INTERVAL);
     while (true) {
         ProcessOneShot();
 
@@ -1796,11 +1801,20 @@ void ThreadOpenConnections()
             }
         }
 
-        int64_t nANow = GetAdjustedTime();
+        bool fFeeler = false;
+        if (nOutbound >= nMaxOutConnections) {
+            int64_t nTime = GetTimeMicros();
+            if (nTime > nNextFeeler) {
+                nNextFeeler = PoissonNextTime(nTime, FEELER_INTERVAL);
+                fFeeler = true;
+            } else
+                continue;
+        }
 
+        int64_t nANow = GetAdjustedTime();
         int nTries = 0;
         while (true) {
-            CAddrInfo addr = addrman.Select();
+            CAddrInfo addr = addrman.Select(fFeeler);
 
             // if we selected an invalid address, restart
             if (!addr.IsValid() || setConnected.count(addr.GetGroup()) || IsLocal(addr))
@@ -1828,9 +1842,13 @@ void ThreadOpenConnections()
             break;
         }
 
-        if (addrConnect.IsValid())
-            //Seeded outbound connections track against the original semaphore
-            OpenNetworkConnection(addrConnect, &grant);
+        if (addrConnect.IsValid()) {
+            if (fFeeler) {
+                int randsleep = GetRandInt(FEELER_SLEEP_WINDOW * 1000);
+                MilliSleep(randsleep);
+            }
+
+            OpenNetworkConnection(addrConnect, &grant, NULL, false, fFeeler);
     }
 }
 
@@ -1929,7 +1947,7 @@ void ThreadOpenAddedConnections()
 }
 
 // if successful, this moves the passed grant to the constructed node
-bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant* grantOutbound, const char* pszDest, bool fOneShot)
+bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant* grantOutbound, const char* pszDest, bool fOneShot, bool fFeeler)
 {
 
     //
@@ -1954,6 +1972,10 @@ bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant* grantOu
     pnode->fNetworkNode = true;
     if (fOneShot)
         pnode->fOneShot = true;
+    if (fFeeler) {
+        pnode->fFeeler = true;
+        pnode->fRelayTxes = false;
+    }
 
     return true;
 }
@@ -2201,7 +2223,7 @@ void StartNode(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     if (semOutbound == NULL) {
         // initialize semaphore
-        int nMaxOutbound = min(nMaxOutConnections, nMaxConnections);
+        int nMaxOutbound = min((nMaxOutConnections + MAX_FEELER_CONNECTIONS), nMaxConnections);
         semOutbound = new CSemaphore(nMaxOutbound);
     }
 
@@ -2260,7 +2282,7 @@ bool StopNode()
     LogPrintf("StopNode()\n");
     MapPort(false);
     if (semOutbound)
-        for (int i=0; i<nMaxOutConnections; i++)
+        for (int i=0; i<(nMaxOutConnections + MAX_FEELER_CONNECTIONS); i++)
             semOutbound->post();
 
     if (fAddressesInitialized)
@@ -2615,6 +2637,8 @@ CNode::CNode(SOCKET hSocketIn, const CAddress& addrIn, const std::string& addrNa
     fWhitelisted = false;
     fOneShot = false;
     fClient = false; // set by version message
+    fFeeler = false;
+    nBlockSize = 0;
     fInbound = fInboundIn;
     fNetworkNode = false;
     fSuccessfullyConnected = false;
@@ -2639,6 +2663,7 @@ CNode::CNode(SOCKET hSocketIn, const CAddress& addrIn, const std::string& addrNa
     nMinPingUsecTime = std::numeric_limits<int64_t>::max();
     thinBlockWaitingForTxns = -1; // BUIP010 Xtreme Thinblocks
     addrFromPort = 0; // BU
+    nOptimisticBytesWritten = 0;
 
     // BU instrumentation
     std::string xmledName;
@@ -2663,10 +2688,7 @@ CNode::CNode(SOCKET hSocketIn, const CAddress& addrIn, const std::string& addrNa
         id = nLastNodeId++;
     }
 
-    if (fLogIPs)
-        LogPrint("net", "Added connection to %s peer=%d\n", addrName, id);
-    else
-        LogPrint("net", "Added connection peer=%d\n", id);
+    LogPrint("net", "Added %s connection %speer=%d\n", fInbound ? "Inbound" : "Outbound", fLogIPs ? addrName + " " : "", id);
 
     // Be shy and don't send version until we hear
     if (hSocket != INVALID_SOCKET && !fInbound)
@@ -2723,7 +2745,7 @@ void CNode::AskFor(const CInv& inv)
         nRequestTime = it->second;
     else
         nRequestTime = 0;
-    LogPrint("net", "askfor %s  %d (%s) peer=%d\n", inv.ToString(), nRequestTime, DateTimeStrFormat("%H:%M:%S", nRequestTime / 1000000), id);
+    LogPrint("net2", "askfor %s  %d (%s) peer=%d\n", inv.ToString(), nRequestTime, DateTimeStrFormat("%H:%M:%S", nRequestTime / 1000000), id);
 
     // Make sure not to reuse time indexes to keep things in the same order
     int64_t nNow = GetTimeMicros() - 1000000;
@@ -2746,7 +2768,7 @@ void CNode::BeginMessage(const char* pszCommand) EXCLUSIVE_LOCK_FUNCTION(cs_vSen
     ENTER_CRITICAL_SECTION(cs_vSend);
     assert(ssSend.size() == 0);
     ssSend << CMessageHeader(Params().MessageStart(), pszCommand, 0);
-    LogPrint("net", "sending: %s ", SanitizeString(pszCommand));
+    LogPrint("net2", "sending: %s ", SanitizeString(pszCommand));
     currentCommand = pszCommand;
 }
 
@@ -2756,7 +2778,7 @@ void CNode::AbortMessage() UNLOCK_FUNCTION(cs_vSend)
 
     LEAVE_CRITICAL_SECTION(cs_vSend);
 
-    LogPrint("net", "(aborted)\n");
+    LogPrint("net2", "(aborted) peer=%d\n", id);
 }
 
 void CNode::EndMessage() UNLOCK_FUNCTION(cs_vSend)
@@ -2829,7 +2851,7 @@ void CNode::EndMessage() UNLOCK_FUNCTION(cs_vSend)
 
     // If write queue empty, attempt "optimistic write"
     if (it == vSendMsg.begin())
-        SocketSendData(this);
+        nOptimisticBytesWritten += SocketSendData(this);
 
     LEAVE_CRITICAL_SECTION(cs_vSend);
 }
