@@ -5015,7 +5015,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (fLogIPs)
             remoteAddr = ", them=" + pfrom->addr.ToString();
 
-        LogPrint("net", "recv version: %s: protocol=%d blocks=%d relay=%d us=%s%s peer=%d\n",
+        LogPrint("net", "recv version: %s: protocol=%d blocks=%d relay=%d services=%08x us=%s%s peer=%d\n",
                   pfrom->cleanSubVer, pfrom->nVersion, pfrom->nStartingHeight, pfrom->fRelayTxes,
                   pfrom->nServices, addrMe.ToString(), remoteAddr, pfrom->id);
 
