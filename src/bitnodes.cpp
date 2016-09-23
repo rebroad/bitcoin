@@ -201,62 +201,64 @@ bool GetLeaderboardFromBitnodes(vector<string>& vIPs)
     // Bitnodes connection parameters
     string url_host = "bitnodes.21.co";
     string url_port = "443";
-    string url_path = "/api/v1/nodes/leaderboard/?limit=100";
     string cert_hostname = "dazzlepod.com";
     int timeout = 30;
 
-    int count = 0;
-    try
-    {
-        boost::asio::io_service io_service;
-        boost::asio::ip::tcp::resolver resolver(io_service);
-        boost::asio::ip::tcp::resolver::query query(url_host, url_port);
-        boost::asio::ip::tcp::resolver::iterator iterator = resolver.resolve(query);
+    int count = 0; // REBHERE
+    try {
+        for(int page = 1; page <= 30; ++page) {
+            string url_path = "/api/v1/nodes/leaderboard/?limit=100&page=" + page;
+            LogPrint("net", "url_path=%d\n", url_path);
+            boost::asio::io_service io_service;
+            boost::asio::ip::tcp::resolver resolver(io_service);
+            boost::asio::ip::tcp::resolver::query query(url_host, url_port);
+            boost::asio::ip::tcp::resolver::iterator iterator = resolver.resolve(query);
         
-        // Force TLS 1.2
-        boost::asio::ssl::context ctx(boost::asio::ssl::context::sslv23);
-        ctx.set_options( boost::asio::ssl::context::default_workarounds |
-        boost::asio::ssl::context::no_sslv2 |
-        boost::asio::ssl::context::no_sslv3 |
-        boost::asio::ssl::context::no_tlsv1 
+            // Force TLS 1.2
+            boost::asio::ssl::context ctx(boost::asio::ssl::context::sslv23);
+            ctx.set_options( boost::asio::ssl::context::default_workarounds |
+            boost::asio::ssl::context::no_sslv2 |
+            boost::asio::ssl::context::no_sslv3 |
+            boost::asio::ssl::context::no_tlsv1 
 #if (BOOST_VERSON >= 105900) 
-        | boost::asio::ssl::context::no_tlsv1_1 
+            | boost::asio::ssl::context::no_tlsv1_1 
 #endif
-        );
+            );
 
-        ctx.set_default_verify_paths();
-        client c(io_service, ctx, iterator, cert_hostname, url_host, url_path, timeout);
-        c.run(io_service);
-        string response = c.getContent();
+            ctx.set_default_verify_paths();
+            client c(io_service, ctx, iterator, cert_hostname, url_host, url_path, timeout);
+            c.run(io_service);
+            string response = c.getContent();
 
-        // Parse Response
-        UniValue valReply(UniValue::VSTR);
-        if (!valReply.read(response)) {
-            throw runtime_error("Bitnodes: couldn't parse reply from server");
-        }
-        const UniValue& reply = valReply.get_obj();
-        if (reply.empty()) {
-            throw runtime_error("Bitnodes: reply from server is empty");
-        }
+            // Parse Response
+            UniValue valReply(UniValue::VSTR);
+            if (!valReply.read(response)) {
+                throw runtime_error("Bitnodes: couldn't parse reply from server");
+            }
+            const UniValue& reply = valReply.get_obj();
+            if (reply.empty()) {
+                throw runtime_error("Bitnodes: reply from server is empty");
+            }
 
-        // Parse Leaderboard
-        const UniValue& result = find_value(reply, "results");
-        if (result.isNull() || !result.isArray()) {
-            throw runtime_error("Bitnodes: server returned invalid results");
-        }
+            // Parse Leaderboard
+            const UniValue& result = find_value(reply, "results");
+            if (result.isNull() || !result.isArray()) {
+                throw runtime_error("Bitnodes: server returned invalid results");
+            }
 
-        if (result.isArray()) {
-            std::vector<UniValue> v = result.getValues();
-            for(std::vector<UniValue>::iterator it = v.begin(); it != v.end(); ++it) {
-                const UniValue& o = *it;
-                const UniValue& result = find_value(o, "node");
-                if (result.isStr()) {
-                    string s = result.get_str();
-                    vIPs.push_back(s);
-                    count++;
+            if (result.isArray()) {
+                std::vector<UniValue> v = result.getValues();
+                for(std::vector<UniValue>::iterator it = v.begin(); it != v.end(); ++it) {
+                    const UniValue& o = *it;
+                    const UniValue& result = find_value(o, "node");
+                    if (result.isStr()) {
+                        string s = result.get_str();
+                        vIPs.push_back(s);
+                        count++;
+                    }
                 }
             }
-        }
+        } // loop through pages
     }
     catch (std::exception& e)
     {

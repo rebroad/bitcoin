@@ -6385,7 +6385,7 @@ bool SendMessages(CNode* pto)
         TRY_LOCK(pto->cs_vSend, lockSend);
         if (!lockSend)
 	  {
-            LogPrint("net", "skipping SendMessages to %s, pto->cs_vSend is locked\n", pto->addr.ToString());
+            LogPrint("net2", "skipping SendMessages to %s, pto->cs_vSend is locked\n", pto->addr.ToString());
             return true;
 	  }
 

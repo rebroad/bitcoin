@@ -1608,6 +1608,7 @@ void ThreadBitnodesAddressSeed()
     vector<string> vIPs;
     vector<CAddress> vAdd;
     bool success = GetLeaderboardFromBitnodes(vIPs);
+    int nResults = vIPs.size();
     if (success) {
         int portOut;
         std::string hostOut = "";
@@ -1621,7 +1622,7 @@ void ThreadBitnodesAddressSeed()
         addrman.Add(vAdd, CNetAddr("bitnodes.21.co", true), 0);
     }
 
-    LogPrintf("%d addresses found from Bitnodes API\n", vAdd.size());
+    LogPrintf("%d (of %d) addresses added from Bitnodes API\n", vAdd.size(), nResults);
 }
 // BITCOINUNLIMITED END
 
