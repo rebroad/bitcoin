@@ -252,7 +252,7 @@ enum {
     // Bitcoin Core nodes used to support this by default, without advertising this bit,
     // but no longer do as of protocol version 70011 (= NO_BLOOM_VERSION)
     NODE_BLOOM = (1 << 2),
-
+    NODE_WITNESS = (1 << 3),
     // NODE_XTHIN means the node supports Xtreme Thinblocks
     // If this is turned off then the node will not service xthin requests nor
     // make xthin requests

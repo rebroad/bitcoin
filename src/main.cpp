@@ -5532,15 +5532,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         int nOldToSend = pfrom->vAddrToSend.size();
         pfrom->vAddrToSend.clear();
-        vector<CAddress> vAddr = connman.GetAddresses();
+        vector<CAddress> vAddr = addrman.GetAddr();
         int nCount = 0;
-        int nTotal = connman.GetAddressCount();
         BOOST_FOREACH(const CAddress &addr, vAddr) {
             pfrom->PushAddress(addr);
             ++nCount;
         }
         pfrom->nNextAddrSend = 0; // Ensure it's sent right away.
-        LogPrint("addrman", "from peer=%d getaddr. Pushing %d (of %d) addresses. OldToSend=%d NewToSend=%d\n", pfrom->id, nCount, nTotal, nOldToSend, pfrom->vAddrToSend.size());
+        LogPrint("addrman", "from peer=%d getaddr. Pushing %d addresses.\n", pfrom->id, nCount);
     }
 
 
