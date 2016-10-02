@@ -398,6 +398,20 @@ const CRPCCommand *CRPCTable::operator[](const std::string &name) const
     return (*it).second;
 }
 
+bool CRPCTable::appendCommand(const std::string& name, const CRPCCommand* pcmd)
+{
+    if (IsRPCRunning())
+        return false;
+
+    // don't allow overwriting for now
+    map<string, const CRPCCommand*>::const_iterator it = mapCommands.find(name);
+    if (it != mapCommands.end())
+        return false;
+
+    mapCommands[name] = pcmd;
+    return true;
+}
+
 bool StartRPC()
 {
     LogPrint("rpc", "Starting RPC\n");
@@ -571,4 +585,4 @@ void RPCRunLater(const std::string& name, boost::function<void(void)> func, int6
     deadlineTimers.insert(std::make_pair(name, boost::shared_ptr<RPCTimerBase>(timerInterface->NewTimer(func, nSeconds*1000))));
 }
 
-const CRPCTable tableRPC;
+CRPCTable tableRPC;

@@ -34,6 +34,7 @@ const char *FILTERADD="filteradd";
 const char *FILTERCLEAR="filterclear";
 const char *REJECT="reject";
 const char *SENDHEADERS="sendheaders";
+const char *FEEFILTER="feefilter";
 // BUIP010 Xtreme Thinblocks - begin section
 const char *THINBLOCK="thinblock";
 const char *XTHINBLOCK="xthinblock";
@@ -82,6 +83,7 @@ const static std::string allNetMessageTypes[] = {
     NetMsgType::FILTERCLEAR,
     NetMsgType::REJECT,
     NetMsgType::SENDHEADERS,
+    NetMsgType::FEEFILTER,
     // BUIP010 Xtreme Thinbocks - begin section
     NetMsgType::THINBLOCK,
     NetMsgType::XTHINBLOCK,
