@@ -17,10 +17,12 @@
 #include "init.h"
 #include "merkleblock.h"
 #include "net.h"
+#include "policy/fees.h"
 #include "policy/policy.h"
 #include "pow.h"
 #include "primitives/block.h"
 #include "primitives/transaction.h"
+#include "random.h"
 #include "script/script.h"
 #include "script/sigcache.h"
 #include "script/standard.h"
@@ -83,6 +85,7 @@ uint64_t nPruneTarget = 0;
 CFeeRate minRelayTxFee = CFeeRate(DEFAULT_MIN_RELAY_TX_FEE);
 
 CTxMemPool mempool(::minRelayTxFee);
+FeeFilterRounder filterRounder(::minRelayTxFee);
 
 struct COrphanTx {
     CTransaction tx;
@@ -597,6 +600,9 @@ CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& loc
             CBlockIndex* pindex = (*mi).second;
             if (chain.Contains(pindex))
                 return pindex;
+	    if (pindex->GetAncestor(chain.Height()) == chain.Tip()) {
+                return chain.Tip();
+            }
         }
     }
     return chain.Genesis();
@@ -3437,10 +3443,8 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, c
                 LogPrint("block", "block size received (%d) differs from serialized block size (%d) peer=%d\n", pfrom->nBlockSize, ret, pfrom->id);
         }
         if (pfrom) {
-            if (pindex) {
+            if (pindex)
                 mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
-                if (fNewBlock) pfrom->nLastBlockTime = GetTime();
-            }
         }
         CheckBlockIndex(chainparams.GetConsensus());
         if (!ret)
@@ -3662,6 +3666,7 @@ bool static LoadBlockIndexDB()
     // chainparams so big blocks are allowed:
     uint256 sizeForkHash = pblocktree->ForkBitActivated(FORK_BIT_2MB);
     if (sizeForkHash != uint256()) {
+        LogPrintf("%s: sizeForkHash = %s\n", sizeForkHash.ToString());
         BlockMap::iterator it = mapBlockIndex.find(sizeForkHash);
         assert(it != mapBlockIndex.end());
         sizeForkTime.store(it->second->GetBlockTime() + chainparams.GetConsensus().SizeForkGracePeriod());
@@ -3805,6 +3810,11 @@ bool CVerifyDB::VerifyDB(const CChainParams& chainparams, CCoinsView *coinsview,
         uiInterface.ShowProgress(_("Verifying blocks..."), std::max(1, std::min(99, (int)(((double)(chainActive.Height() - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100)))));
         if (pindex->nHeight < chainActive.Height()-nCheckDepth)
             break;
+	if (fPruneMode && !(pindex->nStatus & BLOCK_HAVE_DATA)) {
+	    // If pruning, only go back as far as we have data.
+	    LogPrintf("VerifyDB(): block verification stopping at height %d (pruning, no data)\n", pindex->nHeight);
+	    break;
+        }
         CBlock block;
         // check level 0: read from disk
         if (!ReadBlockFromDisk(block, pindex, chainparams.GetConsensus()))
@@ -4389,16 +4399,14 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             if (nSizeThinBlock < nSizeBlock) {
                                 pfrom->PushMessage(NetMsgType::XTHINBLOCK, xThinBlock);
                                 sendFullBlock = false;
-                                LogPrint("thin", "recv getdata %s (%d). send xthinblock - size: %d vs block size: %d => tx hashes: %d transactions: %d peerid=%d\n",
+                                LogPrint("thin", "recv getdata %s (%d). send xthinblock - size: %d vs block size: %d => tx hashes: %d transactions: %d peer=%d\n",
                                          inv.ToString(), nHeight, nSizeThinBlock, nSizeBlock, xThinBlock.vTxHashes.size(), xThinBlock.vMissingTx.size(), pfrom->id);
                             }
-                        }
-                    }
-                    else if (inv.type == MSG_FILTERED_BLOCK)
-                    {
+                        } else
+                            LogPrint("thin", "recv getdata %s (%d). xthinblock collision. peer=%d\n", inv.ToString(), nHeight, pfrom->id);
+                    } else if (inv.type == MSG_FILTERED_BLOCK) {
                         LOCK(pfrom->cs_filter);
-                        if (pfrom->pfilter)
-                        {
+                        if (pfrom->pfilter) {
                             CMerkleBlock merkleBlock(block, *pfrom->pfilter);
                             pfrom->PushMessage(NetMsgType::MERKLEBLOCK, merkleBlock);
                             // CMerkleBlock just contains hashes, so also push any transactions in the block the client did not see
@@ -4408,13 +4416,21 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             // Thus, the protocol spec specified allows for us to provide duplicate txn here,
                             // however we MUST always provide at least what the remote peer needs
                             typedef std::pair<unsigned int, uint256> PairType;
-                            BOOST_FOREACH(PairType& pair, merkleBlock.vMatchedTxn)
+			    int nCount = 0;
+                            BOOST_FOREACH(PairType& pair, merkleBlock.vMatchedTxn) {
                                 pfrom->PushMessage(NetMsgType::TX, block.vtx[pair.first]);
+				++nCount;
+			    }
+			    LogPrint("block", "recv getdata %s (%d). send merkleblock + %d TXs. peer=%d\n", inv.ToString(), nHeight, nCount, pfrom->id);
                             sendFullBlock = false;
-                        }
+                        } else
+			    LogPrint("block", "recv getdata %s (%d). No filter for peer=%d\n", inv.ToString(), nHeight, pfrom->id);
                     }
-                    if (sendFullBlock) // if none of the other methods were actually executed;
-                         pfrom->PushMessage(NetMsgType::BLOCK, block);
+                    if (sendFullBlock) { // if none of the other methods were actually executed;
+                        pfrom->PushMessage(NetMsgType::BLOCK, block);
+                        if (fRecent)
+                            LogPrint("block", "recv getdata %s (%d). sending. peer=%d\n", inv.ToString(), nHeight, pfrom->id);
+		    }
 
                     // Trigger the peer node to send a getblocks request for the next batch of inventory
                     if (inv.hash == pfrom->hashContinue)
@@ -4495,7 +4511,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         return true;
     }
 
-    if (!pfrom->fWhiteListed && !(nLocalServices & NODE_BLOOM) &&
+    if (!pfrom->fWhitelisted && !(nLocalServices & NODE_BLOOM) &&
               (strCommand == NetMsgType::FILTERLOAD ||
                strCommand == NetMsgType::FILTERADD))
     {
@@ -4570,7 +4586,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         LogPrintf("receive version message: %s: version %d, blocks=%d, relay=%s, services=%08x us=%s%s, peer=%d\n",
                   pfrom->cleanSubVer, pfrom->nVersion,
-                  pfrom->nStartingHeight, pfrom->fRelayTxes ? "1" : "0", nServiceInt, addrMe.ToString(),
+                  pfrom->nStartingHeight, pfrom->fRelayTxes ? "1" : "0", pfrom->nServices, addrMe.ToString(),
                   remoteAddr, pfrom->id);
 
         if((pfrom->nServices & NODE_XTHIN))
@@ -4622,7 +4638,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         } else {
             if (((CNetAddr)pfrom->addr) == (CNetAddr)addrFrom)
             {
-                addrman.Add(addrFrom, addrFrom);
+                addrman.Add(addrFrom, addrFrom, pfrom->id);
                 addrman.Good(addrFrom);
             }
         }
@@ -5150,6 +5166,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             return true;
         }
 
+        CNodeState *nodestate = State(pfrom->GetId());
+
         CBlockIndex *pindexLast = NULL;
         BOOST_FOREACH(const CBlockHeader& header, headers) {
             CValidationState state;
@@ -5182,7 +5200,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
 
         bool fCanDirectFetch = CanDirectFetch(chainparams.GetConsensus());
-        CNodeState *nodestate = State(pfrom->GetId());
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         if (fCanDirectFetch && pindexLast->IsValid(BLOCK_VALID_TREE) && chainActive.Tip()->nChainWork <= pindexLast->nChainWork) {
@@ -5530,16 +5547,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
         pfrom->fSentAddr = true;
 
-        int nOldToSend = pfrom->vAddrToSend.size();
         pfrom->vAddrToSend.clear();
         vector<CAddress> vAddr = addrman.GetAddr();
-        int nCount = 0;
-        BOOST_FOREACH(const CAddress &addr, vAddr) {
+        BOOST_FOREACH(const CAddress &addr, vAddr)
             pfrom->PushAddress(addr);
-            ++nCount;
-        }
         pfrom->nNextAddrSend = 0; // Ensure it's sent right away.
-        LogPrint("addrman", "from peer=%d getaddr. Pushing %d addresses.\n", pfrom->id, nCount);
     }
 
 
@@ -5564,6 +5576,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 if (!fInMemPool) continue; // another thread removed since queryHashes, maybe...
                 if (!pfrom->pfilter->IsRelevantAndUpdate(tx)) continue;
             }
+	    if (pfrom->minFeeFilter) {
+		CFeeRate feeRate;
+		mempool.lookupFeeRate(hash, feeRate);
+		LOCK(pfrom->cs_feeFilter);
+		if (feeRate.GetFeePerK() < pfrom->minFeeFilter)
+		    continue;
+	    }
             vInv.push_back(inv);
             if (vInv.size() == MAX_INV_SZ) {
                 pfrom->PushMessage(NetMsgType::INV, vInv);
@@ -5696,7 +5715,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::FILTERCLEAR)
     {
         LOCK(pfrom->cs_filter);
-        if (pfrom->GetLocalServices() & NODE_BLOOM) {
+        if (nLocalServices & NODE_BLOOM) {
             delete pfrom->pfilter;
             pfrom->pfilter = new CBloomFilter();
         }
@@ -5733,8 +5752,19 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
     }
 
-    else
-    {
+    else if (strCommand == NetMsgType::FEEFILTER) {
+	CAmount newFeeFilter = 0;
+	vRecv >> newFeeFilter;
+	if (MoneyRange(newFeeFilter)) {
+	    {
+		LOCK(pfrom->cs_feeFilter);
+		pfrom->minFeeFilter = newFeeFilter;
+	    }
+	    LogPrint("net", "recv feefiter %s peer=%d\n", CFeeRate(newFeeFilter).ToString(), pfrom->id);
+	}
+    }
+
+    else {
         // Ignore unknown commands for extensibility
         LogPrint("net", "Unknown command \"%s\" from peer=%d\n", SanitizeString(strCommand), pfrom->id);
     }
@@ -5949,7 +5979,7 @@ bool SendMessages(CNode* pto)
             }
             pto->vAddrToSend.clear();
             if (nCount)
-                LogPrint(nCount==1 ? "addrman2" : "addrman", "to peer=%d Sending addr %d of %d entries\n", pto->id, nCount, nAddrToSend);
+                LogPrint(nCount==1 ? "addrman2" : "addrman", "send addr %d of %d entries. peer=%d\n", nCount, nAddrToSend, pto->id);
             if (!vAddr.empty())
                 pto->PushMessage(NetMsgType::ADDR, vAddr);
         }

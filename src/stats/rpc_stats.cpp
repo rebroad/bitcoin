@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "rpc/server.h"
+#include "rpcserver.h"
 #include "stats/stats.h"
 #include "util.h"
 #include "utilstrencodings.h"

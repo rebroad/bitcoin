@@ -102,7 +102,8 @@ void CAddrMan::SwapRandom(unsigned int nRndPos1, unsigned int nRndPos2)
     if (nRndPos1 == nRndPos2)
         return;
 
-    assert(nRndPos1 < vRandom.size() && nRndPos2 < vRandom.size());
+    if (nRndPos1 >= vRandom.size() || nRndPos2 >= vRandom.size())
+	return;
 
     int nId1 = vRandom[nRndPos1];
     int nId2 = vRandom[nRndPos2];

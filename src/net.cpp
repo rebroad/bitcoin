@@ -1044,10 +1044,10 @@ void ThreadSocketHandler()
                     (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() && pnode->nSendSize == 0 && pnode->ssSend.empty()))
                 {
                     if (pnode->fDisconnect) {
-                        if (pnode->GetRefCount() != 1 || !pnode->vRecvMsg.empty() || !pnode->vSendMsg.empty() || pnode->nSendSize || pnode->nOptimisticBytesWritten || pnode->ssSend.size() )  // REBTEMP
-                            LogPrint("net", "%s: peer=%d fDisconnect=1 RefCount=%d vRecvMsgs=%d vSendMsgs=%d nSendSize=%d (optimistic=%d) ssSend=%d\n", __func__, pnode->id, pnode->GetRefCount(), pnode->vRecvMsg.size(), pnode->vSendMsg.size(), pnode->nSendSize, pnode->nOptimisticBytesWritten, pnode->ssSend.size());
+                        if (pnode->GetRefCount() != 1 || !pnode->vRecvMsg.empty() || !pnode->vSendMsg.empty() || pnode->nSendSize || pnode->ssSend.size() )  // REBTEMP
+                            LogPrint("net", "%s: peer=%d fDisconnect=1 RefCount=%d vRecvMsgs=%d vSendMsgs=%d nSendSize=%d ssSend=%d\n", __func__, pnode->id, pnode->GetRefCount(), pnode->vRecvMsg.size(), pnode->vSendMsg.size(), pnode->nSendSize, pnode->ssSend.size());
                     } else
-                        LogPrint("net", "%s: peer=%d fDisconnect=0 nOptimistic=%d vSendMsgs=%d\n", __func__, pnode->id, pnode->nOptimisticBytesWritten, pnode->vSendMsg.size());
+                        LogPrint("net", "%s: peer=%d fDisconnect=0 vSendMsgs=%d\n", __func__, pnode->id, pnode->vSendMsg.size());
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
 
@@ -2446,6 +2446,9 @@ CNode::CNode(SOCKET hSocketIn, const CAddress& addrIn, const std::string& addrNa
     nPingUsecTime = 0;
     fPingQueued = false;
     nMinPingUsecTime = std::numeric_limits<int64_t>::max();
+    minFeeFilter = 0;
+    lastSentFeeFilter = 0;
+    nextSendTimeFeeFilter = 0;
     thinBlockWaitingForTxns = -1;
 
     std::string xmledName;
