@@ -5068,12 +5068,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     {
         if (pfrom->nVersion >= NO_BLOOM_VERSION) {
             LOCK(cs_main);
-            Misbehaving(pfrom->GetId(), 100);
-            return false;
-        } else {
+            Misbehaving(pfrom->GetId(), 1);
+        } else
             pfrom->fDisconnect = true;
-            return false;
-        }
+        return false;
     }
 
 
