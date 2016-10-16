@@ -1166,7 +1166,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (pfrom->nVersion >= NO_BLOOM_VERSION) {
             LogPrintf("recv %s from a node that should know better! peer=%d\n", strCommand, pfrom->id);
             LOCK(cs_main);
-            Misbehaving(pfrom->GetId(), 100);
+            Misbehaving(pfrom->GetId(), 1);
         } else
             pfrom->fDisconnect = true;
         return true;
