@@ -2663,7 +2663,7 @@ void CNode::AbortMessage() UNLOCK_FUNCTION(cs_vSend)
     LogPrint("net", "(aborted)\n");
 }
 
-void CNode::EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
+int CNode::EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
 {
     // The -*messagestest options are intentionally not documented in the help message,
     // since they are only used during development to debug the networking code and are
@@ -2672,22 +2672,23 @@ void CNode::EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
     {
         LogPrint("net", "dropmessages DROPPING SEND MESSAGE\n");
         AbortMessage();
-        return;
+        return 0;
     }
     if (mapArgs.count("-fuzzmessagestest"))
         Fuzz(GetArg("-fuzzmessagestest", 10));
 
-    if (ssSend.size() == 0)
+    unsigned int nssSendsize = ssSend.size();
+    if (nssSendsize == 0)
     {
         LEAVE_CRITICAL_SECTION(cs_vSend);
-        return;
+        return 0;
     }
     // Set the size
-    unsigned int nSize = ssSend.size() - CMessageHeader::HEADER_SIZE;
+    unsigned int nSize = nssSendsize - CMessageHeader::HEADER_SIZE;
     WriteLE32((uint8_t*)&ssSend[CMessageHeader::MESSAGE_SIZE_OFFSET], nSize);
 
     //log total amount of bytes per command
-    mapSendBytesPerMsgCmd[std::string(pszCommand)] += nSize + CMessageHeader::HEADER_SIZE;
+    mapSendBytesPerMsgCmd[std::string(pszCommand)] += nssSendsize;
 
     // Set the checksum
     uint256 hash = Hash(ssSend.begin() + CMessageHeader::HEADER_SIZE, ssSend.end());
@@ -2705,6 +2706,8 @@ void CNode::EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
         nOptimisticBytesWritten += SocketSendData(this);
 
     LEAVE_CRITICAL_SECTION(cs_vSend);
+
+    return nssSendsize;
 }
 
 bool CConnman::ForNode(NodeId id, std::function<bool(CNode* pnode)> func)
