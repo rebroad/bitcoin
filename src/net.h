@@ -152,7 +152,7 @@ public:
 
     bool ForNode(NodeId id, std::function<bool(CNode* pnode)> func);
 
-    void PushMessage(CNode* pnode, CSerializedNetMsg&& msg);
+    int PushMessage(CNode* pnode, CSerializedNetMsg&& msg);
 
     template<typename Callable>
     bool ForEachNodeContinueIf(Callable&& func)

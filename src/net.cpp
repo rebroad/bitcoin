@@ -2610,7 +2610,7 @@ void CNode::AskFor(const CInv& inv)
     LogPrint("tx", "askfor(%d,%d,%d) %s  (t-%s) peer=%d\n", mapAskFor.size(), setAskFor.size(), mapAlreadyAskedFor.size(), inv.ToString(), strAge((nRequestTime-nNow)/1000000), id);
 }
 
-void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
+int CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 {
     size_t nMessageSize = msg.data.size();
     size_t nTotalSize = nMessageSize + CMessageHeader::HEADER_SIZE;
@@ -2632,7 +2632,7 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
         LOCK(pnode->cs_vSend);
         if(pnode->hSocket == INVALID_SOCKET) {
             LogPrint("netsend", "INVALID SOCKET not sending %s nMessageSize=%d nTotalSize=%d peer=%d\n", msg.command.c_str(), nMessageSize, nTotalSize, pnode->id);
-            return;
+            return 0;
         }
         bool optimisticSend(pnode->vSendMsg.empty());
 
@@ -2665,6 +2665,8 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
         strSendOffset += strprintf("nSendOffset=%d->%d ", nSendOffsetBefore, pnode->nSendOffset);
 
     LogPrint("netsend", "sending: %s nMessageSize=%d %s%s%s%snTotalSize=%d peer=%d\n", msg.command.c_str(), nMessageSize, strBytesSent, strSendSize, strSendBytes, strSendOffset, nTotalSize, pnode->id);
+
+    return nTotalSize;
 }
 
 bool CConnman::ForNode(NodeId id, std::function<bool(CNode* pnode)> func)
