@@ -2678,11 +2678,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::REJECT)
     {
         if (fDebug) {
+	    string strMsg; string strReason;
+            ostringstream ss;
             try {
-                string strMsg; unsigned char ccode; string strReason;
+                unsigned char ccode;
                 vRecv >> LIMITED_STRING(strMsg, CMessageHeader::COMMAND_SIZE) >> ccode >> LIMITED_STRING(strReason, MAX_REJECT_MESSAGE_LENGTH);
 
-                ostringstream ss;
                 ss << strMsg << " code " << itostr(ccode) << ": " << strReason;
 
                 if (strMsg == NetMsgType::BLOCK || strMsg == NetMsgType::TX)
@@ -2691,16 +2692,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     vRecv >> hash;
                     ss << ": hash " << hash.ToString();
                 }
-                if (strMsg == NetMsgType::BLOCK)
-                    LogPrint("block", "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->id);
-                else if (strMsg == NetMsgType::TX)
-                    LogPrint("tx", "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->id);
-                else
-                    LogPrint("net", "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->id);
             } catch (const std::ios_base::failure&) {
                 // Avoid feedback loops by preventing reject messages from triggering a new reject message.
-                LogPrint("net", "recv reject. unable to parse. peer=%d\n", pfrom->id);
             }
+            if (strMsg == NetMsgType::BLOCK)
+                LogPrint("block", "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->id);
+            else if (strMsg == NetMsgType::TX)
+                LogPrint("tx", "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->id);
+            else
+                LogPrint("net", "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->id);
         }
     }
 
