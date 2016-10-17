@@ -5530,8 +5530,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             }
             resp.txn[i] = block.vtx[req.indexes[i]];
         }
-        pfrom->PushMessageWithFlag(State(pfrom->GetId())->fWantsCmpctWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCKTXN, resp);
-        LogPrint("block", "recv getblocktxn %s (%d) size=%d. send blocktxn indexes=%d peer=%d\n", req.blockhash.ToString(), it->second->nHeight, nSize, i, pfrom->id);
+        int nSendSize = pfrom->PushMessageWithFlag(State(pfrom->GetId())->fWantsCmpctWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCKTXN, resp);
+        LogPrint("block", "recv getblocktxn %s (%d) size=%d. send blocktxn indexes=%d size=%d peer=%d\n", req.blockhash.ToString(), it->second->nHeight, nSize, i, nSendSize, pfrom->id);
     }
 
 
