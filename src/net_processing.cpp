@@ -999,14 +999,14 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                 {
                     // Send block from disk
                     CBlock block;
+                    int nSize = 0;
                     if (!ReadBlockFromDisk(block, (*mi).second, consensusParams))
                         assert(!"cannot load block from disk");
                     if (inv.type == MSG_BLOCK)
-                        connman.PushMessage(pfrom, msgMaker.Make(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block));
+                        nSize += connman.PushMessage(pfrom, msgMaker.Make(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block));
                     else if (inv.type == MSG_WITNESS_BLOCK)
-                        connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::BLOCK, block));
-                    else if (inv.type == MSG_FILTERED_BLOCK)
-                    {
+                        nSize += connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::BLOCK, block));
+                    else if (inv.type == MSG_FILTERED_BLOCK) {
                         bool sendMerkleBlock = false;
                         CMerkleBlock merkleBlock;
                         {
@@ -1017,7 +1017,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             }
                         }
                         if (sendMerkleBlock) {
-                            connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::MERKLEBLOCK, merkleBlock));
+                            nSize += connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::MERKLEBLOCK, merkleBlock));
                             // CMerkleBlock just contains hashes, so also push any transactions in the block the client did not see
                             // This avoids hurting performance by pointlessly requiring a round-trip
                             // Note that there is currently no way for a node to request any single transactions we didn't send here -
@@ -1026,7 +1026,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             // however we MUST always provide at least what the remote peer needs
                             typedef std::pair<unsigned int, uint256> PairType;
                             BOOST_FOREACH(PairType& pair, merkleBlock.vMatchedTxn)
-                                connman.PushMessage(pfrom, msgMaker.Make(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::TX, *block.vtx[pair.first]));
+                                nSize += connman.PushMessage(pfrom, msgMaker.Make(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::TX, *block.vtx[pair.first]));
                         }
                         // else
                             // no response
@@ -1041,11 +1041,11 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         int nSendFlags = fPeerWantsWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS;
                         if (CanDirectFetch(consensusParams) && mi->second->nHeight >= chainActive.Height() - MAX_CMPCTBLOCK_DEPTH) {
                             CBlockHeaderAndShortTxIDs cmpctblock(block, fPeerWantsWitness);
-                            connman.PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
+                            nSize += connman.PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
                         } else
-                            connman.PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCK, block));
+                            nSize += connman.PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCK, block));
                     }
-                    LogPrint(fRecent ? "block" : "blockhist", "recv getdata %s %s - sending. peer=%d\n", inv.ToString(), strBlkInfo(mi->second), pfrom->id);
+                    LogPrint(fRecent ? "block" : "blockhist", "recv getdata %s %s - sending. size=%d peer=%d\n", inv.ToString(), strBlkInfo(mi->second), nSize, pfrom->id);
 
                     // Trigger the peer node to send a getblocks request for the next batch of inventory
                     if (inv.hash == pfrom->hashContinue)
@@ -1634,8 +1634,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             resp.txn[i] = block.vtx[req.indexes[i]];
         }
         int nSendFlags = State(pfrom->GetId())->fWantsCmpctWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS;
-        connman.PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCKTXN, resp));
-        LogPrint("block", "recv getblocktxn %s size=%d. send blocktxn indexes=%d/%d peer=%d\n", strBlockInfo(it->second), nSize, req.indexes.size(), block.vtx.size(), pfrom->id);
+        int nSendSize = connman.PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCKTXN, resp));
+        LogPrint("block", "recv getblocktxn %s size=%d. send blocktxn indexes=%d/%d size=%d peer=%d\n", strBlockInfo(it->second), nSize, req.indexes.size(), block.vtx.size(), nSendSize, pfrom->id);
     }
 
 
@@ -1992,8 +1992,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     fBlockReconstructed = true;
                 } else {
                     req.blockhash = pindex->GetBlockHash();
-                    connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
-                    LogPrint("block", "send getblocktxn %s indexes=%d peer=%d\n", strBlockInfo(pindex), req.indexes.size(), pfrom->id);
+                    int nSize = connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
+                    LogPrint("block", "send getblocktxn %s indexes=%d size=%d peer=%d\n", strBlockInfo(pindex), req.indexes.size(), nSize, pfrom->id);
                 }
                 if (!fAlreadyInFlight && mapBlocksInFlight.size() == 1 && pindex->pprev->IsValid(BLOCK_VALID_CHAIN)) {
                     // We seem to be rather well-synced, so it appears pfrom was the first to provide us
@@ -2850,6 +2850,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
             vector<CAddress> vAddr;
             int nAddrToSend = pto->vAddrToSend.size();
             int nCount = 0;
+            int nSize = 0;
             vAddr.reserve(nAddrToSend);
             BOOST_FOREACH(const CAddress& addr, pto->vAddrToSend)
             {
@@ -2861,16 +2862,16 @@ bool SendMessages(CNode* pto, CConnman& connman)
                     // receiver rejects addr messages larger than 1000
                     if (vAddr.size() >= 1000)
                     {
-                        connman.PushMessage(pto, msgMaker.Make(NetMsgType::ADDR, vAddr));
+                        nSize += connman.PushMessage(pto, msgMaker.Make(NetMsgType::ADDR, vAddr));
                         vAddr.clear();
                     }
                 }
             }
             pto->vAddrToSend.clear();
-            if (nCount)
-                LogPrint(nCount==1 ? "addrman2" : "addrman", "send addr %d of %d entries peer=%d\n", nCount, nAddrToSend, pto->id);
             if (!vAddr.empty())
-                connman.PushMessage(pto, msgMaker.Make(NetMsgType::ADDR, vAddr));
+                nSize += connman.PushMessage(pto, msgMaker.Make(NetMsgType::ADDR, vAddr));
+            if (nCount)
+                LogPrint(nCount==1 ? "addrman2" : "addrman", "send addr %d of %d entries size=%d peer=%d\n", nCount, nAddrToSend, nSize, pto->id);
             // we only send the big addr message once
             if (pto->vAddrToSend.capacity() > 40)
                 pto->vAddrToSend.shrink_to_fit();
@@ -2990,19 +2991,19 @@ bool SendMessages(CNode* pto, CConnman& connman)
                     assert(ReadBlockFromDisk(block, pBestIndex, consensusParams));
                     CBlockHeaderAndShortTxIDs cmpctblock(block, state.fWantsCmpctWitness);
                     int nSendFlags = state.fWantsCmpctWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS;
-                    connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
-                    LogPrint("block", "send cmpctblock %s peer=%d\n",
-                            vHeaders.front().GetHash().ToString(), pto->id);
+                    int nSize = connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
+                    LogPrint("block", "send cmpctblock %s size=%d peer=%d\n",
+                            vHeaders.front().GetHash().ToString(), nSize, pto->id);
                     state.pindexBestHeaderSent = pBestIndex;
                 } else if (state.fPreferHeaders) {
+                    int nSize = connman.PushMessage(pto, msgMaker.Make(NetMsgType::HEADERS, vHeaders));
                     if (vHeaders.size() > 1) {
-                        LogPrint("block", "send %u headers (%d to %d) peer=%d\n",
-                                vHeaders.size(), nHeightStart, nHeightEnd, pto->id);
+                        LogPrint("block", "send %u headers (%d to %d) size=%d peer=%d\n",
+                                vHeaders.size(), nHeightStart, nHeightEnd, nSize, pto->id);
                     } else {
-                        LogPrint("block", "send header %s (%d) peer=%d\n",
-                                vHeaders.front().GetHash().ToString(), nHeightEnd, pto->id);
+                        LogPrint("block", "send header %s (%d) size=%d peer=%d\n",
+                                vHeaders.front().GetHash().ToString(), nHeightEnd, nSize, pto->id);
                     }
-                    connman.PushMessage(pto, msgMaker.Make(NetMsgType::HEADERS, vHeaders));
                     state.pindexBestHeaderSent = pBestIndex;
                 } else
                     fRevertToInv = true;
