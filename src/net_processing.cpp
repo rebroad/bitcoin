@@ -3201,11 +3201,11 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 } else if (state.fCanDoHeaders) {
                     int nSize = connman.PushMessage(pto, msgMaker.Make(NetMsgType::HEADERS, vHeaders));
                     if (vHeaders.size() > 1) {
-                        LogPrint("block", "send %u headers (%d to %d) size=%d peer=%d\n",
-                                vHeaders.size(), nHeightStart, nHeightEnd, nSize, pto->id);
+                        LogPrint("block", "send %u headers%s (%d to %d) size=%d peer=%d\n",
+                                vHeaders.size(), state.fPreferHeaders ? "" : "*", nHeightStart, nHeightEnd, nSize, pto->id);
                     } else {
-                        LogPrint("block", "send header %s (%d) size=%d peer=%d\n",
-                                vHeaders.front().GetHash().ToString(), nHeightEnd, nSize, pto->id);
+                        LogPrint("block", "send header%s %s (%d) size=%d peer=%d\n",
+                                state.fPreferHeaders ? "" : "*", vHeaders.front().GetHash().ToString(), nHeightEnd, nSize, pto->id);
                     }
                     state.pindexBestHeaderSent = pBestIndex;
                 } else
