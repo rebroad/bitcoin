@@ -3204,7 +3204,9 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
 
                     // If the peer's chain has this block, don't inv it back.
                     if (!PeerHasHeader(&state, pindex)) {
-                        pto->PushInventory(CInv(MSG_BLOCK, hashToAnnounce));
+                        std::vector<CInv> vInv;
+                        vInv.push_back(CInv(MSG_BLOCK, hashToAnnounce));
+                        connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
                         LogPrint("block", "send inv block %s (%d) peer=%d\n",
                             hashToAnnounce.ToString(), pindex->nHeight, pto->id);
                     }
