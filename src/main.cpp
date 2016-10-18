@@ -6853,11 +6853,11 @@ bool SendMessages(CNode* pto, CConnman& connman)
                     state.pindexBestHeaderSent = pBestIndex;
                 } else if (state.fCanDoHeaders) {
                     if (vHeaders.size() > 1) {
-                        LogPrint("block", "send %u headers (%d to %d) peer=%d\n",
-                                vHeaders.size(), nHeightStart, nHeightEnd, pto->id);
+                        LogPrint("block", "send %u headers%s (%d to %d) peer=%d\n",
+                                vHeaders.size(), state.fPreferHeaders ? "" : "*", nHeightStart, nHeightEnd, pto->id);
                     } else {
-                        LogPrint("block", "send header %s (%d) peer=%d\n",
-                                vHeaders.front().GetHash().ToString(), nHeightEnd, pto->id);
+                        LogPrint("block", "send header%s %s (%d) peer=%d\n",
+                                state.fPreferHeaders ? "" : "*", vHeaders.front().GetHash().ToString(), nHeightEnd, pto->id);
                     }
                     pto->PushMessage(NetMsgType::HEADERS, vHeaders);
                     state.pindexBestHeaderSent = pBestIndex;
