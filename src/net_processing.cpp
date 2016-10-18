@@ -842,8 +842,10 @@ void PeerLogicValidation::BlockChecked(const CBlock& block, const CValidationSta
             assert (state.GetRejectCode() < REJECT_INTERNAL); // Blocks are never rejected with internal reject codes
             CBlockReject reject = {(unsigned char)state.GetRejectCode(), state.GetRejectReason().substr(0, MAX_REJECT_MESSAGE_LENGTH), hash};
             State(it->second.first)->rejects.push_back(reject);
-            if (nDoS > 0 && it->second.second)
+            if (nDoS > 0 && it->second.second) {
+                LogPrintf("%s: peer=%d\n", __func__, it->second.first);
                 Misbehaving(it->second.first, nDoS);
+            }
         }
     }
     if (it != mapBlockSource.end())
@@ -1156,13 +1158,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                strCommand == NetMsgType::FILTERADD))
     {
         if (pfrom->nVersion >= NO_BLOOM_VERSION) {
+            LogPrintf("recv %s from a node that should know better! peer=%d\n", strCommand, pfrom->id);
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 100);
-            return false;
-        } else {
+        } else
             pfrom->fDisconnect = true;
-            return false;
-        }
+        return true;
     }
 
 
@@ -1172,9 +1173,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (pfrom->nVersion != 0)
         {
             connman.PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_DUPLICATE, string("Duplicate version message")));
+            LogPrintf("recv version. already received a pervious version. send reject. peer=%d\n", pfrom->id);
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 1);
-            return false;
+            return true;
         }
 
         int64_t nTime;
@@ -1318,6 +1320,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     {
         // Must have a version message before anything else
         LOCK(cs_main);
+        LogPrintf("recv %s but not yet received version. peer=%d\n", SanitizeString(strCommand), pfrom->id);
         Misbehaving(pfrom->GetId(), 1);
         return false;
     }
@@ -1369,8 +1372,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (vAddr.size() > 1000)
         {
             LOCK(cs_main);
+            LogPrintf("recv addr too large (%d > 1000) peer=%d\n", vAddr.size(), pfrom->id);
             Misbehaving(pfrom->GetId(), 20);
-            return error("message addr size() = %u", vAddr.size());
+            return true;
         }
 
         // Store the new addresses
@@ -1443,8 +1447,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (vInv.size() > MAX_INV_SZ)
         {
             LOCK(cs_main);
+            LogPrintf("recv invs too large (%d > %d) peer=%d\n", vInv.size(), MAX_INV_SZ, pfrom->id);
             Misbehaving(pfrom->GetId(), 20);
-            return error("message inv size() = %u", vInv.size());
+            return true;
         }
 
         bool fBlocksOnly = !fRelayTxes;
@@ -1499,8 +1504,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             GetMainSignals().Inventory(inv.hash);
 
             if (pfrom->nSendSize > (nMaxSendBufferSize * 2)) {
+                LogPrintf("recv inv nSendSize (%d)>nMaxSendBufferSize(%d)*2 peer=%d\n", pfrom->nSendSize, nMaxSendBufferSize, pfrom->id);
                 Misbehaving(pfrom->GetId(), 50);
-                return error("send buffer size() = %u", pfrom->nSendSize);
+                return true;
             }
         }
 
@@ -1516,8 +1522,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (vInv.size() > MAX_INV_SZ)
         {
             LOCK(cs_main);
+            LogPrintf("recv getdata too large (%d > %d) peer=%d\n", vInv.size(), MAX_INV_SZ, pfrom->id);
             Misbehaving(pfrom->GetId(), 20);
-            return error("message getdata size() = %u", vInv.size());
+            return true;
         }
 
         pfrom->vRecvGetData.insert(pfrom->vRecvGetData.end(), vInv.begin(), vInv.end());
@@ -1747,10 +1754,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     else if (!fMissingInputs2)
                     {
                         int nDos = 0;
-                        if (stateDummy.IsInvalid(nDos) && nDos > 0)
-                        {
+                        if (stateDummy.IsInvalid(nDos) && nDos > 0) {
                             // Punish peer that gave us an invalid orphan tx
-                            LogPrint("mempool", "   invalid orphan tx %s\n", orphanHash.ToString());
+                            LogPrintf("   invalid orphan tx %s peer=%d\n", orphanHash.ToString(), fromPeer);
                             Misbehaving(fromPeer, nDos);
                             setMisbehaving.insert(fromPeer);
                         }
@@ -1829,15 +1835,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         int nDoS = 0;
         if (state.IsInvalid(nDoS))
         {
-            LogPrint("mempoolrej", "%s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(),
-                pfrom->id,
-                FormatStateMessage(state));
             if (state.GetRejectCode() < REJECT_INTERNAL) // Never send AcceptToMemoryPool's internal codes over P2P
                 connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::REJECT, strCommand, (unsigned char)state.GetRejectCode(),
                                    state.GetRejectReason().substr(0, MAX_REJECT_MESSAGE_LENGTH), inv.hash));
             if (nDoS > 0) {
+                LogPrintf("tx %s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(), pfrom->id, FormatStateMessage(state));
                 Misbehaving(pfrom->GetId(), nDoS);
-            }
+            } else
+                LogPrint("mempoolrej", "tx %s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(), pfrom->id, FormatStateMessage(state));
         }
     }
 
@@ -1868,11 +1873,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (nNew < 0) {
             int nDoS;
             if (state.IsInvalid(nDoS)) {
-                LogPrintf("recv cmpctblock size=%d INVALID HEADER peer=%d\n", nSize, pfrom->id);
                 if (nDoS > 0) {
+                    LogPrintf("recv cmpctblock size=%d INVALID HEADER peer=%d\n", nSize, pfrom->id);
                     LOCK(cs_main);
                     Misbehaving(pfrom->GetId(), nDoS);
-                }
+                } else
+                    LogPrint("block", "recv cmpctblock size=%d INVALID HEADER peer=%d\n", nSize, pfrom->id);
                 return true;
             }
         }
@@ -2098,8 +2104,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         unsigned int nCount = ReadCompactSize(vRecv);
         if (nCount > MAX_HEADERS_RESULTS) {
             LOCK(cs_main);
+            LogPrintf("recv headers too large (%d > %d) peer=%d\n", nCount, MAX_HEADERS_RESULTS, pfrom->id);
             Misbehaving(pfrom->GetId(), 20);
-            return error("headers message size = %u", nCount);
+            return true;
         }
         headers.resize(nCount);
         for (unsigned int n = 0; n < nCount; n++) {
@@ -2139,6 +2146,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             UpdateBlockAvailability(pfrom->GetId(), headers.back().GetHash());
 
             if (nodestate->nUnconnectingHeaders % MAX_UNCONNECTING_HEADERS == 0) {
+                LogPrintf("recv header nUnconnectingHeaders=%d MAX_UNCONNECTING_HEADERS=%d peer=%d\n", nodestate->nUnconnectingHeaders, MAX_UNCONNECTING_HEADERS, pfrom->id);
                 Misbehaving(pfrom->GetId(), 20);
             }
             return true;
@@ -2147,8 +2155,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         uint256 hashLastBlock;
         for (const CBlockHeader& header : headers) {
             if (!hashLastBlock.IsNull() && header.hashPrevBlock != hashLastBlock) {
+                LogPrintf("recv headers. not in sequential order! peer=%d\n", pfrom->id);
                 Misbehaving(pfrom->GetId(), 20);
-                return error("non-continuous headers sequence");
+                return true;
             }
             hashLastBlock = header.GetHash();
         }
@@ -2159,11 +2168,18 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (nNew < 0) {
             int nDoS;
             if (state.IsInvalid(nDoS)) {
+                std::string strBlock;
+                if (pindexLast)
+                    strBlock = strprintf(" %s %s", pindexLast->GetBlockHash().ToString(), strBlkInfo(pindexLast));
+                else
+                    strBlock = "s";
                 if (nDoS > 0) {
+                    LogPrintf("recv header%s not accepted peer=%d\n", strBlock, pfrom->id);
                     LOCK(cs_main);
                     Misbehaving(pfrom->GetId(), nDoS);
-                }
-                return error("invalid header received");
+                } else
+                    LogPrint("block", "recv header%s not accepted peer=%d\n", strBlock, pfrom->id);
+                return true;
             }
         }
 
@@ -2444,6 +2460,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         {
             // There is no excuse for sending a too-large filter
             LOCK(cs_main);
+            LogPrintf("recv %s too large peer=%d\n", strCommand, pfrom->id);
             Misbehaving(pfrom->GetId(), 100);
         }
         else
@@ -2466,12 +2483,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // and thus, the maximum size any matched object can have) in a filteradd message
         bool bad = false;
         if (vData.size() > MAX_SCRIPT_ELEMENT_SIZE) {
+            LogPrintf("recv %s too large (%d > %d) peer=%d\n", strCommand, vData.size(), MAX_SCRIPT_ELEMENT_SIZE, pfrom->id);
             bad = true;
         } else {
             LOCK(pfrom->cs_filter);
             if (pfrom->pfilter) {
                 pfrom->pfilter->insert(vData);
             } else {
+                LogPrintf("recv %s pfilter not set. peer=%d\n", strCommand, pfrom->id);
                 bad = true;
             }
         }
