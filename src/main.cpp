@@ -6884,7 +6884,9 @@ bool SendMessages(CNode* pto, CConnman& connman)
 
                     // If the peer's chain has this block, don't inv it back.
                     if (!PeerHasHeader(&state, pindex)) {
-                        pto->PushInventory(CInv(MSG_BLOCK, hashToAnnounce));
+                        vector<CInv> vInv;
+                        vInv.push_back(CInv(MSG_BLOCK, hashToAnnounce));
+                        pto->PushMessage(NetMsgType::INV, vInv);
                         LogPrint("block", "send inv block %s (%d) peer=%d\n",
                             hashToAnnounce.ToString(), pindex->nHeight, pto->id);
                     }
