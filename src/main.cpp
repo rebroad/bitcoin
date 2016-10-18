@@ -3122,9 +3122,8 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
         GetMainSignals().UpdatedBlockTip(pindexNewTip, pindexFork, fInitialDownload);
 
         // Always notify the UI if a new block tip was connected
-        if (pindexFork != pindexNewTip) {
+        if (pindexFork != pindexNewTip)
             uiInterface.NotifyBlockTip(fInitialDownload, pindexNewTip);
-        }
     } while (pindexNewTip != pindexMostWork);
     CheckBlockIndex(chainparams.GetConsensus());
 
@@ -4766,7 +4765,8 @@ void PeerLogicValidation::UpdatedBlockTip(const CBlockIndex *pindexNew, const CB
         }
         // Relay inventory, but don't relay old inventory during initial block download.
         connman->ForEachNode([nNewHeight, &vHashes](CNode* pnode) {
-            if (nNewHeight > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : 0)) {
+            CNodeState *state = State(pnode->id);
+            if (nNewHeight > (state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : pnode->nStartingHeight - 2000)) {
                 BOOST_REVERSE_FOREACH(const uint256& hash, vHashes) {
                     pnode->PushBlockHash(hash);
                 }
