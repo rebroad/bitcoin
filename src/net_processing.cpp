@@ -3414,7 +3414,9 @@ bool PeerLogicValidation::SendMessages(CNode* pto, std::atomic<bool>& interruptM
 
                     // If the peer's chain has this block, don't inv it back.
                     if (!PeerHasHeader(&state, pindex)) {
-                        pto->PushInventory(CInv(MSG_BLOCK, hashToAnnounce));
+                        std::vector<CInv> vInv;
+                        vInv.push_back(CInv(MSG_BLOCK, hashToAnnounce));
+                        connman->PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
                         LogPrint(BCLog::BLOCK, "%s: sending inv peer=%d hash=%s\n", __func__,
                             pto->GetId(), hashToAnnounce.ToString());
                     }
