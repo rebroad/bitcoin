@@ -4936,14 +4936,14 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                 {
                     // Send block from disk
                     CBlock block;
+                    int nSize = 0;
                     if (!ReadBlockFromDisk(block, (*mi).second, consensusParams))
                         assert(!"cannot load block from disk");
                     if (inv.type == MSG_BLOCK)
-                        pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block);
+                        nSize += pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block);
                     else if (inv.type == MSG_WITNESS_BLOCK)
-                        pfrom->PushMessage(NetMsgType::BLOCK, block);
-                    else if (inv.type == MSG_FILTERED_BLOCK)
-                    {
+                        nSize += pfrom->PushMessage(NetMsgType::BLOCK, block);
+                    else if (inv.type == MSG_FILTERED_BLOCK) {
                         bool sendMerkleBlock = false;
                         CMerkleBlock merkleBlock;
                         {
@@ -4954,7 +4954,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             }
                         }
                         if (sendMerkleBlock) {
-                            pfrom->PushMessage(NetMsgType::MERKLEBLOCK, merkleBlock);
+                            nSize += pfrom->PushMessage(NetMsgType::MERKLEBLOCK, merkleBlock);
                             // CMerkleBlock just contains hashes, so also push any transactions in the block the client did not see
                             // This avoids hurting performance by pointlessly requiring a round-trip
                             // Note that there is currently no way for a node to request any single transactions we didn't send here -
@@ -4963,7 +4963,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             // however we MUST always provide at least what the remote peer needs
                             typedef std::pair<unsigned int, uint256> PairType;
                             BOOST_FOREACH(PairType& pair, merkleBlock.vMatchedTxn)
-                                pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::TX, block.vtx[pair.first]);
+                                nSize += pfrom->PushMessageWithFlag(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::TX, block.vtx[pair.first]);
                         }
                         // else
                             // no response
@@ -4977,12 +4977,12 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         bool fPeerWantsWitness = State(pfrom->GetId())->fWantsCmpctWitness;
                         if (CanDirectFetch(consensusParams) && mi->second->nHeight >= chainActive.Height() - MAX_CMPCTBLOCK_DEPTH) {
                             CBlockHeaderAndShortTxIDs cmpctblock(block, fPeerWantsWitness);
-                            pfrom->PushMessageWithFlag(fPeerWantsWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::CMPCTBLOCK, cmpctblock);
+                            nSize += pfrom->PushMessageWithFlag(fPeerWantsWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::CMPCTBLOCK, cmpctblock);
                         } else
-                            pfrom->PushMessageWithFlag(fPeerWantsWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block);
+                            nSize += pfrom->PushMessageWithFlag(fPeerWantsWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block);
                     }
                     if (fRecent)
-                        LogPrint("block", "recv getdata %s (%d). sending. peer=%d\n", inv.ToString(), nHeight, pfrom->id);
+                        LogPrint("block", "recv getdata %s (%d). sending. size=%d peer=%d\n", inv.ToString(), nHeight, nSize, pfrom->id);
 
                     // Trigger the peer node to send a getblocks request for the next batch of inventory
                     if (inv.hash == pfrom->hashContinue)
@@ -6685,6 +6685,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
             vector<CAddress> vAddr;
             int nAddrToSend = pto->vAddrToSend.size();
             int nCount = 0;
+            int nSize = 0;
             vAddr.reserve(nAddrToSend);
             BOOST_FOREACH(const CAddress& addr, pto->vAddrToSend)
             {
@@ -6696,16 +6697,16 @@ bool SendMessages(CNode* pto, CConnman& connman)
                     // receiver rejects addr messages larger than 1000
                     if (vAddr.size() >= 1000)
                     {
-                        pto->PushMessage(NetMsgType::ADDR, vAddr);
+                        nSize += pto->PushMessage(NetMsgType::ADDR, vAddr);
                         vAddr.clear();
                     }
                 }
             }
             pto->vAddrToSend.clear();
-            if (nCount)
-                LogPrint(nCount==1 ? "addrman2" : "addrman", "to peer=%d Sending addr %d of %d entries\n", pto->id, nCount, nAddrToSend);
             if (!vAddr.empty())
-                pto->PushMessage(NetMsgType::ADDR, vAddr);
+                nSize += pto->PushMessage(NetMsgType::ADDR, vAddr);
+            if (nCount)
+                LogPrint(nCount==1 ? "addrman2" : "addrman", "send addr %d of %d entries size=%d peer=%d\n", nCount, nAddrToSend, nSize, pto->id);
             // we only send the big addr message once
             if (pto->vAddrToSend.capacity() > 40)
                 pto->vAddrToSend.shrink_to_fit();
