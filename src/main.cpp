@@ -5083,12 +5083,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     if (strCommand == NetMsgType::VERSION)
     {
-        // Feeler connections exist only to verify if address is online.
-        if (pfrom->fFeeler) {
-            assert(pfrom->fInbound == false);
-            pfrom->fDisconnect = true;
-        }
-
         // Each connection can only send one version message
         if (pfrom->nVersion != 0)
         {
@@ -5170,6 +5164,30 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if((pfrom->nServices & NODE_XTHIN))
             LogPrint("thin", "peer=%d is XThin Capable\n", pfrom->id);
 
+        if (!pfrom->fInbound) {
+            // Advertise our address
+            if (fListen && !IsInitialBlockDownload()) {
+                CAddress addr = GetLocalAddress(&pfrom->addr, pfrom->GetLocalServices());
+                FastRandomContext insecure_rand;
+                if (addr.IsRoutable()) {
+                    LogPrint("net", "%s: advertising routable address %s to peer=%d\n", __func__, addr.ToString(), pfrom->id);
+                    pfrom->PushAddress(addr, insecure_rand);
+                } else if (IsPeerAddrLocalGood(pfrom)) {
+                    addr.SetIP(pfrom->addrLocal);
+                    LogPrint("net", "%s: advertising local address %s to peer=%d\n", __func__, addr.ToString(), pfrom->id);
+                    pfrom->PushAddress(addr, insecure_rand);
+                }
+            }
+            connman.MarkAddressGood(pfrom->addr);
+        }
+
+        // Feeler connections exist only to verify if address is online.
+        if (pfrom->fFeeler) {
+            assert(pfrom->fInbound == false);
+            pfrom->fDisconnect = true;
+            return true;
+        }
+
         pfrom->addrLocal = addrMe;
         if (pfrom->fInbound && addrMe.IsRoutable())
         {
@@ -5198,31 +5216,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         pfrom->PushMessage(NetMsgType::VERACK);
         pfrom->ssSend.SetVersion(min(pfrom->nVersion, PROTOCOL_VERSION));
 
-        if (!pfrom->fInbound)
-        {
-            // Advertise our address
-            if (fListen && !IsInitialBlockDownload())
-            {
-                CAddress addr = GetLocalAddress(&pfrom->addr, pfrom->GetLocalServices());
-                FastRandomContext insecure_rand;
-                if (addr.IsRoutable())
-                {
-                    LogPrint("net", "ProcessMessages: advertising routable address %s to peer=%d\n", addr.ToString(), pfrom->id);
-                    pfrom->PushAddress(addr, insecure_rand);
-                } else if (IsPeerAddrLocalGood(pfrom)) {
-                    addr.SetIP(pfrom->addrLocal);
-                    LogPrint("net", "ProcessMessages: advertising local address %s to peer=%d\n", addr.ToString(), pfrom->id);
-                    pfrom->PushAddress(addr, insecure_rand);
-                }
-            }
-
-            // Get recent addresses
-            if (pfrom->fOneShot || pfrom->nVersion >= CADDR_TIME_VERSION || connman.GetAddressCount() < 1000)
-            {
-                pfrom->PushMessage(NetMsgType::GETADDR);
-                pfrom->fGetAddr = true;
-            }
-            connman.MarkAddressGood(pfrom->addr);
+        // Get recent addresses
+        if (!pfrom->fInbound && (pfrom->fOneShot || pfrom->nVersion >= CADDR_TIME_VERSION || connman.GetAddressCount() < 1000)) {
+            pfrom->PushMessage(NetMsgType::GETADDR);
+            pfrom->fGetAddr = true;
         }
 
         pfrom->fSuccessfullyConnected = true;
