@@ -996,7 +996,8 @@ static void RelayAddress(const CAddress& addr, bool fReachable, CConnman& connma
 
     auto pushfunc = [&addr, &best, nRelayNodes, &insecure_rand] {
         for (unsigned int i = 0; i < nRelayNodes && best[i].first != 0; i++) {
-            best[i].second->PushAddress(addr, insecure_rand);
+            if (best[i].second->nServices & NODE_XTHIN)
+                best[i].second->PushAddress(addr, insecure_rand);
         }
     };
 
@@ -2485,8 +2486,9 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
         // Only send one GetAddr response per connection to reduce resource waste
         //  and discourage addr stamping of INV announcements.
-        if (pfrom->fSentAddr) {
-            LogPrint(BCLog::NET, "Ignoring repeated \"getaddr\". peer=%d\n", pfrom->GetId());
+        if (pfrom->fSentAddr || (!pfrom->fWhitelisted && pfrom->nVersion == 70015 && !(pfrom->nServices & NODE_XTHIN))) {
+            if (pfrom->fSentAddr)
+                LogPrint(BCLog::NET, "Ignoring repeated \"getaddr\". peer=%d\n", pfrom->GetId());
             return true;
         }
         pfrom->fSentAddr = true;
