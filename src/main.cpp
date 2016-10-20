@@ -3675,7 +3675,7 @@ bool ContextualCheckBlock(const CBlock& block, CValidationState& state, const Co
     return true;
 }
 
-static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex=NULL)
+static int AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex=NULL)
 {
     AssertLockHeld(cs_main);
     // Check for duplicate
@@ -3691,7 +3691,7 @@ static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state
                 *ppindex = pindex;
             if (pindex->nStatus & BLOCK_FAILED_MASK)
                 return state.Invalid(error("%s: block %s is marked invalid", __func__, hash.ToString()), 0, "duplicate");
-            return true;
+            return 2;
         }
 
         if (!CheckBlockHeader(block, state, chainparams.GetConsensus()))
@@ -5411,10 +5411,24 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 if (it == mapBlockIndex.end())
                     LogPrint("block", "recv inv %s (new) peer=%d\n", inv.ToString(), pfrom->id);
                 else {
-                    fAlreadyHave = true;
+                    fAlreadyHave = true; // already have the headers
                     int theirheight = it->second->nHeight;
                     bool fRecent = (theirheight >= chainActive.Height()-2) ? true : false;
-                    LogPrint(fRecent ? "block" : "block2", "recv inv %s (%d) peer=%d\n", inv.ToString(), theirheight, pfrom->id);
+                    CBlockIndex *pindexFork = LastCommonAncestor(it->second, pindexBestHeader);
+                    std::string strFork;
+                    std::string strDesc;
+                    if (pindexFork->nHeight < theirheight) {
+                        bool fEqualWork = (it->second->nChainWork == pindexBestHeader->nChainWork);
+                        strFork += strprintf(" %sfork@%d", fEqualWork ? "=" : "", pindexFork->nHeight);
+                    } else if (it->second == chainActive.Tip())
+                        strDesc += "tip "; // it's the current tip
+                    else if (it->second == pindexBestHeader)
+                        strDesc += "best "; // it's the current best header
+                    else if (theirheight < chainActive.Tip()->nHeight)
+                        strDesc += "old "; // it's in our best chain
+                    else if (it->second->nTx > 0)
+                        strDesc += "got "; // it's been downloaded
+                    LogPrint(fRecent ? "block" : "block2", "recv inv %s%s (%d%s) peer=%d\n", strDesc, inv.ToString(), theirheight, strFork, pfrom->id);
                 }
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
                 if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
@@ -6065,7 +6079,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 Misbehaving(pfrom->GetId(), 20);
                 return true;
             }
-            if (!AcceptBlockHeader(header, state, chainparams, &pindexLast)) {
+            int ret = AcceptBlockHeader(header, state, chainparams, &pindexLast);
+            if (!ret) {
                 int nDoS;
                 if (state.IsInvalid(nDoS)) {
                     if (nDoS > 0) {
@@ -6076,6 +6091,23 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     return true;
                 }
             }
+            bool fNew = (ret != 2); // AcceptBlockHeader just added it to the block index
+            // REBTODO - debug below only if it's new to the BlockIndex within last 2 minutes. Nothing to do with whether requested or not.
+            CBlockIndex *pindexFork = LastCommonAncestor(pindexLast, pindexBestHeader);
+            std::string strFork;
+            std::string strDesc;
+            if (pindexFork->nHeight < pindexLast->nHeight) {
+                bool fEqualWork = (pindexLast->nChainWork == pindexBestHeader->nChainWork);
+                strFork += strprintf(" %sfork@%d", fEqualWork ? "=" : "", pindexFork->nHeight);
+            } else if (pindexLast == chainActive.Tip())
+                strDesc += "tip "; // it's the current tip
+            else if (pindexLast == pindexBestHeader)
+                strDesc += "best "; // it's the current best header
+            else if (pindexLast->nHeight < chainActive.Tip()->nHeight)
+                strDesc += "old "; // it's older than our current tip
+            else if (pindexLast->nTx > 0)
+                strDesc += "got "; // it's been downloaded
+            LogPrint((headers.size() == 1 || fNew || pindexLast->nHeight > pindexBestHeader->nHeight-3) ? "block" : "block2", "recv %s%sheader %s (%d%s) peer=%d\n", fNew ? "new " : "", strDesc, header.GetHash().ToString(), pindexLast->nHeight, strFork, pfrom->id);
         }
 
         if (nodestate->nUnconnectingHeaders > 0) {
