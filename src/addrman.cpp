@@ -167,6 +167,7 @@ void CAddrMan::MakeTried(CAddrInfo& info, int nId)
         // Remove the to-be-evicted item from the tried set.
         infoOld.fInTried = false;
         vvTried[nKBucket][nKBucketPos] = -1;
+        LogPrint("addrman", "Evicting item from tried to make space. nKBucket=%d nKBucketPos=%d\n", nKBucket, nKBucketPos);
         nTried--;
 
         // find which new bucket it belongs to
