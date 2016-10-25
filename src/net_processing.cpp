@@ -385,8 +385,12 @@ void ProcessBlockAvailability(NodeId nodeid) {
     if (!state->hashLastUnknownBlock.IsNull()) {
         BlockMap::iterator itOld = mapBlockIndex.find(state->hashLastUnknownBlock);
         if (itOld != mapBlockIndex.end() && itOld->second->nChainWork > 0) {
-            if (state->pindexBestKnownBlock == NULL || itOld->second->nChainWork >= state->pindexBestKnownBlock->nChainWork)
+            if (state->pindexBestKnownBlock == NULL || itOld->second->nChainWork >= state->pindexBestKnownBlock->nChainWork) {
+                const CBlockIndex *prevBestKnownBlock = state->pindexBestKnownBlock;
                 state->pindexBestKnownBlock = itOld->second;
+                if (prevBestKnownBlock != state->pindexBestKnownBlock)
+                    LogPrint("blockbestknown", "%s: BestKnownBlock: (%s) -> (%s) peer=%d\n", __func__, strHeight(prevBestKnownBlock), strHeight(state->pindexBestKnownBlock), nodeid);
+            }
             state->hashLastUnknownBlock.SetNull();
         }
     }
@@ -402,8 +406,12 @@ void UpdateBlockAvailability(NodeId nodeid, const uint256 &hash) {
     BlockMap::iterator it = mapBlockIndex.find(hash);
     if (it != mapBlockIndex.end() && it->second->nChainWork > 0) {
         // An actually better block was announced.
-        if (state->pindexBestKnownBlock == NULL || it->second->nChainWork >= state->pindexBestKnownBlock->nChainWork)
+        if (state->pindexBestKnownBlock == NULL || it->second->nChainWork >= state->pindexBestKnownBlock->nChainWork) {
+            const CBlockIndex *prevBestKnownBlock = state->pindexBestKnownBlock;
             state->pindexBestKnownBlock = it->second;
+            if (prevBestKnownBlock != state->pindexBestKnownBlock)
+                LogPrint("blockbestknown", "%s: BestKnownBlock: (%s) -> (%s) peer=%d\n", __func__, strHeight(prevBestKnownBlock), strHeight(state->pindexBestKnownBlock), nodeid);
+        }
     } else {
         // An unknown block was announced; just assume that the latest one is the best one.
         state->hashLastUnknownBlock = hash;
