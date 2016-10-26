@@ -2395,11 +2395,9 @@ void CConnman::Stop()
     if (threadSocketHandler.joinable())
         threadSocketHandler.join();
 
-    if (fAddressesInitialized)
-    {
-        DumpData();
-        fAddressesInitialized = false;
-    }
+    if (semAddnode)
+        for (int i=0; i<nMaxAddnode; i++)
+            semOutbound->post();
 
     // Close sockets
     BOOST_FOREACH(CNode* pnode, vNodes)
