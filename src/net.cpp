@@ -2370,12 +2370,6 @@ void CConnman::Stop()
         for (int i=0; i<nMaxAddnode; i++)
             semOutbound->post();
 
-    if (fAddressesInitialized)
-    {
-        DumpData();
-        fAddressesInitialized = false;
-    }
-
     // Close sockets
     BOOST_FOREACH(CNode* pnode, vNodes)
         pnode->CloseSocketDisconnect();
