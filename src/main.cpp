@@ -366,6 +366,9 @@ void InitializeNode(NodeId nodeid, const CNode *pnode) {
 }
 
 void FinalizeNode(NodeId nodeid, bool& fUpdateConnectionTime) {
+    if (ShutdownRequested())
+        return; // Speed up shutdown.
+
     fUpdateConnectionTime = false;
     LOCK(cs_main);
     CNodeState *state = State(nodeid);
@@ -377,13 +380,14 @@ void FinalizeNode(NodeId nodeid, bool& fUpdateConnectionTime) {
         fUpdateConnectionTime = true;
     }
 
+    nPreferredDownload -= state->fPreferredDownload;
+    nPeersWithValidatedDownloads -= (state->nBlocksInFlightValidHeaders != 0);
+    assert(nPeersWithValidatedDownloads >= 0);
+
     BOOST_FOREACH(const QueuedBlock& entry, state->vBlocksInFlight) {
         mapBlocksInFlight.erase(entry.hash);
     }
     EraseOrphansFor(nodeid);
-    nPreferredDownload -= state->fPreferredDownload;
-    nPeersWithValidatedDownloads -= (state->nBlocksInFlightValidHeaders != 0);
-    assert(nPeersWithValidatedDownloads >= 0);
 
     mapNodeState.erase(nodeid);
 
