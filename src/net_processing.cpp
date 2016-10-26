@@ -283,6 +283,9 @@ void InitializeNode(CNode *pnode, CConnman& connman) {
 }
 
 void FinalizeNode(NodeId nodeid, bool& fUpdateConnectionTime) {
+    if (ShutdownRequested())
+        return; // Speed up shutdown.
+
     fUpdateConnectionTime = false;
     LOCK(cs_main);
     CNodeState *state = State(nodeid);
