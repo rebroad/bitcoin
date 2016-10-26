@@ -160,6 +160,8 @@ static std::unique_ptr<ECCVerifyHandle> globalVerifyHandle;
 
 void Interrupt(boost::thread_group& threadGroup)
 {
+    LogPrintf("%s: Setting fRequestShutdown to true\n", __func__);
+    fRequestShutdown = true;
     InterruptHTTPServer();
     InterruptHTTPRPC();
     InterruptRPC();
