@@ -5838,14 +5838,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         LogPrint("block", "recv cmpctblock %s (%d) size=%d peer=%d\n", pindex->GetBlockHash().ToString(), pindex->nHeight, nSize, pfrom->id);
         UpdateBlockAvailability(pfrom->GetId(), pindex->GetBlockHash());
 
+        if (pindex->nTx > 0) {
+            LogPrint("block", "block %s (%d) previously downloaded peer=%d\n", pindex->GetBlockHash().ToString(), pindex->nHeight, pfrom->id);
+            return true;
+        }
+
         std::map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator blockInFlightIt = mapBlocksInFlight.find(pindex->GetBlockHash());
         bool fRequested = blockInFlightIt != mapBlocksInFlight.end();
 
-        if (pindex->nStatus & BLOCK_HAVE_DATA) // Nothing to do here
-            return true;
-
-        if (pindex->nChainWork <= chainActive.Tip()->nChainWork || // We know something better
-                pindex->nTx != 0) { // We had this block at some point, but pruned it
+        if (pindex->nChainWork <= chainActive.Tip()->nChainWork) { // We know something better
             if (fRequested) {
                 // We requested this block for some reason, but our mempool will probably be useless
                 // so we just grab the block via normal getdata
