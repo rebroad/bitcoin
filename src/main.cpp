@@ -5843,12 +5843,25 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::BLOCKTXN && !fImporting && !fReindex) // Ignore blocks received while importing
     {
         BlockTransactions resp;
+        int nSize = vRecv.size();
         vRecv >> resp;
 
         CBlock block;
         bool fBlockRead = false;
+        BlockMap::iterator mi = mapBlockIndex.end();
         {
             LOCK(cs_main);
+
+            mi = mapBlockIndex.find(resp.blockhash);
+            if (mi == mapBlockIndex.end()) {
+                LogPrint("block", "recv blocktxn %s size=%d not recognised peer=%d\n", resp.blockhash.ToString(), nSize, pfrom->id);
+                return true;
+            }
+
+            if (mi->second->nTx > 0) {
+                LogPrint("block", "recv blocktxn %s (%d) size=%d already downloaded peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, nSize, pfrom->id);
+                return true;
+            }
 
             map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
             if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock ||
