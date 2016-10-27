@@ -5008,13 +5008,13 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         pfrom->hashContinue.SetNull();
                     }
                 } else if (send) {
-                    LogPrint("block", "recv getdata %s (%d). send notfound. peer=%d\n", inv.ToString(), mi->second->nHeight, pfrom->id);
+                    LogPrint("block2", "recv getdata %s (%d). send notfound. peer=%d\n", inv.ToString(), mi->second->nHeight, pfrom->id);
                     vNotFound.push_back(inv);
                 }
             }
             else if (inv.type == MSG_TX || inv.type == MSG_WITNESS_TX)
             {
-                LogPrint("tx", "recv getdata %s peer=%d\n", inv.ToString(), pfrom->id);
+                LogPrint("tx2", "recv getdata %s peer=%d\n", inv.ToString(), pfrom->id);
                 // Send stream from relay memory
                 bool push = false;
                 auto mi = mapRelay.find(inv.hash);
@@ -5032,7 +5032,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                 }
                 if (!push) {
                     vNotFound.push_back(inv);
-                    LogPrint("tx", "recv getdata %s. send notfound. peer=%d\n", inv.ToString(), pfrom->id);
+                    LogPrint("tx2", "recv getdata %s. send notfound. peer=%d\n", inv.ToString(), pfrom->id);
                 }
             } else
                 LogPrint("net", "recv getdata %s peer=%d\n", inv.ToString(), pfrom->id); // Should never get here
@@ -5071,7 +5071,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 {
     unsigned int nMaxSendBufferSize = connman.GetSendBufferSize();
 
-    LogPrint("net", "recv %s size=%u peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->id);
+    LogPrint("net2", "recv %s size=%u peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->id);
     if (mapArgs.count("-dropmessagestest") && GetRand(atoi(mapArgs["-dropmessagestest"])) == 0)
     {
         LogPrintf("dropmessagestest DROPPING RECV MESSAGE\n");
@@ -5397,7 +5397,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
             if (inv.type == MSG_TX) {
                 bool fAlreadyHave = AlreadyHave(inv);
-                LogPrint("tx", "recv inv %s (%s) peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
+                LogPrint("tx2", "recv inv %s (%s) peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
                 inv.type |= nFetchFlags;
                 pfrom->AddInventoryKnown(inv);
                 if (fBlocksOnly)
@@ -5413,7 +5413,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 else {
                     fAlreadyHave = true;
                     int theirheight = it->second->nHeight;
-                    LogPrint("block", "recv inv %s (%d) peer=%d\n", inv.ToString(), theirheight, pfrom->id);
+                    bool fRecent = (theirheight >= chainActive.Height()-2) ? true : false;
+                    LogPrint(fRecent ? "block" : "block2", "recv inv %s (%d) peer=%d\n", inv.ToString(), theirheight, pfrom->id);
                 }
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
                 if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
@@ -6238,7 +6239,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // Only send one GetAddr response per connection to reduce resource waste
         //  and discourage addr stamping of INV announcements.
         if (pfrom->fSentAddr) {
-            LogPrint("net", "Ignoring repeated \"getaddr\". peer=%d\n", pfrom->id);
+            LogPrint("net2", "Ignoring repeated \"getaddr\". peer=%d\n", pfrom->id);
             return true;
         }
         pfrom->fSentAddr = true;
@@ -7093,7 +7094,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
             const CInv& inv = (*pto->mapAskFor.begin()).second;
             if (!AlreadyHave(inv))
             {
-                LogPrint("tx", "send getdata %s peer=%d\n", inv.ToString(), pto->id);
+                LogPrint("tx2", "send getdata %s peer=%d\n", inv.ToString(), pto->id);
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
                 {
