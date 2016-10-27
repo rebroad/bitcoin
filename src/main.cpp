@@ -4864,12 +4864,16 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
             if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK || inv.type == MSG_CMPCT_BLOCK || inv.type == MSG_WITNESS_BLOCK)
             {
                 bool send = false;
+                bool fRecent = false;
+                int nHeight = 0;
                 BlockMap::iterator mi = mapBlockIndex.find(inv.hash);
-                if (mi != mapBlockIndex.end())
-                {
-                    if (chainActive.Contains(mi->second)) {
+                if (mi != mapBlockIndex.end()) {
+                    nHeight = mi->second->nHeight;
+                    if (nHeight > chainActive.Height()-3)
+                        fRecent=true;
+                    if (chainActive.Contains(mi->second))
                         send = true;
-                    } else {
+                    else {
                         static const int nOneMonth = 30 * 24 * 60 * 60;
                         // To prevent fingerprinting attacks, only send blocks outside of the active
                         // chain if they are valid, and no more than a month older (both in time, and in
@@ -4945,6 +4949,8 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         } else
                             pfrom->PushMessageWithFlag(fPeerWantsWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block);
                     }
+                    if (fRecent)
+                        LogPrint("block", "recv getdata %s (%d). sending. peer=%d\n", inv.ToString(), nHeight, pfrom->id);
 
                     // Trigger the peer node to send a getblocks request for the next batch of inventory
                     if (inv.hash == pfrom->hashContinue)
@@ -5365,21 +5371,24 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     // time the block arrives, the header chain leading up to it is already validated. Not
                     // doing this will result in the received block being rejected as an orphan in case it is
                     // not a direct successor.
+                    LogPrint("block", "send getheaders (%d) %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                     pfrom->PushMessage(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), inv.hash);
                     CNodeState *nodestate = State(pfrom->GetId());
                     if (CanDirectFetch(chainparams.GetConsensus()) &&
                         nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER &&
                         (!IsWitnessEnabled(chainActive.Tip(), chainparams.GetConsensus()) || State(pfrom->GetId())->fHaveWitness)) {
                         inv.type |= nFetchFlags;
-                        if (nodestate->fSupportsDesiredCmpctVersion)
+                        if (nodestate->fSupportsDesiredCmpctVersion) {
+                            LogPrint("block", "send getdata cmpct%s peer=%d\n", inv.ToString(), pfrom->id);
                             vToFetch.push_back(CInv(MSG_CMPCT_BLOCK, inv.hash));
-                        else
+                        } else {
+                            LogPrint("block", "send getdata %s peer=%d\n", inv.ToString(), pfrom->id);
                             vToFetch.push_back(inv);
+                        }
                         // Mark block as in flight already, even though the actual "getdata" message only goes out
                         // later (within the same cs_main lock, though).
                         MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
                     }
-                    LogPrint("block", "send getheaders (%d) to %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                 }
             } else
                 LogPrint("net", "recv inv: %s  %s peer=%d\n", inv.ToString(), AlreadyHave(inv) ? "have" : "new", pfrom->id);
