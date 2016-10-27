@@ -503,6 +503,7 @@ void MaybeSetPeerAsAnnouncingHeaderAndIDs(const CNodeState* nodestate, CNode* pf
             // As per BIP152, we only get 3 of our peers to announce
             // blocks using compact encodings.
             bool found = connman.ForNode(lNodesAnnouncingHeaderAndIDs.front(), [fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion](CNode* pnodeStop){
+                LogPrint("block", "send sendcmpct (no announce) ver=%d peer=%d\n", nCMPCTBLOCKVersion, pnodeStop->id);
                 pnodeStop->PushMessage(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion);
                 return true;
             });
@@ -510,6 +511,7 @@ void MaybeSetPeerAsAnnouncingHeaderAndIDs(const CNodeState* nodestate, CNode* pf
                 lNodesAnnouncingHeaderAndIDs.pop_front();
         }
         fAnnounceUsingCMPCTBLOCK = true;
+        LogPrint("block", "send sendcmpct (announce) ver=%d peer=%d\n", nCMPCTBLOCKVersion, pfrom->id);
         pfrom->PushMessage(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion);
         lNodesAnnouncingHeaderAndIDs.push_back(pfrom->GetId());
     }
@@ -5293,6 +5295,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         bool fAnnounceUsingCMPCTBLOCK = false;
         uint64_t nCMPCTBLOCKVersion = 0;
         vRecv >> fAnnounceUsingCMPCTBLOCK >> nCMPCTBLOCKVersion;
+        LogPrint("block", "recv sendcmpct (%sannounce) ver=%d peer=%d\n", fAnnounceUsingCMPCTBLOCK ? "" : "no ", nCMPCTBLOCKVersion, pfrom->id);
         if (nCMPCTBLOCKVersion == 1 || ((pfrom->GetLocalServices() & NODE_WITNESS) && nCMPCTBLOCKVersion == 2)) {
             LOCK(cs_main);
             // fProvidesHeaderAndIDs is used to "lock in" version of compact blocks we send (fWantsCmpctWitness)
@@ -5470,6 +5473,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::GETBLOCKTXN)
     {
         BlockTransactionsRequest req;
+        int nSize = vRecv.size();
         vRecv >> req;
 
         LOCK(cs_main);
@@ -5489,7 +5493,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         assert(ReadBlockFromDisk(block, it->second, chainparams.GetConsensus()));
 
         BlockTransactions resp(req);
-        for (size_t i = 0; i < req.indexes.size(); i++) {
+        size_t i;
+        for (i = 0; i < req.indexes.size(); i++) {
             if (req.indexes[i] >= block.vtx.size()) {
                 LogPrintf("recv getblocktxn. too many indexes (%d > %d) peer=%d\n", req.indexes[i], block.vtx.size(), pfrom->id);
                 Misbehaving(pfrom->GetId(), 100);
@@ -5498,6 +5503,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             resp.txn[i] = block.vtx[req.indexes[i]];
         }
         pfrom->PushMessageWithFlag(State(pfrom->GetId())->fWantsCmpctWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCKTXN, resp);
+        LogPrint("block", "recv getblocktxn %s (%d) size=%d. send blocktxn indexes=%d peer=%d\n", req.blockhash.ToString(), it->second->nHeight, nSize, i, pfrom->id);
     }
 
 
@@ -5721,14 +5727,18 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::CMPCTBLOCK && !fImporting && !fReindex) // Ignore blocks received while importing
     {
         CBlockHeaderAndShortTxIDs cmpctblock;
+        int nSize = vRecv.size();
         vRecv >> cmpctblock;
 
         LOCK(cs_main);
 
         if (mapBlockIndex.find(cmpctblock.header.hashPrevBlock) == mapBlockIndex.end()) {
             // Doesn't connect (or is genesis), instead of DoSing in AcceptBlockHeader, request deeper headers
-            if (!IsInitialBlockDownload())
+            LogPrint("block", "recv cmpctblock %s. prev %s not found. peer=%d\n", cmpctblock.header.GetHash().ToString(), cmpctblock.header.hashPrevBlock.ToString(), pfrom->id);
+            if (!IsInitialBlockDownload()) {
+                LogPrint("block", "send getheaders (%d) peer=%d\n", pindexBestHeader->nHeight, pfrom->id);
                 pfrom->PushMessage(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), uint256());
+            }
             return true;
         }
 
@@ -5737,7 +5747,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (!AcceptBlockHeader(cmpctblock.header, state, chainparams, &pindex)) {
             int nDoS;
             if (state.IsInvalid(nDoS)) {
-                LogPrintf("recv cmpctblock. INVALID HEADER peer=%d\n", pfrom->id);
+                LogPrintf("recv cmpctblock size=%d INVALID HEADER peer=%d\n", nSize, pfrom->id);
                 if (nDoS > 0)
                     Misbehaving(pfrom->GetId(), nDoS);
                 return true;
@@ -5746,6 +5756,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         // If AcceptBlockHeader returned true, it set pindex
         assert(pindex);
+        LogPrint("block", "recv cmpctblock %s (%d) size=%d peer=%d\n", pindex->GetBlockHash().ToString(), pindex->nHeight, nSize, pfrom->id);
         UpdateBlockAvailability(pfrom->GetId(), pindex->GetBlockHash());
 
         std::map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator blockInFlightIt = mapBlocksInFlight.find(pindex->GetBlockHash());
@@ -5761,6 +5772,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 // so we just grab the block via normal getdata
                 std::vector<CInv> vInv(1);
                 vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom, pindex->pprev, chainparams.GetConsensus()), cmpctblock.header.GetHash());
+                LogPrint("block", "send getdata %s (%d) peer=%d\n", vInv[0].ToString(), pindex->nHeight, pfrom->id);
                 pfrom->PushMessage(NetMsgType::GETDATA, vInv);
             }
             return true;
@@ -5805,6 +5817,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     // Duplicate txindexes, the block is now in-flight, so just request it
                     std::vector<CInv> vInv(1);
                     vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom, pindex->pprev, chainparams.GetConsensus()), cmpctblock.header.GetHash());
+                    LogPrint("block", "send getdata %s (%d) peer=%d\n", vInv[0].ToString(), pindex->nHeight, pfrom->id);
                     pfrom->PushMessage(NetMsgType::GETDATA, vInv);
                     return true;
                 }
@@ -5816,7 +5829,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 }
 
                 BlockTransactionsRequest req;
-                for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
+                size_t i;
+                for (i = 0; i < cmpctblock.BlockTxCount(); i++) {
                     if (!partialBlock.IsTxAvailable(i))
                         req.indexes.push_back(i);
                 }
@@ -5826,10 +5840,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     txn.blockhash = cmpctblock.header.GetHash();
                     CDataStream blockTxnMsg(SER_NETWORK, PROTOCOL_VERSION);
                     blockTxnMsg << txn;
+                    LogPrint("block", "Calling ProcessMessage(BLOCKTXN) peer=%d\n", pfrom->id);
                     return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, nTimeReceived, chainparams, connman);
                 } else {
                     req.blockhash = pindex->GetBlockHash();
-                    pfrom->PushMessage(NetMsgType::GETBLOCKTXN, req);
+                    int nSendSize = pfrom->PushMessage(NetMsgType::GETBLOCKTXN, req);
+                    LogPrint("block", "send getblocktxn %s (%d) indexes=%d size=%d peer=%d\n", req.blockhash.ToString(), pindex->nHeight, i, nSendSize, pfrom->id);
                 }
             }
         } else { // block is more than 2 blocks ahead of our current tip
@@ -5838,6 +5854,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 // mempool will probably be useless - request the block normally
                 std::vector<CInv> vInv(1);
                 vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom, pindex->pprev, chainparams.GetConsensus()), cmpctblock.header.GetHash());
+                LogPrint("block", "send getdata %s (%d) peer=%d\n", vInv[0].ToString(), pindex->nHeight, pfrom->id);
                 pfrom->PushMessage(NetMsgType::GETDATA, vInv);
                 return true;
             } else {
@@ -5847,6 +5864,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 headers.push_back(cmpctblock.header);
                 CDataStream vHeadersMsg(SER_NETWORK, PROTOCOL_VERSION);
                 vHeadersMsg << headers;
+                LogPrint("block", "Calling ProcessMessage(HEADERS) peer=%d\n", pfrom->id);
                 return ProcessMessage(pfrom, NetMsgType::HEADERS, vHeadersMsg, nTimeReceived, chainparams, connman);
             }
         }
@@ -5878,14 +5896,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
             if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock ||
                     it->second.first != pfrom->GetId()) {
-                LogPrint("block", "recv blocktxn %s not expected peer=%d\n", resp.blockhash.ToString(), pfrom->id);
+                LogPrint("block", "recv blocktxn %s (%d) size=%d. not expected peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, nSize, pfrom->id);
                 return true;
             }
 
+            LogPrint("block", "recv blocktxn %s (%d) indexes=%d size=%d peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, resp.txn.size(), nSize, pfrom->id);
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(block, resp.txn);
             if (status == READ_STATUS_INVALID) {
-                LogPrintf("recv blocktxn. INVALID! peer=%d\n", pfrom->id);
+                LogPrintf("blocktxn %s (%d) INVALID! peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, pfrom->id);
                 MarkBlockAsReceived(resp.blockhash, pfrom->id); // Reset in-flight state in case of whitelist
                 Misbehaving(pfrom->GetId(), 100);
                 return true;
@@ -5893,6 +5912,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 // Might have collided, fall back to getdata now :(
                 std::vector<CInv> invs;
                 invs.push_back(CInv(MSG_BLOCK | GetFetchFlags(pfrom, chainActive.Tip(), chainparams.GetConsensus()), resp.blockhash));
+                LogPrint("block", "blocktxn %s (%d) FAILED. send getdata block peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, pfrom->id);
                 pfrom->PushMessage(NetMsgType::GETDATA, invs);
             } else {
                 MarkBlockAsReceived(resp.blockhash, pfrom->id); // it is now an empty pointer
@@ -6709,13 +6729,13 @@ bool SendMessages(CNode* pto, CConnman& connman)
                 if (vHeaders.size() == 1 && state.fPreferHeaderAndIDs) {
                     // We only send up to 1 block as header-and-ids, as otherwise
                     // probably means we're doing an initial-ish-sync or they're slow
-                    LogPrint("block", "send cmpctblock %s peer=%d\n",
-                            vHeaders.front().GetHash().ToString(), pto->id);
                     //TODO: Shouldn't need to reload block from disk, but requires refactor
                     CBlock block;
                     assert(ReadBlockFromDisk(block, pBestIndex, consensusParams));
                     CBlockHeaderAndShortTxIDs cmpctblock(block, state.fWantsCmpctWitness);
-                    pto->PushMessageWithFlag(state.fWantsCmpctWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::CMPCTBLOCK, cmpctblock);
+                    int nSize = pto->PushMessageWithFlag(state.fWantsCmpctWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::CMPCTBLOCK, cmpctblock);
+                    LogPrint("block", "send cmpctblock %s size=%d peer=%d\n",
+                            vHeaders.front().GetHash().ToString(), nSize, pto->id);
                     state.pindexBestHeaderSent = pBestIndex;
                 } else if (state.fPreferHeaders) {
                     if (vHeaders.size() > 1) {
