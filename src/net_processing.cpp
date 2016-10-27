@@ -1668,11 +1668,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     else if (strCommand == NetMsgType::TX)
     {
+        int nSize = vRecv.size();
+
         // Stop processing the transaction early if
         // We are in blocks only mode and peer is either not whitelisted or whitelistrelay is off
         if (!fRelayTxes && (!pfrom->fWhitelisted || !GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY)))
         {
-            LogPrint("tx", "recv tx sent in violation of protocol peer=%d\n", pfrom->id);
+            LogPrint("tx", "recv tx size=%u sent in violation of protocol peer=%d\n", nSize, pfrom->id);
             return true;
         }
 
@@ -1703,9 +1705,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
             pfrom->nLastTXTime = GetTime();
 
-            LogPrint("mempool", "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n",
+            LogPrint("mempool", "AcceptToMemoryPool: peer=%d: accepted %s size=%u (poolsz %u txn, %u kB)\n",
                 pfrom->id,
-                tx.GetHash().ToString(),
+                tx.GetHash().ToString(), nSize,
                 mempool.size(), mempool.DynamicMemoryUsage() / 1000);
 
             // Recursively process any orphan transactions that depended on this one
