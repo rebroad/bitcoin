@@ -6112,10 +6112,19 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     else if (strCommand == NetMsgType::BLOCK && !fImporting && !fReindex) // Ignore blocks received while importing
     {
+        int nSize = vRecv.size();
         CBlock block;
         vRecv >> block;
 
-        LogPrint("block", "recv block %s peer=%d\n", block.GetHash().ToString(), pfrom->id);
+        std::string strHeight;
+        {
+            LOCK(cs_main);
+            BlockMap::iterator mi = mapBlockIndex.find(block.GetHash());
+            if (mi != mapBlockIndex.end())
+                strHeight += strprintf(" (%d)", mi->second->nHeight);
+        }
+
+        LogPrint("block", "recv block %s%s size=%d peer=%d\n", block.GetHash().ToString(), strHeight, nSize, pfrom->id);
 
         CValidationState state;
         // Process all blocks from whitelisted peers, even if not requested,
