@@ -294,6 +294,8 @@ struct CNodeState {
     bool fPreferHeaders;
     //! Whether this peer can process headers for block announcements.
     bool fCanDoHeaders;
+    //! Whether this peer is interested in block invs
+    bool fSentGetblocks;
     //! Whether this peer wants invs or cmpctblocks (when possible) for block announcements.
     bool fPreferHeaderAndIDs;
     /**
@@ -5500,6 +5502,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     else if (strCommand == NetMsgType::GETBLOCKS)
     {
+        State(pfrom->id)->fSentGetblocks = true;
         CBlockLocator locator;
         uint256 hashStop;
         vRecv >> locator >> hashStop;
@@ -6935,7 +6938,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
                         vector<CInv> vInv;
                         vInv.push_back(CInv(MSG_BLOCK, hashToAnnounce));
                         pto->PushMessage(NetMsgType::INV, vInv);
-                        LogPrint("block", "send inv block %s (%d) peer=%d\n",
+                        LogPrint("block", "send inv%s block %s (%d) peer=%d\n", state.fSentGetblocks ? "" : "*",
                             hashToAnnounce.ToString(), pindex->nHeight, pto->id);
                     }
                 }
