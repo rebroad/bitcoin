@@ -1826,8 +1826,10 @@ bool CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
     pnode->fNetworkNode = true;
     if (fOneShot)
         pnode->fOneShot = true;
-    if (fFeeler)
+    if (fFeeler) {
         pnode->fFeeler = true;
+        pnode->fRelayTxes = false;
+    }
 
     return true;
 }
