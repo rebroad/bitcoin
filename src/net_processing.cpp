@@ -253,9 +253,12 @@ void PushNodeVersion(CNode *pnode, CConnman& connman, int64_t nTime)
     CAddress addrYou = (addr.IsRoutable() && !IsProxy(addr) ? addr : CAddress(CService(), addr.nServices));
     CAddress addrMe = CAddress(CService(), nLocalNodeServices);
 
-    connman.PushMessage(pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
-            nonce, strSubVersion, nNodeStartingHeight, ::fRelayTxes));
+    bool fRelay = pnode->fFeeler ? false : ::fRelayTxes;
 
+    connman.PushMessage(pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
+            nonce, strSubVersion, nNodeStartingHeight, fRelay));
+
+    std::string strThem;
     if (fLogIPs)
         strThem += strprintf("them=%s, ", addrYou.ToString());
     LogPrint(pnode->fFeeler ? "feeler" : "net", "send version %d, blocks=%d, relay=%s, services=0x%x, us=%s, %speer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, fRelay ? "1" : "0", nLocalNodeServices, addrMe.ToString(), strThem, nodeid);
