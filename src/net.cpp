@@ -1484,7 +1484,7 @@ void CConnman::ThreadDNSAddressSeed()
     const std::vector<CDNSSeedData> &vSeeds = Params().DNSSeeds();
     int found = 0;
 
-    LogPrintf("Loading addresses from DNS seeds (could take a while)\n");
+    LogPrintf("Loading addresses from %d DNS seeds (could take a while)\n", vSeeds.size());
 
     BOOST_FOREACH(const CDNSSeedData &seed, vSeeds) {
         if (HaveNameProxy()) {
