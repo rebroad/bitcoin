@@ -2658,16 +2658,15 @@ void CNode::BeginMessage(const char* pszCommand) EXCLUSIVE_LOCK_FUNCTION(cs_vSen
     ENTER_CRITICAL_SECTION(cs_vSend);
     assert(ssSend.size() == 0);
     ssSend << CMessageHeader(Params().MessageStart(), pszCommand, 0);
-    LogPrint("net", "sending: %s ", SanitizeString(pszCommand));
 }
 
-void CNode::AbortMessage() UNLOCK_FUNCTION(cs_vSend)
+void CNode::AbortMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
 {
     ssSend.clear();
 
     LEAVE_CRITICAL_SECTION(cs_vSend);
 
-    LogPrint("net", "(aborted)\n");
+    LogPrint("net", "sending: %s (aborted) peer=%d\n", pszCommand, id);
 }
 
 int CNode::EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
@@ -2678,7 +2677,7 @@ int CNode::EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
     if (mapArgs.count("-dropmessagestest") && GetRand(GetArg("-dropmessagestest", 2)) == 0)
     {
         LogPrint("net", "dropmessages DROPPING SEND MESSAGE\n");
-        AbortMessage();
+        AbortMessage(pszCommand);
         return 0;
     }
     if (mapArgs.count("-fuzzmessagestest"))
@@ -2702,15 +2701,24 @@ int CNode::EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend)
     assert(ssSend.size () >= CMessageHeader::CHECKSUM_OFFSET + CMessageHeader::CHECKSUM_SIZE);
     memcpy((char*)&ssSend[CMessageHeader::CHECKSUM_OFFSET], hash.begin(), CMessageHeader::CHECKSUM_SIZE);
 
-    LogPrint("net", "(%d bytes) peer=%d\n", nSize, id);
-
     std::deque<CSerializeData>::iterator it = vSendMsg.insert(vSendMsg.end(), CSerializeData());
     ssSend.GetAndClear(*it);
-    nSendSize += (*it).size();
+    unsigned int nSendDelta = (*it).size();
+    nSendSize += nSendDelta;
 
     // If write queue empty, attempt "optimistic write"
-    if (it == vSendMsg.begin())
-        nOptimisticBytesWritten += SocketSendData(this);
+    unsigned int nOptimisticDelta = 0;
+    std::string strOptim;
+    if (it == vSendMsg.begin()) {
+        nOptimisticDelta = SocketSendData(this);
+	strOptim += strprintf(" optim=%d", nOptimisticDelta);
+        nOptimisticBytesWritten += nOptimisticDelta;
+    }
+    std::string strSendSize;
+    if (nSendSize)
+        strSendSize += strprintf(" nSendSize=%d", nSendSize);
+
+    LogPrint("net2", "sending: %s nSize=%d ssSendsize=%d%s nSendDelta=%d%s peer=%d\n", pszCommand, nSize, nssSendsize, strSendSize, nSendDelta, strOptim, id);
 
     LEAVE_CRITICAL_SECTION(cs_vSend);
 

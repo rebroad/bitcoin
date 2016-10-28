@@ -785,7 +785,7 @@ public:
     void BeginMessage(const char* pszCommand) EXCLUSIVE_LOCK_FUNCTION(cs_vSend);
 
     // TODO: Document the precondition of this function.  Is cs_vSend locked?
-    void AbortMessage() UNLOCK_FUNCTION(cs_vSend);
+    void AbortMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend);
 
     // TODO: Document the precondition of this function.  Is cs_vSend locked?
     int EndMessage(const char* pszCommand) UNLOCK_FUNCTION(cs_vSend);
@@ -803,7 +803,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -821,7 +821,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -840,7 +840,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -858,7 +858,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -876,7 +876,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -894,7 +894,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -912,7 +912,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -930,7 +930,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -948,7 +948,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -966,7 +966,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
@@ -984,7 +984,7 @@ public:
         }
         catch (...)
         {
-            AbortMessage();
+            AbortMessage(pszCommand);
             throw;
         }
         return nSize;
