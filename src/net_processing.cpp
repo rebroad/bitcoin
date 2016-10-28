@@ -1536,6 +1536,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     else if (strCommand == NetMsgType::SENDHEADERS)
     {
+        LogPrint("block", "recv sendheaders peer=%s\n", pfrom->id);
         LOCK(cs_main);
         State(pfrom->GetId())->fPreferHeaders = true;
         State(pfrom->GetId())->fCanDoHeaders = true;
