@@ -2791,7 +2791,6 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 {
     size_t nMessageSize = msg.data.size();
     size_t nTotalSize = nMessageSize + CMessageHeader::HEADER_SIZE;
-    LogPrint("net", "sending: %s (%d bytes) peer=%d\n",  SanitizeString(msg.command.c_str()), nMessageSize, pnode->id);
 
     std::vector<unsigned char> serializedHeader;
     serializedHeader.reserve(CMessageHeader::HEADER_SIZE);
@@ -2820,8 +2819,13 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
         if (optimisticSend == true)
             nBytesSent = SocketSendData(pnode);
     }
-    if (nBytesSent)
+    std::string strBytesSent;
+    if (nBytesSent) {
+        strBytesSent += strprintf("nBytesSent=%d ", nBytesSent);
         RecordBytesSent(nBytesSent);
+    }
+
+    LogPrint("netsend", "sending: %s nMessageSize=%d %snTotalSize=%d peer=%d\n",  msg.command.c_str(), nMessageSize, strBytesSent, nTotalSize, pnode->id);
 }
 
 bool CConnman::ForNode(NodeId id, std::function<bool(CNode* pnode)> func)
