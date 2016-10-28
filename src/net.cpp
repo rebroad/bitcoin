@@ -1649,6 +1649,7 @@ void CConnman::ThreadDNSAddressSeed()
 void CConnman::DumpAddresses()
 {
     int64_t nStart = GetTimeMillis();
+    LogPrintf("Flushing %d addresses to peers.dat...\n", addrman.size());
 
     CAddrDB adb;
     adb.Write(addrman);
