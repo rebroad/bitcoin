@@ -386,20 +386,20 @@ BOOST_AUTO_TEST_CASE(addrman_getaddr)
     addrman.Add(addr4, source2);
     addrman.Add(addr5, source1);
 
-    // GetAddr returns 23% of addresses, 23% of 5 is 1 rounded down.
-    BOOST_CHECK(addrman.GetAddr().size() == 1); 
+    // GetAddr returns 100% of addresses, 100% of 5 is 5 rounded down.
+    BOOST_CHECK(addrman.GetAddr().size() == 5);
 
     // Test 24: Ensure GetAddr works with new and tried addresses.
     addrman.Good(CAddress(addr1, NODE_NONE));
     addrman.Good(CAddress(addr2, NODE_NONE));
-    BOOST_CHECK(addrman.GetAddr().size() == 1);
+    BOOST_CHECK(addrman.GetAddr().size() == 5);
 
     // Test 25: Ensure GetAddr still returns 23% when addrman has many addrs.
     for (unsigned int i = 1; i < (8 * 256); i++) {
         int octet1 = i % 256;
         int octet2 = (i / 256) % 256;
         int octet3 = (i / (256 * 2)) % 256;
-        std::string strAddr = boost::to_string(octet1) + "." + boost::to_string(octet2) + "." + boost::to_string(octet3) + ".23";
+        std::string strAddr = boost::to_string(octet1) + "." + boost::to_string(octet2) + "." + boost::to_string(octet3) + "1";
         CAddress addr = CAddress(ResolveService(strAddr), NODE_NONE);
         
         // Ensure that for all addrs in addrman, isTerrible == false.
@@ -410,11 +410,8 @@ BOOST_AUTO_TEST_CASE(addrman_getaddr)
     }
     std::vector<CAddress> vAddr = addrman.GetAddr();
 
-    size_t percent23 = (addrman.size() * 23) / 100;
-    BOOST_CHECK(vAddr.size() == percent23);
-    BOOST_CHECK(vAddr.size() == 461);
-    // (Addrman.size() < number of addresses added) due to address collisons.
-    BOOST_CHECK(addrman.size() == 2007);
+    size_t percent100 = (addrman.size() * 100) / 100;
+    BOOST_CHECK(vAddr.size() == percent100);
 }
 
 
