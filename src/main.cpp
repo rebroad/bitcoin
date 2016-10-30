@@ -408,6 +408,8 @@ bool MarkBlockAsReceived(const uint256& hash, NodeId nodeid) {
     map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash);
     if (itInFlight != mapBlocksInFlight.end()) {
         LogPrint("block", "%s: first=%d, peer=%d\n", __func__, itInFlight->second.first, nodeid);
+        if (itInFlight->second.first != nodeid)
+            return true;  // REBTEST
         CNodeState *state = State(itInFlight->second.first);
         state->nBlocksInFlightValidHeaders -= itInFlight->second.second->fValidatedHeaders;
         if (state->nBlocksInFlightValidHeaders == 0 && itInFlight->second.second->fValidatedHeaders) {
