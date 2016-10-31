@@ -1822,7 +1822,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
 
         // we must use CBlocks, as CBlockHeaders won't include the 0x00 nTx count at the end
         std::vector<CBlock> vHeaders;
-        int nLimit = MAX_HEADERS_RESULTS;
+        int nLimit = MAX_HEADERS_SEND;
         int nHeightStart = pindex ? pindex->nHeight : -1;
         int nHeightEnd = nHeightStart;
         int nCount = 0;
