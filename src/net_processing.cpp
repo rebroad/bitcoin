@@ -168,6 +168,8 @@ struct CNodeState {
     int nUnconnectingHeaders;
     //! Whether we've started headers synchronization with this peer.
     bool fSyncStarted;
+    //! Whether we're waiting for requested headers from this peer
+    bool fExpectingHeaders;
     //! Since when we're stalling block download progress (in microseconds), or 0.
     int64_t nStallingSince;
     std::list<QueuedBlock> vBlocksInFlight;
@@ -211,6 +213,7 @@ struct CNodeState {
         pindexBestHeaderSent = NULL;
         nUnconnectingHeaders = 0;
         fSyncStarted = false;
+        fExpectingHeaders = false;
         nStallingSince = 0;
         nDownloadingSince = 0;
         nBlocksInFlight = 0;
@@ -2381,6 +2384,10 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
     {
         std::vector<CBlockHeader> headers;
 
+        CNodeState *nodestate = State(pfrom->GetId());
+        bool fHeadersExpected = nodestate->fExpectingHeaders;
+        nodestate->fExpectingHeaders = false; // no longer expecting as they have arrived
+
         // Bypass the normal CBlock deserialization, as we don't want to risk deserializing 2000 full blocks.
         unsigned int nCount = ReadCompactSize(vRecv);
         if (nCount > MAX_HEADERS_RESULTS) {
@@ -2403,7 +2410,6 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         const CBlockIndex *pindexLast = NULL;
         {
         LOCK(cs_main);
-        CNodeState *nodestate = State(pfrom->GetId());
 
         // If this looks like it could be a block announcement (nCount <
         // MAX_BLOCKS_TO_ANNOUNCE), use special logic for handling headers that
@@ -2469,9 +2475,11 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         nodestate->nUnconnectingHeaders = 0;
 
         assert(pindexLast);
+        const CBlockIndex *pindexPrevBestKnown = nodestate->pindexBestKnownBlock;
         UpdateBlockAvailability(pfrom->GetId(), pindexLast->GetBlockHash());
 
-        if (nCount == MAX_HEADERS_RESULTS) {
+        // Ask for more headers if there might be more and we are getting new headers from this peer.
+        if (fHeadersExpected && nNew > 1 && nodestate->pindexBestKnownBlock != pindexPrevBestKnown) {
             // Headers message had its maximum size; the peer may have more headers.
             //
             // Optimize where to fetch the next headers from. Places the last header could be;-
@@ -2506,6 +2514,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
             LogPrint("block", "send more getheaders (%s%d) to end. peer=%d (startheight:%d)\n", strDesc, pindexContinue->nHeight, pfrom->id, pfrom->nStartingHeight);
             connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexContinue), uint256()));
+            nodestate->fExpectingHeaders = true; // we are expecting again
         }
 
         bool fCanDirectFetch = CanDirectFetch(chainparams.GetConsensus());
@@ -3100,6 +3109,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                     pindexStart = pindexStart->pprev;
                 LogPrint("block", "send initial getheaders (%d) to end peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);
                 connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexStart), uint256()));
+                state.fExpectingHeaders = true;
             }
         }
 
