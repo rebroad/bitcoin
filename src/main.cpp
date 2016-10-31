@@ -6151,7 +6151,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         assert(pindexLast);
         UpdateBlockAvailability(pfrom->GetId(), pindexLast->GetBlockHash());
 
-        if (nCount == MAX_HEADERS_RESULTS) {
+        if (nCount > 1) {
             // Headers message had its maximum size; the peer may have more headers.
             //
             // Optimize where to fetch the next headers from. Places the last header could be;-
