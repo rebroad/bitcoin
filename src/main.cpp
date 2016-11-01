@@ -6255,14 +6255,27 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         vRecv >> block;
 
         std::string strHeight;
+        bool fAlreadyHad = false;
         {
             LOCK(cs_main);
             BlockMap::iterator mi = mapBlockIndex.find(block.GetHash());
-            if (mi != mapBlockIndex.end())
+            if (mi != mapBlockIndex.end()) {
                 strHeight += strprintf(" (%d)", mi->second->nHeight);
+                if (mi->second->nTx)
+                    fAlreadyHad = true;
+            }
         }
 
         LogPrint("block", "recv block %s%s size=%d peer=%d\n", block.GetHash().ToString(), strHeight, nSize, pfrom->id);
+        std::map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator blockInFlightIt = mapBlocksInFlight.find(block.GetHash());
+        bool fRequested = blockInFlightIt != mapBlocksInFlight.end();
+        fRequested |= pfrom->fWhitelisted && !IsInitialBlockDownload();
+
+        if (!fRequested && fAlreadyHad) {
+            LogPrintf("block %s%s was old and not requested. Disconnecting peer=%d\n", block.GetHash().ToString(), strHeight, pfrom->id);
+            Misbehaving(pfrom->id, 34);
+            pfrom->fDisconnect = true;
+        }
 
         CValidationState state;
         // Process all blocks from whitelisted peers, even if not requested,
