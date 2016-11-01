@@ -2695,7 +2695,26 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
         vRecv >> *pblock;
 
-        LogPrint("block", "recv block %s size=%d peer=%d\n", pblock->GetHash().ToString(), nSize, pfrom->id);
+        std::string strExtra;
+        {
+            LOCK(cs_main);
+            BlockMap::iterator mi = mapBlockIndex.find(pblock->GetHash());
+            if (mi != mapBlockIndex.end())
+                strExtra += strprintf(" %s", strBlkInfo(mi->second));
+        }
+
+        LogPrint("block", "recv block %s%s size=%d peer=%d\n", pblock->GetHash().ToString(), strExtra, nSize, pfrom->id);
+        std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator blockInFlightIt = mapBlocksInFlight.find(pblock->GetHash());
+        bool fRequested = blockInFlightIt != mapBlocksInFlight.end();
+        fRequested |= pfrom->fWhitelisted && !IsInitialBlockDownload();
+
+        if (!fRequested) { // to reduce fingerprinting
+            LogPrintf("block %s%s was not requested. Disconnecting peer=%d\n", pblock->GetHash().ToString(), strExtra, pfrom->id);
+            LOCK(cs_main);
+            Misbehaving(pfrom->id, 34);
+            pfrom->fDisconnect = true;
+            return true;
+        }
 
         // Process all blocks from whitelisted peers, even if not requested,
         // unless we're still syncing with the network.
