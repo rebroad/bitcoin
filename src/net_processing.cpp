@@ -2352,7 +2352,28 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
         vRecv >> *pblock;
 
-        LogPrint("block", "recv block %s size=%d peer=%d\n", pblock->GetHash().ToString(), nSize, pfrom->id);
+        std::string strExtra;
+        bool fAlreadyHad = false;
+        {
+            LOCK(cs_main);
+            BlockMap::iterator mi = mapBlockIndex.find(pblock->GetHash());
+            if (mi != mapBlockIndex.end()) {
+                strExtra += strprintf(" %s", strBlkInfo(mi->second));
+                if (mi->second->nTx)
+                    fAlreadyHad = true;
+            }
+        }
+
+        LogPrint("block", "recv block %s%s size=%d peer=%d\n", pblock->GetHash().ToString(), strExtra, nSize, pfrom->id);
+        std::map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator blockInFlightIt = mapBlocksInFlight.find(pblock->GetHash());
+        bool fRequested = blockInFlightIt != mapBlocksInFlight.end();
+        fRequested |= pfrom->fWhitelisted && !IsInitialBlockDownload();
+
+        if (!fRequested && fAlreadyHad) {
+            LogPrintf("block %s%s was old and not requested. Disconnecting peer=%d\n", pblock->GetHash().ToString(), strExtra, pfrom->id);
+            Misbehaving(pfrom->id, 34);
+            pfrom->fDisconnect = true;
+        }
 
         // Process all blocks from whitelisted peers, even if not requested,
         // unless we're still syncing with the network.
