@@ -2236,8 +2236,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             LOCK(cs_main);
 
             std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
-            if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock ||
-                    it->second.first != pfrom->GetId()) {
+            if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock) {
                 LogPrint("block", "recv blocktxn %s size=%d. not expected. peer=%d\n", resp.blockhash.ToString(), nSize, pfrom->id);
                 return true;
             }
@@ -2250,7 +2249,9 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             if (status == READ_STATUS_INVALID) {
                 MarkBlockAsReceived(resp.blockhash); // Reset in-flight state in case of whitelist
                 LogPrintf("blocktxn %s size=%d. INVALID! peer=%d\n", resp.blockhash.ToString(), nSize, pfrom->id);
-                Misbehaving(pfrom->GetId(), 100);
+                if (it->second.first == pfrom->id) { // Only misbehaving if it's the one we expected
+                    Misbehaving(pfrom->GetId(), 100);
+                }
                 return true;
             } else if (status == READ_STATUS_FAILED) {
                 // Might have collided, fall back to getdata now :(
