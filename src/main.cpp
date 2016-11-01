@@ -6000,14 +6000,16 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             }
 
             map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
-            if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock ||
-                    it->second.first != pfrom->GetId()) {
+            if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock) {
                 LogPrint("block", "recv blocktxn %s (%d) size=%d. not expected peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, nSize, pfrom->id);
                 MarkBlockAsReceived(resp.blockhash, pfrom->id); // REBTEST
                 return true;
             }
 
-            LogPrint("block", "recv blocktxn %s (%d) indexes=%d size=%d peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, resp.txn.size(), nSize, pfrom->id);
+            if (it->second.first != pfrom->id)
+                LogPrint("block", "recv blocktxn %s (%d) indexes=%d size=%d expected-peer=%d peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, resp.txn.size(), nSize, it->second.first, pfrom->id);
+            else
+                LogPrint("block", "recv blocktxn %s (%d) indexes=%d size=%d peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, resp.txn.size(), nSize, pfrom->id);
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(block, resp.txn);
             if (status == READ_STATUS_INVALID) {
