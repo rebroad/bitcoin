@@ -2081,14 +2081,17 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             }
 
             map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
-            if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock ||
-                    it->second.first != pfrom->GetId()) {
+            if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock) {
                 LogPrint("block", "recv blocktxn %s size=%d. not expected. peer=%d\n", strBlockInfo(mi->second), nSize, pfrom->id);
                 return true;
             }
 
-            if (resp.txn.size()) // Only show if we actually received the blocktxn message
-                LogPrint("block", "recv blocktxn %s indexes=%d size=%d peer=%d\n", strBlockInfo(mi->second), resp.txn.size(), nSize, pfrom->id);
+            if (resp.txn.size()) { // Only show if we actually received the blocktxn message
+                std::string strExpected;
+                if (it->second.first != pfrom->id)
+                    strExpected = strprintf("expected-peer=%d ", it->second.first);
+                LogPrint("block", "recv blocktxn %s indexes=%d size=%d %speer=%d\n", strBlockInfo(mi->second), resp.txn.size(), nSize, strExpected, pfrom->id);
+            }
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
             if (status == READ_STATUS_INVALID) {
