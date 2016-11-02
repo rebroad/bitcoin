@@ -1,7 +1,11 @@
 Bitcoin Core integration/staging tree
 =====================================
 
-[![Build Status](https://travis-ci.org/bitcoin/bitcoin.svg?branch=master)](https://travis-ci.org/bitcoin/bitcoin)
+[![Build Status](https://travis-ci.org/rebroad/bitcoin.svg?branch=master)](https://travis-ci.org/rebroad/bitcoin)
+<a href="https://scan.coverity.com/projects/rebroad-bitcoin">
+  <img alt="Coverity Scan Build Status"
+       src="https://scan.coverity.com/projects/10696/badge.svg"/>
+</a>
 
 https://bitcoincore.org
 
