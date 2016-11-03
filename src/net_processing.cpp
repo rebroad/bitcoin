@@ -589,10 +589,9 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<CBl
                 // We consider the chain that this peer is on invalid.
                 return;
             }
-            if (!State(nodeid)->fHaveWitness && IsWitnessEnabled(pindex->pprev, consensusParams)) {
+            if (!State(nodeid)->fHaveWitness && IsWitnessEnabled(pindex->pprev, consensusParams))
                 // We wouldn't download this block or its descendants from this peer.
                 return;
-            }
             if (pindex->nStatus & BLOCK_HAVE_DATA || chainActive.Contains(pindex)) {
                 if (pindex->nChainTx)
                     state->pindexLastCommonBlock = pindex;
@@ -1550,7 +1549,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 Misbehaving(pfrom->GetId(), 50);
                 return true;
             }
-        }
+        } // loop through each inv
 
         if (!vToFetch.empty())
             connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETDATA, vToFetch));
