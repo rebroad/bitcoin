@@ -5514,12 +5514,17 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         LOCK(cs_main);
 
+        if (locator.IsNull())
+            LogPrintf("recv getblocks locator IsNull peer=%d\n", pfrom->id); // REBTEMP
         // Find the last block the caller has in the main chain
         CBlockIndex* pindex = FindForkInGlobalIndex(chainActive, locator);
+        LogPrintf("getblocks pindex-nHeight=%d peer=%d\n", pindex ? pindex->nHeight : -1, pfrom->id); // REBTEMP
 
         // Send the rest of the chain
-        if (pindex)
+        if (pindex) {
             pindex = chainActive.Next(pindex);
+            LogPrintf("getblocks Next pindex->nHeight=%d peer=%d\n", pindex ? pindex->nHeight : -1, pfrom->id); //REBTEMP
+        }
         int nLimit = 500;
         int nHeightStart = pindex ? pindex->nHeight : -1;
         int nHeightEnd = nHeightStart;
@@ -5598,22 +5603,27 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             return true;
         }
 
-        CNodeState *nodestate = State(pfrom->GetId());
         CBlockIndex* pindex = NULL;
-        if (locator.IsNull())
-        {
+        if (locator.IsNull()) {
             // If locator is null, return the hashStop block
+            if (hashStop.IsNull()) {
+                LogPrintf("recv getheaders locator IsNull hashStop IsNull peer=%d\n", pfrom->id); // REBTEMP
+                return true; // Avoid running a find() that will search the entire Index and fail. (REBTODO: correct assumption?)
+            }
             BlockMap::iterator mi = mapBlockIndex.find(hashStop);
-            if (mi == mapBlockIndex.end())
-                return true;
+            if (mi == mapBlockIndex.end()) {
+                LogPrintf("recv getheaders locator IsNull hashStop not found peer=%d\n", pfrom->id); // REBTEMP
+                return true; // REBTODO - why don't we instead send our ActiveTip header?
+            }
             pindex = (*mi).second;
-        }
-        else
-        {
+        } else {
             // Find the last block the caller has in the main chain
             pindex = FindForkInGlobalIndex(chainActive, locator);
-            if (pindex)
+            LogPrintf("recv getheaders locator %s (%d) peer=%d\n", pindex ? pindex->GetBlockHash().ToString() : "NULL", pindex ? pindex->nHeight : -1, pfrom->id); // REBTEMP
+            if (pindex) {
                 pindex = chainActive.Next(pindex);
+                LogPrintf("getheaders Next pindex->nHeight=%d peer=%d\n", pindex ? pindex->nHeight : -1, pfrom->id); // REBTEMP
+            }
         }
 
         // we must use CBlocks, as CBlockHeaders won't include the 0x00 nTx count at the end
@@ -5634,7 +5644,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // if our peer has chainActive.Tip() (and thus we are sending an empty
         // headers message). In both cases it's safe to update
         // pindexBestHeaderSent to be our tip.
-        nodestate->pindexBestHeaderSent = pindex ? pindex : chainActive.Tip();
+        State(pfrom->id)->pindexBestHeaderSent = pindex ? pindex : chainActive.Tip();
         LogPrint("block", "recv getheaders to %s. send %d headers (height %d to %d) peer=%d\n", hashStop.IsNull() ? "end" : hashStop.ToString(), nCount, nHeightStart, nHeightEnd, pfrom->id);
         pfrom->PushMessage(NetMsgType::HEADERS, vHeaders);
     }
