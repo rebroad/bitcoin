@@ -1700,7 +1700,7 @@ void CConnman::ThreadOpenConnections()
             // only consider nodes missing relevant services we have at least 4 already,
             // and at least 6 once SegWit has activated
             if ((addr.nServices & nRelevantServices) != nRelevantServices && (nTries < 40 &&
-                    nRelevant < 5) && !fFeeler)
+                    (nRelevant < 5 || (fWitnessActive && nRelevant < 7))) && !fFeeler)
                 continue;
 
             // do not allow non-default ports, unless after 50 invalid addresses selected already
