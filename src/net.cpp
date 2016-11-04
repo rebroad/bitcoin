@@ -1734,6 +1734,7 @@ void CConnman::ThreadOpenConnections()
         // Do this here so we don't have to critsect vNodes inside mapAddresses critsect.
         int nOutbound = 0;
         int nOutboundRelevant = 0;
+        int nRelevant = 0;
         std::set<std::vector<unsigned char> > setConnected;
         {
             LOCK(cs_vNodes);
@@ -1750,6 +1751,7 @@ void CConnman::ThreadOpenConnections()
                     // also have the added issue that they're attacker controlled and could be used
                     // to prevent us from connecting to particular hosts if we used them here.
                     setConnected.insert(pnode->addr.GetGroup());
+                    nRelevant += pnode->fSuccessfullyConnected && ((pnode->nServices & nRelevantServices) == nRelevantServices);
                     nOutbound++;
                 }
             }
@@ -1806,15 +1808,12 @@ void CConnman::ThreadOpenConnections()
             if (nANow - addr.nLastTry < 600 && nTries < 30)
                 continue;
 
-            // only consider nodes missing relevant services after 40 failed attempts and only if less than half the outbound are up.
+            // only consider nodes missing relevant services we have at least 4 already,
+            // and at least 6 once SegWit has activated
             ServiceFlags nRequiredServices = nRelevantServices;
-            if (nTries >= 40 && nOutbound < (nMaxOutbound >> 1)) {
-                nRequiredServices = REQUIRED_SERVICES;
-            }
-
-            if ((addr.nServices & nRequiredServices) != nRequiredServices) {
+            if ((addr.nServices & nRelevantServices) != nRequiredServices && (nTries < 40 &&
+                    nRelevant < 5) && !fFeeler)
                 continue;
-            }
 
             // do not allow non-default ports, unless after 50 invalid addresses selected already
             if (addr.GetPort() != Params().GetDefaultPort() && nTries < 50)
