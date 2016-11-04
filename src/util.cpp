@@ -112,6 +112,7 @@ string strMiscWarning;
 bool fLogTimestamps = DEFAULT_LOGTIMESTAMPS;
 bool fLogTimeMicros = DEFAULT_LOGTIMEMICROS;
 bool fLogIPs = DEFAULT_LOGIPS;
+bool fWitnessActive = false; // needed by net.cpp for peer selection
 std::atomic<bool> fReopenDebugLog(false);
 CTranslationInterface translationInterface;
 
