@@ -1642,6 +1642,12 @@ void CConnman::ThreadOpenConnections()
         //
         CAddress addrConnect;
 
+        // Only declare outselves a Witness node once SegWit has activated.
+        if (fWitnessActive) {
+            nLocalServices = ServiceFlags(nLocalServices | NODE_WITNESS);
+            nRelevantServices = ServiceFlags(nRelevantServices | NODE_WITNESS);
+        }
+
         // Only connect out to one peer per network group (/16 for IPv4).
         // Do this here so we don't have to critsect vNodes inside mapAddresses critsect.
         int nOutbound = 0;
