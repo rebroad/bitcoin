@@ -2529,6 +2529,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
+    else if (strCommand == NetMsgType::ALERT)
+    {
+	;;
+    }
+
+
     else if (strCommand == NetMsgType::FILTERLOAD)
     {
         CBloomFilter filter;
