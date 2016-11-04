@@ -66,6 +66,7 @@
 using namespace std;
 
 bool fFeeEstimatesInitialized = false;
+bool fWitnessActive = false; // needed by net.cpp for peer selection
 static const bool DEFAULT_PROXYRANDOMIZE = true;
 static const bool DEFAULT_REST_ENABLE = false;
 static const bool DEFAULT_DISABLE_SAFEMODE = false;
