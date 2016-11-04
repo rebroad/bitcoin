@@ -1803,7 +1803,7 @@ void CConnman::ThreadOpenConnections()
             // and at least 6 once SegWit has activated
             ServiceFlags nRequiredServices = nRelevantServices;
             if ((addr.nServices & nRelevantServices) != nRequiredServices && (nTries < 40 &&
-                    nRelevant < 5) && !fFeeler)
+                    (nRelevant < 5 || (fWitnessActive && nRelevant < 7))) && !fFeeler)
                 continue;
 
             // do not allow non-default ports, unless after 50 invalid addresses selected already
