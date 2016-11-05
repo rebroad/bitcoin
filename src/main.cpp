@@ -7146,7 +7146,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
             // should only happen during initial block download.
-            LogPrintf("Peer=%d is stalling block download, disconnecting\n", pto->id);
+            LogPrintf("block download stalled. nLastRecv=%is nLastSend=%is sipa disconnect peer=%d\n", nNow/1000000 - pto->nLastRecv, nNow/1000000 - pto->nLastSend, pto->id);
             pto->fDisconnect = true;
         }
         // In case there is a block that has been in flight from this peer for 2 + 0.5 * N times the block interval
@@ -7155,10 +7155,10 @@ bool SendMessages(CNode* pto, CConnman& connman)
         // being saturated. We only count validated in-flight blocks so peers can't advertise non-existing block hashes
         // to unreasonably increase our timeout.
         if (!pto->fDisconnect && state.vBlocksInFlight.size() > 0) {
-            QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
+            //QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
             int nOtherPeersWithValidatedDownloads = nPeersWithValidatedDownloads - (state.nBlocksInFlightValidHeaders > 0);
             if (nNow > state.nDownloadingSince + consensusParams.nPowTargetSpacing * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
-                LogPrintf("Timeout downloading block %s from peer=%d, disconnecting\n", queuedBlock.hash.ToString(), pto->id);
+                LogPrintf("block download timeout. nDownloadingSince=%is nLastRecv=%is nLastSend=%is sipa disconnect peer=%d\n", (nNow - state.nDownloadingSince)/1000000, nNow/1000000 - pto->nLastRecv, nNow/1000000 - pto->nLastSend, pto->id);
                 pto->fDisconnect = true;
             }
         }
