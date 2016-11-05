@@ -5566,7 +5566,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             return true;
         }
 
-        if (it->second->nHeight < chainActive.Height() - MAX_BLOCKTXN_DEPTH) {
+        if (!pfrom->fWhitelisted && (it->second->nHeight < chainActive.Height() - MAX_BLOCKTXN_DEPTH)) {
             LogPrint("block", "recv getblocktxn %s (%d) too deep (> %i) peer=%d", req.blockhash.ToString(), it->second->nHeight, MAX_BLOCKTXN_DEPTH, pfrom->id);
             return true;
         }
