@@ -5464,7 +5464,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                             vToFetch.push_back(inv);
                         }
                         // Mark block as in flight already, even though the actual "getdata" message only goes out
-                        // later (within the same cs_main lock, though).
+                        // below (within the same cs_main lock, though).
                         MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
                     }
                 }
@@ -5843,9 +5843,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         assert(pindex);
         LogPrint("block", "recv cmpctblock %s (%d) size=%d peer=%d\n", pindex->GetBlockHash().ToString(), pindex->nHeight, nSize, pfrom->id);
         UpdateBlockAvailability(pfrom->GetId(), pindex->GetBlockHash());
+        // We cannot MarkBlockAsReceived() yet because MarkBlockAsInFlight() below will need the data.
 
         if (pindex->nTx > 0) {
             LogPrint("block", "block %s (%d) previously downloaded peer=%d\n", pindex->GetBlockHash().ToString(), pindex->nHeight, pfrom->id);
+            MarkBlockAsReceived(pindex->GetBlockHash(), pfrom->id); // REBTEST
             return true;
         }
 
@@ -5858,21 +5860,28 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 // so we just grab the block via normal getdata
                 std::vector<CInv> vInv(1);
                 vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom, pindex->pprev, chainparams.GetConsensus()), cmpctblock.header.GetHash());
+                // Even though it's already in flight, mark in case it is now a different peer.
+                MarkBlockAsInFlight(pfrom->id, cmpctblock.header.GetHash(), chainparams.GetConsensus()); // REBTEST
                 LogPrint("block", "send getdata %s (%d) peer=%d\n", vInv[0].ToString(), pindex->nHeight, pfrom->id);
                 pfrom->PushMessage(NetMsgType::GETDATA, vInv);
-            }
+            } else
+                // but here we do!
+                MarkBlockAsReceived(pindex->GetBlockHash(), pfrom->id); // REBTEST
             return true;
         }
 
         // If we're not close to tip yet, give up and let parallel block fetch work its magic
-        if (!fRequested && !CanDirectFetch(chainparams.GetConsensus()))
+        if (!fRequested && !CanDirectFetch(chainparams.GetConsensus())) {
+            MarkBlockAsReceived(pindex->GetBlockHash(), pfrom->id); // REBTEST
             return true;
+        }
 
         CNodeState *nodestate = State(pfrom->GetId());
 
         if (IsWitnessEnabled(pindex->pprev, chainparams.GetConsensus()) && !nodestate->fSupportsDesiredCmpctVersion) {
             // Don't bother trying to process compact blocks from v1 peers
             // after segwit activates.
+            MarkBlockAsReceived(pindex->GetBlockHash(), pfrom->id); // REBTEST
             return true;
         }
 
@@ -5882,15 +5891,19 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             if ((!fRequested && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
                  (fRequested && blockInFlightIt->second.first == pfrom->GetId())) {
                 list<QueuedBlock>::iterator *queuedBlockIt = NULL;
-                if (!MarkBlockAsInFlight(pfrom->GetId(), pindex->GetBlockHash(), chainparams.GetConsensus(), pindex, &queuedBlockIt)) {
+                // We're marking the block as in flight here to get queuedBlockIt. If we don't fetch
+                // more data, we'll mark it as received before we exit...
+                if (!MarkBlockAsInFlight(pfrom->GetId(), pindex->GetBlockHash(), chainparams.GetConsensus(), pindex, &queuedBlockIt)) { // Essentially if fRequested (from pfrom)
                     if (!(*queuedBlockIt)->partialBlock)
                         (*queuedBlockIt)->partialBlock.reset(new PartiallyDownloadedBlock(&mempool));
                     else {
                         // The block was already in flight using compact blocks from the same peer
-                        LogPrint("block", "recv cmpctblock %s (%d) already being synced! peer=%d\n", pindex->GetBlockHash().ToString(), pindex->nHeight, pfrom->id);
+                        LogPrint("block", "recv cmpctblock %s (%d) already being synced! peer=%d\n", pindex->GetBlockHash().ToString(), pindex->nHeight, pfrom->id); // This should surely never happen...?
+                        // Apparently it's already in-flight from a previous send, so don't MarkBlockAsRecieved() here.
                         return true;
                     }
                 }
+                // At this point in the code, fRequested could be true or false
 
                 PartiallyDownloadedBlock& partialBlock = *(*queuedBlockIt)->partialBlock;
                 ReadStatus status = partialBlock.InitData(cmpctblock);
@@ -5903,6 +5916,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     // Duplicate txindexes, the block is now in-flight, so just request it
                     std::vector<CInv> vInv(1);
                     vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom, pindex->pprev, chainparams.GetConsensus()), cmpctblock.header.GetHash());
+                    // Mark in case it is now a different peer
+                    MarkBlockAsInFlight(pfrom->id, cmpctblock.header.GetHash(), chainparams.GetConsensus()); // REBTEST
                     LogPrint("block", "send getdata %s (%d) peer=%d\n", vInv[0].ToString(), pindex->nHeight, pfrom->id);
                     pfrom->PushMessage(NetMsgType::GETDATA, vInv);
                     return true;
@@ -5940,6 +5955,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 // mempool will probably be useless - request the block normally
                 std::vector<CInv> vInv(1);
                 vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom, pindex->pprev, chainparams.GetConsensus()), cmpctblock.header.GetHash());
+                // Mark in case it is now a different peer
+                MarkBlockAsInFlight(pfrom->id, cmpctblock.header.GetHash(), chainparams.GetConsensus()); // REBTEST
                 LogPrint("block", "send getdata %s (%d) peer=%d\n", vInv[0].ToString(), pindex->nHeight, pfrom->id);
                 pfrom->PushMessage(NetMsgType::GETDATA, vInv);
                 return true;
@@ -5950,6 +5967,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 headers.push_back(cmpctblock.header);
                 CDataStream vHeadersMsg(SER_NETWORK, PROTOCOL_VERSION);
                 vHeadersMsg << headers;
+                MarkBlockAsReceived(cmpctblock.header.GetHash(), pfrom->id); // REBTEST
                 LogPrint("block", "Calling ProcessMessage(HEADERS) peer=%d\n", pfrom->id);
                 return ProcessMessage(pfrom, NetMsgType::HEADERS, vHeadersMsg, nTimeReceived, chainparams, connman);
             }
@@ -5971,11 +5989,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             mi = mapBlockIndex.find(resp.blockhash);
             if (mi == mapBlockIndex.end()) {
                 LogPrint("block", "recv blocktxn %s size=%d not recognised peer=%d\n", resp.blockhash.ToString(), nSize, pfrom->id);
+                // no need to MarkBlockAsReceived() as we've never even heard about it before.
                 return true;
             }
 
             if (mi->second->nTx > 0) {
                 LogPrint("block", "recv blocktxn %s (%d) size=%d already downloaded peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, nSize, pfrom->id);
+                MarkBlockAsReceived(resp.blockhash, pfrom->id); // REBTEST - add to that PR
                 return true;
             }
 
@@ -5983,6 +6003,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             if (it == mapBlocksInFlight.end() || !it->second.second->partialBlock ||
                     it->second.first != pfrom->GetId()) {
                 LogPrint("block", "recv blocktxn %s (%d) size=%d. not expected peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, nSize, pfrom->id);
+                MarkBlockAsReceived(resp.blockhash, pfrom->id); // REBTEST
                 return true;
             }
 
@@ -6000,6 +6021,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 invs.push_back(CInv(MSG_BLOCK | GetFetchFlags(pfrom, chainActive.Tip(), chainparams.GetConsensus()), resp.blockhash));
                 LogPrint("block", "blocktxn %s (%d) FAILED. send getdata block peer=%d\n", resp.blockhash.ToString(), mi->second->nHeight, pfrom->id);
                 pfrom->PushMessage(NetMsgType::GETDATA, invs);
+                // Still in flight...
             } else {
                 MarkBlockAsReceived(resp.blockhash, pfrom->id); // it is now an empty pointer
                 fBlockRead = true;
@@ -6200,6 +6222,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     uint32_t nFetchFlags = GetFetchFlags(pfrom, pindex->pprev, chainparams.GetConsensus());
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                     MarkBlockAsInFlight(pfrom->GetId(), pindex->GetBlockHash(), chainparams.GetConsensus(), pindex);
+                    // The actual GETDATA is below...
                 }
                 if (vGetData.size() > 1)
                     LogPrint("block", "send %d getdata blocks to %s (%d) peer=%d\n", vGetData.size(), pindexLast->GetBlockHash().ToString(), pindexLast->nHeight, pfrom->id);
@@ -6213,6 +6236,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     }
                     if (vGetData.size() == 1)
                         LogPrint("block", "send getdata %s (%d) peer=%d\n", vGetData[0].ToString(), pindexLast->nHeight, pfrom->id);
+                    // The MarkBlockAsInFlight() is above...
                     pfrom->PushMessage(NetMsgType::GETDATA, vGetData);
                 }
             }
