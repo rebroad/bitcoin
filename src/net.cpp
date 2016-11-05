@@ -682,7 +682,7 @@ void CNode::copyStats(CNodeStats &stats)
 }
 #undef X
 
-bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete)
+bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete, int64_t& tLastRecvBlk)
 {
     complete = false;
     int64_t nTimeMicros = GetTimeMicros();
@@ -724,6 +724,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
                 std::string strChk = HexStr(msg.hdr.pchChecksum, msg.hdr.pchChecksum+CMessageHeader::CHECKSUM_SIZE);
                 int64_t nNow = GetTime();
                 bool fUpdate = nNow > tLastBlkRep + 10;
+                tLastRecvBlk = nNow;
                 if (msg.complete()) {
                     tLastBlkRep = nNow;
                     //LogPrint("block", "net recv %s (%u bytes) chk=%s peer=%d\n", pchCommand, msg.hdr.nMessageSize, strChk, id);
@@ -1337,7 +1338,7 @@ void CConnman::ThreadSocketHandler()
                         if (nBytes > 0)
                         {
                             bool notify = false;
-                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify))
+                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify, pnode->tLastRecvBlk))
                                 pnode->CloseSocketDisconnect();
                             RecordBytesRecv(nBytes);
                             if (notify) {
@@ -2692,6 +2693,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     nRecvVersion = INIT_PROTO_VERSION;
     nLastSend = 0;
     nLastRecv = 0;
+    tLastRecvBlk = 0;
     nBlocksToBeProcessed = 0;
     nSendBytes = 0;
     nRecvBytes = 0;
