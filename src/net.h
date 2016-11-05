@@ -630,6 +630,7 @@ public:
     int64_t nLastSend;
     int64_t nLastRecv;
     std::atomic<int> nBlocksToBeProcessed; // blocks received but not yet processed
+    int64_t tLastRecvBlk; // Last partial block reception
     int64_t nTimeConnected;
     int64_t nTimeOffset;
     const CAddress addr;
@@ -759,7 +760,7 @@ public:
         return nRefCount;
     }
 
-    bool ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete);
+    bool ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete, int64_t& tLastRecvBlk);
 
     void SetRecvVersion(int nVersionIn)
     {

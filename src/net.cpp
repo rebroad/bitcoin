@@ -641,7 +641,7 @@ void CNode::copyStats(CNodeStats &stats)
 }
 #undef X
 
-bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete)
+bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete, int64_t& tLastRecvBlk)
 {
     complete = false;
     int64_t nTimeMicros = GetTimeMicros();
@@ -681,6 +681,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
                 std::string strChk = HexStr(msg.hdr.pchChecksum, msg.hdr.pchChecksum+CMessageHeader::CHECKSUM_SIZE);
                 int64_t nNow = GetTime();
                 bool fUpdate = nNow > tLastBlkRep + 10;
+                tLastRecvBlk = nNow;
                 if (msg.complete()) {
                     tLastBlkRep = nNow;
                     //LogPrint("block", "net recv %s (%u bytes) chk=%s peer=%d\n", pchCommand, msg.hdr.nMessageSize, strChk, id);
@@ -1267,7 +1268,7 @@ void CConnman::ThreadSocketHandler()
                         if (nBytes > 0)
                         {
                             bool notify = false;
-                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify))
+                            if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify, pnode->tLastRecvBlk))
                                 pnode->CloseSocketDisconnect();
                             RecordBytesRecv(nBytes);
                             if (notify) {
@@ -1342,11 +1343,12 @@ void CConnman::ThreadSocketHandler()
                     LogPrintf("socket receive timeout: nLastRecv=%is peer=%d\n", nTime - pnode->nLastRecv, pnode->id);
                     pnode->fDisconnect = true;
                 }
-                else if (pnode->nPingNonceSent && pnode->nPingUsecStart + TIMEOUT_INTERVAL * 1000000 < GetTimeMicros())
-                {
-                    LogPrintf("ping timeout: %fs peer=%d\n", 0.000001 * (GetTimeMicros() - pnode->nPingUsecStart), pnode->id);
-                    pnode->fDisconnect = true;
-                }
+                // Disable the below as this can happen when downloading a block on a slow connection
+                //else if (pnode->nPingNonceSent && pnode->nPingUsecStart + TIMEOUT_INTERVAL * 1000000 < GetTimeMicros())
+                //{
+                //    LogPrintf("ping timeout: %fs peer=%d\n", 0.000001 * (GetTimeMicros() - pnode->nPingUsecStart), pnode->id);
+                //    pnode->fDisconnect = true;
+                //}
             }
         }
         {
@@ -2586,6 +2588,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     nRecvVersion = INIT_PROTO_VERSION;
     nLastSend = 0;
     nLastRecv = 0;
+    tLastRecvBlk = 0;
     nBlocksToBeProcessed = 0;
     nSendBytes = 0;
     nRecvBytes = 0;
