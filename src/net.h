@@ -595,6 +595,7 @@ public:
     const int64_t nTimeConnected;
     std::atomic<int64_t> nTimeOffset;
     std::atomic<int> nBlocksToBeProcessed; // blocks received but not yet processed
+    int64_t tLastRecvBlk; // Last partial block reception
     const CAddress addr;
     std::atomic<int> nVersion;
     // strSubVer is whatever byte array we read from the wire. However, this field is intended
@@ -726,7 +727,7 @@ public:
         return nRefCount;
     }
 
-    bool ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete);
+    bool ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete, int64_t& tLastRecvBlk);
 
     void SetRecvVersion(int nVersionIn)
     {
