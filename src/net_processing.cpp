@@ -1164,13 +1164,20 @@ void LogRecv(int nNew, CBlockIndex *pindex, std::string strType, int nSize, int 
         strDesc += "old "; // it's behind our current tip
     else if (pindex->nTx > 0)
         strDesc += "got "; // it's been downloaded
+    bool fCheck = false;
+    std::string strExtra = strprintf("%s", strBlkInfo(pindex, &fCheck));
     std::string strSize;
     if (nSize)
         strSize = strprintf("size=%d ", nSize);
     bool fRecent = false;
     if (pindex->nChainWork >= (pindexBestHeader->pprev ? (pindexBestHeader->pprev->pprev ? pindexBestHeader->pprev->pprev->nChainWork : 0) : 0))
         fRecent = true;
-    LogPrint((nNew || fRecent) ? "block" : "blockhist", "recv %s%s%s %s %s %speer=%d\n", strNew, strDesc, strType, pindex->GetBlockHash().ToString(), strBlkInfo(pindex), strSize, node);
+    LogPrint((nNew || fCheck || fRecent) ? "block" : "blockhist", "recv %s%s%s %s %s %speer=%d\n", strNew, strDesc, strType, pindex->GetBlockHash().ToString(), strExtra, strSize, node);
+    if (fCheck && nNew) {
+        CBlockIndex *pindexTipFork = LastCommonAncestor(pindex, chainActive.Tip());
+        if (pindexTipFork->nHeight < chainActive.Tip()->nHeight)
+            LogPrint("block", "WARNING: current headers indicate a re-org may happen, back to height %d\n", pindexTipFork->nHeight);
+    }
 }
 
 bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t nTimeReceived, const CChainParams& chainparams, CConnman& connman)
