@@ -6143,6 +6143,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             CBlockIndex *pindexFork = LastCommonAncestor(pindexLast, pindexBestHeader);
             std::string strFork;
             std::string strDesc;
+            bool fCheck = false;
             if (pindexFork->nHeight < pindexLast->nHeight) {
                 bool fEqualWork = (pindexLast->nChainWork == pindexBestHeader->nChainWork);
                 strFork += strprintf(" %sfork@%d", fEqualWork ? "=" : "", pindexFork->nHeight);
@@ -6152,9 +6153,17 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 strDesc += "best "; // it's the current best header
             else if (pindexLast->nHeight < chainActive.Tip()->nHeight)
                 strDesc += "old "; // it's older than our current tip
-            else if (pindexLast->nTx > 0)
-                strDesc += "got "; // it's been downloaded
+            else {
+                fCheck = true;
+                if (pindexLast->nTx > 0)
+                    strDesc += "got "; // it's been downloaded
+            }
             LogPrint((headers.size() == 1 || fNew || pindexLast->nHeight > pindexBestHeader->nHeight-3) ? "block" : "block2", "recv %s%sheader %s (%d%s) peer=%d\n", fNew ? "new " : "", strDesc, header.GetHash().ToString(), pindexLast->nHeight, strFork, pfrom->id);
+            if (fCheck) {
+                CBlockIndex *pindexTipFork = LastCommonAncestor(pindexLast, chainActive.Tip());
+                if (pindexTipFork->nHeight < chainActive.Tip()->nHeight)
+                    LogPrint("block", "WARNING: current headers indicate a re-org may happen, back to height %d\n", pindexTipFork->nHeight);
+            }
         }
 
         if (nodestate->nUnconnectingHeaders > 0) {
