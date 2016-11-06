@@ -1468,6 +1468,9 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     fWitnessActive = IsWitnessEnabled(chainActive.Tip(), chainparams.GetConsensus());
     LogPrintf("Segregated Witness is %d\n", fWitnessActive ? "ACTIVE" : "INACTIVE");
 
+    LogPrintf("SEGWIT.nTimeout = %d\n", chainparams.GetConsensus().vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout);
+    LogPrintf("SEGWIT.VersionBitsState = %d\n", VersionBitsState(chainActive.Tip(), chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT, versionbitscache));
+
     if (fWitnessActive) {
         // Only advertize witness capabilities if they have a reasonable start time.
         // This allows us to have the code merged without a defined softfork, by setting its
