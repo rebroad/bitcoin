@@ -530,11 +530,11 @@ std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = NULL)
             nBehind ? strprintf(" behind=%d", nBehind) : "");
 }
 
-std::string strBlockInfo(const CBlockIndex* pindex)
+std::string strBlockInfo(const CBlockIndex* pindex, bool* fFork = NULL)
 {
     if (!pindex)
         return "NULL";
-    return strprintf("%s %s", pindex->GetBlockHash().ToString(), strBlkInfo(pindex));
+    return strprintf("%s %s", pindex->GetBlockHash().ToString(), strBlkInfo(pindex, fFork));
 }
 
 /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
@@ -1277,13 +1277,20 @@ void LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize
         strDesc += "old "; // it's behind our current tip
     else if (pindex->nTx > 0)
         strDesc += "got "; // it's been downloaded
+    bool fCheck = false;
+    std::string strExtra = strprintf("%s", strBlockInfo(pindex, &fCheck));
     std::string strSize;
     if (nSize)
         strSize = strprintf("size=%d ", nSize);
     bool fRecent = false;
     if (pindex->nChainWork >= (pindexBestHeader->pprev ? (pindexBestHeader->pprev->pprev ? pindexBestHeader->pprev->pprev->nChainWork : 0) : 0))
         fRecent = true;
-    LogPrint((nNew || fRecent) ? "block" : "blockhist", "recv %s%s%s %s %speer=%d\n", strNew, strDesc, strType, strBlockInfo(pindex), strSize, node);
+    LogPrint((nNew || fCheck || fRecent) ? "block" : "blockhist", "recv %s%s%s %s %speer=%d\n", strNew, strDesc, strType, strExtra, strSize, node);
+    if (fCheck && nNew) {
+        const CBlockIndex *pindexTipFork = LastCommonAncestor(pindex, chainActive.Tip());
+        if (pindexTipFork->nHeight < chainActive.Tip()->nHeight)
+            LogPrint("block", "WARNING: current headers indicate a re-org may happen, back to height %d\n", pindexTipFork->nHeight);
+    }
 }
 
 bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStream& vRecv, int64_t nTimeReceived, const CChainParams& chainparams, CConnman& connman, const std::atomic<bool>& interruptMsgProc)
