@@ -1,5 +1,9 @@
 Improve addr advertising to bitnodes.
 
+debug SENDCMPCT - keep track of which nodes are responding to announce / no announce requests
+
+log recv headers "best" when best!=tip
+
 Log when blockindex re-orgs (even if only for headers)
 
 Explore partial block download - perhaps request merkleblock to get the txs and then cmpctblock and blocktxn will be small enough - or perhaps it's possible to still process a blocktxn even if not fully downloaded...
