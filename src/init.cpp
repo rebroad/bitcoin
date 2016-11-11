@@ -1494,7 +1494,30 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
 
     fWitnessActive = IsWitnessEnabled(chainActive.Tip(), chainparams.GetConsensus());
-    LogPrintf("Segregated Witness is %d\n", fWitnessActive ? "ACTIVE" : "INACTIVE");
+    ThresholdState WitnessState = VersionBitsState(chainActive.Tip(), chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT, versionbitscache);
+    LogPrintf("Segregated Witness is ");
+    switch (WitnessState) {
+        case THRESHOLD_DEFINED: {
+            LogPrintf("DEFINED/INACTIVE\n");
+            break;
+        }
+        case THRESHOLD_STARTED: {
+            LogPrintf("STARTED\n");
+            break;
+        }
+        case THRESHOLD_LOCKED_IN: {
+            LogPrintf("LOCKED_IN/ACTIVE\n");
+            break;
+        }
+        case THRESHOLD_FAILED: {
+            LogPrintf("FAILED\n");
+            break;
+        }
+        case THRESHOLD_ACTIVE: {
+            LogPrintf("ACTIVE (NOT LOCKED_IN)\n"); // REBTODO - is this right?
+            break;
+        }
+    }
 
     if (fWitnessActive) {
         // Only advertize witness capabilities if they have a reasonable start time.
