@@ -1387,10 +1387,14 @@ void CConnman::ThreadSocketHandler()
             if (sendSet)
             {
                 LOCK(pnode->cs_vSend);
+                unsigned int nSendSizeBefore = pnode->nSendSize;
+                unsigned int nSendBytesBefore = pnode->nSendBytes;
+                unsigned int nSendOffsetBefore = pnode->nSendOffset;
                 size_t nBytes = SocketSendData(pnode);
-                if (nBytes) {
+                if (nBytes || nSendSizeBefore != pnode->nSendSize || nSendBytesBefore != pnode->nSendBytes || nSendOffsetBefore != pnode->nSendOffset)
+                    LogPrint("netsend", "SSD: nBytes=%d, nSendSize=%d->%d, nSendBytes=%d->%d, nSendOffset=%d->%d peer=%d\n", nBytes, nSendSizeBefore, pnode->nSendSize, nSendBytesBefore, pnode->nSendBytes, nSendOffsetBefore, pnode->nSendOffset, pnode->id);
+                if (nBytes)
                     RecordBytesSent(nBytes);
-                }
             }
 
             //
@@ -2874,6 +2878,10 @@ int CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 
     CVectorWriter{SER_NETWORK, INIT_PROTO_VERSION, serializedHeader, 0, hdr};
 
+    unsigned int nSendSizeBefore = pnode->nSendSize;
+    unsigned int nSendBytesBefore = pnode->nSendBytes;
+    unsigned int nSendOffsetBefore = pnode->nSendOffset;
+
     size_t nBytesSent = 0;
     {
         LOCK(pnode->cs_vSend);
@@ -2899,7 +2907,17 @@ int CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
         RecordBytesSent(nBytesSent);
     }
 
-    LogPrint("netsend", "sending: %s nMessageSize=%d %snTotalSize=%d peer=%d\n",  msg.command.c_str(), nMessageSize, strBytesSent, nTotalSize, pnode->id);
+    std::string strSendSize;
+    if (pnode->nSendSize || nSendSizeBefore)
+        strSendSize += strprintf("nSendSize=%d->%d ", nSendSizeBefore, pnode->nSendSize);
+    std::string strSendBytes;
+    if (pnode->nSendBytes || nSendBytesBefore)
+        strSendBytes += strprintf("nSendBytes=%d->%d ", nSendBytesBefore, pnode->nSendBytes);
+    std::string strSendOffset;
+    if (pnode->nSendOffset || nSendOffsetBefore)
+        strSendOffset += strprintf("nSendOffset=%d->%d ", nSendOffsetBefore, pnode->nSendOffset);
+
+    LogPrint("netsend", "sending: %s nMessageSize=%d %s%s%s%snTotalSize=%d peer=%d\n", msg.command.c_str(), nMessageSize, strBytesSent, strSendSize, strSendBytes, strSendOffset, nTotalSize, pnode->id);
 
     return nTotalSize;
 }
