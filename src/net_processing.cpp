@@ -1686,8 +1686,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         vRecv >> locator >> hashStop;
 
         LOCK(cs_main);
-        if (IsInitialBlockDownload() && !pfrom->fWhitelisted) {
-            LogPrint("block", "recv getheaders. Ignoring because node is in initial block download. peer=%d\n", pfrom->id);
+        if ((chainActive.Tip()->nHeight < 295000 || chainActive.Tip()->GetBlockTime() < 1397080064) && !pfrom->fWhitelisted) {
+            LogPrint("block", "recv getheaders. Ignoring because we have not finished checkpointing. peer=%d\n", pfrom->id);
             return true;
         }
 
