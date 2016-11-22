@@ -1790,6 +1790,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             }
         }
 
+        // If we successfully decode the compact block, store here for processing
+        // (without cs_main).
+        bool fBlockReconstructed = false;
+        CDataStream blockTxnMsg(SER_NETWORK, PROTOCOL_VERSION);
+
+        {
         LOCK(cs_main);
         // If AcceptBlockHeader returned true, it set pindex
         assert(pindex);
@@ -1871,9 +1877,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     // Dirty hack to jump to BLOCKTXN code (TODO: move message handling into their own functions)
                     BlockTransactions txn;
                     txn.blockhash = cmpctblock.header.GetHash();
-                    CDataStream blockTxnMsg(SER_NETWORK, PROTOCOL_VERSION);
                     blockTxnMsg << txn;
-                    return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, nTimeReceived, chainparams, connman);
+                    fBlockReconstructed = true;
                 } else {
                     req.blockhash = pindex->GetBlockHash();
                     connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
@@ -1897,6 +1902,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 return ProcessMessage(pfrom, NetMsgType::HEADERS, vHeadersMsg, nTimeReceived, chainparams, connman);
             }
         }
+        } // cs_main
+
+        if (fBlockReconstructed)
+            return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, nTimeReceived, chainparams, connman);
     }
 
     else if (strCommand == NetMsgType::BLOCKTXN && !fImporting && !fReindex) // Ignore blocks received while importing
