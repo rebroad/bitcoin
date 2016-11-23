@@ -345,7 +345,7 @@ public:
     template<typename Stream>
     void Unserialize(Stream& s)
     {
-        LOCK(cs);
+        TRY_LOCK(cs, gotlock);
 
         Clear();
 
@@ -482,7 +482,8 @@ public:
     //! Return the number of (unique) addresses in all tables.
     size_t size() const
     {
-        LOCK(cs); // TODO: Cache this in an atomic to avoid this overhead
+        //LOCK(cs); // TODO: Cache this in an atomic to avoid this overhead
+        TRY_LOCK(cs, gotlock);
         return vRandom.size();
     }
 
@@ -559,7 +560,7 @@ public:
     {
         CAddrInfo addrRet;
         {
-            LOCK(cs);
+            TRY_LOCK(cs, gotlock);
             Check();
             addrRet = Select_(newOnly);
             Check();
