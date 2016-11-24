@@ -1642,7 +1642,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), inv.hash));
                     LogPrint("block", "send getheaders (%d) to %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                 }
-            }
+            } else
+                LogPrint("net", "recv inv: %s  %s peer=%d\n", inv.ToString(), AlreadyHave(inv) ? "have" : "new", pfrom->id);
 
             // Track requests for our stuff
             GetMainSignals().Inventory(inv.hash);
