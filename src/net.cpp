@@ -2059,9 +2059,7 @@ void Discover(boost::thread_group& threadGroup)
 
 void CConnman::SetNetworkActive(bool active)
 {
-    if (fDebug) {
-        LogPrint("net", "SetNetworkActive: %s\n", active);
-    }
+    LogPrint("net", "SetNetworkActive: %s\n", active);
 
     if (!active) {
         fNetworkActive = false;
