@@ -1606,7 +1606,11 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
         }
     }
 
+    int nOrphans = mapOrphanTransactions.size();
     GetMainSignals().SyncTransaction(tx, NULL, CMainSignals::SYNC_TRANSACTION_NOT_IN_BLOCK);
+    int nErased = nOrphans - mapOrphanTransactions.size();
+    if (nErased)
+        LogPrint("mempool", "Erased %d orphan tx\n", nErased);
 
     return true;
 }
@@ -2809,9 +2813,13 @@ bool static DisconnectTip(CValidationState& state, const CChainParams& chainpara
     UpdateTip(pindexDelete->pprev, chainparams);
     // Let wallets know transactions went from 1-confirmed to
     // 0-confirmed or conflicted:
+    int nOrphans = mapOrphanTransactions.size();
     for (const auto& tx : block.vtx) {
         GetMainSignals().SyncTransaction(*tx, pindexDelete->pprev, CMainSignals::SYNC_TRANSACTION_NOT_IN_BLOCK);
     }
+    int nErased = nOrphans - mapOrphanTransactions.size();
+    if (nErased)
+        LogPrint("mempool", "Erased %d orphan txs\n", nErased);
     return true;
 }
 
@@ -3090,6 +3098,7 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
 
         // throw all transactions though the signal-interface
         // while _not_ holding the cs_main lock
+        int nOrphans = mapOrphanTransactions.size();
         for (const auto& tx : txConflicted)
         {
             GetMainSignals().SyncTransaction(*tx, pindexNewTip, CMainSignals::SYNC_TRANSACTION_NOT_IN_BLOCK);
@@ -3097,6 +3106,9 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
         // ... and about transactions that got confirmed:
         for (unsigned int i = 0; i < txChanged.size(); i++)
             GetMainSignals().SyncTransaction(*std::get<0>(txChanged[i]), std::get<1>(txChanged[i]), std::get<2>(txChanged[i]));
+        int nErased = nOrphans - mapOrphanTransactions.size();
+        if (nErased)
+            LogPrint("mempool", "Erased %d orphan tx included or conflicted by block\n", nErased);
 
         // Notify external listeners about the new tip.
         GetMainSignals().UpdatedBlockTip(pindexNewTip, pindexFork, fInitialDownload);
@@ -4727,25 +4739,14 @@ void PeerLogicValidation::SyncTransaction(const CTransaction& tx, const CBlockIn
 
     LOCK(cs_main);
 
-    std::vector<uint256> vOrphanErase;
     // Which orphan pool entries must we evict?
     for (size_t j = 0; j < tx.vin.size(); j++) {
         auto itByPrev = mapOrphanTransactionsByPrev.find(tx.vin[j].prevout);
         if (itByPrev == mapOrphanTransactionsByPrev.end()) continue;
         for (auto mi = itByPrev->second.begin(); mi != itByPrev->second.end(); ++mi) {
             const CTransaction& orphanTx = (*mi)->second.tx;
-            const uint256& orphanHash = orphanTx.GetHash();
-            vOrphanErase.push_back(orphanHash);
+            EraseOrphanTx(orphanTx.GetHash());
         }
-    }
-
-    // Erase orphan transactions include or precluded by this block
-    if (vOrphanErase.size()) {
-        int nErased = 0;
-        BOOST_FOREACH(uint256 &orphanHash, vOrphanErase) {
-            nErased += EraseOrphanTx(orphanHash);
-        }
-        LogPrint("mempool", "Erased %d orphan tx included or conflicted by block\n", nErased);
     }
 }
 
