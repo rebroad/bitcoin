@@ -349,15 +349,15 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     }
 
     /// debug print
-    LogPrint("net", "%s connection %s lastseen=%s\n", fFeeler ? "feeler" : "trying",
+    LogPrint(fFeeler ? "feeler" : "net", "%s connection %s lastseen=%s\n", fFeeler ? "feeler" : "trying",
         pszDest ? pszDest : addrConnect.ToString(),
         pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
     // Connect
     SOCKET hSocket;
     bool proxyConnectionFailed = false;
-    if (pszDest ? ConnectSocketByName(addrConnect, hSocket, pszDest, Params().GetDefaultPort(), nConnectTimeout, &proxyConnectionFailed) :
-                  ConnectSocket(addrConnect, hSocket, nConnectTimeout, &proxyConnectionFailed))
+    if (pszDest ? ConnectSocketByName(addrConnect, hSocket, pszDest, Params().GetDefaultPort(), nConnectTimeout, fFeeler, &proxyConnectionFailed) :
+                  ConnectSocket(addrConnect, hSocket, nConnectTimeout, fFeeler, &proxyConnectionFailed))
     {
         if (!IsSelectableSocket(hSocket)) {
             LogPrintf("Cannot create connection: non-selectable socket created (fd >= FD_SETSIZE ?)\n");
@@ -390,7 +390,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         // Add node
         NodeId id = GetNewNodeId();
         uint64_t nonce = GetDeterministicRandomizer(RANDOMIZER_ID_LOCALHOSTNONCE).Write(id).Finalize();
-        CNode* pnode = new CNode(id, nLocalServices, GetBestHeight(), hSocket, addrConnect, CalculateKeyedNetGroup(addrConnect), nonce, pszDest ? pszDest : "", false);
+        CNode* pnode = new CNode(id, nLocalServices, GetBestHeight(), hSocket, addrConnect, CalculateKeyedNetGroup(addrConnect), nonce, pszDest ? pszDest : "", false, fFeeler);
         pnode->nServicesExpected = ServiceFlags(addrConnect.nServices & nRelevantServices);
         pnode->nTimeConnected = GetTime();
         pnode->AddRef();
@@ -1813,8 +1813,6 @@ bool CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
         grantOutbound->MoveTo(pnode->grantOutbound);
     if (fOneShot)
         pnode->fOneShot = true;
-    if (fFeeler)
-        pnode->fFeeler = true;
 
     return true;
 }
@@ -2490,9 +2488,10 @@ int CConnman::GetBestHeight() const
 unsigned int CConnman::GetReceiveFloodSize() const { return nReceiveFloodSize; }
 unsigned int CConnman::GetSendBufferSize() const{ return nSendBufferMaxSize; }
 
-CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn, SOCKET hSocketIn, const CAddress& addrIn, uint64_t nKeyedNetGroupIn, uint64_t nLocalHostNonceIn, const std::string& addrNameIn, bool fInboundIn) :
+CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn, SOCKET hSocketIn, const CAddress& addrIn, uint64_t nKeyedNetGroupIn, uint64_t nLocalHostNonceIn, const std::string& addrNameIn, bool fInboundIn, bool fFeelerIn) :
     addr(addrIn),
     fInbound(fInboundIn),
+    fFeeler(fFeelerIn),
     id(idIn),
     nKeyedNetGroup(nKeyedNetGroupIn),
     addrKnown(5000, 0.001),
@@ -2518,7 +2517,6 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     fWhitelisted = false;
     fOneShot = false;
     fClient = false; // set by version message
-    fFeeler = false;
     fSuccessfullyConnected = false;
     fDisconnect = false;
     nRefCount = 0;
@@ -2551,7 +2549,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
         mapRecvBytesPerMsgCmd[msg] = 0;
     mapRecvBytesPerMsgCmd[NET_MESSAGE_COMMAND_OTHER] = 0;
 
-    LogPrint("net", "Added %s connection %speer=%d\n", fInbound ? "Inbound" : "Outbound", fLogIPs ? addrName + " " : "", id);
+    LogPrint("net", "Added %s connection %speer=%d\n", fFeeler ? "feeler" : fInbound ? "inbound" : "outbound", fLogIPs ? addrName + " " : "", id);
 }
 
 CNode::~CNode()
