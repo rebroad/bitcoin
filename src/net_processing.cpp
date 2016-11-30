@@ -261,7 +261,7 @@ void PushNodeVersion(CNode *pnode, CConnman& connman, int64_t nTime)
     std::string strThem;
     if (fLogIPs)
         strThem += strprintf("them=%s, ", addrYou.ToString());
-    LogPrint("net", "send version message: version %d, blocks=%d, relay=%s, us=%s, %speer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, fRelay ? "1" : "0", addrMe.ToString(), strThem, nodeid);
+    LogPrint(pnode->fFeeler ? "feeler" : "net", "send version message: version %d, blocks=%d, relay=%s, us=%s, %speer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, fRelay ? "1" : "0", addrMe.ToString(), strThem, nodeid);
 }
 
 void InitializeNode(CNode *pnode, CConnman& connman) {
@@ -1350,7 +1350,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         if (nVersion < MIN_PEER_PROTO_VERSION)
         {
             // disconnect from peers older than this proto version
-            LogPrintf("recv version obsolete %i; disconnecting peer=%d\n", nVersion, pfrom->id);
+            LogPrint(pfrom->fFeeler ? "feeler" : "net", "recv version obsolete %i; disconnecting peer=%d\n", nVersion, pfrom->id);
             connman.PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_OBSOLETE,
                                strprintf("Version must be %d or greater", MIN_PEER_PROTO_VERSION)));
             pfrom->fDisconnect = true;
@@ -1450,7 +1450,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         if (fLogIPs)
             remoteAddr = ", them=" + pfrom->addr.ToString();
 
-        LogPrintf("recv version: %s: version %d, blocks=%d, us=%s%s, peer=%d\n",
+        LogPrint(pfrom->fFeeler ? "feeler" : "net", "recv version: %s: version %d, blocks=%d, us=%s%s, peer=%d\n",
                   cleanSubVer, pfrom->nVersion,
                   pfrom->nStartingHeight, addrMe.ToString(), remoteAddr, pfrom->id);
 
