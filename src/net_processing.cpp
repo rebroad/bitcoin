@@ -1208,6 +1208,42 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     if (strCommand == NetMsgType::VERSION)
     {
+        int nVersionInt;
+        uint64_t nServiceInt;
+        int64_t nTime;
+        CAddress addrMe;
+        vRecv >> nVersionInt >> nServiceInt >> nTime >> addrMe;
+        CAddress addrFrom;
+        uint64_t nNonce = 1;
+        if (!vRecv.empty())
+            vRecv >> addrFrom >> nNonce;
+        if (!vRecv.empty()) {
+            vRecv >> LIMITED_STRING(pfrom->strSubVer, MAX_SUBVERSION_LENGTH);
+            pfrom->cleanSubVer = SanitizeString(pfrom->strSubVer);
+        }
+        if (!vRecv.empty()) {
+            vRecv >> pfrom->nStartingHeight;
+        }
+        {
+            LOCK(pfrom->cs_filter);
+            if (!vRecv.empty())
+                vRecv >> pfrom->fRelayTxes; // set to true after we get the first filter* message
+            else
+                pfrom->fRelayTxes = true;
+        }
+
+        string remoteAddr;
+        if (fLogIPs)
+            remoteAddr = ", them=" + pfrom->addr.ToString();
+
+        LogPrintf("recv version: %s: version %d, blocks=%d, relay=%s, services=0x%x us=%s%s, peer=%d\n",
+                  pfrom->cleanSubVer, nVersionInt,
+                  pfrom->nStartingHeight, pfrom->fRelayTxes ? "1" : "0", nServiceInt, addrMe.ToString(),
+                  remoteAddr, pfrom->id);
+
+        if((pfrom->nServices & NODE_XTHIN))
+            LogPrint("thin", "peer=%d is XThin Capable\n", pfrom->id);
+
         // Each connection can only send one version message
         if (pfrom->nVersion != 0)
         {
@@ -1218,12 +1254,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             return true;
         }
 
-        int64_t nTime;
-        CAddress addrMe;
-        CAddress addrFrom;
-        uint64_t nNonce = 1;
-        uint64_t nServiceInt;
-        vRecv >> pfrom->nVersion >> nServiceInt >> nTime >> addrMe;
+        pfrom->nVersion = nVersionInt;
         pfrom->nServices = ServiceFlags(nServiceInt);
         if (!pfrom->fInbound)
         {
@@ -1250,25 +1281,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 LogPrintf("recv version. obsolete %i; allowing inbound peer=%d\n", pfrom->nVersion, pfrom->id);
         }
 
-        if (pfrom->nVersion == 10300)
-            pfrom->nVersion = 300;
-        if (!vRecv.empty())
-            vRecv >> addrFrom >> nNonce;
-        if (!vRecv.empty()) {
-            vRecv >> LIMITED_STRING(pfrom->strSubVer, MAX_SUBVERSION_LENGTH);
-            pfrom->cleanSubVer = SanitizeString(pfrom->strSubVer);
-        }
-        if (!vRecv.empty()) {
-            vRecv >> pfrom->nStartingHeight;
-        }
-        {
-            LOCK(pfrom->cs_filter);
-            if (!vRecv.empty())
-                vRecv >> pfrom->fRelayTxes; // set to true after we get the first filter* message
-            else
-                pfrom->fRelayTxes = true;
-        }
-
         // Disconnect if we connected to ourself
         if (pfrom->fInbound && !connman.CheckIncomingNonce(nNonce))
         {
@@ -1276,18 +1288,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->fDisconnect = true;
             return true;
         }
-
-        string remoteAddr;
-        if (fLogIPs)
-            remoteAddr = ", them=" + pfrom->addr.ToString();
-
-        LogPrintf("recv version: %s: version %d, blocks=%d, relay=%s, services=0x%x us=%s%s, peer=%d\n",
-                  pfrom->cleanSubVer, pfrom->nVersion,
-                  pfrom->nStartingHeight, pfrom->fRelayTxes ? "1" : "0", nServiceInt, addrMe.ToString(),
-                  remoteAddr, pfrom->id);
-
-        if((pfrom->nServices & NODE_XTHIN))
-            LogPrint("thin", "peer=%d is XThin Capable\n", pfrom->id);
 
         pfrom->addrLocal = addrMe;
         if (pfrom->fInbound && addrMe.IsRoutable())
