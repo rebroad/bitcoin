@@ -1341,7 +1341,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
             if (Lookup(strAddr.c_str(), addrLocal, GetListenPort(), fNameLookup) && addrLocal.IsValid())
                 AddLocal(addrLocal, LOCAL_MANUAL);
             else
-                return InitError(ResolveErrMsg("externalip", strAddr));
+                InitError(ResolveErrMsg("externalip", strAddr));
         }
     }
 
