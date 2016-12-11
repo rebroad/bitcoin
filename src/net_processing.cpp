@@ -3514,7 +3514,8 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
         // We don't want white listed peers to filter txs to us if we have -whitelistforcerelay
         if (GetBoolArg("-feefilter", DEFAULT_FEEFILTER) &&
             !(pto->fWhitelisted && GetBoolArg("-whitelistforcerelay", DEFAULT_WHITELISTFORCERELAY))) {
-            CAmount currentFilter = mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK();
+            int nMaxMempoolSize = GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
+            CAmount currentFilter = mempool.GetMinFee(nMaxMempoolSize).GetFeePerK() * (1.0 * mempool.DynamicMemoryUsage() / nMaxMempoolSize);
             int64_t timeNow = GetTimeMicros();
             if (timeNow > pto->nextSendTimeFeeFilter) {
                 static CFeeRate default_feerate(DEFAULT_MIN_RELAY_TX_FEE);
