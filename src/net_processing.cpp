@@ -2088,7 +2088,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         // possibilities in compact block processing...
         if (pindex->nHeight <= chainActive.Height() + 2) {
             if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
-                 (fAlreadyInFlight && blockInFlightIt->second.first == pfrom->GetId())) {
+                 fAlreadyInFlight) {
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
                 if (!MarkBlockAsInFlight(pfrom->GetId(), pindex->GetBlockHash(), pindex, &queuedBlockIt)) {
                     if (!(*queuedBlockIt)->partialBlock)
