@@ -872,7 +872,9 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
 
     GetMainSignals().TransactionAddedToMempool(ptx);
     // update mempool stats
-    CStats::DefaultStats()->addMempoolSample(pool.size(), pool.DynamicMemoryUsage(), poolMinFeeRate.GetFeePerK());
+    int nMaxMempoolSize = gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
+    int64_t nFeePerK = poolMinFeeRate.GetFeePerK() * (1.0 * pool.DynamicMemoryUsage() / nMaxMempoolSize);
+    CStats::DefaultStats()->addMempoolSample(pool.size(), pool.DynamicMemoryUsage(), nFeePerK);
 
     return true;
 }
@@ -2108,7 +2110,9 @@ bool static DisconnectTip(CValidationState& state, const CChainParams& chainpara
     // 0-confirmed or conflicted:
     GetMainSignals().BlockDisconnected(pblock);
     // update mempool stats
-    CStats::DefaultStats()->addMempoolSample(mempool.size(), mempool.DynamicMemoryUsage(), mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK());
+    int nMaxMempoolSize = gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
+    int64_t nFeePerK = mempool.GetMinFee(nMaxMempoolSize).GetFeePerK() * (1.0 * mempool.DynamicMemoryUsage() / nMaxMempoolSize);
+    CStats::DefaultStats()->addMempoolSample(mempool.size(), mempool.DynamicMemoryUsage(), nFeePerK);
     return true;
 }
 
@@ -2239,7 +2243,9 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
 
 
     // update mempool stats
-    CStats::DefaultStats()->addMempoolSample(mempool.size(), mempool.DynamicMemoryUsage(), mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK());
+    int nMaxMempoolSize = gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
+    int64_t nFeePerK = mempool.GetMinFee(nMaxMempoolSize).GetFeePerK() * (1.0 * mempool.DynamicMemoryUsage() / nMaxMempoolSize);
+    CStats::DefaultStats()->addMempoolSample(mempool.size(), mempool.DynamicMemoryUsage(), nFeePerK);
 
     int64_t nTime6 = GetTimeMicros(); nTimePostConnect += nTime6 - nTime5; nTimeTotal += nTime6 - nTime1;
     LogPrint(BCLog::BENCH, "  - Connect postprocess: %.2fms [%.2fs]\n", (nTime6 - nTime5) * 0.001, nTimePostConnect * 0.000001);
