@@ -1716,8 +1716,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     // fell back to inv we probably have a reorg which we should get the headers for first,
                     // we now only provide a getheaders response here. When we receive the headers, we will
                     // then ask for the blocks we need.
-                    connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), inv.hash));
-                    LogPrint("block", "send getheaders (%d) to %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
+                    connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), uint256()));
+                    LogPrint("block", "send getheaders (%d) peer=%d\n", pindexBestHeader->nHeight, pfrom->id);
                 }
             } else
                 LogPrint("net", "recv inv: %s  %s peer=%d\n", inv.ToString(), AlreadyHave(inv) ? "have" : "new", pfrom->id);
