@@ -2977,7 +2977,7 @@ bool ContextualCheckBlock(const CBlock& block, CValidationState& state, const Co
     return true;
 }
 
-static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
+static int AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
     // Check for duplicate
@@ -3023,22 +3023,26 @@ static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state
 
     CheckBlockIndex(chainparams.GetConsensus());
 
-    return true;
+    return 2; // 2 means it was new
 }
 
 // Exposed wrapper for AcceptBlockHeader
-bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
+int ProcessNewHeaders(const std::vector<CBlockHeader>& headers, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
+    int nCount = 0;
+    int ret;
     {
         LOCK(cs_main);
         for (const CBlockHeader& header : headers) {
-            if (!AcceptBlockHeader(header, state, chainparams, ppindex)) {
-                return false;
-            }
+            ret = AcceptBlockHeader(header, state, chainparams, ppindex);
+            if (ret == 2)
+                nCount++;
+            if (ret == false)
+                return -1;
         }
     }
     NotifyHeaderTip();
-    return true;
+    return nCount;
 }
 
 /** Store block on disk. If dbp is non-NULL, the file is known to already reside on disk */
