@@ -3076,7 +3076,7 @@ static bool ContextualCheckBlock(const CBlock& block, CValidationState& state, c
     return true;
 }
 
-static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
+static int AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
     // Check for duplicate
@@ -3132,28 +3132,32 @@ static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state
 
     CheckBlockIndex(chainparams.GetConsensus());
 
-    return true;
+    return 2; // 2 means it was new
 }
 
 // Exposed wrapper for AcceptBlockHeader
-bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, CValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex, CBlockHeader *first_invalid)
+int ProcessNewHeaders(const std::vector<CBlockHeader>& headers, CValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex, CBlockHeader *first_invalid)
 {
+    int nCount = 0;
+    int ret;
     if (first_invalid != nullptr) first_invalid->SetNull();
     {
         LOCK(cs_main);
         for (const CBlockHeader& header : headers) {
             CBlockIndex *pindex = nullptr; // Use a temp pindex instead of ppindex to avoid a const_cast
-            if (!AcceptBlockHeader(header, state, chainparams, &pindex)) {
+            ret = AcceptBlockHeader(header, state, chainparams, &pindex);
+            if (!ret) {
                 if (first_invalid) *first_invalid = header;
-                return false;
-            }
+                return -1;
+            } else if (ret == 2)
+                nCount++;
             if (ppindex) {
                 *ppindex = pindex;
             }
         }
     }
     NotifyHeaderTip();
-    return true;
+    return nCount;
 }
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
