@@ -1965,7 +1965,8 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
 
         const CBlockIndex *pindex = NULL;
         CValidationState state;
-        if (!ProcessNewBlockHeaders({cmpctblock.header}, state, chainparams, &pindex)) {
+        int nNew = ProcessNewHeaders({cmpctblock.header}, state, chainparams, &pindex);
+        if (nNew < 0) {
             int nDoS;
             if (state.IsInvalid(nDoS)) {
                 if (nDoS > 0) {
@@ -2276,7 +2277,8 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
         }
 
         CValidationState state;
-        if (!ProcessNewBlockHeaders(headers, state, chainparams, &pindexLast)) {
+        int nNew = ProcessNewHeaders(headers, state, chainparams, &pindexLast);
+        if (nNew < 0) {
             int nDoS;
             if (state.IsInvalid(nDoS)) {
                 if (nDoS > 0) {
