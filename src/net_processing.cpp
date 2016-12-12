@@ -2043,7 +2043,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
         const CBlockIndex *pindex = NULL;
         CValidationState state;
-        if (!ProcessNewBlockHeaders({cmpctblock.header}, state, chainparams, &pindex)) {
+        int nNew = ProcessNewHeaders({cmpctblock.header}, state, chainparams, &pindex);
+        if (nNew < 0) {
             int nDoS;
             if (state.IsInvalid(nDoS)) {
                 if (nDoS > 0) {
@@ -2370,18 +2371,17 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         }
 
         CValidationState state;
-        if (!ProcessNewBlockHeaders(headers, state, chainparams, &pindexLast)) {
-            int nDoS;
-            if (state.IsInvalid(nDoS)) {
-                std::string strBlock;
-                strBlock = strprintf(" %s", strBlockInfo(pindexLast));
-                LogPrint("block", "recv header%s not accepted peer=%d\n", strBlock, pfrom->id);
-                if (nDoS > 0) {
-                    LOCK(cs_main);
-                    Misbehaving(pfrom->GetId(), nDoS);
-                }
-                return false;
+        int nNew = ProcessNewHeaders(headers, state, chainparams, &pindexLast);
+        int nDoS;
+        if (state.IsInvalid(nDoS)) {
+            std::string strBlock;
+            strBlock = strprintf(" %s", strBlockInfo(pindexLast));
+            LogPrint("block", "recv %d header%s%s not accepted peer=%d\n", nNew, nNew>1 ? "s" : "", strBlock, pfrom->id);
+            if (nDoS > 0) {
+                LOCK(cs_main);
+                Misbehaving(pfrom->GetId(), nDoS);
             }
+            return false;
         }
 
         {
