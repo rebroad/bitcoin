@@ -2107,7 +2107,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         pindexLast->GetBlockHash().ToString(), pindexLast->nHeight);
             }
             if (vGetData.size() > 0) {
-                if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 && mapBlocksInFlight.size() == 1 && pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
+                if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 && mapBlocksInFlight.size() <= 2 && pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
                     // We seem to be rather well-synced, so it appears pfrom was the first to provide us
                     // with this block! Let's get them to announce using compact blocks in the future.
                     MaybeSetPeerAsAnnouncingHeaderAndIDs(nodestate, pfrom, connman);
