@@ -1325,11 +1325,12 @@ void CConnman::ThreadSocketHandler()
                     LogPrintf("socket receive timeout: nLastRecv=%is peer=%d\n", nTime - pnode->nLastRecv, pnode->id);
                     pnode->fDisconnect = true;
                 }
-                else if (pnode->nPingNonceSent && pnode->nPingUsecStart + TIMEOUT_INTERVAL * 1000000 < GetTimeMicros())
-                {
-                    LogPrintf("ping timeout: %fs peer=%d\n", 0.000001 * (GetTimeMicros() - pnode->nPingUsecStart), pnode->id);
-                    pnode->fDisconnect = true;
-                }
+                // Disable the below as this can happen when downloading a block on a slow connection
+                //else if (pnode->nPingNonceSent && pnode->nPingUsecStart + TIMEOUT_INTERVAL * 1000000 < GetTimeMicros())
+                //{
+                //    LogPrintf("ping timeout: %fs peer=%d\n", 0.000001 * (GetTimeMicros() - pnode->nPingUsecStart), pnode->id);
+                //    pnode->fDisconnect = true;
+                //}
             }
         }
         {
