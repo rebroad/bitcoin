@@ -39,6 +39,7 @@ using namespace std;
 #endif
 
 int64_t nTimeBestReceived = 0; // Used only to inform the wallet of when we last received a block
+int64_t tLastBlkRep = 0; // Time block download was last reported.
 
 struct IteratorComparator
 {
@@ -2627,9 +2628,14 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman)
 
         if (msg.nLastDataPos != (int)msg.nDataPos) {
             if (strCommand == NetMsgType::BLOCK || strCommand == NetMsgType::CMPCTBLOCK || strCommand == NetMsgType::BLOCKTXN || strCommand == NetMsgType::HEADERS) {
-                State(pfrom->id)->tLastRecvBlk = GetTime();
-                if (msg.nLastDataPos < 0 && !msg.complete())
-                    LogPrint("partial", "Incoming %s (%u of %u bytes) chk=%s from peer=%d\n", strCommand, msg.nDataPos, msg.hdr.nMessageSize, strChk, pfrom->id);
+                int64_t nNow = GetTime();
+                State(pfrom->id)->tLastRecvBlk = nNow;
+                bool fUpdate = msg.nLastDataPos >= 0 && nNow > tLastBlkRep + 60;
+                if (msg.nLastDataPos < 0 || fUpdate) {
+                    tLastBlkRep = nNow;
+                    if (!msg.complete())
+                        LogPrint("partial", "%sIncoming %s (%u of %u bytes) chk=%s from peer=%d\n", fUpdate ? ".." : "", strCommand, msg.nDataPos, msg.hdr.nMessageSize, strChk, pfrom->id);
+                }
             }
             msg.nLastDataPos = msg.nDataPos;
         }
