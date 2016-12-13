@@ -73,6 +73,7 @@ CCriticalSection cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost;
 static bool vfLimited[NET_MAX] = {};
 std::string strSubVersion;
+int64_t tLastBlkRep = 0; // Time block download last reported.
 
 limitedmap<uint256, int64_t> mapAlreadyAskedFor(MAX_INV_SZ);
 
@@ -663,10 +664,14 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
 
         // absorb network data
         int handled;
-        if (!msg.in_data)
+        bool fBody;
+        if (!msg.in_data) {
+            fBody = false;
             handled = msg.readHeader(pch, nBytes);
-        else
+        } else {
+            fBody = true;
             handled = msg.readData(pch, nBytes);
+        }
 
         if (handled < 0)
                 return false;
@@ -674,6 +679,22 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
         if (msg.in_data && msg.hdr.nMessageSize > MAX_PROTOCOL_MESSAGE_LENGTH) {
             LogPrint("net", "Oversized message. Disconnecting peer=%i\n", GetId());
             return false;
+        }
+
+        if (msg.in_data) {
+            std::string pchCommand = msg.hdr.pchCommand;
+            if (pchCommand == NetMsgType::BLOCK || pchCommand == NetMsgType::CMPCTBLOCK || pchCommand == NetMsgType::BLOCKTXN || pchCommand == NetMsgType::HEADERS) {
+                std::string strChk = HexStr(msg.hdr.pchChecksum, msg.hdr.pchChecksum+CMessageHeader::CHECKSUM_SIZE);
+                int64_t nNow = GetTime();
+                bool fUpdate = nNow > tLastBlkRep + 60;
+                if (msg.complete()) {
+                    tLastBlkRep = nNow;
+                    //LogPrint("block", "net recv %s (%u bytes) chk=%s peer=%d\n", pchCommand, msg.hdr.nMessageSize, strChk, id);
+                } else if (fUpdate) { // if (!fBody || fUpdate) // if we want to debug the start of every message too
+                    tLastBlkRep = nNow;
+                    LogPrint("partial", "net %sIncoming %s (%u%% of %u bytes) chk=%s peer=%d\n", fBody ? ".." : "", pchCommand, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, strChk, id);
+                }
+            }
         }
 
         pch += handled;
