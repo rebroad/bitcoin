@@ -2446,7 +2446,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                             pindexLast->GetBlockHash().ToString(), pindexLast->nHeight);
                 }
                 if (vGetData.size() > 0) {
-                    if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 && mapBlocksInFlight.size() == 1 && pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
+                    if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 && mapBlocksInFlight.size() <= 2 && pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                     }
