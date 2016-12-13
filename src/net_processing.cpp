@@ -65,6 +65,8 @@ static const uint64_t RANDOMIZER_ID_ADDRESS_RELAY = 0x3cac0035b5866b90ULL; // SH
 namespace {
     /** Number of nodes with fSyncStarted. */
     int nSyncStarted = 0;
+    /* When sipa disconnect logic last invoked. */
+    int64_t tSipaDisconnect = 0;
 
     /**
      * Sources of received blocks, saved to be able to send them reject
@@ -176,6 +178,8 @@ struct CNodeState {
     int64_t nDownloadingSince;
     //! Last block reception
     int64_t tLastRecvBlk;
+    //! When sipa disconnect logic invoked
+    int64_t tSipaDisconnect;
     int nBlocksInFlight;
     int nBlocksInFlightValidHeaders;
     //! Whether we consider this a preferred download peer.
@@ -218,6 +222,7 @@ struct CNodeState {
         nStallingSince = 0;
         nDownloadingSince = 0;
         tLastRecvBlk = 0;
+        tSipaDisconnect = 0;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
         fPreferredDownload = false;
@@ -3351,14 +3356,22 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
 
         // Detect whether we're stalling
-        nNow = GetTimeMicros();
+        int64_t tNow = nNow / 1000000;
         if (state.nStallingSince && state.nStallingSince < nNow - 1000000 * BLOCK_STALLING_TIMEOUT) {
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
             // should only happen during initial block download.
-            LogPrintf("block download stalled. LastRecv=%is LastRecvBlk=%is LastSend=%is sipa disconnect peer=%d\n", nNow/1000000-pto->nLastRecv, nNow/1000000-state.tLastRecvBlk, nNow/1000000-pto->nLastSend, pto->id);
-            pto->fDisconnect = true;
-            return true;
+            bool fFakeIt = (tNow - state.tLastRecvBlk) < 60 && !GetBoolArg("-sipadisconnects", true);
+            if (!fFakeIt || tNow > state.tSipaDisconnect + 60) {
+                LogPrintf("block download stalled. LastRecv=%is LastRecvBlk=%is LastSend=%is %sdisconnect peer=%d\n",
+                        tNow-pto->nLastRecv, tNow-state.tLastRecvBlk, tNow-pto->nLastSend, fFakeIt ? "sipa " : "", pto->id);
+                if (!fFakeIt) {
+                    pto->fDisconnect = true;
+                    return true;
+                }
+                state.tSipaDisconnect = tNow;
+                tSipaDisconnect = tNow;
+            }
         }
         // In case there is a block that has been in flight from this peer for 2 + 0.5 * N times the block interval
         // (with N the number of peers from which we're downloading validated blocks), disconnect due to timeout.
@@ -3369,9 +3382,16 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             //QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
             int nOtherPeersWithValidatedDownloads = nPeersWithValidatedDownloads - (state.nBlocksInFlightValidHeaders > 0);
             if (nNow > state.nDownloadingSince + consensusParams.nPowTargetSpacing * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
-                LogPrintf("block download timeout. DLingSince=%is LastRecv=%is LastRecvBlk=%is LastSend=%is sipa disconnect peer=%d\n", (nNow-state.nDownloadingSince)/1000000, nNow/1000000-pto->nLastRecv, nNow/1000000-state.tLastRecvBlk, nNow/1000000-pto->nLastSend, pto->id);
-                pto->fDisconnect = true;
-                return true;
+                bool fFakeIt = (tNow - state.tLastRecvBlk) < 60 && !GetBoolArg("-sipadisconnects", true);;
+                if (!fFakeIt || (tNow > state.tSipaDisconnect + 60 * nOtherPeersWithValidatedDownloads && tNow > tSipaDisconnect + 60)) {
+                    LogPrintf("block download timeout. DLingSince=%is LastRecv=%is LastRecvBlk=%is LastSend=%is %sdisconnect peer=%d\n", tNow-state.nDownloadingSince/1000000, tNow-pto->nLastRecv, tNow-state.tLastRecvBlk, tNow-pto->nLastSend, fFakeIt ? "sipa ": "", pto->id);
+                    if (!fFakeIt) {
+                        pto->fDisconnect = true;
+                        return true;
+                    }
+                    state.tSipaDisconnect = tNow;
+                    tSipaDisconnect = tNow;
+                }
             }
         }
 
