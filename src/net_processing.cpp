@@ -176,6 +176,8 @@ struct CNodeState {
     list<QueuedBlock> vBlocksInFlight;
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     int64_t nDownloadingSince;
+    //! Node is unable to download blocks for now
+    int nBlockPaused;
     //! Last block reception
     int64_t tLastRecvBlk;
     //! When sipa disconnect logic invoked
@@ -221,6 +223,7 @@ struct CNodeState {
         fExpectingHeaders = false;
         nStallingSince = 0;
         nDownloadingSince = 0;
+        nBlockPaused = 0;
         tLastRecvBlk = 0;
         tSipaDisconnect = 0;
         nBlocksInFlight = 0;
@@ -532,24 +535,58 @@ std::string strHeight(CBlockIndex* pindex, bool *fFork /*=NULL*/) {
 /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
  *  at most count entries. */
 void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<CBlockIndex*>& vBlocks, NodeId& nodeStaller, const Consensus::Params& consensusParams) {
-    if (count == 0)
+    CNodeState *state = State(nodeid);
+    if (count == 0) {
+        if (state->nBlockPaused != 1) {
+            state->nBlockPaused = 1;
+            LogPrint("block", "BLOCKED - count==0 peer=%d\n", nodeid);
+        }
         return;
+    } else if (state->nBlockPaused == 1) {
+        LogPrint("block", "UNBLOCKED - count!=0 peer=%d\n", nodeid);
+        state->nBlockPaused = -1;
+    }
 
     vBlocks.reserve(vBlocks.size() + count);
-    CNodeState *state = State(nodeid);
     assert(state != NULL);
 
     if (!state->fHaveWitness && state->pindexLastCommonBlock && IsWitnessEnabled(state->pindexLastCommonBlock, consensusParams)) {
         // This peer cannot provide witnesses and we need them
+        if (state->nBlockPaused != 6) {
+            state->nBlockPaused = 6;
+            LogPrint("block", "BLOCKED - Not providing witnesses. peer=%d\n", nodeid);
+        }
         return;
+    } else if (state->nBlockPaused == 6) {
+        LogPrintf("block", "UNBLOCKED - Witness now provided or not needed. peer=%d\n", nodeid);
+        state->nBlockPaused = -6;
     }
 
     // Make sure pindexBestKnownBlock is up to date, we'll need it.
     ProcessBlockAvailability(nodeid);
 
-    if (state->pindexBestKnownBlock == NULL || state->pindexBestKnownBlock->nChainWork < chainActive.Tip()->nChainWork) {
-        // This peer has nothing interesting.
+    if (state->pindexBestKnownBlock == NULL) {
+        // Not received headers yet
+        if (state->nBlockPaused != 2) {
+            state->nBlockPaused = 2;
+            LogPrint("block", "BLOCKED - no headers received yet peer=%d\n", nodeid);
+        }
         return;
+    } else if (state->nBlockPaused == 2) {
+        LogPrint("block", "UNBLOCKED - headers now received peer=%d\n", nodeid);
+        state->nBlockPaused = -2;
+    }
+
+    if (state->pindexBestKnownBlock->nChainWork < chainActive.Tip()->nChainWork) {
+        // Nothing interesting
+        if (state->nBlockPaused != 3) {
+            state->nBlockPaused = 3;
+            LogPrint("block", "BLOCKED - BestKnownBlockWork < TipWork peer=%d\n", nodeid);
+        }
+        return;
+    } else if (state->nBlockPaused == 3) {
+        LogPrint("block", "UNBLOCKED - BestKnownBlockWork >= TipWork peer=%d\n", nodeid);
+        state->nBlockPaused = -3;
     }
 
     if (state->pindexLastCommonBlock == NULL) {
@@ -560,7 +597,11 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<CBl
 
     // If the peer reorganized, our previous pindexLastCommonBlock may not be an ancestor
     // of its current tip anymore. Go back enough to fix that.
+    CBlockIndex *pindexPrevCommon = state->pindexLastCommonBlock;
     state->pindexLastCommonBlock = LastCommonAncestor(state->pindexLastCommonBlock, state->pindexBestKnownBlock);
+    std::string strPrevCommon;
+    if (pindexPrevCommon != state->pindexLastCommonBlock)
+        LogPrint("block", "%s: reorg? PrevCommon=%s Common=%s peer=%d\n", __func__, strBlkHeight(pindexPrevCommon), strBlkHeight(state->pindexLastCommonBlock), nodeid);
     if (state->pindexLastCommonBlock == state->pindexBestKnownBlock)
         return;
 
@@ -591,11 +632,26 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<CBl
         BOOST_FOREACH(CBlockIndex* pindex, vToFetch) {
             if (!pindex->IsValid(BLOCK_VALID_TREE)) {
                 // We consider the chain that this peer is on invalid.
+                if (state->nBlockPaused != 5) {
+                    state->nBlockPaused = 5;
+                    LogPrint("block", "BLOCKED - %s - chain is invalid. peer=%d\n", strBlockInfo(pindex), nodeid);
+                }
                 return;
+            } else if (state->nBlockPaused == 5) {
+                LogPrint("block", "UNBLOCKED - %s - chain is now valid. peer=%d\n", strBlockInfo(pindex), nodeid);
+                state->nBlockPaused = -5;
             }
-            if (!State(nodeid)->fHaveWitness && IsWitnessEnabled(pindex->pprev, consensusParams))
+            if (!State(nodeid)->fHaveWitness && IsWitnessEnabled(pindex->pprev, consensusParams)) {
                 // We wouldn't download this block or its descendants from this peer.
+                if (state->nBlockPaused != 6) {
+                    state->nBlockPaused = 6;
+                    LogPrint("block", "BLOCKED - Witness just activated! Not providing witnesses. peer=%d\n", nodeid);
+                }
                 return;
+            } else if (state->nBlockPaused == 6) {
+                LogPrint("block", "UNBLOCKED - Witness de-activated! peer=%d\n", nodeid);
+                state->nBlockPaused = -6;
+            }
             if (pindex->nStatus & BLOCK_HAVE_DATA || chainActive.Contains(pindex)) {
                 if (pindex->nChainTx)
                     state->pindexLastCommonBlock = pindex;
@@ -603,13 +659,21 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<CBl
                 // The block is not already downloaded, and not yet in flight.
                 if (pindex->nHeight > nWindowEnd) {
                     // We reached the end of the window.
+                    if (state->nBlockPaused != 7) {
+                        LogPrint("block", "BLOCKED - End of window. prevPause=%d nodeStaller=%d waitingfor=%d peer=%d\n", state->nBlockPaused, nodeStaller, waitingfor, nodeid);
+                        state->nBlockPaused = 7;
+                    }
                     if (vBlocks.size() == 0 && waitingfor != nodeid) {
                         // We aren't able to fetch anything, but we would be if the download window was one larger.
                         nodeStaller = waitingfor;
                     }
                     return;
+                } else if (state->nBlockPaused == 7) {
+                    LogPrint("block", "UNBLOCKED - Height (%s) within window (%d) peer=%d\n", strHeight(pindex), nWindowEnd);
+                    state->nBlockPaused = -7;
                 }
                 vBlocks.push_back(pindex);
+                state->nBlockPaused = 0;
                 if (vBlocks.size() == count) {
                     return;
                 }
@@ -3296,6 +3360,10 @@ bool SendMessages(CNode* pto, CConnman& connman)
         //
         vector<CInv> vGetData;
         if (!pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+            if (state.nBlockPaused == 9) {
+                LogPrint("block", "UNBLOCKED - Able to FindNextBlocksToDownload() peer=%d\n", pto->id);
+                state.nBlockPaused = -9;
+            }
             vector<CBlockIndex*> vToDownload;
             NodeId staller = -1;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller, consensusParams);
@@ -3311,6 +3379,18 @@ bool SendMessages(CNode* pto, CConnman& connman)
                     State(staller)->nStallingSince = nNow;
                     LogPrint("block", "Stall started peer=%d\n", staller);
                 }
+            }
+        } else {
+            if (state.nBlockPaused != 9) {
+                state.nBlockPaused = 9;
+                std::string strReason;
+                if (pto->fClient)
+                    strReason += "fClient ";
+                if (!fFetch && IsInitialBlockDownload())
+                    strReason += "!fFetch&&IBD ";
+                if (state.nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER)
+                    strReason += "nBlocksInFlight=MAX ";
+                LogPrint("block", "BLOCKED - %speer=%d\n", strReason, pto->id);
             }
         }
 
