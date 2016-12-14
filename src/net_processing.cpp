@@ -2920,7 +2920,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
     const Consensus::Params& consensusParams = Params().GetConsensus();
     {
         // Don't send anything until we get its version message
-        if (pto->nVersion == 0 || pto->fDisconnect)
+        if (pto->nVersion == 0 || pto->fDisconnect || ShutdownRequested())
             return true;
 
         // If we get here, the outgoing message serialization version is set and can't change.
