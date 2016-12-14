@@ -3109,7 +3109,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
     const Consensus::Params& consensusParams = Params().GetConsensus();
     {
         // Don't send anything until the version handshake is complete
-        if (!pto->fSuccessfullyConnected || pto->fDisconnect)
+        if (!pto->fSuccessfullyConnected || pto->fDisconnect || ShutdownRequested())
             return true;
 
         // If we get here, the outgoing message serialization version is set and can't change.
