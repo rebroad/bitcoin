@@ -1119,7 +1119,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         // instead we respond with the full, non-compact block.
                         bool fPeerWantsWitness = State(pfrom->GetId())->fWantsCmpctWitness;
                         int nSendFlags = fPeerWantsWitness ? 0 : SERIALIZE_TRANSACTION_NO_WITNESS;
-                        if (CanDirectFetch(consensusParams) && mi->second->nHeight >= chainActive.Height() - MAX_CMPCTBLOCK_DEPTH) {
+                        if (CanDirectFetch(consensusParams) && mi->second->nChainWork >= chainActive[std::max(0, chainActive.Height() - MAX_CMPCTBLOCK_DEPTH)]->nChainWork) {
                             if ((fPeerWantsWitness || !fWitnessesPresentInARecentCompactBlock) && a_recent_compact_block && a_recent_compact_block->header.GetHash() == mi->second->GetBlockHash()) {
                                 connman.PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, *a_recent_compact_block));
                             } else {
@@ -1738,7 +1738,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             return true;
         }
 
-        if (it->second->nHeight < chainActive.Height() - MAX_BLOCKTXN_DEPTH) {
+        if (it->second->nChainWork < chainActive[std::max(0, chainActive.Height() - MAX_BLOCKTXN_DEPTH)]->nChainWork) {
             // If an older block is requested (should never happen in practice,
             // but can happen in tests) send a block response instead of a
             // blocktxn response. Sending a full block response instead of a
