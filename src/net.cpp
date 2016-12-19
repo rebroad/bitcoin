@@ -349,7 +349,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     }
 
     /// debug print
-    LogPrint(fFeeler ? "feeler" : "net", "%s connection %s lastseen=%s\n", fFeeler ? "feeler" : "trying",
+    LogPrint(fFeeler ? "feeler" : "conn", "%s connection %s lastseen=%s\n", fFeeler ? "feeler" : "trying",
         pszDest ? pszDest : addrConnect.ToString(),
         pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
@@ -435,7 +435,7 @@ void CNode::CloseSocketDisconnect()
     if (hSocket != INVALID_SOCKET)
     {
         if (fDisconnect)
-            LogPrint("net", "disconnecting (as requested) %speer=%d\n", fFeeler ? "feeler " : "", id);
+            LogPrint("conn", "disconnecting (as requested) %speer=%d\n", fFeeler ? "feeler " : "", id);
         fDisconnect = true;
         CloseSocket(hSocket);
     }
@@ -951,7 +951,7 @@ bool CConnman::AttemptToEvictConnection()
     LOCK(cs_vNodes);
     for(std::vector<CNode*>::const_iterator it(vNodes.begin()); it != vNodes.end(); ++it) {
         if ((*it)->GetId() == evicted) {
-            LogPrint("net", "Evicting peer %d\n", evicted);
+            LogPrint("conn", "Evicting peer %d\n", evicted);
             (*it)->fDisconnect = true;
             return true;
         }
@@ -1011,7 +1011,7 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
 
     if (IsBanned(addr) && !whitelisted)
     {
-        LogPrintf("connection from %s dropped (banned)\n", addr.ToString());
+        LogPrint("conn", "connection from %s dropped (banned)\n", addr.ToString());
         CloseSocket(hSocket);
         return;
     }
@@ -1020,7 +1020,7 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
     {
         if (!AttemptToEvictConnection()) {
             // No connection to evict, disconnect the new connection
-            LogPrint("net", "failed to find an eviction candidate - connection dropped (full)\n");
+            LogPrint("conn", "failed to find an eviction candidate - connection dropped (full)\n");
             CloseSocket(hSocket);
             return;
         }
@@ -2571,7 +2571,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
         mapRecvBytesPerMsgCmd[msg] = 0;
     mapRecvBytesPerMsgCmd[NET_MESSAGE_COMMAND_OTHER] = 0;
 
-    LogPrint("net", "Added %s connection %speer=%d\n", fFeeler ? "feeler" : fInbound ? "inbound" : "outbound", fLogIPs ? addrName + " " : "", id);
+    LogPrint("conn", "Added %s connection %speer=%d\n", fFeeler ? "feeler" : fInbound ? "inbound" : "outbound", fLogIPs ? addrName + " " : "", id);
 }
 
 CNode::~CNode()
