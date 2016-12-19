@@ -272,7 +272,6 @@ std::string Socks5ErrorString(int err)
 /** Connect using SOCKS5 (as described in RFC1928) */
 static bool Socks5(const std::string& strDest, int port, const ProxyCredentials *auth, SOCKET& hSocket)
 {
-    LogPrint("net", "SOCKS5 connecting %s\n", strDest);
     if (strDest.size() > 255) {
         CloseSocket(hSocket);
         return error("Hostname too long");
@@ -351,7 +350,8 @@ static bool Socks5(const std::string& strDest, int port, const ProxyCredentials 
     char pchRet2[4];
     if (!InterruptibleRecv(pchRet2, 4, SOCKS5_RECV_TIMEOUT, hSocket)) {
         CloseSocket(hSocket);
-        return error("Error reading proxy response");
+        LogPrint("conn", "%s: Error reading proxy response for %s:%d\n", __func__, strDest, port);
+        return false;
     }
     if (pchRet2[0] != 0x05) {
         CloseSocket(hSocket);
@@ -393,7 +393,6 @@ static bool Socks5(const std::string& strDest, int port, const ProxyCredentials 
         CloseSocket(hSocket);
         return error("Error reading from proxy");
     }
-    LogPrint("net", "SOCKS5 connected %s\n", strDest);
     return true;
 }
 
