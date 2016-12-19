@@ -272,7 +272,6 @@ std::string Socks5ErrorString(int err)
 /** Connect using SOCKS5 (as described in RFC1928) */
 static bool Socks5(const std::string& strDest, int port, const ProxyCredentials *auth, SOCKET& hSocket)
 {
-    LogPrint("net", "SOCKS5 connecting %s\n", strDest);
     if (strDest.size() > 255) {
         CloseSocket(hSocket);
         return error("Hostname too long");
@@ -351,7 +350,8 @@ static bool Socks5(const std::string& strDest, int port, const ProxyCredentials 
     char pchRet2[4];
     if (!InterruptibleRecv(pchRet2, 4, SOCKS5_RECV_TIMEOUT, hSocket)) {
         CloseSocket(hSocket);
-        return error("Error reading proxy response");
+        LogPrint("conn", "%s: Error reading proxy response for %s:%d\n", __func__, strDest, port);
+        return false;
     }
     if (pchRet2[0] != 0x05) {
         CloseSocket(hSocket);
@@ -393,7 +393,6 @@ static bool Socks5(const std::string& strDest, int port, const ProxyCredentials 
         CloseSocket(hSocket);
         return error("Error reading from proxy");
     }
-    LogPrint("net", "SOCKS5 connected %s\n", strDest);
     return true;
 }
 
@@ -442,13 +441,13 @@ bool static ConnectSocketDirectly(const CService &addrConnect, SOCKET& hSocketRe
             int nRet = select(hSocket + 1, NULL, &fdset, NULL, &timeout);
             if (nRet == 0)
             {
-                LogPrint(fFeeler ? "feeler" : "net", "%sconnection to %s timeout\n", fFeeler ? "feeler " : "", addrConnect.ToString());
+                LogPrint(fFeeler ? "feeler" : "conn", "%sconnection to %s timeout\n", fFeeler ? "feeler " : "", addrConnect.ToString());
                 CloseSocket(hSocket);
                 return false;
             }
             if (nRet == SOCKET_ERROR)
             {
-                LogPrint(fFeeler ? "feeler" : "net", "%sselect() for %s failed: %s\n", fFeeler ? "feeler " : "", addrConnect.ToString(), NetworkErrorString(WSAGetLastError()));
+                LogPrint(fFeeler ? "feeler" : "conn", "%sselect() for %s failed: %s\n", fFeeler ? "feeler " : "", addrConnect.ToString(), NetworkErrorString(WSAGetLastError()));
                 CloseSocket(hSocket);
                 return false;
             }
@@ -459,13 +458,13 @@ bool static ConnectSocketDirectly(const CService &addrConnect, SOCKET& hSocketRe
             if (getsockopt(hSocket, SOL_SOCKET, SO_ERROR, &nRet, &nRetSize) == SOCKET_ERROR)
 #endif
             {
-                LogPrint(fFeeler ? "feeler" : "net", "%sgetsockopt() for %s failed: %s\n", fFeeler ? "feeler " : "", addrConnect.ToString(), NetworkErrorString(WSAGetLastError()));
+                LogPrint(fFeeler ? "feeler" : "conn", "%sgetsockopt() for %s failed: %s\n", fFeeler ? "feeler " : "", addrConnect.ToString(), NetworkErrorString(WSAGetLastError()));
                 CloseSocket(hSocket);
                 return false;
             }
             if (nRet != 0)
             {
-                LogPrint(fFeeler ? "feeler" : "net", "%sconnect() to %s failed after select(): %s\n", fFeeler ? "feeler " : "", addrConnect.ToString(), NetworkErrorString(nRet));
+                LogPrint(fFeeler ? "feeler" : "conn", "%sconnect() to %s failed after select(): %s\n", fFeeler ? "feeler " : "", addrConnect.ToString(), NetworkErrorString(nRet));
                 CloseSocket(hSocket);
                 return false;
             }
@@ -476,7 +475,7 @@ bool static ConnectSocketDirectly(const CService &addrConnect, SOCKET& hSocketRe
         else
 #endif
         {
-            LogPrint(fFeeler ? "feeler" : "net", "%sconnect() to %s failed: %s\n", fFeeler ? "feeler " : "", addrConnect.ToString(), NetworkErrorString(WSAGetLastError()));
+            LogPrint(fFeeler ? "feeler" : "conn", "%sconnect() to %s failed: %s\n", fFeeler ? "feeler " : "", addrConnect.ToString(), NetworkErrorString(WSAGetLastError()));
             CloseSocket(hSocket);
             return false;
         }
