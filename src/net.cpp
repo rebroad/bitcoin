@@ -458,7 +458,7 @@ void CNode::CloseSocketDisconnect()
     LOCK(cs_hSocket);
     if (hSocket != INVALID_SOCKET)
     {
-        LogPrint(BCLog::NET, "disconnecting peer=%d\n", id);
+        LogPrint(BCLog::NET, "disconnecting %speer=%d\n", fFeeler ? "feeler " : "", id);
         CloseSocket(hSocket);
     }
 }
