@@ -435,7 +435,7 @@ void CNode::CloseSocketDisconnect()
     fDisconnect = true;
     if (hSocket != INVALID_SOCKET)
     {
-        LogPrint("net", "disconnecting peer=%d\n", id);
+        LogPrint("net", "disconnecting %speer=%d\n", fFeeler ? "feeler " : "", id);
         CloseSocket(hSocket);
     }
 
