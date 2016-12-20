@@ -353,7 +353,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     /// debug print
     LogPrint(fFeeler ? "feeler" : "net", "%s connection %s lastseen=%s\n", fFeeler ? "feeler" : "trying",
         pszDest ? pszDest : addrConnect.ToString(),
-        pszDest ? 0.0 : (double)(GetAdjustedTime() - addrConnect.nTime)/3600.0);
+        pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
     // Connect
     SOCKET hSocket;
