@@ -100,6 +100,7 @@ namespace boost {
 using namespace std;
 
 const char * const BITCOIN_CONF_FILENAME = "bitcoin.conf";
+const char * const NETWORK_CONF_FILENAME = "network.conf";
 const char * const BITCOIN_PID_FILENAME = "bitcoind.pid";
 
 map<string, string> mapArgs;
@@ -518,22 +519,23 @@ void ClearDatadirCache()
     pathCachedNetSpecific = boost::filesystem::path();
 }
 
-boost::filesystem::path GetConfigFile(const std::string& confPath)
+boost::filesystem::path GetConfigFile(const std::string& confPath, const bool fNetSpecific /*=false*/)
 {
     boost::filesystem::path pathConfigFile(confPath);
     if (!pathConfigFile.is_complete())
-        pathConfigFile = GetDataDir(false) / pathConfigFile;
+        pathConfigFile = GetDataDir(fNetSpecific) / pathConfigFile;
 
     return pathConfigFile;
 }
 
-void ReadConfigFile(const std::string& confPath,
+bool ReadConfigFile(const std::string& confPath,
                     map<string, string>& mapSettingsRet,
-                    map<string, vector<string> >& mapMultiSettingsRet)
+                    map<string, vector<string> >& mapMultiSettingsRet,
+                    const bool fNetSpecific /*=false*/)
 {
-    boost::filesystem::ifstream streamConfig(GetConfigFile(confPath));
+    boost::filesystem::ifstream streamConfig(GetConfigFile(confPath, fNetSpecific));
     if (!streamConfig.good())
-        return; // No bitcoin.conf file is OK
+        return false; // No bitcoin.conf file is OK
 
     set<string> setOptions;
     setOptions.insert("*");
@@ -550,6 +552,8 @@ void ReadConfigFile(const std::string& confPath,
     }
     // If datadir is changed in .conf file:
     ClearDatadirCache();
+
+    return true; // indicate a config file was processed
 }
 
 #ifndef WIN32
