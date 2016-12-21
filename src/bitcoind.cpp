@@ -116,6 +116,13 @@ bool AppInit(int argc, char* argv[])
             fprintf(stderr, "Error: %s\n", e.what());
             return false;
         }
+        // Read the network specific config file
+        try {
+            gArgs.ReadConfigFile(gArgs.GetArg("-netconf", NETWORK_CONF_FILENAME), true);
+        } catch (const std::exception& e) {
+            fprintf(stderr,"Error reading network config file: %s\n", e.what());
+            return false;
+        }
 
         // Error out when loose non-argument tokens are encountered on command line
         for (int i = 1; i < argc; i++) {
