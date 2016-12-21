@@ -34,6 +34,7 @@ std::string HelpMessageCli()
     strUsage += HelpMessageGroup(_("Options:"));
     strUsage += HelpMessageOpt("-?", _("This help message"));
     strUsage += HelpMessageOpt("-conf=<file>", strprintf(_("Specify configuration file (default: %s)"), BITCOIN_CONF_FILENAME));
+    strUsage += HelpMessageOpt("-netconf=<file>", strprintf(_("Specify network specific configuration file (default: %s)"), NETWORK_CONF_FILENAME));
     strUsage += HelpMessageOpt("-datadir=<dir>", _("Specify data directory"));
     AppendParamsHelpMessages(strUsage);
     strUsage += HelpMessageOpt("-named", strprintf(_("Pass named instead of positional arguments (default: %s)"), DEFAULT_NAMED));
@@ -112,6 +113,13 @@ static int AppInitRPC(int argc, char* argv[])
     } catch (const std::exception& e) {
         fprintf(stderr, "Error: %s\n", e.what());
         return EXIT_FAILURE;
+    }
+    // Read the network specific config file
+    try {
+        ReadConfigFile(GetArg("-netconf", NETWORK_CONF_FILENAME), true);
+    } catch (const std::exception& e) {
+        fprintf(stderr, "Error reading network config file: %s\n", e.what());
+        return false;
     }
     if (GetBoolArg("-rpcssl", false))
     {
