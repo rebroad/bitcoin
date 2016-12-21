@@ -88,6 +88,7 @@
 const int64_t nStartupTime = GetTime();
 
 const char * const BITCOIN_CONF_FILENAME = "bitcoin.conf";
+const char * const NETWORK_CONF_FILENAME = "network.conf";
 const char * const BITCOIN_PID_FILENAME = "bitcoind.pid";
 
 ArgsManager gArgs;
@@ -591,20 +592,20 @@ void ClearDatadirCache()
     pathCachedNetSpecific = fs::path();
 }
 
-fs::path GetConfigFile(const std::string& confPath)
+fs::path GetConfigFile(const std::string& confPath, const bool fNetSpecific /*=false*/)
 {
     fs::path pathConfigFile(confPath);
     if (!pathConfigFile.is_complete())
-        pathConfigFile = GetDataDir(false) / pathConfigFile;
+        pathConfigFile = GetDataDir(fNetSpecific) / pathConfigFile;
 
     return pathConfigFile;
 }
 
-void ArgsManager::ReadConfigFile(const std::string& confPath)
+bool ArgsManager::ReadConfigFile(const std::string& confPath, const bool fNetSpecific /*=false*/)
 {
-    fs::ifstream streamConfig(GetConfigFile(confPath));
+    fs::ifstream streamConfig(GetConfigFile(confPath, fNetSpecific));
     if (!streamConfig.good())
-        return; // No bitcoin.conf file is OK
+        return false; // No bitcoin.conf file is OK
 
     {
         LOCK(cs_args);
@@ -624,6 +625,8 @@ void ArgsManager::ReadConfigFile(const std::string& confPath)
     }
     // If datadir is changed in .conf file:
     ClearDatadirCache();
+
+    return true; // indicate a config file was processed
 }
 
 #ifndef WIN32
