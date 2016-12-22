@@ -757,7 +757,7 @@ bool AddOrphanTx(const CTransactionRef& tx, NodeId peer) EXCLUSIVE_LOCKS_REQUIRE
     unsigned int sz = GetTransactionWeight(*tx);
     if (sz >= MAX_STANDARD_TX_WEIGHT)
     {
-        LogPrint("mempool", "ignoring large orphan tx (size: %u, hash: %s)\n", sz, hash.ToString());
+        LogPrint("tx", "ignoring large orphan tx (size: %u, hash: %s)\n", sz, hash.ToString());
         return false;
     }
 
@@ -769,7 +769,7 @@ bool AddOrphanTx(const CTransactionRef& tx, NodeId peer) EXCLUSIVE_LOCKS_REQUIRE
 
     AddToCompactExtraTransactions(tx);
 
-    LogPrint("mempool", "stored orphan tx %s (mapsz %u outsz %u)\n", hash.ToString(),
+    LogPrint("tx", "stored orphan tx %s (mapsz %u outsz %u)\n", hash.ToString(),
              mapOrphanTransactions.size(), mapOrphanTransactionsByPrev.size());
     return true;
 }
@@ -804,7 +804,7 @@ void EraseOrphansFor(NodeId peer)
             nErased += EraseOrphanTx(maybeErase->second.tx->GetHash());
         }
     }
-    if (nErased > 0) LogPrint("mempool", "Erased %d orphan tx from peer=%d\n", nErased, peer);
+    if (nErased > 0) LogPrint("tx", "Erased %d orphan tx from peer=%d\n", nErased, peer);
 }
 
 
@@ -829,7 +829,7 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans) EXCLUSIVE_LOCKS_REQUIRE
         }
         // Sweep again 5 minutes after the next entry that expires in order to batch the linear scan.
         nNextSweep = nMinExpTime + ORPHAN_TX_EXPIRE_INTERVAL;
-        if (nErased > 0) LogPrint("mempool", "Erased %d orphan tx due to expiration\n", nErased);
+        if (nErased > 0) LogPrint("tx", "Erased %d orphan tx due to expiration\n", nErased);
     }
     while (mapOrphanTransactions.size() > nMaxOrphans)
     {
@@ -1971,7 +1971,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
 
             pfrom->nLastTXTime = GetTime();
 
-            LogPrint("mempool", "AcceptToMemoryPool: peer=%d: accepted %s size=%u (poolsz %u txn, %u kB)\n",
+            LogPrint("tx", "AcceptToMemoryPool: peer=%d: accepted %s size=%u (poolsz %u txn, %u kB)\n",
                 pfrom->id,
                 tx.GetHash().ToString(), nSize,
                 mempool.size(), mempool.DynamicMemoryUsage() / 1000);
@@ -2001,7 +2001,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
                     if (setMisbehaving.count(fromPeer))
                         continue;
                     if (AcceptToMemoryPool(mempool, stateDummy, porphanTx, true, &fMissingInputs2, &lRemovedTxn)) {
-                        LogPrint("mempool", "   accepted orphan tx %s\n", orphanHash.ToString());
+                        LogPrint("tx", "   accepted orphan tx %s\n", orphanHash.ToString());
                         RelayTransaction(orphanTx, connman);
                         for (unsigned int i = 0; i < orphanTx.vout.size(); i++) {
                             vWorkQueue.emplace_back(orphanHash, i);
@@ -2019,7 +2019,7 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
                         }
                         // Has inputs but not accepted to mempool
                         // Probably non-standard or insufficient fee/priority
-                        LogPrint("mempool", "   removed orphan tx %s\n", orphanHash.ToString());
+                        LogPrint("tx", "   removed orphan tx %s\n", orphanHash.ToString());
                         vEraseQueue.push_back(orphanHash);
                         if (!orphanTx.HasWitness() && !stateDummy.CorruptionPossible()) {
                             // Do not use rejection cache for witness transactions or
@@ -2058,9 +2058,9 @@ bool static ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vR
                 unsigned int nMaxOrphanTx = (unsigned int)std::max((int64_t)0, GetArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
                 unsigned int nEvicted = LimitOrphanTxSize(nMaxOrphanTx);
                 if (nEvicted > 0)
-                    LogPrint("mempool", "mapOrphan overflow, removed %u tx\n", nEvicted);
+                    LogPrint("tx", "mapOrphan overflow, removed %u tx\n", nEvicted);
             } else {
-                LogPrint("mempool", "not keeping orphan with rejected parents %s\n",tx.GetHash().ToString());
+                LogPrint("tx", "not keeping orphan with rejected parents %s\n",tx.GetHash().ToString());
                 // We will continue to reject this tx since it has rejected
                 // parents so avoid re-requesting it from other peers.
                 recentRejects->insert(tx.GetHash());
