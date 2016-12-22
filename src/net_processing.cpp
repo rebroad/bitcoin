@@ -1249,7 +1249,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 {
     unsigned int nMaxSendBufferSize = connman.GetSendBufferSize();
 
-    LogPrint("net", "recv %s size=%u peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->id);
+    LogPrint("netall", "recv %s size=%u peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->id);
     if (mapArgs.count("-dropmessagestest") && GetRand(atoi(mapArgs["-dropmessagestest"])) == 0)
     {
         LogPrintf("dropmessagestest DROPPING RECV MESSAGE\n");
