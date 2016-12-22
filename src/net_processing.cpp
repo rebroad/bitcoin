@@ -518,6 +518,11 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
     CNodeState *state = State(nodeid);
     assert(state != NULL);
 
+    if (!state->fHaveWitness && state->pindexLastCommonBlock && IsWitnessEnabled(state->pindexLastCommonBlock, consensusParams)) {
+        // This peer cannot provide witnesses and we need them
+        return;
+    }
+
     // Make sure pindexBestKnownBlock is up to date, we'll need it.
     ProcessBlockAvailability(nodeid);
 
