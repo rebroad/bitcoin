@@ -233,6 +233,9 @@ private Q_SLOTS:
     /** called by a timer to check if fRequestShutdown has been set **/
     void detectShutdown();
 
+    /** called by the qApp quit action, will ensure proper shutdown **/
+    void shouldQuit();
+
     /** Show progress dialog e.g. for verifychain */
     void showProgress(const QString &title, int nProgress);
     
