@@ -923,7 +923,7 @@ void PeerLogicValidation::SyncTransaction(const CTransaction& tx, const CBlockIn
         BOOST_FOREACH(uint256 &orphanHash, vOrphanErase) {
             nErased += EraseOrphanTx(orphanHash);
         }
-        LogPrint("mempool", "Erased %d orphan tx included or conflicted by block\n", nErased);
+        //LogPrint("mempool", "Erased %d orphan tx included or conflicted by block\n", nErased);
     }
 }
 
