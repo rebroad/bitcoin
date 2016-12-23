@@ -2077,7 +2077,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     if (setMisbehaving.count(fromPeer))
                         continue;
                     if (AcceptToMemoryPool(mempool, stateDummy, porphanTx, true, &fMissingInputs2, &lRemovedTxn)) {
-                        LogPrint("tx", "   accepted orphan tx %s\n", orphanHash.ToString());
+                        LogPrint("tx", "   accepted orphan tx %s peer=%d\n", orphanHash.ToString(), fromPeer);
                         RelayTransaction(orphanTx, connman);
                         for (unsigned int i = 0; i < orphanTx.vout.size(); i++) {
                             vWorkQueue.emplace_back(orphanHash, i);
@@ -2095,7 +2095,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                         }
                         // Has inputs but not accepted to mempool
                         // Probably non-standard or insufficient fee/priority
-                        LogPrint("tx", "   removed orphan tx %s\n", orphanHash.ToString());
+                        LogPrint("tx", "   removed orphan tx %s peer=%d\n", orphanHash.ToString(), fromPeer);
                         vEraseQueue.push_back(orphanHash);
                         if (!orphanTx.HasWitness() && !stateDummy.CorruptionPossible()) {
                             // Do not use rejection cache for witness transactions or
