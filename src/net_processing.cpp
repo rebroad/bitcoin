@@ -1932,6 +1932,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 LogPrint("tx", "not keeping orphan with rejected parents %s\n",tx.GetHash().ToString());
             }
         } else { // not accepted and not missing inputs, i.e. invalid
+            // REBTODO - update stats of invalid txs from this peer
             if (tx.wit.IsNull() && !state.CorruptionPossible()) {
                 // Do not use rejection cache for witness transactions or
                 // witness-stripped transactions, as they can have been malleated.
