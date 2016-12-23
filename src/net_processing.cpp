@@ -3469,7 +3469,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         // Message: getdata (blocks)
         //
         vector<CInv> vGetData;
-        if (!pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+        if ((fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             vector<const CBlockIndex*> vToDownload;
             if (state.nBlockPaused == 9) {
                 LogPrint("blockblock", "UNBLOCKED - Able to FindNextBlocksToDownload() peer=%d\n", pto->id);
