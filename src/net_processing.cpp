@@ -1906,6 +1906,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         } // if accepted to memory pool
         else if (fMissingInputs)
         { // not accepted as missing inputs, i.e. an orphan
+            // REBTODO - update stats for orphan txs from this peer
             bool fRejectedParents = false; // It may be the case that the orphans parents have all been rejected
             BOOST_FOREACH(const CTxIn& txin, tx.vin) {
                 if (recentRejects->contains(txin.prevout.hash)) {
