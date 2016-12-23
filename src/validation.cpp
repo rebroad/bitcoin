@@ -4079,16 +4079,6 @@ std::string GetWarnings(const std::string& strFor)
      return strprintf("CBlockFileInfo(blocks=%u, size=%u, heights=%u...%u, time=%s...%s)", nBlocks, nSize, nHeightFirst, nHeightLast, DateTimeStrFormat("%Y-%m-%d", nTimeFirst), DateTimeStrFormat("%Y-%m-%d", nTimeLast));
  }
 
-std::string strAge(const CBlockIndex *pindex) {
-    int nAge = GetAdjustedTime() - pindex->GetBlockTime();
-    if (abs(nAge) < 360)
-        return strprintf("%ds", nAge);
-    else if (abs(nAge) < 86400)
-        return strprintf("%.1fhrs", nAge/3600.0);
-    else
-        return strprintf("%.1fdays", nAge/86400.0);
-}
-
 ThresholdState VersionBitsTipState(const Consensus::Params& params, Consensus::DeploymentPos pos)
 {
     LOCK(cs_main);

@@ -276,7 +276,6 @@ bool IsInitialBlockDownload();
  * This function only returns the highest priority warning of the set selected by strFor.
  */
 std::string GetWarnings(const std::string& strFor);
-std::string strAge(const CBlockIndex* pindex);
 /** Retrieve a transaction (from memory pool, or from disk, if possible) */
 bool GetTransaction(const uint256 &hash, CTransactionRef &tx, const Consensus::Params& params, uint256 &hashBlock, bool fAllowSlow = false);
 /** Find the best known block, and make it the tip of the block chain */
