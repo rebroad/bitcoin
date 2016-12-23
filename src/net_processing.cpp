@@ -600,6 +600,9 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
         // Bootstrap quickly by guessing a parent of our best tip is the forking point.
         // Guessing wrong in either direction is not a problem.
         state->pindexLastCommonBlock = LastCommonAncestor(state->pindexBestKnownBlock, pindexActivatingTip);
+        LogPrint("blocklastcommon", "%s: LastCommon=%s BestKnown=%s ActivateTip=%s ActivatingTip=%s peer=%d\n", __func__,
+            strHeight(state->pindexLastCommonBlock), strHeight(state->pindexBestKnownBlock),
+            strHeight(chainActive.Tip()), strHeight(pindexActivatingTip), nodeid);
     }
 
     // If the peer reorganized, our previous pindexLastCommonBlock may not be an ancestor
@@ -3552,7 +3555,10 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 state.nBlockPaused = -9;
             }
             NodeId staller = -1;
+            const CBlockIndex *prevCommonBlock = state.pindexLastCommonBlock;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller, consensusParams);
+            if (prevCommonBlock != state.pindexLastCommonBlock)
+                LogPrint("blocklastcommon", "%s: LastCommonBlock (%s) -> (%s) peer=%d\n", __func__, strHeight(prevCommonBlock), strHeight(state.pindexLastCommonBlock), pto->id);
             BOOST_FOREACH(const CBlockIndex *pindex, vToDownload) {
                 uint32_t nFetchFlags = GetFetchFlags(pto, pindex->pprev, consensusParams);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
