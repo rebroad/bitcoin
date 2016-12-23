@@ -2075,7 +2075,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 PartiallyDownloadedBlock& partialBlock = *(*queuedBlockIt)->partialBlock;
                 ReadStatus status = partialBlock.InitData(cmpctblock);
                 if (status == READ_STATUS_INVALID) {
-                    LogPrintf("cmpctblock %s %s INVALID! peer=%d\n", pindex->GetBlockHash().ToString(), strBlkInfo(pindex), pfrom->id);
+                    LogPrintf("cmpctblock %s INVALID! peer=%d\n", strBlockInfo(pindex), pfrom->id);
                     MarkBlockAsReceived(pindex->GetBlockHash(), pfrom->id); // Reset in-flight state in case of whitelist
                     Misbehaving(pfrom->GetId(), 100);
                     return true;
