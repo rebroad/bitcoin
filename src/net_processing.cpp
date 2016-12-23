@@ -1836,7 +1836,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 vWorkQueue.emplace_back(inv.hash, i);
             }
 
-            pfrom->nLastTXTime = GetTime();
+            pfrom->nLastTXTime = GetTime(); // REBTODO - update stats for useful txs
 
             LogPrint("mempool", "AcceptToMemoryPool: peer=%d: accepted %s size=%u (poolsz %u txn, %u kB)\n",
                 pfrom->id,
