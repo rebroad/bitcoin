@@ -1838,10 +1838,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
             pfrom->nLastTXTime = GetTime(); // REBTODO - update stats for useful txs
 
-            LogPrint("tx", "AcceptToMemoryPool: peer=%d: accepted %s size=%u (poolsz %u txn, %u kB)\n",
-                pfrom->id,
-                tx.GetHash().ToString(), nSize,
-                mempool.size(), mempool.DynamicMemoryUsage() / 1000);
+            LogPrint("tx", "recv tx(%d,%d,%d) %s size=%u accepted (poolsz %u txn, %u kB) peer=%d\n",
+                    pfrom->mapAskFor.size(), pfrom->setAskFor.size(), mapAlreadyAskedFor.size(),
+                    tx.GetHash().ToString(), nSize,
+                    mempool.size(), mempool.DynamicMemoryUsage() / 1000,
+                    pfrom->id);
 
             // Recursively process any orphan transactions that depended on this one
             set<NodeId> setMisbehaving;
