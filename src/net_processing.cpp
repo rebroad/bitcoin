@@ -1923,6 +1923,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     if (!AlreadyHave(_inv)) pfrom->AskFor(_inv);
                 }
                 AddOrphanTx(tx, pfrom->GetId());
+                LogPrint("tx", "recv tx(%d,%d,%d) %s size=%u orphan (poolsz %u txn) peer=%d\n",
+                    pfrom->mapAskFor.size(), pfrom->setAskFor.size(), mapAlreadyAskedFor.size(),
+                    tx.GetHash().ToString(), nSize,
+                    mapOrphanTransactions.size(),
+                    pfrom->id);
 
                 // DoS prevention: do not allow mapOrphanTransactions to grow unbounded
                 unsigned int nMaxOrphanTx = (unsigned int)std::max((int64_t)0, GetArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
