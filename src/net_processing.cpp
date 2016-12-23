@@ -489,7 +489,9 @@ std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = NULL)
 {
     if (!pindex)
         return "NULL";
-    return strprintf("(%s) age=%s", strHeight(pindex, fFork), strAge(GetAdjustedTime()-pindex->GetBlockTime()));
+    int nBehind = pindexBestHeader->nHeight - pindex->nHeight;
+    return strprintf("(%s) age=%s%s", strHeight(pindex, fFork), strAge(GetAdjustedTime()-pindex->GetBlockTime()),
+            nBehind ? strprintf(" behind=%d", nBehind) : "");
 }
 
 std::string strBlockInfo(const CBlockIndex* pindex)
