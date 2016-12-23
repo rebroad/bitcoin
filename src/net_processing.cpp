@@ -3365,7 +3365,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
         // Message: getdata (blocks)
         //
         vector<CInv> vGetData;
-        if (!pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+        if ((fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             if (state.nBlockPaused == 9) {
                 LogPrint("block", "UNBLOCKED - Able to FindNextBlocksToDownload() peer=%d\n", pto->id);
                 state.nBlockPaused = -9;
