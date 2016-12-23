@@ -2494,12 +2494,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         // Only send one GetAddr response per connection to reduce resource waste
         //  and discourage addr stamping of INV announcements.
-        if (pfrom->fSentAddr)
+        if (pfrom->fSentAddr || (pfrom->nVersion != 70002 && !(pfrom->nServices & NODE_XTHIN)))
             return true;
         pfrom->fSentAddr = true;
-
-        if (pfrom->nVersion != 70002 && !(pfrom->nServices & NODE_XTHIN))
-            return true;
 
         pfrom->vAddrToSend.clear();
         vector<CAddress> vAddr = connman.GetAddresses();
