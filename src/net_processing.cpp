@@ -1838,7 +1838,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
             pfrom->nLastTXTime = GetTime(); // REBTODO - update stats for useful txs
 
-            LogPrint("mempool", "AcceptToMemoryPool: peer=%d: accepted %s size=%u (poolsz %u txn, %u kB)\n",
+            LogPrint("tx", "AcceptToMemoryPool: peer=%d: accepted %s size=%u (poolsz %u txn, %u kB)\n",
                 pfrom->id,
                 tx.GetHash().ToString(), nSize,
                 mempool.size(), mempool.DynamicMemoryUsage() / 1000);
