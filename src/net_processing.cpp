@@ -2083,7 +2083,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     // Duplicate txindexes, the block is now in-flight, so just request it
                     std::vector<CInv> vInv(1);
                     vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom, pindex->pprev, chainparams.GetConsensus()), cmpctblock.header.GetHash());
-                    LogPrint("block", "cmpctblock failed. send getdata %s (%s) peer=%d\n", vInv[0].ToString(), strHeight(pindex), pfrom->id);
+                    LogPrint("block", "cmpctblock failed. send getdata block %s peer=%d\n", strBlockInfo(pindex), pfrom->id);
                     connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
                     return true;
                 }
