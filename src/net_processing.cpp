@@ -2104,7 +2104,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                             assert(recentRejects);
                             recentRejects->insert(orphanHash);
                         }
-                    }
+                    } else
+                        LogPrint("tx", "   waiting orphan tx %s peer=%d\n", orphanHash.ToString(), fromPeer);
                     mempool.check(pcoinsTip);
                 }
             }
