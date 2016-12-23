@@ -2102,7 +2102,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 } else {
                     req.blockhash = pindex->GetBlockHash();
                     int nSize = connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
-                    LogPrint("block", "send getblocktxn %s indexes=%d size=%d peer=%d\n", strBlockInfo(pindex), req.indexes.size(), nSize, pfrom->id);
+                    LogPrint("block", "send getblocktxn %s indexes=%d/%d size=%d peer=%d\n", strBlockInfo(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), nSize, pfrom->id);
                 }
                 if (!fAlreadyInFlight && mapBlocksInFlight.size() == 1 && pindex->pprev->IsValid(BLOCK_VALID_CHAIN)) {
                     // We seem to be rather well-synced, so it appears pfrom was the first to provide us
