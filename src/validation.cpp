@@ -2081,9 +2081,11 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
             }
         }
     }
-    LogPrintf("%s: new best=%s (%d) ver=0x%08x age=%s tx=%lu\n", __func__,
+    LogPrintf("%s: new best=%s (%d) ver=0x%x age=%s workage=%s tx=%lu\n", __func__,
       chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), chainActive.Tip()->nVersion,
-      strAge(chainActive.Tip()), (unsigned long)chainActive.Tip()->nTx);
+      strAge(GetAdjustedTime()-chainActive.Tip()->GetBlockTime()),
+      strAge(GetBlockProofEquivalentTime(*pindexBestHeader, *chainActive.Tip(), *pindexBestHeader, consensusParams)),
+      (unsigned long)chainActive.Tip()->nTx);
     if (!warningMessages.empty())
         LogPrintf(" warning='%s'\n", boost::algorithm::join(warningMessages, ", "));
 
