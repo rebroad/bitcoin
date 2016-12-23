@@ -3417,7 +3417,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
             const CInv& inv = (*pto->mapAskFor.begin()).second;
             if (!AlreadyHave(inv))
             {
-                LogPrint("tx", "send getdata %s peer=%d\n", inv.ToString(), pto->id);
+                LogPrint("tx", "send getdata(%d,%d,%d) %s peer=%d\n", pto->mapAskFor.size(), pto->setAskFor.size(), mapAlreadyAskedFor.size(), inv.ToString(), pto->id);
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
                 {
