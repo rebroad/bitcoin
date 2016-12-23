@@ -401,7 +401,8 @@ std::string strBlkInfo(CBlockIndex *pindex, bool *fFork = NULL)
 {
     if (!pindex)
         return "NULL";
-    return strprintf("(%s) age=%s", strHeight(pindex, fFork), strAge(GetAdjustedTime()-pindex->GetBlockTime()));
+    return strprintf("(%s) age=%s workage=%s", strHeight(pindex, fFork), strAge(GetAdjustedTime()-pindex->GetBlockTime()),
+            strAge(GetBlockProofEquivalentTime(*pindexBestHeader, *chainActive.Tip(), *pindexBestHeader, consensusParams)));
 }
 
 std::string strBlockInfo(CBlockIndex *pindex)
