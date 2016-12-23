@@ -2487,10 +2487,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         // Only send one GetAddr response per connection to reduce resource waste
         //  and discourage addr stamping of INV announcements.
-        if (pfrom->fSentAddr) {
-            LogPrint("net", "Ignoring repeated \"getaddr\". peer=%d\n", pfrom->id);
+        if (pfrom->fSentAddr)
             return true;
-        }
         pfrom->fSentAddr = true;
 
         pfrom->vAddrToSend.clear();
