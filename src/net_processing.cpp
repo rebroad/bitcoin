@@ -3372,7 +3372,10 @@ bool SendMessages(CNode* pto, CConnman& connman)
             }
             vector<CBlockIndex*> vToDownload;
             NodeId staller = -1;
+            CBlockIndex *prevCommonBlock = state.pindexLastCommonBlock;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller, consensusParams);
+            if (prevCommonBlock != state.pindexLastCommonBlock)
+                LogPrint("blocklastcommon", "%s: LastCommonBlock (%s) -> (%s) peer=%d\n", __func__, strHeight(prevCommonBlock), strHeight(state.pindexLastCommonBlock), pto->id);
             BOOST_FOREACH(CBlockIndex *pindex, vToDownload) {
                 uint32_t nFetchFlags = GetFetchFlags(pto, pindex->pprev, consensusParams);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
