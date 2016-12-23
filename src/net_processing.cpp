@@ -3545,7 +3545,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
         // Message: getdata (blocks)
         //
         std::vector<CInv> vGetData;
-        if (!pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+        if ((fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             std::vector<const CBlockIndex*> vToDownload;
             if (state.nBlockPaused == 9) {
                 LogPrint("blockblock", "UNBLOCKED - (fFetch || !IsIBD) && InFlight(%d) < Max(%d) peer=%d\n", state.nBlocksInFlight, state.nMaxInFlight, pto->id);
