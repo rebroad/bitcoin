@@ -186,7 +186,7 @@ void AdvertiseLocal(CNode *pnode)
             addrLocal.SetIP(pnode->GetAddrLocal());
         }
         if (addrLocal.IsRoutable()) {
-            LogPrint("net", "%s: advertising local routable address %s to peer=%d\n", __func__, addrLocal.ToString(), pnode->id);
+            LogPrint("net2", "%s: advertising local routable address %s to peer=%d\n", __func__, addrLocal.ToString(), pnode->id);
             FastRandomContext insecure_rand;
             pnode->PushAddress(addrLocal, insecure_rand);
         }
