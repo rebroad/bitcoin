@@ -1895,7 +1895,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                             assert(recentRejects);
                             recentRejects->insert(orphanHash);
                         }
-                    } else
+                    } else // REBTODO - update stats for tricky orphan TXs for this peer
                         LogPrint("tx", "   waiting orphan tx %s peer=%d\n", orphanHash.ToString(), fromPeer);
                     mempool.check(pcoinsTip);
                 }
