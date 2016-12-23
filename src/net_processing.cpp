@@ -2178,7 +2178,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             if (status == READ_STATUS_INVALID) {
                 LogPrintf("blocktxn %s size=%d INVALID! peer=%d\n", strBlockInfo(mi->second), nSize, pfrom->id);
                 MarkBlockAsReceived(resp.blockhash, pfrom->id); // Reset in-flight state in case of whitelist
-                Misbehaving(pfrom->GetId(), 100);
+                if (it->second.first == pfrom->id) // Only misbehaving if it's the one we expected
+                    Misbehaving(pfrom->GetId(), 100);
                 return true;
             } else if (status == READ_STATUS_FAILED) {
                 // Might have collided, fall back to getdata now :(
