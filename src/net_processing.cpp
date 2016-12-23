@@ -756,8 +756,6 @@ bool AddOrphanTx(const CTransactionRef& tx, NodeId peer) EXCLUSIVE_LOCKS_REQUIRE
         mapOrphanTransactionsByPrev[txin.prevout].insert(ret.first);
     }
 
-    LogPrint("tx", "stored orphan tx %s (mapsz %u outsz %u)\n", hash.ToString(),
-             mapOrphanTransactions.size(), mapOrphanTransactionsByPrev.size());
     return true;
 }
 
@@ -1951,10 +1949,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
             pfrom->nLastTXTime = GetTime();
 
-            LogPrint("tx", "AcceptToMemoryPool: peer=%d: accepted %s size=%u (poolsz %u txn, %u kB)\n",
-                pfrom->id,
-                tx.GetHash().ToString(), nSize,
-                mempool.size(), mempool.DynamicMemoryUsage() / 1000);
+            LogPrint("tx", "recv tx(%d,%d,%d) %s size=%u accepted (poolsz %u txn, %u kB) peer=%d\n",
+                    pfrom->mapAskFor.size(), pfrom->setAskFor.size(), mapAlreadyAskedFor.size(),
+                    tx.GetHash().ToString(), nSize,
+                    mempool.size(), mempool.DynamicMemoryUsage() / 1000,
+                    pfrom->id);
 
             // Recursively process any orphan transactions that depended on this one
             set<NodeId> setMisbehaving;
@@ -1981,7 +1980,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     if (setMisbehaving.count(fromPeer))
                         continue;
                     if (AcceptToMemoryPool(mempool, stateDummy, porphanTx, true, &fMissingInputs2)) {
-                        LogPrint("tx", "   accepted orphan tx %s peer=%d\n", orphanHash.ToString(), fromPeer);
+                        LogPrint("tx", "   accepted orphan tx %s (poolsz %u) peer=%d\n", orphanHash.ToString(), mempool.size(), fromPeer);
                         RelayTransaction(orphanTx, connman);
                         for (unsigned int i = 0; i < orphanTx.vout.size(); i++) {
                             vWorkQueue.emplace_back(orphanHash, i);
@@ -1999,7 +1998,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         }
                         // Has inputs but not accepted to mempool
                         // Probably non-standard or insufficient fee/priority
-                        LogPrint("tx", "   removed orphan tx %s peer=%d\n", orphanHash.ToString(), fromPeer);
+                        LogPrint("tx", "   removed orphan tx %s (poolsz %u) peer=%d\n", orphanHash.ToString(), mempool.size(), fromPeer);
                         vEraseQueue.push_back(orphanHash);
                         if (!orphanTx.HasWitness() && !stateDummy.CorruptionPossible()) {
                             // Do not use rejection cache for witness transactions or
@@ -2034,6 +2033,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     if (!AlreadyHave(_inv)) pfrom->AskFor(_inv);
                 }
                 AddOrphanTx(ptx, pfrom->GetId());
+                LogPrint("tx", "recv tx(%d,%d,%d) %s size=%u orphan (mapsz %u outsz %s) peer=%d\n",
+                    pfrom->mapAskFor.size(), pfrom->setAskFor.size(), mapAlreadyAskedFor.size(),
+                    tx.GetHash().ToString(), nSize,
+                    mapOrphanTransactions.size(), mapOrphanTransactionsByPrev.size(),
+                    pfrom->id);
 
                 // DoS prevention: do not allow mapOrphanTransactions to grow unbounded
                 unsigned int nMaxOrphanTx = (unsigned int)std::max((int64_t)0, GetArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
@@ -3515,7 +3519,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             const CInv& inv = (*pto->mapAskFor.begin()).second;
             if (!AlreadyHave(inv))
             {
-                LogPrint("tx", "send getdata %s peer=%d\n", inv.ToString(), pto->id);
+                LogPrint("tx", "send getdata(%d,%d,%d) %s peer=%d\n", pto->mapAskFor.size(), pto->setAskFor.size(), mapAlreadyAskedFor.size(), inv.ToString(), pto->id);
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
                 {
