@@ -1969,7 +1969,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 LogPrintf("tx %s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(), pfrom->id, FormatStateMessage(state));
                 Misbehaving(pfrom->GetId(), nDoS);
             } else
-                LogPrint("mempoolrej", "tx %s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(), pfrom->id, FormatStateMessage(state));
+                LogPrint("tx", "tx %s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(), pfrom->id, FormatStateMessage(state));
         }
     }
 
