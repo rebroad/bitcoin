@@ -3398,7 +3398,7 @@ bool SendMessages(CNode* pto, CConnman& connman)
                 if (!fFetch && IsInitialBlockDownload())
                     strReason += "!fFetch&&IBD ";
                 if (state.nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER)
-                    strReason += "nBlocksInFlight=MAX ";
+                    strReason += strprintf("nBlocksInFlight=MAX(%d) ", state.nBlocksInFlight);
                 LogPrint("block", "BLOCKED - %speer=%d\n", strReason, pto->id);
             }
         }
