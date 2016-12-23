@@ -274,11 +274,13 @@ void Shutdown()
  */
 void HandleSIGTERM(int)
 {
+    LogPrintf("%s: Setting fRequestShutdown\n", __func__);
     fRequestShutdown = true;
 }
 
 void HandleSIGHUP(int)
 {
+    LogPrintf("%s: Closng this file...\n", __func__);
     fReopenDebugLog = true;
 }
 
