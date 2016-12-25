@@ -3272,7 +3272,7 @@ void FormBestChain() {
     ActivateBestChain(state, chainparams);
 }
 
-bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool *fNewBlock)
+bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool *fNewBlock, bool *fSlowBiter)
 {
     {
         CBlockIndex *pindex = NULL;
