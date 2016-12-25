@@ -69,6 +69,7 @@ static const uint64_t RANDOMIZER_ID_LOCALHOSTNONCE = 0xd93e69e2bbfa5735ULL; // S
 bool fDiscover = true;
 bool fListen = true;
 bool fRelayTxes = true;
+size_t vNodesSize = 0;
 CCriticalSection cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost;
 static bool vfLimited[NET_MAX] = {};
@@ -1187,7 +1188,6 @@ void CConnman::ThreadSocketHandler()
                 }
             }
         }
-        size_t vNodesSize;
         {
             LOCK(cs_vNodes);
             vNodesSize = vNodes.size();
