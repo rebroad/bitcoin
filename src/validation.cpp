@@ -4141,7 +4141,7 @@ int VersionBitsTipStateSinceHeight(const Consensus::Params& params, Consensus::D
     return VersionBitsStateSinceHeight(chainActive.Tip(), params, pos, versionbitscache);
 }
 
-static const uint64_t MEMPOOL_DUMP_VERSION = 1;
+static const uint64_t MEMPOOL_DUMP_VERSION = 2;
 
 bool LoadMempool(void)
 {
@@ -4164,41 +4164,61 @@ bool LoadMempool(void)
         if (version != MEMPOOL_DUMP_VERSION) {
             return false;
         }
-        uint64_t num;
-        file >> num;
-        double prioritydummy = 0;
-        while (num--) {
-            CTransactionRef tx;
-            int64_t nTime;
-            int64_t nFeeDelta;
-            file >> tx;
-            file >> nTime;
-            file >> nFeeDelta;
+        std::map<std::string, std::vector<unsigned char>> mapData;
+        file >> mapData;
 
-            CAmount amountdelta = nFeeDelta;
-            if (amountdelta) {
-                mempool.PrioritiseTransaction(tx->GetHash(), tx->GetHash().ToString(), prioritydummy, amountdelta);
+        it = mapData.find("deltas");
+        if (it == mapData.end()) {
+            try {
+                CDataStream ss(it->second, SER_NETWORK, PROTOCOL_VERSION);
+                LOCK(mempool.cs);
+                ss >> mempool.mapDeltas;
+            } catch (const std::exception& e) {
+                LogPrintf("Failed to deserialize mempool %s from disk: %s. Continuing anyway.\n", "deltas", e.what());
             }
-            CValidationState state;
-            if (nTime + nExpiryTimeout > nNow) {
-                LOCK(cs_main);
-                AcceptToMemoryPoolWithTime(mempool, state, tx, true, NULL, nTime);
-                if (state.IsValid()) {
+        }
+
+        it = mapData.find("txs");
+        if (it == mapData.end()) {
+            std::vector<std::map<std::string, std::vector<unsigned char>>> txMapDatas;
+            try {
+                CDataStream(it->second, SER_NETWORK, PROTOCOL_VERSION) >> txMapDatas;
+            } catch (const std::exception& e) {
+                LogPrintf("Failed to deserialize mempool %s from disk: %s. Continuing anyway.\n", "transactions", e.what());
+            }
+            for (auto mapTxData : txMapDatas) {
+                try {
+                    it = mapTxData.find("t");
+                    if (it == mapTxData.end()) {
+                        throw runtime_error("mapTxData \"t\" key missing");
+                    }
+                    int64_t nTime;
+                    CDataStream(it->second, SER_NETWORK, PROTOCOL_VERSION) >> nTime;
+                    if (nTime + nExpiryTimeout > nNow) {
+                        ++skipped;
+                        continue;
+                    }
+
+                    it = mapTxData.find("");
+                    if (it == mapTxData.end()) {
+                        throw runtime_error("mapTxData null key missing");
+                    }
+                    CDataStream ssTx(it->second, SER_NETWORK, PROTOCOL_VERSION);
+                    CTransaction tx(deserialize, ssTx);
+
+                    CValidationState state;
+                    LOCK(cs_main);
+                    AcceptToMemoryPoolWithTime(mempool, state, MakeTransactionRef(tx), true, NULL, nTime);
+                    if (!state.IsValid()) {
+                        throw runtime_error(state.GetRejectReason());
+                    }
                     ++count;
-                } else {
+                } catch (const std::exception& e) {
                     ++failed;
                 }
-            } else {
-                ++skipped;
             }
             if (ShutdownRequested())
                 return false;
-        }
-        std::map<uint256, CAmount> mapDeltas;
-        file >> mapDeltas;
-
-        for (const auto& i : mapDeltas) {
-            mempool.PrioritiseTransaction(i.first, i.first.ToString(), prioritydummy, i.second);
         }
     } catch (const std::exception& e) {
         LogPrintf("Failed to deserialize mempool data on disk: %s. Continuing anyway.\n", e.what());
@@ -4209,24 +4229,43 @@ bool LoadMempool(void)
     return true;
 }
 
+template <class T>
+std::vector<unsigned char> SerializeToVector(T o) {
+    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+    ss << o;
+    return std::vector<unsigned char>(ss.begin(), ss.end());
+}
+
 void DumpMempool(void)
 {
     int64_t start = GetTimeMicros();
 
-    std::map<uint256, CAmount> mapDeltas;
     std::vector<TxMempoolInfo> vinfo;
+    std::map<uint256, std::pair<double, CAmount>> mapDeltas;
 
     {
         LOCK(mempool.cs);
-        for (const auto &i : mempool.mapDeltas) {
-            mapDeltas[i.first] = i.second.first;
-        }
         vinfo = mempool.infoAll();
+        mapDeltas = mempool.mapDeltas;
     }
 
     int64_t mid = GetTimeMicros();
 
     try {
+        std::map<std::string, std::vector<unsigned char>> mapData;
+        mapData["deltas"] = SerializeToVector(mapDeltas);
+        {
+            std::vector<std::map<std::string, std::vector<unsigned char>>> txMapDatas;
+            for (TxMempoolInfo info : vinfo) {
+                std::map<std::string, std::vector<unsigned char>> mapTxData;
+                mapTxData[""] = SerializeToVector(*(info.tx));
+                mapTxData["t"] = SerializeToVector(info.nTime);
+                txMapDatas.push_back(std::move(mapTxData));
+            }
+
+            mapData["txs"] = SerializeToVector(txMapDatas);
+        }
+
         FILE* filestr = fopen((GetDataDir() / "mempool.dat.new").string().c_str(), "w");
         if (!filestr) {
             return;
@@ -4237,15 +4276,8 @@ void DumpMempool(void)
         uint64_t version = MEMPOOL_DUMP_VERSION;
         file << version;
 
-        file << (uint64_t)vinfo.size();
-        for (const auto& i : vinfo) {
-            file << *(i.tx);
-            file << (int64_t)i.nTime;
-            file << (int64_t)i.nFeeDelta;
-            mapDeltas.erase(i.tx->GetHash());
-        }
+        file << mapData;
 
-        file << mapDeltas;
         FileCommit(file.Get());
         file.fclose();
         RenameOver(GetDataDir() / "mempool.dat.new", GetDataDir() / "mempool.dat");
