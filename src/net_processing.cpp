@@ -182,6 +182,9 @@ struct CNodeState {
     int64_t tLastRecvBlk;
     //! When sipa disconnect logic invoked
     int64_t tSipaDisconnect;
+    //! Maximum blocks allowed in flight from this peer
+    unsigned int nMaxInFlight;
+    //! How many getdata block requests we're still waiting for.
     int nBlocksInFlight;
     int nBlocksInFlightValidHeaders;
     //! Whether we consider this a preferred download peer.
@@ -226,6 +229,10 @@ struct CNodeState {
         nBlockPaused = 0;
         tLastRecvBlk = 0;
         tSipaDisconnect = 0;
+        if (GetBoolArg("-dynmax", false))
+            nMaxInFlight = 2; // REBTOTO change this to one once we start counting clicks
+        else
+            nMaxInFlight = MAX_BLOCKS_IN_TRANSIT_PER_PEER;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
         fPreferredDownload = false;
@@ -681,6 +688,14 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
                 }
                 vBlocks.push_back(pindex);
                 state->nBlockPaused = 0;
+                if (state->nDownloadingSince && state->nMaxInFlight - count <= 0 && GetBoolArg("-dynmax", false)) {
+                    int nBlocksToBeProcessed = count - state->nMaxInFlight + state->nBlocksInFlight;
+                    LogPrint("block", "%s: nMaxInFlight=%d 2bProc=%d peer=%d\n", __func__, state->nBlocksInFlight, nBlocksToBeProcessed, nodeid);
+                    LogPrint("block", "%s: nMaxInFlight %d -> %d peer=%d\n", __func__, state->nMaxInFlight, state->nMaxInFlight * 2, nodeid);
+                    count += state->nMaxInFlight;
+                    state->nMaxInFlight = state->nMaxInFlight * 2;
+                    state->nDownloadingSince = 0; // This will be updated outside of this function once blocks are in flight again.
+                }
                 if (vBlocks.size() == count) {
                     return;
                 }
@@ -2186,7 +2201,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
         if (pindex->nHeight <= chainActive.Height() + 2) {
-            if (fAlreadyInFlight || nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+            if (fAlreadyInFlight || nodestate->nBlocksInFlight < (int)nodestate->nMaxInFlight) {
                 list<QueuedBlock>::iterator *queuedBlockIt = NULL;
                 if (!MarkBlockAsInFlight(pfrom->GetId(), pindex->GetBlockHash(), chainparams.GetConsensus(), pindex, &queuedBlockIt)) {
                     if (!(*queuedBlockIt)->partialBlock)
@@ -2521,7 +2536,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             vector<const CBlockIndex *> vToFetch;
             const CBlockIndex *pindexWalk = pindexLast;
             // Calculate all the blocks we'd need to switch to pindexLast, up to a limit.
-            while (pindexWalk && !chainActive.Contains(pindexWalk) && vToFetch.size() <= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+            while (pindexWalk && !chainActive.Contains(pindexWalk) && vToFetch.size() <= nodestate->nMaxInFlight) {
                 if (!(pindexWalk->nStatus & BLOCK_HAVE_DATA) &&
                         !mapBlocksInFlight.count(pindexWalk->GetBlockHash()) &&
                         (!IsWitnessEnabled(pindexWalk->pprev, chainparams.GetConsensus()) || State(pfrom->GetId())->fHaveWitness)) {
@@ -2541,14 +2556,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 vector<CInv> vGetData;
                 // Download as much as possible, from earliest to latest.
                 BOOST_REVERSE_FOREACH(const CBlockIndex *pindex, vToFetch) {
-                    if (nodestate->nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+                    if (nodestate->nBlocksInFlight >= (int)nodestate->nMaxInFlight) {
                         // Can't download any more from this peer
                         break;
                     }
                     uint32_t nFetchFlags = GetFetchFlags(pfrom, pindex->pprev, chainparams.GetConsensus());
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                     MarkBlockAsInFlight(pfrom->GetId(), pindex->GetBlockHash(), chainparams.GetConsensus(), pindex);
-                    if (nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER && vToFetch.size() > 1)
+                    if (nodestate->nBlocksInFlight < (int)nodestate->nMaxInFlight && vToFetch.size() > 1)
                         // don't log this if we might be substituting it for a compact block
                         LogPrint("block", "send getdata %s %s peer=%d\n", pindex->GetBlockHash().ToString(), strBlkInfo(pindex), pfrom->id);
                 }
@@ -3476,7 +3491,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         // Message: getdata (blocks)
         //
         vector<CInv> vGetData;
-        if ((fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER + pto->nBlocksToBeProcessed) {
+        if ((fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < (int)state.nMaxInFlight + pto->nBlocksToBeProcessed) {
             vector<const CBlockIndex*> vToDownload;
             if (state.nBlockPaused == 9) {
                 LogPrint("blockblock", "UNBLOCKED - Able to FindNextBlocksToDownload() peer=%d\n", pto->id);
@@ -3484,7 +3499,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             }
             NodeId staller = -1;
             const CBlockIndex *prevCommonBlock = state.pindexLastCommonBlock;
-            FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER + pto->nBlocksToBeProcessed- state.nBlocksInFlight, vToDownload, staller, consensusParams);
+            FindNextBlocksToDownload(pto->GetId(), state.nMaxInFlight + pto->nBlocksToBeProcessed - state.nBlocksInFlight, vToDownload, staller, consensusParams);
             if (prevCommonBlock != state.pindexLastCommonBlock)
                 LogPrint("blocklastcommon", "%s: LastCommonBlock (%s) -> (%s) peer=%d\n", __func__, strHeight(prevCommonBlock), strHeight(state.pindexLastCommonBlock), pto->id);
             BOOST_FOREACH(const CBlockIndex *pindex, vToDownload) {
@@ -3508,7 +3523,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
                     strReason += "fClient ";
                 if (!fFetch && IsInitialBlockDownload())
                     strReason += "!fFetch&&IBD ";
-                if (state.nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER)
+                if (state.nBlocksInFlight >= (int)state.nMaxInFlight)
                     strReason += strprintf("nBlocksInFlight=MAX(%d) ", state.nBlocksInFlight);
                 LogPrint("blockblock", "BLOCKED - %speer=%d\n", strReason, pto->id);
             }
