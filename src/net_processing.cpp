@@ -449,6 +449,9 @@ void MaybeSetPeerAsAnnouncingHeaderAndIDs(NodeId nodeid, CConnman& connman) {
         // Never ask from peers who can't provide witnesses.
         return;
     }
+    if (mempool.size() < 1)
+        // No point if our mempool is empty
+        return;
     if (nodestate->fProvidesHeaderAndIDs) {
         for (std::list<NodeId>::iterator it = lNodesAnnouncingHeaderAndIDs.begin(); it != lNodesAnnouncingHeaderAndIDs.end(); it++) {
             if (*it == nodeid) {
