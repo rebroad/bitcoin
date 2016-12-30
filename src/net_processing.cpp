@@ -2728,7 +2728,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         } else {
             // This is most likely a bug in another implementation somewhere; cancel this ping
             bPingFinished = true;
-            sProblem = "Short payload";
+            LogPrint("net", "recv pong: Short payload size=%d expected=%d ping?=%dms peer=%d\n", nAvail, sizeof(nonce),
+                   (pingUsecEnd - pfrom->nPingUsecStart) / 1000, pfrom->id);
         }
 
         if (!(sProblem.empty())) {
