@@ -630,6 +630,7 @@ public:
 
     int64_t nLastSend;
     int64_t nLastRecv;
+    int nNetClicks; // net cycles for this node
     int nBlocksToBeProcessed; // blocks added to vRecvMsg but not yet processed
     int64_t nTimeConnected;
     int64_t nTimeOffset;

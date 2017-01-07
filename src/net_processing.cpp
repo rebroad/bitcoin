@@ -1353,7 +1353,6 @@ void LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize
 
 bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t nTimeReceived, const CChainParams& chainparams, CConnman& connman, std::atomic<bool>& interruptMsgProc)
 {
-    LogPrint("netrecv", "received: %s (%u bytes) peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->id);
     if (IsArgSet("-dropmessagestest") && GetRand(GetArg("-dropmessagestest", 0)) == 0)
     {
         LogPrintf("dropmessagestest DROPPING RECV MESSAGE\n");
@@ -2933,6 +2932,10 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, std::atomic<bool>& interru
         msg.SetVersion(pfrom->GetRecvVersion());
 
         string strCommand = msg.hdr.pchCommand;
+        string strChk = HexStr(msg.hdr.pchChecksum, msg.hdr.pchChecksum+CMessageHeader::CHECKSUM_SIZE);
+
+        LogPrint("netrecv", "receive: %s %d%% chk=%s vProcessMsg.size=%d complete=%d peer=%d\n", strCommand, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, strChk, pfrom->vProcessMsg.size(), msg.complete(), pfrom->id);
+
         if (strCommand == NetMsgType::BLOCK || strCommand == NetMsgType::CMPCTBLOCK || strCommand == NetMsgType::BLOCKTXN)
             State(pfrom->id)->tLastRecvBlk = GetTime();
         msg.nLastDataPos = msg.nDataPos;
@@ -2963,10 +2966,9 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, std::atomic<bool>& interru
         const uint256& hash = msg.GetMessageHash();
         if (memcmp(hash.begin(), hdr.pchChecksum, CMessageHeader::CHECKSUM_SIZE) != 0)
         {
-            LogPrintf("%s(%s, %u bytes): CHECKSUM ERROR expected=%s was=%s peer=%d\n", __func__,
-               SanitizeString(strCommand), nMessageSize,
-               HexStr(hdr.pchChecksum, hdr.pchChecksum+CMessageHeader::CHECKSUM_SIZE),
-               HexStr(hash.begin(), hash.begin()+CMessageHeader::CHECKSUM_SIZE),
+            LogPrintf("%s(%s, %u bytes): CHECKSUM ERROR expected=%s is=%s peer=%d\n", __func__,
+               SanitizeString(strCommand), nMessageSize, strChk,
+               strChk=HexStr(hash.begin(), hash.begin()+CMessageHeader::CHECKSUM_SIZE),
 	       pfrom->id);
             return fMoreWork;
         }
