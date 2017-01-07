@@ -634,6 +634,7 @@ public:
     std::atomic<int> nBlocksToBeProcessed; // blocks received but not yet processed
     std::atomic<int> nMsgsToBeProcessed; // msgs received but not yet processed
     int64_t tLastRecvBlk; // Last partial block reception
+    int nNetClicks; // net cycles for this node
     int64_t nTimeConnected;
     int64_t nTimeOffset;
     const CAddress addr;

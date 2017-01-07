@@ -644,6 +644,7 @@ void CNode::copyStats(CNodeStats &stats)
 
 bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete, int64_t& tLastRecvBlk)
 {
+    int iter = 0;
     complete = false;
     int64_t nTimeMicros = GetTimeMicros();
     nLastRecv = nTimeMicros / 1000000;
@@ -651,8 +652,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
     while (nBytes > 0) {
 
         // get current incomplete message, or create a new one
-        if (vRecvMsg.empty() ||
-            vRecvMsg.back().complete())
+        if (vRecvMsg.empty() || vRecvMsg.back().complete())
             vRecvMsg.push_back(CNetMessage(Params().MessageStart(), SER_NETWORK, INIT_PROTO_VERSION));
 
         CNetMessage& msg = vRecvMsg.back();
@@ -661,12 +661,23 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
         int handled;
         bool fBody;
         if (!msg.in_data) {
+            iter++;
             fBody = false;
             handled = msg.readHeader(pch, nBytes);
         } else {
             fBody = true;
             handled = msg.readData(pch, nBytes);
         }
+
+        std::string strClicks;
+        if (nNetClicks)
+            strClicks += strprintf("clicks=%d ", nNetClicks);
+        if (fBody)
+            LogPrint("netrecv", "%s: %sbody%d vRecvMsg.size=%d nBytes=%d hand=%d %d%% size=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
+        else
+            LogPrint("netrecv", "%s: %shead%d vRecvMsg.size=%d nBytes=%d hand=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
+
+        nNetClicks = 0;
 
         if (handled < 0)
                 return false;
@@ -1325,7 +1336,8 @@ void CConnman::ThreadSocketHandler()
                         }
                     }
                 }
-            }
+            } else
+                pnode->nNetClicks++;
 
             //
             // Send
@@ -1371,7 +1383,7 @@ void CConnman::ThreadSocketHandler()
                 //    pnode->fDisconnect = true;
                 //}
             }
-        }
+        } // FOREACH node
         {
             LOCK(cs_vNodes);
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
@@ -2685,6 +2697,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     tLastRecvBlk = 0;
     nBlocksToBeProcessed = 0;
     nMsgsToBeProcessed = 0;
+    nNetClicks = 0;
     nSendBytes = 0;
     nRecvBytes = 0;
     nTimeConnected = GetSystemTimeInSeconds();
