@@ -2029,7 +2029,7 @@ void CConnman::ThreadMessageHandler()
 
         std::unique_lock<std::mutex> lock(mutexMsgProc);
         if (!fMoreWork && nBlocksToBeProcessed < 1) {
-            condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(100), [this] { return fMsgProcWake; });
+            condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(2000), [this] { return fMsgProcWake; });
         }
         fMsgProcWake = false;
     }
