@@ -599,6 +599,7 @@ public:
     std::atomic<int> nBlocksToBeProcessed; // blocks received but not yet processed
     std::atomic<int> nMsgsToBeProcessed; // msgs received but not yet processed
     int64_t tLastRecvBlk; // Last partial block reception
+    int nNetClicks; // net cycles for this node
     const CAddress addr;
     std::atomic<int> nVersion;
     // strSubVer is whatever byte array we read from the wire. However, this field is intended
