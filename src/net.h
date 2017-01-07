@@ -594,6 +594,7 @@ public:
 
     std::atomic<int64_t> nLastSend;
     std::atomic<int64_t> nLastRecv;
+    std::atomic<int64_t> nLastRecvClick;
     const int64_t nTimeConnected;
     std::atomic<int64_t> nTimeOffset;
     std::atomic<int> nBlocksToBeProcessed; // blocks received but not yet processed
