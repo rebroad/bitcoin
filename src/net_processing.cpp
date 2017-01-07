@@ -1581,11 +1581,11 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 FastRandomContext insecure_rand;
                 if (addr.IsRoutable())
                 {
-                    LogPrint("net", "ProcessMessages: advertising routable address %s to peer=%d\n", addr.ToString(), pfrom->id);
+                    LogPrint("net", "%s: advertising routable address %s to peer=%d\n", __func__, addr.ToString(), pfrom->id);
                     pfrom->PushAddress(addr, insecure_rand);
                 } else if (IsPeerAddrLocalGood(pfrom)) {
                     addr.SetIP(addrMe);
-                    LogPrint("net", "ProcessMessages: advertising local address %s to peer=%d\n", addr.ToString(), pfrom->id);
+                    LogPrint("net", "%s: advertising local address %s to peer=%d\n", __func__, addr.ToString(), pfrom->id);
                     pfrom->PushAddress(addr, insecure_rand);
                 }
             }
