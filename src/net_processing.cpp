@@ -1496,11 +1496,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 FastRandomContext insecure_rand;
                 if (addr.IsRoutable())
                 {
-                    LogPrint("net", "ProcessMessages: advertising routable address %s to peer=%d\n", addr.ToString(), pfrom->id);
+                    LogPrint("net", "%s: advertising routable address %s to peer=%d\n", __func__, addr.ToString(), pfrom->id);
                     pfrom->PushAddress(addr, insecure_rand);
                 } else if (IsPeerAddrLocalGood(pfrom)) {
                     addr.SetIP(pfrom->addrLocal);
-                    LogPrint("net", "ProcessMessages: advertising local address %s to peer=%d\n", addr.ToString(), pfrom->id);
+                    LogPrint("net", "%s: advertising local address %s to peer=%d\n", __func__, addr.ToString(), pfrom->id);
                     pfrom->PushAddress(addr, insecure_rand);
                 }
             }
