@@ -3146,7 +3146,11 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             if ((nSyncStarted < 2 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
                 state.fSyncStarted = true;
                 nSyncStarted++;
-                const CBlockIndex *pindexStart = pindexBestHeader;
+                const CBlockIndex *pindexStart;
+                if (pto->nStartingHeight >= 0 && pto->nStartingHeight < chainActive.Height())
+                    pindexStart = chainActive[pto->nStartingHeight];
+                else
+                    pindexStart = chainActive.Tip();
                 /* If possible, start at the block preceding the currently
                    best known header.  This ensures that we always get a
                    non-empty list of headers back as long as the peer
