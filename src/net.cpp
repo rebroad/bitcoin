@@ -1602,7 +1602,6 @@ void CConnman::ThreadDNSAddressSeed()
     }
 
     const std::vector<CDNSSeedData> &vSeeds = Params().DNSSeeds();
-    int found = 0;
 
     LogPrintf("Loading addresses from %d DNS seeds (could take a while)\n", vSeeds.size());
 
@@ -1624,9 +1623,9 @@ void CConnman::ThreadDNSAddressSeed()
                     CAddress addr = CAddress(CService(ip, Params().GetDefaultPort()), requiredServiceBits);
                     addr.nTime = GetTime() - 3*nOneDay - GetRand(4*nOneDay); // use a random age between 3 and 7 days old
                     vAdd.push_back(addr);
-                    found++;
                 }
-            }
+            } else
+                LogPrintf("%s: seed (%s) lookup failed\n", __func__, seed.host);
             if (interruptNet) {
                 return;
             }
@@ -1639,10 +1638,10 @@ void CConnman::ThreadDNSAddressSeed()
                 Lookup(seed.name.c_str(), seedSource, 0, true);
                 addrman.Add(vAdd, seedSource);
             }
+            LogPrintf("%d addresses found from DNS seed %s\n", vIPs.size(), seed.host);
         }
-    }
+    } // FOREACH seed
 
-    LogPrintf("%d addresses found from DNS seeds\n", found);
 }
 
 void CConnman::DumpAddresses()
