@@ -324,6 +324,7 @@ private:
     void ProcessOneShot();
     void ThreadOpenConnections();
     void ThreadMessageHandler();
+    void ThreadValidation();
     void AcceptConnection(const ListenSocket& hListenSocket);
     void ThreadSocketHandler();
     void ThreadDNSAddressSeed();
@@ -420,6 +421,8 @@ private:
 
     std::condition_variable condMsgProc;
     std::mutex mutexMsgProc;
+    std::condition_variable condValidation;
+    std::mutex mutexValidation;
     std::atomic<bool> flagInterruptMsgProc;
 
     CThreadInterrupt interruptNet;
@@ -429,6 +432,7 @@ private:
     std::thread threadOpenAddedConnections;
     std::thread threadOpenConnections;
     std::thread threadMessageHandler;
+    std::thread threadValidation;
 
     /** flag for deciding to connect to an extra outbound peer,
      *  in excess of nMaxOutbound
