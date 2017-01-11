@@ -63,6 +63,7 @@ CWaitableCriticalSection csBestBlock;
 CConditionVariable cvBlockChange;
 int nScriptCheckThreads = 0;
 std::atomic_bool fImporting(false);
+std::atomic<bool> fActivateChain;
 bool fReindex = false;
 bool fTxIndex = false;
 bool fHavePruned = false;
@@ -2475,12 +2476,19 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
     // us in the middle of ProcessNewBlock - do not assume pblock is set
     // sanely for performance or correctness!
 
+    if (fActivatingChain) {
+        fActivateChain = true;
+        return true;
+    }
+    fActivatingChain = true;
     CBlockIndex *pindexMostWork = NULL;
     CBlockIndex *pindexNewTip = NULL;
     do {
         boost::this_thread::interruption_point();
-        if (ShutdownRequested())
+        if (ShutdownRequested()) {
+            fActivatingChain = false;
             break;
+        }
 
         const CBlockIndex *pindexFork;
         ConnectTrace connectTrace;
@@ -2501,13 +2509,17 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
             }
 
             // Whether we have anything to do at all.
-            if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip())
+            if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip()) {
+                fActivatingChain = false;
                 return true;
+            }
 
             bool fInvalidFound = false;
             std::shared_ptr<const CBlock> nullBlockPtr;
-            if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connectTrace))
+            if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connectTrace)) {
+                fActivatingChain = false;
                 return false;
+            }
 
             if (fInvalidFound) {
                 // Wipe cache, we may need another branch now.
@@ -2545,9 +2557,11 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
 
     // Write changes periodically to disk, after relay.
     if (!FlushStateToDisk(state, FLUSH_STATE_PERIODIC)) {
+        fActivatingChain = false;
         return false;
     }
 
+    fActivatingChain = false;
     return true;
 }
 
@@ -3229,10 +3243,16 @@ static bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CValidation
     return true;
 }
 
+void FormBestChain() {
+    CValidationState state;
+    const CChainParams& chainparams = Params();
+    ActivateBestChain(state, chainparams);
+}
+
 bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool *fNewBlock)
 {
+    CBlockIndex *pindex = NULL;
     {
-        CBlockIndex *pindex = NULL;
         if (fNewBlock) *fNewBlock = false;
         CValidationState state;
         // Ensure that CheckBlock() passes before calling AcceptBlock, as
@@ -3254,9 +3274,15 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
 
     NotifyHeaderTip();
 
-    CValidationState state; // Only used to report errors, not invalidity - ignore it
-    if (!ActivateBestChain(state, chainparams, pblock))
-        return error("%s: ActivateBestChain failed", __func__);
+    // If best header is within 6 blocks from our tip, activate best chain withtin the message handler thread to avoid the 100ms delay,
+    // and to avoid breaking the miner tests.
+    if (fActivatingChain || pindexBestHeader->nChainWork > chainActive.Tip()->nChainWork + GetBlockProof(*chainActive.Tip()) * 6) {
+        fActivateChain = true;
+    } else {
+        CValidationState state; // Only used to report errors, not invalidity - ignore it
+        if (!ActivateBestChain(state, chainparams, pblock))
+            return error("%s: ActivateBestChain failed", __func__);
+    }
 
     return true;
 }
