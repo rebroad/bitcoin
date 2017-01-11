@@ -98,6 +98,7 @@ bool fLogTimestamps = DEFAULT_LOGTIMESTAMPS;
 bool fLogTimeMicros = DEFAULT_LOGTIMEMICROS;
 bool fLogIPs = DEFAULT_LOGIPS;
 std::atomic<bool> fReopenDebugLog(false);
+std::atomic<bool> fActivatingChain(false);
 CTranslationInterface translationInterface;
 
 /** Log categories bitfield. */
