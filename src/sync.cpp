@@ -87,40 +87,40 @@ static void potential_deadlock_detected(const std::pair<void*, void*>& mismatch,
     bool secondLocked = false;
     bool onlyMaybeDeadlock = false;
 
-    LogPrintf("POTENTIAL DEADLOCK DETECTED\n");
-    LogPrintf("Previous lock order was:\n");
+    LogPrint("lock", "POTENTIAL DEADLOCK DETECTED\n");
+    LogPrint("lock", "Previous lock order was:\n");
     BOOST_FOREACH (const PAIRTYPE(void*, CLockLocation) & i, s2) {
         if (i.first == mismatch.first) {
-            LogPrintf(" (1)");
+            LogPrint("lock", " (1)");
             if (!firstLocked && secondLocked && i.second.fTry)
                 onlyMaybeDeadlock = true;
             firstLocked = true;
         }
         if (i.first == mismatch.second) {
-            LogPrintf(" (2)");
+            LogPrint("lock", " (2)");
             if (!secondLocked && firstLocked && i.second.fTry)
                 onlyMaybeDeadlock = true;
             secondLocked = true;
         }
-        LogPrintf(" %s\n", i.second.ToString());
+        LogPrint("lock", " %s\n", i.second.ToString());
     }
     firstLocked = false;
     secondLocked = false;
-    LogPrintf("Current lock order is:\n");
+    LogPrint("lock", "Current lock order is:\n");
     BOOST_FOREACH (const PAIRTYPE(void*, CLockLocation) & i, s1) {
         if (i.first == mismatch.first) {
-            LogPrintf(" (1)");
+            LogPrint("lock", " (1)");
             if (!firstLocked && secondLocked && i.second.fTry)
                 onlyMaybeDeadlock = true;
             firstLocked = true;
         }
         if (i.first == mismatch.second) {
-            LogPrintf(" (2)");
+            LogPrint("lock", " (2)");
             if (!secondLocked && firstLocked && i.second.fTry)
                 onlyMaybeDeadlock = true;
             secondLocked = true;
         }
-        LogPrintf(" %s\n", i.second.ToString());
+        LogPrint("lock", " %s\n", i.second.ToString());
     }
     assert(onlyMaybeDeadlock);
 }
