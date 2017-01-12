@@ -77,26 +77,26 @@ boost::thread_specific_ptr<LockStack> lockstack;
 
 static void potential_deadlock_detected(const std::pair<void*, void*>& mismatch, const LockStack& s1, const LockStack& s2)
 {
-    LogPrintf("POTENTIAL DEADLOCK DETECTED\n");
-    LogPrintf("Previous lock order was:\n");
+    LogPrint("lock", "POTENTIAL DEADLOCK DETECTED\n");
+    LogPrint("lock", "Previous lock order was:\n");
     BOOST_FOREACH (const PAIRTYPE(void*, CLockLocation) & i, s2) {
         if (i.first == mismatch.first) {
-            LogPrintf(" (1)");
+            LogPrint("lock", " (1)");
         }
         if (i.first == mismatch.second) {
-            LogPrintf(" (2)");
+            LogPrint("lock", " (2)");
         }
-        LogPrintf(" %s\n", i.second.ToString());
+        LogPrint("lock", " %s\n", i.second.ToString());
     }
-    LogPrintf("Current lock order is:\n");
+    LogPrint("lock", "Current lock order is:\n");
     BOOST_FOREACH (const PAIRTYPE(void*, CLockLocation) & i, s1) {
         if (i.first == mismatch.first) {
-            LogPrintf(" (1)");
+            LogPrint("lock", " (1)");
         }
         if (i.first == mismatch.second) {
-            LogPrintf(" (2)");
+            LogPrint("lock", " (2)");
         }
-        LogPrintf(" %s\n", i.second.ToString());
+        LogPrint("lock", " %s\n", i.second.ToString());
     }
     assert(false);
 }
