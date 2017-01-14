@@ -465,6 +465,40 @@ const CBlockIndex* LastCommonAncestor(const CBlockIndex* pa, const CBlockIndex* 
     return pa;
 }
 
+std::string strHeight(const CBlockIndex* pindex, bool *fFork = NULL) {
+    if (!pindex)
+        return "NULL";
+    const CBlockIndex *pindexFork = LastCommonAncestor(pindex, pindexBestHeader);
+    std::string strFork;
+    if (pindexFork->nHeight < pindex->nHeight) {
+        if (fFork) *fFork = true;
+        bool fEqualWork = (pindex->nChainWork == pindexBestHeader->nChainWork);
+        strFork = strprintf(" %sfork@%d", fEqualWork ? "=" : "", pindexFork->nHeight);
+    }
+    return strprintf("%d%s", pindex->nHeight, strFork);
+}
+
+std::string strBlkHeight(const CBlockIndex* pindex)
+{
+    if (!pindex)
+        return "NULL";
+    return strprintf("%s (%s)", pindex->GetBlockHash().ToString(), strHeight(pindex));
+}
+
+std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = NULL)
+{
+    if (!pindex)
+        return "NULL";
+    return strprintf("(%s) age=%s", strHeight(pindex, fFork), strAge(GetAdjustedTime()-pindex->GetBlockTime()));
+}
+
+std::string strBlockInfo(const CBlockIndex* pindex)
+{
+    if (!pindex)
+        return "NULL";
+    return strprintf("%s %s", pindex->GetBlockHash().ToString(), strBlkInfo(pindex));
+}
+
 /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
  *  at most count entries. */
 void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller, const Consensus::Params& consensusParams) {
