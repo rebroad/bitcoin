@@ -11,6 +11,7 @@ void CConnman::ThreadValidation()
     while (!flagInterruptMsgProc) {
         if (fActivateChain && !fActivatingChain) {
             fActivateChain = false;
+            LogPrint("block", "%s: Slept %ds. Calling FormBestChain()\n", __func__, nSleep);
             FormBestChain();
         }
         if (!pindexBestHeader || pindexBestHeader->nChainWork == chainActive.Tip()->nChainWork)

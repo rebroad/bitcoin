@@ -674,11 +674,13 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
     // scan for better chains in the block chain database, that are not yet connected in the active best chain
     if (chainActive.Tip() == NULL) {
         CValidationState state;
+        LogPrintf("%s: chainActive.Tip() == NULL, so calling ActivateBestChain\n", __func__);
         if (!ActivateBestChain(state, chainparams)) {
             LogPrintf("Failed to connect best block");
             StartShutdown();
         }
-    }
+    } else
+        LogPrintf("%s: chainActive.Tip() != NULL, so skipping ActivateBestChain\n", __func__);
 
     if (GetBoolArg("-stopafterblockimport", DEFAULT_STOPAFTERBLOCKIMPORT)) {
         LogPrintf("Stopping after block import\n");

@@ -1146,7 +1146,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     return nSubsidy;
 }
 
-bool IsInitialBlockDownload()
+int IsInitialBlockDownload()
 {
     const CChainParams& chainParams = Params();
 
@@ -1154,21 +1154,21 @@ bool IsInitialBlockDownload()
     static std::atomic<bool> latchToFalse{false};
     // Optimization: pre-test latch before taking the lock.
     if (latchToFalse.load(std::memory_order_relaxed))
-        return false;
+        return 0;
 
     LOCK(cs_main);
     if (latchToFalse.load(std::memory_order_relaxed))
-        return false;
+        return 0;
     if (fImporting || fReindex)
-        return true;
+        return 1;
     if (chainActive.Tip() == NULL)
-        return true;
+        return 2;
     if (chainActive.Tip()->nChainWork < UintToArith256(chainParams.GetConsensus().nMinimumChainWork))
-        return true;
+        return 3;
     if (chainActive.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
-        return true;
+        return 4;
     latchToFalse.store(true, std::memory_order_relaxed);
-    return false;
+    return 0;
 }
 
 CBlockIndex *pindexBestForkTip = NULL, *pindexBestForkBase = NULL;
@@ -2452,8 +2452,14 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
     // us in the middle of ProcessNewBlock - do not assume pblock is set
     // sanely for performance or correctness!
 
-    if (fActivatingChain)
+    if (fActivatingChain) {
+        if (!fActivateChain)
+            LogPrint("block", "%s: Setting fActivateChain\n", __func__);
+        else
+            LogPrint("block", "%s: fActivateChain already set\n", __func__);
+        fActivateChain = true;
         return true;
+    }
     fActivatingChain = true;
     CBlockIndex *pindexMostWork = NULL;
     CBlockIndex *pindexNewTip = NULL;
@@ -3209,8 +3215,14 @@ static bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CValidation
 
 void FormBestChain() {
     CValidationState state;
+    int64_t tStart = GetTimeMillis();
     const CChainParams& chainparams = Params();
-    ActivateBestChain(state, chainparams);
+    if (!ActivateBestChain(state, chainparams))
+        LogPrint("block", "%s: ActivateBestChain failed\n", __func__);
+    else {
+        int64_t tNow = GetTimeMillis();
+        LogPrint("block", "%s: ActivateBestChain duration = %ds\n", __func__, (tNow - tStart) * 0.001);
+    }
 }
 
 bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool *fNewBlock)
@@ -3234,12 +3246,21 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
 
     // If best header is within 6 blocks from our tip, activate best chain withtin the message handler thread to avoid the 100ms delay,
     // and to avoid breaking the miner tests.
-    if (fActivatingChain || pindexBestHeader->nChainWork > chainActive.Tip()->nChainWork + GetBlockProof(*chainActive.Tip()) * 6)
+    bool fBite = pindex->nChainWork > chainActive.Tip()->nChainWork && pindex->nHeight <= chainActive.Height() + 1;
+    if (fActivatingChain || pindexBestHeader->nChainWork > chainActive.Tip()->nChainWork + GetBlockProof(*chainActive.Tip()) * 6) {
+        if (!fActivateChain)
+            LogPrint("block", "%s: Setting fActivateChain%s\n", __func__, fBite ? " - EXPECTING THIS TO BITE!" : "");
+        else if (fBite)
+            LogPrint("block", "%s: fActivateChain already set - EXPECTING THIS TO BITE!\n", __func__);
         fActivateChain = true;
-    else {
+    } else {
         CValidationState state; // Only used to report errors, not invalidity - ignore it
+        int64_t tStart = GetTimeMillis();
+        LogPrint("block", "%s: Calling ActivateBestChain()%s\n", __func__, fBite ? " - EXPECTING THIS TO BITE!" : "");
         if (!ActivateBestChain(state, chainparams, pblock))
             return error("%s: ActivateBestChain failed", __func__);
+        int64_t tNow = GetTimeMillis();
+        LogPrintf("%s: ActivateBestChain duration = %ds\n", __func__, (tNow - tStart) * .001);
     }
 
     return true;

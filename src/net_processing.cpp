@@ -1144,6 +1144,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             a_recent_block = most_recent_block;
                         }
                         CValidationState dummy;
+                        LogPrint("block", "recv getdata %s - Calling ActivateBestChain()\n", strBlockInfo(mi->second));
                         ActivateBestChain(dummy, Params(), a_recent_block);
                     }
                     if (chainActive.Contains(mi->second)) {
