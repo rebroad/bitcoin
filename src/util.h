@@ -53,6 +53,7 @@ extern bool fLogIPs;
 extern std::atomic<bool> fWitnessActive;
 extern std::atomic<bool> fReopenDebugLog;
 extern std::atomic<bool> fActivatingChain; // True while activating the best chain
+extern std::atomic<bool> fActivatingThread; // True while activating the best chain in the dedicated thread
 extern CTranslationInterface translationInterface;
 
 extern const char * const BITCOIN_CONF_FILENAME;

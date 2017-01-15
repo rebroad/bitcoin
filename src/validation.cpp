@@ -3266,7 +3266,9 @@ static bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CValidation
 void FormBestChain() {
     CValidationState state;
     const CChainParams& chainparams = Params();
+    fActivatingThread = true;
     ActivateBestChain(state, chainparams);
+    fActivatingThread = false;
 }
 
 bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool *fNewBlock)

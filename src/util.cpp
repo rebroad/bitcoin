@@ -101,6 +101,7 @@ bool fLogIPs = DEFAULT_LOGIPS;
 std::atomic<bool> fWitnessActive(false); // needed by net.cpp for peer selection
 std::atomic<bool> fReopenDebugLog(false);
 std::atomic<bool> fActivatingChain(false);
+std::atomic<bool> fActivatingThread(false);
 CTranslationInterface translationInterface;
 
 /** Log categories bitfield. */
@@ -316,7 +317,10 @@ static std::string LogTimestampStr(const std::string &str, std::atomic_bool *fSt
         if (mocktime) {
             strStamped += " (mocktime: " + DateTimeStrFormat("%Y-%m-%d %H:%M:%S", mocktime) + ")";
         }
-        strStamped += ' ' + str;
+        if (fActivatingThread)
+            strStamped += "  " + str;
+        else
+            strStamped += ' ' + str;
     } else
         strStamped = str;
 
