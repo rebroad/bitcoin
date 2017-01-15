@@ -703,7 +703,9 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
         StartShutdown();
     }
     } // End scope of CImportingNow
+    LogPrintf("%s: Starting LoadMempool()\n", __func__);
     LoadMempool();
+    LogPrintf("%s: Finished LoadMempool()\n", __func__);
     fDumpMempoolLater = !fRequestShutdown;
 }
 
