@@ -699,7 +699,9 @@ void ThreadImport(std::vector<fs::path> vImportFiles)
     }
     } // End scope of CImportingNow
     if (gArgs.GetArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL)) {
+        LogPrintf("%s: Starting LoadMempool()\n", __func__);
         LoadMempool();
+        LogPrintf("%s: Finished LoadMempool()\n", __func__);
         fDumpMempoolLater = !fRequestShutdown;
     }
 }
