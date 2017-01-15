@@ -316,7 +316,10 @@ static std::string LogTimestampStr(const std::string &str, std::atomic_bool *fSt
         if (mocktime) {
             strStamped += " (mocktime: " + DateTimeStrFormat("%Y-%m-%d %H:%M:%S", mocktime) + ")";
         }
-        strStamped += ' ' + str;
+        if (fActivatingChain)
+            strStamped += "  " + str;
+        else
+            strStamped += ' ' + str;
     } else
         strStamped = str;
 
