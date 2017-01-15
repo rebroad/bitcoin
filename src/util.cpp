@@ -282,7 +282,10 @@ static std::string LogTimestampStr(const std::string &str, std::atomic_bool *fSt
         strStamped = DateTimeStrFormat("%Y-%m-%d %H:%M:%S", nTimeMicros/1000000);
         if (fLogTimeMicros)
             strStamped += strprintf(".%06d", nTimeMicros%1000000);
-        strStamped += ' ' + str;
+        if (fActivatingChain)
+            strStamped += "  " + str;
+        else
+            strStamped += ' ' + str;
     } else
         strStamped = str;
 
