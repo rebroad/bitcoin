@@ -702,7 +702,9 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
         nBytes -= handled;
 
         if (msg.complete()) {
-
+            std::string pchCommand = msg.hdr.pchCommand;
+            if (pchCommand == NetMsgType::BLOCK)
+                nBlocksToBeProcessed++;
             //store received bytes per message command
             //to prevent a memory DOS, only allow valid commands
             mapMsgCmdSize::iterator i = mapRecvBytesPerMsgCmd.find(msg.hdr.pchCommand);
@@ -712,9 +714,9 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
             i->second += msg.hdr.nMessageSize + CMessageHeader::HEADER_SIZE;
 
             msg.nTime = nTimeMicros;
-            complete = true;
+            complete = true; // We got at least one complete message
         }
-    }
+    } // while (nBytes > 0)
 
     return true;
 }
@@ -2602,6 +2604,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     nRecvVersion = INIT_PROTO_VERSION;
     nLastSend = 0;
     nLastRecv = 0;
+    nBlocksToBeProcessed = 0;
     nSendBytes = 0;
     nRecvBytes = 0;
     nTimeConnected = GetTime();

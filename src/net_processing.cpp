@@ -2918,6 +2918,9 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, std::atomic<bool>& interru
             State(pfrom->id)->tLastRecvBlk = GetTime();
         msg.nLastDataPos = msg.nDataPos;
 
+        if (msg.complete() && strCommand == NetMsgType::BLOCK)
+            pfrom->nBlocksToBeProcessed--;
+
         // Scan for message start
         if (memcmp(msg.hdr.pchMessageStart, chainparams.MessageStart(), CMessageHeader::MESSAGE_START_SIZE) != 0) {
             LogPrintf("PROCESSMESSAGE: INVALID MESSAGESTART %s peer=%d\n", SanitizeString(msg.hdr.GetCommand()), pfrom->id);
@@ -3473,7 +3476,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         // Message: getdata (blocks)
         //
         vector<CInv> vGetData;
-        if ((fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+        if ((fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER + pto->nBlocksToBeProcessed) {
             vector<const CBlockIndex*> vToDownload;
             if (state.nBlockPaused == 9) {
                 LogPrint("blockblock", "UNBLOCKED - Able to FindNextBlocksToDownload() peer=%d\n", pto->id);
@@ -3481,7 +3484,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             }
             NodeId staller = -1;
             const CBlockIndex *prevCommonBlock = state.pindexLastCommonBlock;
-            FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller, consensusParams);
+            FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER + pto->nBlocksToBeProcessed- state.nBlocksInFlight, vToDownload, staller, consensusParams);
             if (prevCommonBlock != state.pindexLastCommonBlock)
                 LogPrint("blocklastcommon", "%s: LastCommonBlock (%s) -> (%s) peer=%d\n", __func__, strHeight(prevCommonBlock), strHeight(state.pindexLastCommonBlock), pto->id);
             BOOST_FOREACH(const CBlockIndex *pindex, vToDownload) {
