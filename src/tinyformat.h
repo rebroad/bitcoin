@@ -137,6 +137,7 @@ namespace tfm = tinyformat;
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include "utiltime.h"
 
 #ifndef TINYFORMAT_ERROR
 #   define TINYFORMAT_ERROR(reason) assert(0 && reason)
@@ -821,8 +822,11 @@ inline void formatImpl(std::ostream& out, const char* fmt,
 
     // Print remaining part of format string.
     fmt = printFormatStringLiteral(out, fmt);
-    if(*fmt != '\0')
-        TINYFORMAT_ERROR("tinyformat: Too many conversion specifiers in format string");
+    if(*fmt != '\0') {
+        int64_t nTimeMicros = GetTimeMicros();
+        std::cout << DateTimeStrFormat("%Y-%m-%d %H:%M:%S", nTimeMicros/1000000);
+        printf(".%ld Too many conversion specifiers in format string\n", nTimeMicros%1000000);
+    }
 
     // Restore stream state
     out.width(origWidth);
