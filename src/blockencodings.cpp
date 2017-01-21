@@ -174,6 +174,10 @@ bool PartiallyDownloadedBlock::IsTxAvailable(size_t index) const {
 }
 
 ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<CTransactionRef>& vtx_missing) {
+    if (header.IsNull()) {
+        LogPrint("%s: header.IsNull()\n", __func__);
+        return READ_STATUS_INVALID;
+    }
     assert(!header.IsNull());
     uint256 hash = header.GetHash();
     block = header;
