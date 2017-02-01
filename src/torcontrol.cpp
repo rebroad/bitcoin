@@ -358,7 +358,7 @@ public:
     ~TorController();
 
     /** Get name fo file to store private key in */
-    std::string GetPrivateKeyFile();
+    std::string GetPrivateKeyFile(unsigned int number = 0);
 
     /** Reconnect, after getting disconnected */
     void Reconnect();
@@ -471,6 +471,7 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
         // Finally - now create the service
         if (private_key.empty()) // No private key, generate one
             private_key = "NEW:RSA1024"; // Explicitly request RSA1024 - see issue #9214
+        LogPrint("tor", "tor: private_key = %s\n", private_key);
         // Request hidden service, redirect port.
         // Note that the 'virtual' port doesn't have to be the same as our internal port, but this is just a convenient
         // choice.  TODO; refactor the shutdown sequence some day.
@@ -650,9 +651,12 @@ void TorController::Reconnect()
     }
 }
 
-std::string TorController::GetPrivateKeyFile()
+std::string TorController::GetPrivateKeyFile(unsigned int number /*= 0*/)
 {
-    return (GetDataDir() / "onion_private_key").string();
+    std::string strFilename = "onion_private_key";
+    if (number)
+        strFilename += strprintf("%d", number);
+    return (GetDataDir() / strFilename).string();
 }
 
 void TorController::reconnect_cb(evutil_socket_t fd, short what, void *arg)
