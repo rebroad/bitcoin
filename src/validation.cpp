@@ -1748,6 +1748,10 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     txdata.reserve(block.vtx.size()); // Required so that pointers to individual PrecomputedTransactionData don't get invalidated
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
+        if (ShutdownRequested()) {
+            LogPrintf("%s: Shutdown requested. Aborting at %d%%.\n", __func__, i * 100 / block.vtx.size());
+            return false;
+        }
         const CTransaction &tx = *(block.vtx[i]);
 
         nInputs += tx.vin.size();
@@ -2205,7 +2209,9 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
         if (!rv) {
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
-            return error("ConnectTip(): ConnectBlock %s failed", pindexNew->GetBlockHash().ToString());
+            if (!ShutdownRequested())
+                error("ConnectTip(): ConnectBlock %s failed.", pindexNew->GetBlockHash().ToString());
+            return false;
         }
         nTime3 = GetTimeMicros(); nTimeConnectTotal += nTime3 - nTime2;
         LogPrint(BCLog::BENCH, "  - Connect total: %.2fms [%.2fs]\n", (nTime3 - nTime2) * 0.001, nTimeConnectTotal * 0.000001);
