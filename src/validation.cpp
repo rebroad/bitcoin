@@ -2492,8 +2492,14 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
     // us in the middle of ProcessNewBlock - do not assume pblock is set
     // sanely for performance or correctness!
 
-    if (fActivatingChain)
+    if (fActivatingChain) {
+        if (!fActivateChain)
+            LogPrint("tip", "%s: Setting fActivateChain\n", __func__);
+        else
+            LogPrint("tip", "%s: fActivateChain already set\n", __func__);
+        fActivateChain = true;
         return true;
+    }
     fActivatingChain = true;
 
     if (ShutdownRequested()) {
@@ -3268,14 +3274,21 @@ static bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CValidation
 
 void FormBestChain() {
     CValidationState state;
+    int64_t tStart = GetTimeMillis();
     const CChainParams& chainparams = Params();
-    ActivateBestChain(state, chainparams);
+    if (!ActivateBestChain(state, chainparams))
+        LogPrint("block", "%s: ActivateBestChain failed\n", __func__);
+    else {
+        int64_t tNow = GetTimeMillis();
+        if (tNow != tStart)
+            LogPrint("block", "%s: ActivateBestChain duration = %ds\n", __func__, (tNow - tStart) * 0.001);
+    }
 }
 
 bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool *fNewBlock, bool *fSlowBiter)
 {
+    CBlockIndex *pindex = NULL;
     {
-        CBlockIndex *pindex = NULL;
         if (fNewBlock) *fNewBlock = false;
         CValidationState state;
         // Ensure that CheckBlock() passes before calling AcceptBlock, as
@@ -3303,6 +3316,11 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
     bool fBite = fBetter && (pindex->nHeight <= pindexActivatingTip->nHeight + 1);
     if (fActivatingChain || pindexBestHeader->nChainWork > chainActive.Tip()->nChainWork + GetBlockProof(*chainActive.Tip()) * 6) {
         if (fBite) {
+            // Only log when biting
+            if (!fActivateChain)
+                LogPrint("tip", "%s: Setting fActivateChain (%d) - EXPECTING THIS TO BITE!\n", __func__, pindex->nHeight);
+            else
+                LogPrint("tip", "%s: fActivateChain already set (%d)- EXPECTING THIS TO BITE!\n", __func__, pindex->nHeight);
             fActivateChain = true;
             if (!fActivatingChain && fSlowBiter) {
                 *fSlowBiter = true;
@@ -3310,8 +3328,12 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
         }
     } else {
         CValidationState state; // Only used to report errors, not invalidity - ignore it
+        int64_t tStart = GetTimeMillis();
+        LogPrint(fBite ? "tip" : "block", "%s: Calling ActivateBestChain()%s\n", __func__, fBite ? " - EXPECTING THIS TO BITE!" : "");
         if (!ActivateBestChain(state, chainparams, pblock))
             return error("%s: ActivateBestChain failed", __func__);
+        int64_t tNow = GetTimeMillis();
+        LogPrintf("%s: ActivateBestChain duration = %ds\n", __func__, (tNow - tStart) * .001);
     }
 
     return true;
