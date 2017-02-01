@@ -7,10 +7,12 @@ std::atomic<bool> fActivateChain(true);
 
 void CConnman::ThreadValidation()
 {
-    int nSleep;
+    int nSleep = 0;
     while (!flagInterruptMsgProc) {
         if (fActivateChain && !fActivatingChain) {
             fActivateChain = false;
+	    if (nSleep != 100)
+                LogPrint("block", "%s: Slept %dms. Calling FormBestChain()\n", __func__, nSleep);
             FormBestChain();
         }
         nSleep = 100;
