@@ -214,7 +214,7 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     std::string strPrefilled;
     if (prefilled_count != 1) // Doesn't this always equal 1?
         strPrefilled += strprintf("prefilled=%lu ", prefilled_count);
-    LogPrint("block", "made block %s size=%d txs: %smempool=%lu+%lu req=%lu\n", hash.ToString(), ::GetSerializeSize(block, SER_DISK, PROTOCOL_VERSION), strPrefilled, mempool_count, extra_count, vtx_missing.size());
+    LogPrint("block", "made block %s size=%d txs: %smempool=%lu+%lu req=%d\n", hash.ToString(), ::GetSerializeSize(block, SER_DISK, PROTOCOL_VERSION), strPrefilled, mempool_count, extra_count, tx_missing_offset);
 
     return READ_STATUS_OK;
 }
