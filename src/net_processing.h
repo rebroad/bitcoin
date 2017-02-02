@@ -49,7 +49,7 @@ public:
 
 
     void InitializeNode(CNode* pnode) override;
-    void FinalizeNode(NodeId nodeid, bool& fUpdateConnectionTime) override;
+    void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) override;
     /** Process protocol messages received from a given node */
     bool ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt) override;
     /**

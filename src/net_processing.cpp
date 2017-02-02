@@ -571,9 +571,10 @@ void PeerLogicValidation::InitializeNode(CNode *pnode) {
         PushNodeVersion(pnode, connman, GetTime());
 }
 
-void PeerLogicValidation::FinalizeNode(NodeId nodeid, bool& fUpdateConnectionTime) {
+void PeerLogicValidation::FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
     fUpdateConnectionTime = false;
     LOCK(cs_main);
+    NodeId nodeid = pnode->GetId();
     CNodeState *state = State(nodeid);
     assert(state != nullptr);
 
@@ -2874,6 +2875,13 @@ bool PeerLogicValidation::ProcessMessages(CNode* pfrom, std::atomic<bool>& inter
     CNetMessage& msg(msgs.front());
 
     msg.SetVersion(pfrom->GetRecvVersion());
+
+    if (msg.complete() && msg.hdr.pchCommand == NetMsgType::BLOCK) {
+        pfrom->nBlocksToBeProcessed--;
+        nBlocksToBeProcessed--;
+    } else if (ShutdownRequested())
+        return fMoreWork;
+
     // Scan for message start
     if (memcmp(msg.hdr.pchMessageStart, chainparams.MessageStart(), CMessageHeader::MESSAGE_START_SIZE) != 0) {
         LogPrintf("PROCESSMESSAGE: INVALID MESSAGESTART %s peer=%d\n", SanitizeString(msg.hdr.GetCommand()), pfrom->GetId());

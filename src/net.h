@@ -471,7 +471,7 @@ public:
     virtual bool ProcessMessages(CNode* pnode, std::atomic<bool>& interrupt) = 0;
     virtual bool SendMessages(CNode* pnode, std::atomic<bool>& interrupt) = 0;
     virtual void InitializeNode(CNode* pnode) = 0;
-    virtual void FinalizeNode(NodeId id, bool& update_connection_time) = 0;
+    virtual void FinalizeNode(CNode* pnode, bool& update_connection_time) = 0;
 };
 
 enum
@@ -504,6 +504,7 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer, ServiceFlags nLocalServices)
 extern bool fDiscover;
 extern bool fListen;
 extern bool fRelayTxes;
+extern std::atomic<int> nBlocksToBeProcessed;
 
 extern limitedmap<uint256, int64_t> mapAlreadyAskedFor;
 
@@ -627,6 +628,7 @@ public:
 
     std::atomic<int64_t> nLastSend;
     std::atomic<int64_t> nLastRecv;
+    std::atomic<int> nBlocksToBeProcessed; // blocks received but not yet processed
     const int64_t nTimeConnected;
     std::atomic<int64_t> nTimeOffset;
     // Address of this peer
