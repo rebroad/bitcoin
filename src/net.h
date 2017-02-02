@@ -435,7 +435,7 @@ struct CNodeSignals
     boost::signals2::signal<bool (CNode*, CConnman&, std::atomic<bool>&), CombinerAll> ProcessMessages;
     boost::signals2::signal<bool (CNode*, CConnman&, std::atomic<bool>&), CombinerAll> SendMessages;
     boost::signals2::signal<void (CNode*, CConnman&)> InitializeNode;
-    boost::signals2::signal<void (NodeId, bool&)> FinalizeNode;
+    boost::signals2::signal<void (CNode*, bool&)> FinalizeNode;
 };
 
 
@@ -472,6 +472,7 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer, ServiceFlags nLocalServices)
 extern bool fDiscover;
 extern bool fListen;
 extern bool fRelayTxes;
+extern std::atomic<int> nBlocksToBeProcessed;
 
 extern limitedmap<uint256, int64_t> mapAlreadyAskedFor;
 
@@ -593,6 +594,7 @@ public:
     std::atomic<int64_t> nLastRecv;
     const int64_t nTimeConnected;
     std::atomic<int64_t> nTimeOffset;
+    std::atomic<int> nBlocksToBeProcessed; // blocks received but not yet processed
     const CAddress addr;
     std::atomic<int> nVersion;
     // strSubVer is whatever byte array we read from the wire. However, this field is intended

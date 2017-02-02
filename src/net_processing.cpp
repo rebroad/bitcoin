@@ -274,9 +274,14 @@ void InitializeNode(CNode *pnode, CConnman& connman) {
         PushNodeVersion(pnode, connman, GetTime());
 }
 
-void FinalizeNode(NodeId nodeid, bool& fUpdateConnectionTime) {
+void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
+    if (ShutdownRequested())
+        return;
+
     fUpdateConnectionTime = false;
+    nBlocksToBeProcessed -= pnode->nBlocksToBeProcessed;
     LOCK(cs_main);
+    NodeId nodeid = pnode->id;
     CNodeState *state = State(nodeid);
 
     if (state->fSyncStarted)
@@ -1426,7 +1431,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         pfrom->fSuccessfullyConnected = true;
     }
 
-    else if (!pfrom->fSuccessfullyConnected)
+    else if (!pfrom->fSuccessfullyConnected && !pfrom->fDisconnect)
     {
         // Must have a verack message before anything else
         LOCK(cs_main);
@@ -2650,17 +2655,15 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
     //
     bool fMoreWork = false;
 
-    if (!pfrom->vRecvGetData.empty())
+    if (!pfrom->fDisconnect && !pfrom->vRecvGetData.empty()) {
         ProcessGetData(pfrom, chainparams.GetConsensus(), connman, interruptMsgProc);
-
-    if (pfrom->fDisconnect)
-        return false;
-
-    // this maintains the order of responses
-    if (!pfrom->vRecvGetData.empty()) return true;
+        // this maintains the order of responses
+        if (!pfrom->vRecvGetData.empty())
+            return true;
+    }
 
     // Don't bother if send buffer is too full to respond anyway
-    if (pfrom->fPauseSend)
+    if ((pfrom->fDisconnect || pfrom->fPauseSend) && pfrom->nBlocksToBeProcessed < 1)
         return false;
 
     std::list<CNetMessage> msgs;
@@ -2677,6 +2680,16 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
     CNetMessage& msg(msgs.front());
 
     msg.SetVersion(pfrom->GetRecvVersion());
+
+    if (msg.complete()) {
+        std::string pchCommand = msg.hdr.pchCommand;
+        if (pchCommand == NetMsgType::BLOCK) {
+            pfrom->nBlocksToBeProcessed--;
+            nBlocksToBeProcessed--;
+        } else if (ShutdownRequested() || pfrom->fDisconnect || pfrom->fPauseSend)
+            return fMoreWork;
+    }
+
     // Scan for message start
     if (memcmp(msg.hdr.pchMessageStart, chainparams.MessageStart(), CMessageHeader::MESSAGE_START_SIZE) != 0) {
         LogPrintf("PROCESSMESSAGE: INVALID MESSAGESTART %s peer=%d\n", SanitizeString(msg.hdr.GetCommand()), pfrom->id);
