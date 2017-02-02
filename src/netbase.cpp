@@ -101,13 +101,15 @@ bool static LookupIntern(const char *pszName, std::vector<CNetAddr>& vIP, unsign
     aiHint.ai_flags = fAllowLookup ? AI_ADDRCONFIG : AI_NUMERICHOST;
 #endif
     struct addrinfo *aiRes = NULL;
-    LogPrintf("%s: about to getaddrinfo\n", __func__); // REBTEMP
+    int64_t tStart = GetTimeMillis();
     int nErr = getaddrinfo(pszName, NULL, &aiHint, &aiRes);
+    int64_t nDuration = GetTimeMillis() - tStart;
     if (nErr) {
-        LogPrintf("%s: getaddrinfo failed\n", __func__); // REBTEMP
+        if (nDuration > 1000)
+            LogPrintf("%s: getaddrinfo %s failed %dms\n", __func__, pszName, nDuration); // REBTEMP
         return false;
-    } else
-        LogPrintf("%s: getaddrinfo succeeded\n", __func__); // REBTEMP
+    } else if (nDuration > 1000)
+        LogPrintf("%s: getaddrinfo %s succeeded %dms\n", __func__, pszName, nDuration); // REBTEMP
 
     struct addrinfo *aiTrav = aiRes;
     while (aiTrav != NULL && (nMaxSolutions == 0 || vIP.size() < nMaxSolutions))
