@@ -2479,6 +2479,12 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
     if (fActivatingChain)
         return true;
     fActivatingChain = true;
+
+    if (ShutdownRequested()) {
+        fActivatingChain = false;
+        return true;
+    }
+
     CBlockIndex *pindexMostWork = NULL;
     CBlockIndex *pindexNewTip = NULL;
     do {
