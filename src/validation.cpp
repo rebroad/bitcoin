@@ -3708,6 +3708,8 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
     LogPrintf("%s: building vSortedByHeight\n", __func__);
     BOOST_FOREACH(const PAIRTYPE(uint256, CBlockIndex*)& item, mapBlockIndex)
     {
+        if (ShutdownRequested())
+            return false;
         CBlockIndex* pindex = item.second;
         vSortedByHeight.push_back(std::make_pair(pindex->nHeight, pindex));
     }
@@ -3716,6 +3718,8 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
     LogPrintf("%s: parsing vSortedByHeight\n", __func__);
     BOOST_FOREACH(const PAIRTYPE(int, CBlockIndex*)& item, vSortedByHeight)
     {
+        if (ShutdownRequested())
+            return false;
         CBlockIndex* pindex = item.second;
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
