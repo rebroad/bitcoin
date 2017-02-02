@@ -73,6 +73,7 @@ CCriticalSection cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost;
 static bool vfLimited[NET_MAX] = {};
 std::string strSubVersion;
+std::atomic<int> nBlocksToBeProcessed(0);
 
 limitedmap<uint256, int64_t> mapAlreadyAskedFor(MAX_INV_SZ);
 
@@ -714,7 +715,11 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
         nBytes -= handled;
 
         if (msg.complete()) {
-
+            std::string pchCommand = msg.hdr.pchCommand;
+            if (pchCommand == NetMsgType::BLOCK) {
+                nBlocksToBeProcessed++;
+                ::nBlocksToBeProcessed++;
+            }
             //store received bytes per message command
             //to prevent a memory DOS, only allow valid commands
             mapMsgCmdSize::iterator i = mapRecvBytesPerMsgCmd.find(msg.hdr.pchCommand);
@@ -1118,7 +1123,7 @@ void CConnman::ThreadSocketHandler()
             std::vector<CNode*> vNodesCopy = vNodes;
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
             {
-                if (pnode->fDisconnect)
+                if (pnode->fDisconnect && pnode->nBlocksToBeProcessed < 1)
                 {
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
@@ -1132,7 +1137,8 @@ void CConnman::ThreadSocketHandler()
                     // hold in disconnected pool until all refs are released
                     pnode->Release();
                     vNodesDisconnected.push_back(pnode);
-                }
+                } else if (pnode->fDisconnect && pnode->fSuccessfullyConnected)
+                    pnode->fSuccessfullyConnected = false; // Allow new nodes to be connected
             }
         }
         {
@@ -1757,7 +1763,7 @@ void CConnman::ThreadOpenConnections()
         //  * Only make a feeler connection once every few minutes.
         //
         bool fFeeler = false;
-        if (nOutbound >= nMaxOutbound) {
+        if (nOutboundRelevant >= nMaxOutbound) {
             int64_t nTime = GetTimeMicros(); // The current time right now (in microseconds).
             if (nTime > nNextFeeler) {
                 nNextFeeler = PoissonNextSend(nTime, FEELER_INTERVAL);
@@ -1967,7 +1973,7 @@ bool CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
 
 void CConnman::ThreadMessageHandler()
 {
-    while (!flagInterruptMsgProc)
+    while (!flagInterruptMsgProc || nBlocksToBeProcessed > 0)
     {
         std::vector<CNode*> vNodesCopy;
         {
@@ -1983,20 +1989,21 @@ void CConnman::ThreadMessageHandler()
         BOOST_FOREACH(CNode* pnode, vNodesCopy)
         {
             if (pnode->fDisconnect)
-                continue;
+                if (pnode->nBlocksToBeProcessed < 1)
+                    continue;
 
             // Receive messages
             bool fMoreNodeWork = GetNodeSignals().ProcessMessages(pnode, *this, flagInterruptMsgProc);
             fMoreWork |= (fMoreNodeWork && !pnode->fPauseSend);
-            if (flagInterruptMsgProc)
+            if (flagInterruptMsgProc && nBlocksToBeProcessed < 1)
                 return;
 
             // Send messages
+            if (!flagInterruptMsgProc)
             {
                 LOCK(pnode->cs_sendProcessing);
                 GetNodeSignals().SendMessages(pnode, *this, flagInterruptMsgProc);
-            }
-            if (flagInterruptMsgProc)
+            } else if (nBlocksToBeProcessed < 1)
                 return;
         }
 
@@ -2408,7 +2415,7 @@ void CConnman::DeleteNode(CNode* pnode)
 {
     assert(pnode);
     bool fUpdateConnectionTime = false;
-    GetNodeSignals().FinalizeNode(pnode->GetId(), fUpdateConnectionTime);
+    GetNodeSignals().FinalizeNode(pnode, fUpdateConnectionTime);
     if(fUpdateConnectionTime)
         addrman.Connected(pnode->addr);
     delete pnode;
@@ -2666,6 +2673,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     nRecvVersion = INIT_PROTO_VERSION;
     nLastSend = 0;
     nLastRecv = 0;
+    nBlocksToBeProcessed = 0;
     nSendBytes = 0;
     nRecvBytes = 0;
     nTimeOffset = 0;
