@@ -751,6 +751,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
             if (msg.hdr.pchCommand == NetMsgType::BLOCK) {
                 nBlocksToBeProcessed++;
                 ::nBlocksToBeProcessed++;
+                LogPrint("block", "net recv block 2bproc=%d,%d peer=%d\n", nBlocksToBeProcessed, ::nBlocksToBeProcessed, id);
             }
             //store received bytes per message command
             //to prevent a memory DOS, only allow valid commands

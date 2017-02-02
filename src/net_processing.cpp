@@ -313,6 +313,8 @@ void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
     nMsgsToBeProcessed -= pnode->nMsgsToBeProcessed;
     if (!pnode->fFeeler)
         LogPrint("net", "%s: nMsgs2b=%d vProcessMsg.size=%d peer=%d\n", __func__, pnode->nMsgsToBeProcessed, pnode->vProcessMsg.size(), pnode->id);
+    if (pnode->nBlocksToBeProcessed)
+        LogPrint("block", "%s: nBlocks2b %d -> %d peer=%d\n", __func__, nBlocksToBeProcessed + pnode->nBlocksToBeProcessed, nBlocksToBeProcessed, pnode->id);
 
     LOCK(cs_main);
     NodeId nodeid = pnode->id;
@@ -3038,6 +3040,7 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
         if (msg.complete() && msg.hdr.pchCommand == NetMsgType::BLOCK) {
             pfrom->nBlocksToBeProcessed--;
             nBlocksToBeProcessed--;
+            LogPrint("block", "recv block 2bproc=%d,%d peer=%d\n", pfrom->nBlocksToBeProcessed, nBlocksToBeProcessed, pfrom->id); // REBTEMP
         } else if (ShutdownRequested())
             return fMoreWork;
 
