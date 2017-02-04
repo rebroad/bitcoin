@@ -1339,7 +1339,7 @@ void CConnman::ThreadSocketHandler()
                             if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify, pnode->tLastRecvBlk))
                                 pnode->CloseSocketDisconnect();
                             RecordBytesRecv(nBytes);
-                            if (notify) {
+                            if (notify) { // at least one complete message received
                                 size_t nSizeAdded = 0;
                                 auto it(pnode->vRecvMsg.begin());
                                 for (; it != pnode->vRecvMsg.end(); ++it) {
