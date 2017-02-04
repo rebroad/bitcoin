@@ -2048,6 +2048,8 @@ void CConnman::ThreadMessageHandler()
         tBefore = tAfter;
 
         bool fMoreWork = false;
+        int nMoreWork = 0;
+        int nPaused = 0;
 
         BOOST_FOREACH(CNode* pnode, vNodesCopy)
         {
@@ -2058,6 +2060,9 @@ void CConnman::ThreadMessageHandler()
             // Receive messages
             bool fMoreNodeWork = GetNodeSignals().ProcessMessages(pnode, *this, flagInterruptMsgProc);
             fMoreWork |= (fMoreNodeWork && !pnode->fPauseSend);
+            if (fMoreNodeWork)
+                nMoreWork++;
+            if (pnode->fPauseSend) nPaused++;
             if (flagInterruptMsgProc && nBlocksToBeProcessed < 1)
                 return;
 
