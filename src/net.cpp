@@ -2039,11 +2039,14 @@ void CConnman::ThreadMessageHandler()
 
         int64_t nDuration = tAfter - tLastTime;
         int nToBeBefore = nMsgsToBeProcessed;
-        if (!fMoreWork && nBlocksToBeProcessed < 1) {
-            fMsgProcSleep = true;
-            condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(2000), [this] { return fMsgProcWake; });
-            fMsgProcSleep = false;
-            tAfter = GetTimeMillis();
+        if (!fMoreWork) {
+            if (nBlocksToBeProcessed < 1) {
+                fMsgProcSleep = true;
+                condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(2000), [this] { return fMsgProcWake; });
+                fMsgProcSleep = false;
+                tAfter = GetTimeMillis();
+            } else
+                LogPrint("block", "%s: No sleep as there are %d blocks to process!\n", __func__, nBlocksToBeProcessed);
         }
         if (tAfter != tBefore || nDuration > 1000)
             LogPrint("net2", "%s: %s=%dms Slept=%dms MsgsToBe=%d->%d nMoreWork=%d nPaused=%d\n", __func__, nDuration > 1000 ? "DURATION" : "Duration", nDuration, tAfter - tBefore, nToBeBefore, nMsgsToBeProcessed, nMoreWork, nPaused); // REBTEMP
