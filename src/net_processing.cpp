@@ -309,6 +309,8 @@ void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
     fUpdateConnectionTime = false;
     nBlocksToBeProcessed -= pnode->nBlocksToBeProcessed;
     nMsgsToBeProcessed -= pnode->nMsgsToBeProcessed;
+    if (!pnode->fFeeler)
+        LogPrint("net", "%s: nMsgs2b=%d vProcessMsg.size=%d peer=%d\n", __func__, pnode->nMsgsToBeProcessed, pnode->vProcessMsg.size(), pnode->id);
 
     LOCK(cs_main);
     NodeId nodeid = pnode->id;
