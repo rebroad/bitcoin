@@ -1394,7 +1394,7 @@ void CConnman::ThreadSocketHandler()
             // Inactivity checking
             //
             int64_t nTime = GetSystemTimeInSeconds();
-            if (nTime - pnode->nTimeConnected > 60)
+            if (nTime - pnode->nTimeConnected > 60 && !pnode->fDisconnect)
             {
                 if (pnode->nLastRecv == 0 || pnode->nLastSend == 0)
                 {
