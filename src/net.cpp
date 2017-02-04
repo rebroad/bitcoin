@@ -74,6 +74,7 @@ std::map<CNetAddr, LocalServiceInfo> mapLocalHost;
 static bool vfLimited[NET_MAX] = {};
 std::string strSubVersion;
 std::atomic<int> nBlocksToBeProcessed(0);
+std::atomic<int> nMsgsToBeProcessed(0);
 int64_t tLastBlkRep = 0; // Time block download last reported.
 
 limitedmap<uint256, int64_t> mapAlreadyAskedFor(MAX_INV_SZ);
@@ -1277,6 +1278,10 @@ void CConnman::ThreadSocketHandler()
                                 for (; it != pnode->vRecvMsg.end(); ++it) {
                                     if (!it->complete())
                                         break;
+                                    else {
+                                        nMsgsToBeProcessed++;
+                                        pnode->nMsgsToBeProcessed++;
+                                    }
                                     nSizeAdded += it->vRecv.size() + CMessageHeader::HEADER_SIZE;
                                 }
                                 {
@@ -2582,6 +2587,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     nLastRecv = 0;
     tLastRecvBlk = 0;
     nBlocksToBeProcessed = 0;
+    nMsgsToBeProcessed = 0;
     nSendBytes = 0;
     nRecvBytes = 0;
     nTimeConnected = GetSystemTimeInSeconds();

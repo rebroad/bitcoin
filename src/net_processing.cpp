@@ -308,6 +308,8 @@ void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
 
     fUpdateConnectionTime = false;
     nBlocksToBeProcessed -= pnode->nBlocksToBeProcessed;
+    nMsgsToBeProcessed -= pnode->nMsgsToBeProcessed;
+
     LOCK(cs_main);
     NodeId nodeid = pnode->id;
     CNodeState *state = State(nodeid);
@@ -2952,6 +2954,9 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, std::atomic<bool>& interru
         CNetMessage& msg(msgs.front());
 
         msg.SetVersion(pfrom->GetRecvVersion());
+
+        pfrom->nMsgsToBeProcessed--;
+        nMsgsToBeProcessed--;
 
         if (msg.complete() && msg.hdr.pchCommand == NetMsgType::BLOCK) {
             pfrom->nBlocksToBeProcessed--;
