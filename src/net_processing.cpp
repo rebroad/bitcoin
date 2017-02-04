@@ -3081,8 +3081,10 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
         try
         {
             fRet = ProcessMessage(pfrom, strCommand, vRecv, msg.nTime, chainparams, connman, interruptMsgProc);
-            if (interruptMsgProc)
+            if (interruptMsgProc) {
+                LogPrintf("%s: interruptMsgProc\n", __func__);
                 return false;
+            }
             if (!pfrom->vRecvGetData.empty())
                 fMoreWork = true;
         }
