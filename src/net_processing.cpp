@@ -3090,7 +3090,9 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
     // Process message
     bool fRet = false;
     try {
+        int64_t tBefore = GetTimeMillis();
         fRet = ProcessMessage(pfrom, strCommand, vRecv, msg.nTime, chainparams, connman, interruptMsgProc);
+        LogPrint("timing", "%s: %s %dms\n", __func__, SanitizeString(strCommand), GetTimeMillis() - tBefore); // REBTEMP
         if (interruptMsgProc)
             return false;
         if (!pfrom->vRecvGetData.empty())
