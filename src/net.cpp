@@ -2011,9 +2011,13 @@ bool CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
 
 void CConnman::ThreadMessageHandler()
 {
+    int64_t tLastTime = GetTimeMillis();
     while (!flagInterruptMsgProc || nBlocksToBeProcessed > 0)
     {
         std::vector<CNode*> vNodesCopy;
+        std::string strDurations;
+        int64_t tBefore = tLastTime;
+        int64_t tAfter = tBefore;
         {
             LOCK(cs_vNodes);
             vNodesCopy = vNodes;
@@ -2021,6 +2025,11 @@ void CConnman::ThreadMessageHandler()
                 pnode->AddRef();
             }
         }
+
+        tAfter = GetTimeMillis();
+        if (tAfter != tBefore)
+            strDurations += strprintf("AddRefs=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
 
         bool fMoreWork = false;
 
@@ -2031,6 +2040,10 @@ void CConnman::ThreadMessageHandler()
 
             // Receive messages
             bool fMoreNodeWork = GetNodeSignals().ProcessMessages(pnode, *this, flagInterruptMsgProc);
+            tAfter = GetTimeMillis();
+            if (tAfter != tBefore)
+                strDurations += strprintf("proc%d=%dms ", pnode->id, tAfter - tBefore);
+            tBefore = tAfter;
             fMoreWork |= (fMoreNodeWork && !pnode->fPauseSend);
             if (flagInterruptMsgProc && nBlocksToBeProcessed < 1)
                 return;
@@ -2040,6 +2053,10 @@ void CConnman::ThreadMessageHandler()
             {
                 LOCK(pnode->cs_sendProcessing);
                 GetNodeSignals().SendMessages(pnode, *this, flagInterruptMsgProc);
+                tAfter = GetTimeMillis();
+                if (tAfter != tBefore)
+                    strDurations += strprintf("send%d=%dms ", pnode->id, tAfter - tBefore);
+                tBefore = tAfter;
             } else if (nBlocksToBeProcessed < 1)
                 return;
         }
@@ -2049,12 +2066,29 @@ void CConnman::ThreadMessageHandler()
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
                 pnode->Release();
         }
+        tAfter = GetTimeMillis();
+        if (tAfter != tBefore)
+            strDurations += strprintf("release=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
 
         std::unique_lock<std::mutex> lock(mutexMsgProc);
+        tAfter = GetTimeMillis();
+        if (tAfter != tBefore)
+            strDurations += strprintf("lock=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
+
+        int64_t nDuration = tAfter - tLastTime;
+        int nToBeBefore = nMsgsToBeProcessed;
         if (!fMoreWork && nBlocksToBeProcessed < 1) {
             condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(2000), [this] { return fMsgProcWake; });
+            tAfter = GetTimeMillis();
         }
+        if (tAfter != tBefore || nDuration > 1000)
+            LogPrint("net2", "%s: %s=%dms Slept=%dms MsgsToBe=%d->%d nMoreWork=%d nPaused=%d\n", __func__, nDuration > 1000 ? "DURATION" : "Duration", nDuration, tAfter - tBefore, nToBeBefore, nMsgsToBeProcessed, nMoreWork, nPaused); // REBTEMP
+        if (nDuration > 1000)
+            LogPrint("net2", "%s: DURATIONS: %s\n", __func__, strDurations);
         fMsgProcWake = false;
+        tLastTime = tAfter;
     }
 }
 
