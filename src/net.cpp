@@ -1961,6 +1961,8 @@ void CConnman::ThreadMessageHandler()
         tBefore = tAfter;
 
         bool fMoreWork = false;
+        int nMoreWork = 0;
+        int nPaused = 0;
 
         BOOST_FOREACH(CNode* pnode, vNodesCopy)
         {
@@ -1974,6 +1976,11 @@ void CConnman::ThreadMessageHandler()
                 strDurations += strprintf("proc%d=%dms ", pnode->id, tAfter - tBefore);
             tBefore = tAfter;
             fMoreWork |= (fMoreNodeWork && !pnode->fPauseSend);
+            if (fMoreNodeWork)
+                nMoreWork++;
+            else if (pnode->nMsgsToBeProcessed)
+                LogPrint("net2", "%s: !ProcessMessages() && nMsgsToBeProcessed=%d vProcessMsg.size=%d PauseSend=%d peer=%d\n", __func__, pnode->nMsgsToBeProcessed, pnode->vProcessMsg.size(), pnode->fPauseSend, pnode->id);
+            if (pnode->fPauseSend) nPaused++;
             if (flagInterruptMsgProc && nBlocksToBeProcessed < 1)
                 return;
 
