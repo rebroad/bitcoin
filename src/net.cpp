@@ -1986,7 +1986,7 @@ void CConnman::ThreadMessageHandler()
 
         BOOST_FOREACH(CNode* pnode, vNodesCopy)
         {
-            if (pnode->fDisconnect)
+            if (pnode->fDisconnect || pnode->vProcessMsg.empty())
                 continue;
 
             // Receive messages
