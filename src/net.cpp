@@ -2112,8 +2112,13 @@ void CConnman::ThreadMessageHandler()
         int nToBeBefore = nMsgsToBeProcessed;
         if (!fMoreWork) {
             if (nBlocksToBeProcessed < 1) {
+                int nSleep;
+                if (nToBeBefore)
+                    nSleep = 100;
+                else
+                    nSleep = 2000;
                 fMsgProcSleep = true;
-                condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(2000), [this] { return fMsgProcWake; });
+                condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(nSleep), [this] { return fMsgProcWake; });
                 fMsgProcSleep = false;
                 tAfter = GetTimeMillis();
             } else
