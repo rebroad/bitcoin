@@ -140,20 +140,25 @@ bool AppInit(int argc, char* argv[])
         SoftSetBoolArg("-server", true);
         // Set this early so that parameter interactions go to console
         InitLogging();
+        LogPrintf("%s: Before InitParameterInteraction()\n", __func__); // REBTEMP
         InitParameterInteraction();
+        LogPrintf("%s: After InitParameterInteraction()\n", __func__); // REBTEMP
         if (!AppInitBasicSetup())
         {
             // InitError will have been called with detailed error, which ends up on console
+            LogPrintf("%s: !AppInitBasicSetup(). Exiting\n", __func__); // REBTEMP
             exit(1);
         }
         if (!AppInitParameterInteraction())
         {
             // InitError will have been called with detailed error, which ends up on console
+            LogPrintf("%s: !AppInitParameterInteraction(). Exiting\n", __func__); // REBTEMP
             exit(1);
         }
         if (!AppInitSanityChecks())
         {
             // InitError will have been called with detailed error, which ends up on console
+            LogPrintf("%s: !AppInitSanityChecks(). Exiting\n", __func__); // REBTEMP
             exit(1);
         }
         if (GetBoolArg("-daemon", false))
@@ -172,7 +177,9 @@ bool AppInit(int argc, char* argv[])
 #endif // HAVE_DECL_DAEMON
         }
 
+        LogPrintf("%s: Before AppInitMain()\n", __func__); // REBTEMP
         fRet = AppInitMain(threadGroup, scheduler);
+        LogPrintf("%s: After AppInitMain()\n", __func__); // REBTEMP
     }
     catch (const std::exception& e) {
         PrintExceptionContinue(&e, "AppInit()");
@@ -182,14 +189,20 @@ bool AppInit(int argc, char* argv[])
 
     if (!fRet)
     {
+        LogPrintf("%s: !AppInitMain(). Before Interrupt()\n", __func__); // REBTEMP
         Interrupt(threadGroup);
+        LogPrintf("%s: !AppInitMain(). After Interrupt()\n", __func__); // REBTEMP
         // threadGroup.join_all(); was left out intentionally here, because we didn't re-test all of
         // the startup-failure cases to make sure they don't result in a hang due to some
         // thread-blocking-waiting-for-another-thread-during-startup case
     } else {
+        LogPrintf("%s: AppInitMain() == true. Before WaitForShutdown()()\n", __func__); // REBTEMP
         WaitForShutdown(&threadGroup);
+        LogPrintf("%s: AppInitMain() == true. After WaitForShutdown()()\n", __func__); // REBTEMP
     }
+    LogPrintf("%s: Before Shutdown()\n", __func__); // REBTEMP
     Shutdown();
+    LogPrintf("%s: After Shutdown()\n", __func__); // REBTEMP
 
     return fRet;
 }
