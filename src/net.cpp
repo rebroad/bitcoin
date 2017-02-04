@@ -1399,6 +1399,8 @@ void CConnman::WakeMessageHandler()
         std::lock_guard<std::mutex> lock(mutexMsgProc);
         fMsgProcWake = true;
     }
+    if (fMsgProcSleep)
+        LogPrint("net2", "%s: condMsgProc.notify_one()\n", __func__);
     condMsgProc.notify_one();
 }
 
@@ -2038,7 +2040,9 @@ void CConnman::ThreadMessageHandler()
         int64_t nDuration = tAfter - tLastTime;
         int nToBeBefore = nMsgsToBeProcessed;
         if (!fMoreWork && nBlocksToBeProcessed < 1) {
+            fMsgProcSleep = true;
             condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(2000), [this] { return fMsgProcWake; });
+            fMsgProcSleep = false;
             tAfter = GetTimeMillis();
         }
         if (tAfter != tBefore || nDuration > 1000)
@@ -2325,6 +2329,7 @@ bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options c
     {
         std::unique_lock<std::mutex> lock(mutexMsgProc);
         fMsgProcWake = false;
+        fMsgProcSleep = false;
     }
 
     // Send and receive from sockets, accept connections
@@ -2381,6 +2386,8 @@ void CConnman::Interrupt()
         std::lock_guard<std::mutex> lock(mutexMsgProc);
         flagInterruptMsgProc = true;
     }
+    if (fMsgProcSleep)
+        LogPrint("net", "%s: condMsgProc.notify_all()\n", __func__);
     condMsgProc.notify_all();
 
     interruptNet();
