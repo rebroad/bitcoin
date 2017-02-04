@@ -472,6 +472,7 @@ extern bool fDiscover;
 extern bool fListen;
 extern bool fRelayTxes;
 extern std::atomic<int> nBlocksToBeProcessed;
+extern std::atomic<int> nMsgsToBeProcessed;
 
 extern limitedmap<uint256, int64_t> mapAlreadyAskedFor;
 
@@ -594,6 +595,7 @@ public:
     const int64_t nTimeConnected;
     std::atomic<int64_t> nTimeOffset;
     std::atomic<int> nBlocksToBeProcessed; // blocks received but not yet processed
+    std::atomic<int> nMsgsToBeProcessed; // msgs received but not yet processed
     int64_t tLastRecvBlk; // Last partial block reception
     const CAddress addr;
     std::atomic<int> nVersion;
