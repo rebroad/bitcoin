@@ -394,6 +394,7 @@ private:
     bool fMsgProcWake;
 
     std::condition_variable condMsgProc;
+    std::atomic<bool> fMsgProcSleep;
     std::mutex mutexMsgProc;
     std::condition_variable condValidation;
     std::mutex mutexValidation;
