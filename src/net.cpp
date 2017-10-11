@@ -1367,6 +1367,10 @@ void CConnman::ThreadSocketHandler()
                             // socket closed gracefully
                             if (!pnode->fDisconnect)
                                 LogPrint("net", "socket closed\n");
+			    if (pnode->fInbound && (nTimeConnected == 30 || pnode->nVersion == 0 || pnode->cleanSubVer.empty())) {
+                                LogPrint("net", "Banning %s\n", pnode->addrName);
+			        Ban(pnode->addr, BanReasonNodeMisbehaving);
+                            }
                             pnode->CloseSocketDisconnect();
                         }
                         else if (nBytes < 0)

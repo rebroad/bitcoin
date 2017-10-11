@@ -1380,6 +1380,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
 
     if (!(pfrom->GetLocalServices() & NODE_BLOOM) &&
+	       !pfrom->fWhitelisted &&
               (strCommand == NetMsgType::FILTERLOAD ||
                strCommand == NetMsgType::FILTERADD))
     {
@@ -1387,8 +1388,10 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             LogPrintf("recv %s from a node that should know better! peer=%d\n", strCommand, pfrom->id);
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 1);
-        } else
+        } else {
+            LogPrintf("recv %s from non-whitelisted. disconnecting peer=%d\n", strCommand, pfrom->id);
             pfrom->fDisconnect = true;
+        }
         return true;
     }
 
