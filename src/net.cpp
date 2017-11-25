@@ -377,7 +377,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     }
 
     /// debug print
-    LogPrint(BCLog::NET, "%s connection %s lastseen=%s\n", fFeeler ? "feeler" : "trying",
+    LogPrint(BCLog::CONN, "%s connection %s lastseen=%s\n", fFeeler ? "feeler" : "trying",
         pszDest ? pszDest : addrConnect.ToString(),
         pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
@@ -451,13 +451,14 @@ void CConnman::DumpBanlist()
 
 void CNode::CloseSocketDisconnect()
 {
-    fDisconnect = true;
     LOCK(cs_hSocket);
     if (hSocket != INVALID_SOCKET)
     {
-        LogPrint(BCLog::NET, "disconnecting %speer=%d\n", fFeeler ? "feeler " : "", id);
+        LogPrint(BCLog::CONN, "disconnecting %s%speer=%d\n", fDisconnect ? "(as requested) " : "", fFeeler ? "feeler " : "", id);
+        fDisconnect = true;
         CloseSocket(hSocket);
     }
+    fDisconnect = true;
 }
 
 void CConnman::ClearBanned()
@@ -1036,7 +1037,7 @@ bool CConnman::AttemptToEvictConnection()
     LOCK(cs_vNodes);
     for(std::vector<CNode*>::const_iterator it(vNodes.begin()); it != vNodes.end(); ++it) {
         if ((*it)->GetId() == evicted) {
-            LogPrint(BCLog::NET, "Evicting peer %d\n", evicted);
+            LogPrint(BCLog::CONN, "Evicting peer %d\n", evicted);
             (*it)->fDisconnect = true;
             return true;
         }
@@ -1102,7 +1103,7 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
     {
         if (!AttemptToEvictConnection()) {
             // No connection to evict, disconnect the new connection
-            LogPrint(BCLog::NET, "failed to find an eviction candidate - connection dropped (full)\n");
+            LogPrint(BCLog::CONN, "failed to find an eviction candidate - connection dropped (full)\n");
             CloseSocket(hSocket);
             return;
         }
@@ -1351,7 +1352,7 @@ void CConnman::ThreadSocketHandler()
                 {
                     // socket closed gracefully
                     if (!pnode->fDisconnect) {
-                        LogPrint(BCLog::NET, "socket closed\n");
+                        LogPrint(BCLog::CONN, "socket closed gracefully peer=%d\n", pnode->GetId());
                     }
                     pnode->CloseSocketDisconnect();
                 }
@@ -1388,27 +1389,27 @@ void CConnman::ThreadSocketHandler()
             {
                 if (pnode->nLastRecv == 0 || pnode->nLastSend == 0)
                 {
-                    LogPrint(BCLog::NET, "socket no message in first 60 seconds, %d %d from %d\n", pnode->nLastRecv != 0, pnode->nLastSend != 0, pnode->GetId());
+                    LogPrint(BCLog::CONN, "socket no message in first 60 seconds, %d %d peer=%d\n", pnode->nLastRecv != 0, pnode->nLastSend != 0, pnode->GetId());
                     pnode->fDisconnect = true;
                 }
                 else if (nTime - pnode->nLastSend > TIMEOUT_INTERVAL)
                 {
-                    LogPrintf("socket sending timeout: %is\n", nTime - pnode->nLastSend);
+                    LogPrintf("socket sending timeout: %is peer=%d\n", nTime - pnode->nLastSend, pnode->GetId());
                     pnode->fDisconnect = true;
                 }
                 else if (nTime - pnode->nLastRecv > (pnode->nVersion > BIP0031_VERSION ? TIMEOUT_INTERVAL : 90*60))
                 {
-                    LogPrintf("socket receive timeout: %is\n", nTime - pnode->nLastRecv);
+                    LogPrintf("socket receive timeout: %is peer=%d\n", nTime - pnode->nLastRecv, pnode->GetId());
                     pnode->fDisconnect = true;
                 }
                 else if (pnode->nPingNonceSent && pnode->nPingUsecStart + TIMEOUT_INTERVAL * 1000000 < GetTimeMicros())
                 {
-                    LogPrintf("ping timeout: %fs\n", 0.000001 * (GetTimeMicros() - pnode->nPingUsecStart));
+                    LogPrintf("ping timeout: %fs peer=%d\n", 0.000001 * (GetTimeMicros() - pnode->nPingUsecStart), pnode->GetId());
                     pnode->fDisconnect = true;
                 }
                 else if (!pnode->fSuccessfullyConnected)
                 {
-                    LogPrintf("version handshake timeout from %d\n", pnode->GetId());
+                    LogPrintf("version handshake timeout peer=%d\n", pnode->GetId());
                     pnode->fDisconnect = true;
                 }
             }
@@ -2783,7 +2784,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
         mapRecvBytesPerMsgCmd[msg] = 0;
     mapRecvBytesPerMsgCmd[NET_MESSAGE_COMMAND_OTHER] = 0;
 
-    LogPrint(BCLog::NET, "Added %s connection %speer=%d\n", fInbound ? "Inbound" : "Outbound", fLogIPs ? addrName + " " : "", id);
+    LogPrint(BCLog::CONN, "Added %s connection %speer=%d\n", fInbound ? "Inbound" : "Outbound", fLogIPs ? addrName + " " : "", id);
 }
 
 CNode::~CNode()
@@ -2837,7 +2838,7 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 {
     size_t nMessageSize = msg.data.size();
     size_t nTotalSize = nMessageSize + CMessageHeader::HEADER_SIZE;
-    LogPrint(BCLog::NET, "sending %s (%d bytes) peer=%d\n",  SanitizeString(msg.command.c_str()), nMessageSize, pnode->GetId());
+    LogPrint(BCLog::NET2, "sending: %s (%d bytes) peer=%d\n",  SanitizeString(msg.command.c_str()), nMessageSize, pnode->GetId());
 
     std::vector<unsigned char> serializedHeader;
     serializedHeader.reserve(CMessageHeader::HEADER_SIZE);

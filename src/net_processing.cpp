@@ -295,11 +295,10 @@ void PushNodeVersion(CNode *pnode, CConnman* connman, int64_t nTime)
     connman->PushMessage(pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
             nonce, strSubVersion, nNodeStartingHeight, ::fRelayTxes));
 
-    if (fLogIPs) {
-        LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s, them=%s, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, addrMe.ToString(), addrYou.ToString(), nodeid);
-    } else {
-        LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, addrMe.ToString(), nodeid);
-    }
+    std::string strThem;
+    if (fLogIPs)
+        strThem += strprintf("them=%s, ", addrYou.ToString());
+    LogPrint(BCLog::NET, "send version %d, blocks=%d, relay=%s, services=0x%x, us=%s, %speer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, fRelay ? "1" : "0", nLocalNodeServices, addrMe.ToString(), strThem, nodeid);
 }
 
 // Requires cs_main.
@@ -1446,18 +1445,20 @@ bool static ProcessHeadersMessage(CNode *pfrom, CConnman *connman, const std::ve
                     uint32_t nFetchFlags = GetFetchFlags(pfrom);
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                     MarkBlockAsInFlight(pfrom->GetId(), pindex->GetBlockHash(), pindex);
-                    LogPrint(BCLog::BLOCK, "Requesting block %s from  peer=%d\n",
-                            pindex->GetBlockHash().ToString(), pfrom->GetId());
                 }
                 if (vGetData.size() > 1) {
-                    LogPrint(BCLog::BLOCK, "Downloading blocks toward %s (%d) via headers direct fetch\n",
-                            pindexLast->GetBlockHash().ToString(), pindexLast->nHeight);
+                    LogPrint(BCLog::BLOCK, "Requesting %d blocks toward %s (%d) from peer=%d\n",
+                            vGetData.size(), pindexLast->GetBlockHash().ToString(), pindexLast->nHeight,
+                            pfrom->GetId());
                 }
                 if (vGetData.size() > 0) {
                     if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 && mapBlocksInFlight.size() <= 2 && pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                     }
+                    if (vGetData.size() == 1)
+                            LogPrint(BCLog::BLOCK, "Requesting %s (%d) from peer=%d\n",
+                                vGetData[0].ToString(), pindexLast->nHeight, pfrom->GetId());
                     connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                 }
             }
@@ -1499,7 +1500,7 @@ bool static ProcessHeadersMessage(CNode *pfrom, CConnman *connman, const std::ve
 
 bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStream& vRecv, int64_t nTimeReceived, const CChainParams& chainparams, CConnman* connman, const std::atomic<bool>& interruptMsgProc)
 {
-    LogPrint(BCLog::NET, "received: %s (%u bytes) peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->GetId());
+    LogPrint(BCLog::NET2, "received: %s (%u bytes) peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->GetId());
     if (gArgs.IsArgSet("-dropmessagestest") && GetRand(gArgs.GetArg("-dropmessagestest", 0)) == 0)
     {
         LogPrintf("dropmessagestest DROPPING RECV MESSAGE\n");
@@ -1523,7 +1524,6 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
     if (strCommand == NetMsgType::REJECT)
     {
-        if (LogAcceptCategory(BCLog::NET)) {
             try {
                 std::string strMsg; unsigned char ccode; std::string strReason;
                 vRecv >> LIMITED_STRING(strMsg, CMessageHeader::COMMAND_SIZE) >> ccode >> LIMITED_STRING(strReason, MAX_REJECT_MESSAGE_LENGTH);
@@ -1538,16 +1538,15 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     ss << ": hash " << hash.ToString();
                 }
                 if (strMsg == NetMsgType::BLOCK)
-                    LogPrint(BCLog::BLOCK, "Reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->GetId());
+                    LogPrint(BCLog::BLOCK, "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->GetId());
                 else if (strMsg == NetMsgType::TX)
-                    LogPrint(BCLog::TX, "Reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->GetId());
+                    LogPrint(BCLog::TX, "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->GetId());
                 else
-                    LogPrint(BCLog::NET, "Reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->GetId());
+                    LogPrint(BCLog::NET, "recv reject %s peer=%d\n", SanitizeString(ss.str()), pfrom->GetId());
             } catch (const std::ios_base::failure&) {
                 // Avoid feedback loops by preventing reject messages from triggering a new reject message.
-                LogPrint(BCLog::NET, "Unparseable reject message received\n");
+                LogPrint(BCLog::NET, "recv reject. unable to parse. peer=%d\n", pfrom->GetId());
             }
-        }
     }
 
     else if (strCommand == NetMsgType::VERSION)
@@ -1583,7 +1582,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         }
         if (!pfrom->fFeeler && pfrom->nServicesExpected & ~nServices)
         {
-            LogPrint(BCLog::NET, "peer=%d does not offer the expected services (%08x offered, %08x expected); disconnecting\n", pfrom->GetId(), nServices, pfrom->nServicesExpected);
+            LogPrint(BCLog::NET, "recv version does not offer the expected services (0x%x offered, 0x%x expected); disconnecting peer=%d\n", nServices, pfrom->nServicesExpected, pfrom->GetId());
             connman->PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
                                strprintf("Expected to offer services %08x", pfrom->nServicesExpected)));
             pfrom->fDisconnect = true;
@@ -1704,10 +1703,9 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         if (fLogIPs)
             remoteAddr = ", peeraddr=" + pfrom->addr.ToString();
 
-        LogPrintf("receive version message: %s: version %d, blocks=%d, us=%s, peer=%d%s\n",
+        LogPrintf("recv version %s version=%d, blocks=%d, us=%s%s, peer=%d\n",
                   cleanSubVer, pfrom->nVersion,
-                  pfrom->nStartingHeight, addrMe.ToString(), pfrom->GetId(),
-                  remoteAddr);
+                  pfrom->nStartingHeight, addrMe.ToString(), remoteAddr, pfrom->GetId());
 
         int64_t nTimeOffset = nTime - GetTime();
         pfrom->nTimeOffset = nTimeOffset;
@@ -1893,7 +1891,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     LogPrint(BCLog::BLOCK, "recv inv %s (new) peer=%d\n", inv.ToString(), pfrom->GetId());
                 } else {
                     fAlreadyHave = true; // already have the headers
-                    LogPrint(BCLog::BLOCK, "recv inv %s (%d) peer=%d\n", inv.ToString(), it->second->nHeight, pfrom->id);
+                    LogPrint(BCLog::BLOCK, "recv inv %s (%d) peer=%d\n", inv.ToString(), it->second->nHeight, pfrom->GetId());
                 }
                 UpdateBlockAvailability(pfrom->GetId(), inv.hash);
                 if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
@@ -1903,12 +1901,13 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     // we now only provide a getheaders response here. When we receive the headers, we will
                     // then ask for the blocks we need.
                     connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), inv.hash));
-                    LogPrint(BCLog::BLOCK, "getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->GetId());
+                    LogPrint(BCLog::BLOCK, "send getheaders (%d) %s peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->GetId());
                 }
             }
             else if (inv.type == MSG_TX) {
                 fAlreadyHave = AlreadyHave(inv);
                 inv.type |= nFetchFlags;
+                LogPrint(BCLog::TX, "recv inv %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->GetId());
                 pfrom->AddInventoryKnown(inv);
                 if (fBlocksOnly) {
                     LogPrint(BCLog::TX, "transaction (%s) inv sent in violation of protocol peer=%d\n", inv.hash.ToString(), pfrom->GetId());
@@ -1916,6 +1915,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     pfrom->AskFor(inv);
                 }
             }
+            else
+                LogPrint(BCLog:: NET, "recv inv: %s  %s peer=%d\n", inv.ToString(), AlreadyHave(inv) ? "have" : "new", pfrom->GetId());
 
             // Track requests for our stuff
             GetMainSignals().Inventory(inv.hash);
@@ -2629,7 +2630,15 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
         vRecv >> *pblock;
 
-        LogPrint(BCLog::BLOCK, "received block %s peer=%d\n", pblock->GetHash().ToString(), pfrom->GetId());
+        std::string strExtra;
+        {
+            LOCK(cs_main);
+            BlockMap::iterator mi = mapBlockIndex.find(pblock->GetHash());
+            if (mi != mapBlockIndex.end())
+                strExtra += strprintf(" %s", strBlkInfo(mi->second));
+        }
+
+        LogPrint(BCLog::BLOCK, "recv block %s%s peer=%d\n", pblock->GetHash().ToString(), strExtra, pfrom->GetId());
 
         bool forceProcessing = false;
         const uint256 hash(pblock->GetHash());
@@ -2852,7 +2861,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 LOCK(pfrom->cs_feeFilter);
                 pfrom->minFeeFilter = newFeeFilter;
             }
-            LogPrint(BCLog::NET, "received: feefilter of %s from peer=%d\n", CFeeRate(newFeeFilter).ToString(), pfrom->GetId());
+            LogPrint(BCLog::NET, "recv feefilter of %s from peer=%d\n", CFeeRate(newFeeFilter).ToString(), pfrom->GetId());
         }
     }
 

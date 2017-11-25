@@ -320,7 +320,7 @@ std::string Socks5ErrorString(uint8_t err)
 static bool Socks5(const std::string& strDest, int port, const ProxyCredentials *auth, SOCKET& hSocket)
 {
     IntrRecvError recvr;
-    LogPrint(BCLog::NET, "SOCKS5 connecting %s\n", strDest);
+    LogPrint(BCLog::PROXY, "SOCKS5 connecting %s\n", strDest);
     if (strDest.size() > 255) {
         CloseSocket(hSocket);
         return error("Hostname too long");
@@ -448,7 +448,7 @@ static bool Socks5(const std::string& strDest, int port, const ProxyCredentials 
         CloseSocket(hSocket);
         return error("Error reading from proxy");
     }
-    LogPrint(BCLog::NET, "SOCKS5 connected %s\n", strDest);
+    LogPrint(BCLog::PROXY, "SOCKS5 connected %s\n", strDest);
     return true;
 }
 
@@ -495,7 +495,7 @@ bool static ConnectSocketDirectly(const CService &addrConnect, SOCKET& hSocketRe
             int nRet = select(hSocket + 1, nullptr, &fdset, nullptr, &timeout);
             if (nRet == 0)
             {
-                LogPrint(BCLog::NET, "connection to %s timeout\n", addrConnect.ToString());
+                LogPrint(BCLog::CONN, "connection to %s timeout\n", addrConnect.ToString());
                 CloseSocket(hSocket);
                 return false;
             }
