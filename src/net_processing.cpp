@@ -621,8 +621,11 @@ void PeerLogicValidation::InitializeNode(CNode *pnode) {
 
 void PeerLogicValidation::FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
     fUpdateConnectionTime = false;
-    LOCK(cs_main);
     NodeId nodeid = pnode->GetId();
+    LogPrint(BCLog::BLOCK, "%s: nBlocksToBeProcessed %d - %d = %d peer=%d\n", __func__,
+        nBlocksToBeProcessed, pnode->nBlocksToBeProcessed, nBlocksToBeProcessed-pnode->nBlocksToBeProcessed, nodeid);
+    nBlocksToBeProcessed -= pnode->nBlocksToBeProcessed;
+    LOCK(cs_main);
     CNodeState *state = State(nodeid);
     assert(state != nullptr);
 
