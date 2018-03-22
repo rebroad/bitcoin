@@ -107,6 +107,7 @@ namespace BCLog {
         LEVELDB     = (1 << 20),
         CONN        = (1 << 21),
         NET2        = (1 << 22),
+        BLOCKHIST   = (1 << 23),
         ALL         = ~(uint32_t)0,
     };
 }
