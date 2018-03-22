@@ -945,7 +945,7 @@ bool AppInitParameterInteraction()
             for (const auto& cat : categories) {
                 uint32_t flag = 0;
                 if (!GetLogCategory(&flag, &cat)) {
-                    InitWarning(strprintf(_("Unsupported logging category %s=%s."), "-debug", cat));
+                    LogPrintf("Unsupported logging category %s=%s\n", "-debug", cat);
                     continue;
                 }
                 logCategories |= flag;
