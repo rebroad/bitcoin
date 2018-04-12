@@ -197,7 +197,8 @@ void AdvertiseLocal(CNode *pnode)
         }
         if (addrLocal.IsRoutable())
         {
-            LogPrint(BCLog::NET, "AdvertiseLocal: advertising address %s\n", addrLocal.ToString());
+            LogPrint(BCLog::NET, "%s: advertising local routable address %s to peer=%d\n",
+                __func__, addrLocal.ToString(), pnode->GetId());
             FastRandomContext insecure_rand;
             pnode->PushAddress(addrLocal, insecure_rand);
         }
