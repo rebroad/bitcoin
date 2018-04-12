@@ -123,6 +123,18 @@ namespace {
     /** When our tip was last updated. */
     int64_t g_last_tip_update = 0;
 
+    /** When we last SendMessages() */
+    int64_t tSendMessages = GetTime();
+
+    /** Count when we abort SendMessages due to locks */
+    int nSendMessagesLockExits = 0;
+
+    /** Count when we abort SendMessages due to rejects */
+    int nSendMessagesRejectExits = 0;
+
+    /** When we last Request blocks in SendMessages() */
+    int64_t tRequestBlocks = GetTime();
+
     /** Relay map, protected by cs_main. */
     typedef std::map<uint256, CTransactionRef> MapRelay;
     MapRelay mapRelay;
@@ -176,6 +188,16 @@ struct CNodeState {
     std::list<QueuedBlock> vBlocksInFlight;
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     int64_t nDownloadingSince;
+    //! When we last SendMessages()
+    int64_t tSendMessages;
+    //! When we last request blocks
+    int64_t tRequestBlocks;
+    //! Count when we abort SendMessages due to locks
+    int nSendMessagesLockExits;
+    //! Count when we abort SendMessages due to rejects
+    int nSendMessagesRejectExits;
+    //! Node is unable to download blocks for now
+    int nBlockPaused;
     int nBlocksInFlight;
     int nBlocksInFlightValidHeaders;
     //! Whether we consider this a preferred download peer.
@@ -245,6 +267,10 @@ struct CNodeState {
         nHeadersSyncTimeout = 0;
         nStallingSince = 0;
         nDownloadingSince = 0;
+        tSendMessages = GetTime();
+        tRequestBlocks = GetTime();
+        nSendMessagesLockExits = 0;
+        nSendMessagesRejectExits = 0;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
         fPreferredDownload = false;
@@ -321,6 +347,7 @@ bool MarkBlockAsReceived(const uint256& hash) {
         }
         state->vBlocksInFlight.erase(itInFlight->second.second);
         state->nBlocksInFlight--;
+        LogPrint(BCLog::BLOCKBLOCK, "nBlocksInFlight: %d -> %d peer=%d\n", state->nBlocksInFlight+1, state->nBlocksInFlight, itInFlight->second.first);
         state->nStallingSince = 0;
         mapBlocksInFlight.erase(itInFlight);
         return true;
@@ -499,11 +526,19 @@ std::string strBlockInfo(const CBlockIndex* pindex)
 /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
  *  at most count entries. */
 void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller, const Consensus::Params& consensusParams) {
-    if (count == 0)
+    CNodeState *state = State(nodeid);
+    if (count == 0) {
+        if (state->nBlockPaused != 1) {
+            state->nBlockPaused = 1;
+            LogPrint(BCLog::BLOCKBLOCK, "BLOCKED - count==0 peer=%d\n", nodeid);
+        }
         return;
+    } else if (state->nBlockPaused == 1) {
+        LogPrint(BCLog::BLOCKBLOCK, "UNBLOCKED - count!=0 peer=%d\n", nodeid);
+        state->nBlockPaused = -1;
+    }
 
     vBlocks.reserve(vBlocks.size() + count);
-    CNodeState *state = State(nodeid);
     assert(state != nullptr);
 
     if (!state->fHaveWitness && state->pindexLastCommonBlock && IsWitnessEnabled(state->pindexLastCommonBlock, consensusParams)) {
@@ -1486,7 +1521,14 @@ bool static ProcessHeadersMessage(CNode *pfrom, CConnman *connman, const std::ve
                 for (const CBlockIndex *pindex : reverse_iterate(vToFetch)) {
                     if (nodestate->nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
                         // Can't download any more from this peer
+                        if (nodestate->nBlockPaused != 2) {
+                            LogPrint(BCLog::BLOCKBLOCK, "BLOCKED - nBlocksInFlight(%d) >= %d peer=%d\n", nodestate->nBlocksInFlight, MAX_BLOCKS_IN_TRANSIT_PER_PEER, pfrom->GetId());
+                            nodestate->nBlockPaused = 2;
+                        }
                         break;
+                    } else if (nodestate->nBlockPaused == 2) {
+                       LogPrint(BCLog::BLOCKBLOCK, "UNBLOCKED - nBlocksInFlight(%d) < %d peer=%d\n", nodestate->nBlocksInFlight, MAX_BLOCKS_IN_TRANSIT_PER_PEER, pfrom->GetId());
+                       nodestate->nBlockPaused = -2;
                     }
                     uint32_t nFetchFlags = GetFetchFlags(pfrom);
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
@@ -3249,6 +3291,12 @@ public:
 
 bool PeerLogicValidation::SendMessages(CNode* pto, std::atomic<bool>& interruptMsgProc)
 {
+    int nLastRun = GetTime() - tSendMessages;
+    int nLastRunPeer = GetTime() - State(pto->GetId())->tSendMessages;
+    if (nLastRun > 1 || nLastRunPeer > 5)
+        LogPrint(BCLog::BLOCKBLOCK, "SendMessages() last run %d seconds ago (%d seconds ago for peer=%d).\n", nLastRun, nLastRunPeer, pto->GetId());
+    tSendMessages = GetTime();
+    State(pto->GetId())->tSendMessages = GetTime();
     const Consensus::Params& consensusParams = Params().GetConsensus();
     {
         // Don't send anything until the version handshake is complete
@@ -3288,11 +3336,17 @@ bool PeerLogicValidation::SendMessages(CNode* pto, std::atomic<bool>& interruptM
         }
 
         TRY_LOCK(cs_main, lockMain); // Acquire cs_main for IsInitialBlockDownload() and CNodeState()
-        if (!lockMain)
+        if (!lockMain) {
+            nSendMessagesLockExits++;
+            State(pto->GetId())->nSendMessagesLockExits++;
             return true;
+        }
 
-        if (SendRejectsAndCheckIfBanned(pto, connman))
+        if (SendRejectsAndCheckIfBanned(pto, connman)) {
+            nSendMessagesRejectExits++;
+            State(pto->GetId())->nSendMessagesRejectExits++;
             return true;
+        }
         CNodeState &state = *State(pto->GetId());
 
         // Address refresh broadcast
@@ -3702,6 +3756,17 @@ bool PeerLogicValidation::SendMessages(CNode* pto, std::atomic<bool>& interruptM
         // GetTime() is used by this anti-DoS logic so we can test this using mocktime
         ConsiderEviction(pto, GetTime());
 
+        int nLastRunBlocks = GetTime() - tRequestBlocks;
+        int nLastRunBlocksPeer = GetTime() - state.tRequestBlocks;
+        if ((nLastRunBlocks > 1 && nLastRunBlocks != nLastRun) || (nLastRunBlocksPeer > 5 && nLastRunBlocksPeer != nLastRunPeer))
+            LogPrint(BCLog::BLOCKBLOCK, "SendMessages() getdata (blocks) last run %d seconds ago (%d seconds ago for peer=%d). (LockExits=%d,%d RejExits=%d,%d)\n", nLastRunBlocks, nLastRunBlocksPeer, pto->GetId(), nSendMessagesLockExits, state.nSendMessagesLockExits, nSendMessagesRejectExits, state.nSendMessagesRejectExits);
+        tRequestBlocks = GetTime();
+        state.tRequestBlocks = GetTime();
+        nSendMessagesLockExits = 0;
+        state.nSendMessagesLockExits = 0;
+        nSendMessagesRejectExits = 0;
+        state.nSendMessagesRejectExits = 0;
+
         //
         // Message: getdata (blocks)
         //
@@ -3714,6 +3779,7 @@ bool PeerLogicValidation::SendMessages(CNode* pto, std::atomic<bool>& interruptM
                 uint32_t nFetchFlags = GetFetchFlags(pto);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                 MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), pindex);
+                state.nBlockPaused = 0;
                 LogPrint(BCLog::BLOCK, "Requesting block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
@@ -3722,6 +3788,10 @@ bool PeerLogicValidation::SendMessages(CNode* pto, std::atomic<bool>& interruptM
                     LogPrint(BCLog::BLOCK, "Stall started peer=%d\n", staller);
                 }
             }
+        } else if (state.nBlockPaused != 3) {
+            state.nBlockPaused = 3;
+            LogPrint(BCLog::BLOCKBLOCK, "BLOCKED - !fetch && (!IDB || nBlocksInFlight(%d) >= MAX_BLOCKS_IN_TRANSIT_PER_PEER(%d) peer=%d\n", state.nBlocksInFlight, MAX_BLOCKS_IN_TRANSIT_PER_PEER,
+                pto->GetId());
         }
 
         //

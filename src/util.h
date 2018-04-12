@@ -108,6 +108,7 @@ namespace BCLog {
         CONN        = (1 << 21),
         NET2        = (1 << 22),
         BLOCKHIST   = (1 << 23),
+        BLOCKBLOCK  = (1 << 24),
         ALL         = ~(uint32_t)0,
     };
 }

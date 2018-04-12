@@ -248,6 +248,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::CONN, "conn"},
     {BCLog::NET2, "net2"},
     {BCLog::BLOCKHIST, "blockhist"},
+    {BCLog::BLOCKBLOCK, "blockblock"},
     {BCLog::ALL, "1"},
     {BCLog::ALL, "all"},
 };
