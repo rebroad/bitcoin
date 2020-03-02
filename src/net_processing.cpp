@@ -280,6 +280,8 @@ void PushNodeVersion(CNode *pnode, CConnman& connman, int64_t nTime)
     CAddress addrMe = CAddress(CService(), nLocalNodeServices);
 
     bool fRelay = pnode->fFeeler ? false : ::fRelayTxes;
+    if (pnode->fWhitelisted) // Advertise BLOOM to Whitelisted nodes
+        nLocalNodeServices = ServiceFlags(nLocalNodeServices | NODE_BLOOM);
 
     connman.PushMessage(pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
             nonce, strSubVersion, nNodeStartingHeight, fRelay));
@@ -1388,16 +1390,17 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
     }
 
 
-    if (!(pfrom->GetLocalServices() & NODE_BLOOM) &&
+    if (!(pfrom->GetLocalServices() & NODE_BLOOM) && !pfrom->fWhitelisted &&
               (strCommand == NetMsgType::FILTERLOAD ||
-               strCommand == NetMsgType::FILTERADD))
-    {
+               strCommand == NetMsgType::FILTERADD)) {
         if (pfrom->nVersion >= NO_BLOOM_VERSION) {
             LogPrintf("recv %s from a node that should know better! peer=%d\n", strCommand, pfrom->id);
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 1);
-        } else
+        } else {
+            LogPrint("net", "recv %s from non-whitelisted. disconnecting peer=%d\n", strCommand, pfrom->id);
             pfrom->fDisconnect = true;
+        }
         return true;
     }
 
