@@ -280,6 +280,8 @@ void PushNodeVersion(CNode *pnode, CConnman& connman, int64_t nTime)
     CAddress addrMe = CAddress(CService(), nLocalNodeServices);
 
     bool fRelay = pnode->fFeeler ? false : ::fRelayTxes;
+    if (pnode->fWhitelisted) // Advertise BLOOM to Whitelisted nodes
+        nLocalNodeServices = ServiceFlags(nLocalNodeServices | NODE_BLOOM);
 
     connman.PushMessage(pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
             nonce, strSubVersion, nNodeStartingHeight, fRelay));
