@@ -2551,6 +2551,8 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
                 fActivatingChain = false;
                 return true;
             }
+            if (!pindexNewTip)
+                LogPrintf("%s: MostWork=%d\n", __func__, pindexMostWork->nHeight); // REBTEMP
 
             bool fInvalidFound = false;
             std::shared_ptr<const CBlock> nullBlockPtr;
