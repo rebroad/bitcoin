@@ -600,15 +600,15 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
         state->nBlockPaused = -2;
     }
 
-    if (state->pindexBestKnownBlock->nChainWork < chainActive.Tip()->nChainWork) {
+    if (state->pindexBestKnownBlock->nChainWork <= chainActive.Tip()->nChainWork) {
         // Nothing interesting
         if (state->nBlockPaused != 3) {
             state->nBlockPaused = 3;
-            LogPrint("blockblock", "BLOCKED - BestKnownBlockWork < TipWork peer=%d\n", nodeid);
+            LogPrint("blockblock", "BLOCKED - BestKnownBlockWork <= TipWork peer=%d\n", nodeid);
         }
         return;
     } else if (state->nBlockPaused == 3) {
-        LogPrint("blockblock", "UNBLOCKED - BestKnownBlockWork >= TipWork peer=%d\n", nodeid);
+        LogPrint("blockblock", "UNBLOCKED - BestKnownBlockWork > TipWork peer=%d\n", nodeid);
         state->nBlockPaused = -3;
     }
 
