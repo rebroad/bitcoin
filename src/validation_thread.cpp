@@ -16,11 +16,12 @@ void CConnman::ThreadValidation()
                 FormBestChain();
             }
         }
-        nSleep = 100;
-        if (!fActivateChain)
-            MilliSleep(nSleep);
-        else
+        if (fActivateChain)
             nSleep = 0;
+        else
+            nSleep = 100;
+        if (!interruptNet.sleep_for(std::chrono::milliseconds(nSleep)))
+            return;
     }
 }
 

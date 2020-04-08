@@ -3655,6 +3655,7 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
     // Check whether we need to continue reindexing
     bool fReindexing = false;
     pblocktree->ReadReindexing(fReindexing);
+    LogPrintf("fReindexing = %d\n", fReindexing);
     fReindex |= fReindexing;
 
     // Check whether we have a transaction index
