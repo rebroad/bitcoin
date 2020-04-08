@@ -3226,7 +3226,8 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexStart), uint256()));
                 state.fExpectingHeaders = true;
             }
-        }
+        } else if (fReindex)
+            LogPrint("block", "not requesting headers as fReindex = 1\n");
 
         // Resend wallet transactions that haven't gotten in a block yet
         // Except during reindex, importing and IBD, when old wallet
