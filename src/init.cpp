@@ -1403,6 +1403,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     // ********************************************************* Step 7: load block chain
 
     fReindex = GetBoolArg("-reindex", false);
+    LogPrintf("%s: fReindex = %d\n", __func__, fReindex);
     bool fReindexChainState = GetBoolArg("-reindex-chainstate", false);
 
     // Upgrading to 0.8; hard-link the old blknnnn.dat files into /blocks/
@@ -1429,6 +1430,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
         if (linked)
         {
             fReindex = true;
+            LogPrintf("%s: fReindex = 1 as some hardlinking found\n", __func__); // REBTEMP
         }
     }
 
@@ -1555,6 +1557,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                     "", CClientUIInterface::MSG_ERROR | CClientUIInterface::BTN_ABORT);
                 if (fRet) {
                     fReindex = true;
+                    LogPrintf("%s: fReindex = 1\n", __func__);
                     fRequestShutdown = false;
                 } else {
                     LogPrintf("Aborted block database rebuild. Exiting.\n");

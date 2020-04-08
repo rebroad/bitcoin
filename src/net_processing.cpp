@@ -1791,7 +1791,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     // then ask for the blocks we need.
                     connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), uint256()));
                     LogPrint("block", "send getheaders (%d) peer=%d\n", pindexBestHeader->nHeight, pfrom->id);
-                }
+                } else if (fReindex || fImporting)
+                    LogPrint("block", "Not requesting headers as fReindex = 1\n");
             } else
                 LogPrint("net", "recv inv: %s  %s peer=%d\n", inv.ToString(), AlreadyHave(inv) ? "have" : "new", pfrom->id);
 
@@ -3230,7 +3231,8 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexStart), uint256()));
                 state.fExpectingHeaders = true;
             }
-        }
+        } else if (fReindex)
+            LogPrint("block", "not requesting headers as fReindex = 1\n");
 
         // Resend wallet transactions that haven't gotten in a block yet
         // Except during reindex, importing and IBD, when old wallet

@@ -15,11 +15,12 @@ void CConnman::ThreadValidation()
                 LogPrint("block", "%s: Slept %dms. Calling FormBestChain()\n", __func__, nSleep);
             FormBestChain();
         }
-        nSleep = 100;
-        if (!fActivateChain)
-            MilliSleep(nSleep);
-        else
+        if (fActivateChain)
             nSleep = 0;
+        else
+            nSleep = 100;
+        if (!interruptNet.sleep_for(std::chrono::milliseconds(nSleep)))
+            return;
     }
     LogPrintf("%s: Exiting\n", __func__);
 }
