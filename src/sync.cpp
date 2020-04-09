@@ -88,7 +88,7 @@ static void potential_deadlock_detected(const std::pair<void*, void*>& mismatch,
         }
         LogPrint("lock", " %s\n", i.second.ToString());
     }
-    LogPrintf("Current lock order is:\n");
+    LogPrint("lock", "Current lock order is:\n");
     BOOST_FOREACH (const PAIRTYPE(void*, CLockLocation) & i, s1) {
         if (i.first == mismatch.first) {
             LogPrint("lock", " (1)");
