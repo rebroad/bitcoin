@@ -1885,9 +1885,12 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
         if (!tx.IsCoinBase())
         {
-            if (!view.HaveInputs(tx))
+            if (!view.HaveInputs(tx)) {
+                if (ShutdownRequested())
+                    LogPrintf("!view.HaveInputs(). Exiting %s\n", __func__);
                 return state.DoS(100, error("ConnectBlock(): inputs missing/spent"),
                                  REJECT_INVALID, "bad-txns-inputs-missingorspent");
+             }
 
             // Check that transaction is BIP68 final
             // BIP68 lock checks (as opposed to nLockTime checks) must
@@ -1898,6 +1901,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             }
 
             if (!SequenceLocks(tx, nLockTimeFlags, &prevheights, *pindex)) {
+                if (ShutdownRequested())
+                    LogPrintf("!SequenceLocks(). Exiting %s\n", __func__);
                 return state.DoS(100, error("%s: contains a non-BIP68-final transaction", __func__),
                                  REJECT_INVALID, "bad-txns-nonfinal");
             }
@@ -1908,9 +1913,12 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         // * p2sh (when P2SH enabled in flags and excludes coinbase)
         // * witness (when witness enabled in flags and excludes coinbase)
         nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
-        if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST)
+        if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST) {
+            if (ShutdownRequested())
+                LogPrintf("nSigOpsCost > MAX_BLOCK_SIGOPS_COST. Exiting %s\n", __func__);
             return state.DoS(100, error("ConnectBlock(): too many sigops"),
                              REJECT_INVALID, "bad-blk-sigops");
+	}
 
         txdata.emplace_back(tx);
         if (!tx.IsCoinBase())
@@ -1919,9 +1927,12 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
             std::vector<CScriptCheck> vChecks;
             bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
-            if (!CheckInputs(tx, state, view, fScriptChecks, flags, fCacheResults, txdata[i], nScriptCheckThreads ? &vChecks : NULL))
+            if (!CheckInputs(tx, state, view, fScriptChecks, flags, fCacheResults, txdata[i], nScriptCheckThreads ? &vChecks : NULL)) {
+                if (ShutdownRequested())
+                    LogPrintf("!CheckInputs(). Exiting %s\n", __func__);
                 return error("ConnectBlock(): CheckInputs on %s failed with %s",
                     tx.GetHash().ToString(), FormatStateMessage(state));
+            }
             control.Add(vChecks);
         }
 
@@ -1934,33 +1945,50 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         vPos.push_back(std::make_pair(tx.GetHash(), pos));
         pos.nTxOffset += ::GetSerializeSize(tx, SER_DISK, CLIENT_VERSION);
     }
+    if (ShutdownRequested())
+        LogPrintf("%s: Outside for loop\n", __func__);
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint("bench", "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs]\n", (unsigned)block.vtx.size(), 0.001 * (nTime3 - nTime2), 0.001 * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : 0.001 * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * 0.000001);
 
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
-    if (block.vtx[0]->GetValueOut() > blockReward)
+    if (block.vtx[0]->GetValueOut() > blockReward) {
+        if (ShutdownRequested())
+            LogPrintf("Reward too high. Exiting %s\n", __func__);
         return state.DoS(100,
                          error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
                                block.vtx[0]->GetValueOut(), blockReward),
                                REJECT_INVALID, "bad-cb-amount");
+    }
 
-    if (!control.Wait())
+    if (!control.Wait()) {
+        if (ShutdownRequested())
+            LogPrintf("!control.Wait(). Exiting %s\n", __func__);
         return state.DoS(100, false);
+    }
     int64_t nTime4 = GetTimeMicros(); nTimeVerify += nTime4 - nTime2;
     LogPrint("bench", "    - Verify %u txins: %.2fms (%.3fms/txin) [%.2fs]\n", nInputs - 1, 0.001 * (nTime4 - nTime2), nInputs <= 1 ? 0 : 0.001 * (nTime4 - nTime2) / (nInputs-1), nTimeVerify * 0.000001);
 
-    if (fJustCheck)
+    if (fJustCheck) {
+        if (ShutdownRequested())
+            LogPrintf("fJustCheck. Exiting %s\n", __func__);
         return true;
+    }
 
     // Write undo information to disk
     if (pindex->GetUndoPos().IsNull() || !pindex->IsValid(BLOCK_VALID_SCRIPTS))
     {
         if (pindex->GetUndoPos().IsNull()) {
             CDiskBlockPos _pos;
-            if (!FindUndoPos(state, pindex->nFile, _pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40))
+            if (!FindUndoPos(state, pindex->nFile, _pos, ::GetSerializeSize(blockundo, SER_DISK, CLIENT_VERSION) + 40)) {
+                if (ShutdownRequested())
+                    LogPrintf("!FindUndoPos(). Exiting %s\n", __func__);
                 return error("ConnectBlock(): FindUndoPos failed");
-            if (!UndoWriteToDisk(blockundo, _pos, pindex->pprev->GetBlockHash(), chainparams.MessageStart()))
+            }
+            if (!UndoWriteToDisk(blockundo, _pos, pindex->pprev->GetBlockHash(), chainparams.MessageStart())) {
+                if (ShutdownRequested())
+                    LogPrintf("!UndoWriteToDisk(). Exiting %s\n", __func__);
                 return AbortNode(state, "Failed to write undo data");
+            }
 
             // update nUndoPos in block index
             pindex->nUndoPos = _pos.nPos;
@@ -1972,8 +2000,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     }
 
     if (fTxIndex)
-        if (!pblocktree->WriteTxIndex(vPos))
+        if (!pblocktree->WriteTxIndex(vPos)) {
+            if (ShutdownRequested())
+                LogPrintf("WriteTxIndex failed. Exiting %s\n", __func__);
             return AbortNode(state, "Failed to write transaction index");
+        }
 
     // add this block to the view's block chain
     view.SetBestBlock(pindex->GetBlockHash());
@@ -1990,6 +2021,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     int64_t nTime6 = GetTimeMicros(); nTimeCallbacks += nTime6 - nTime5;
     LogPrint("bench", "    - Callbacks: %.2fms [%.2fs]\n", 0.001 * (nTime6 - nTime5), nTimeCallbacks * 0.000001);
 
+    if (ShutdownRequested())
+        LogPrintf("%s: End\n", __func__);
     return true;
 }
 
@@ -2222,6 +2255,8 @@ bool static DisconnectTip(CValidationState& state, const CChainParams& chainpara
 
     // Update chainActive and related variables.
     UpdateTip(pindexDelete->pprev, chainparams);
+    if (ShutdownRequested())
+	LogPrintf("%s: After UpdateTip()\n", __func__);
     // Let wallets know transactions went from 1-confirmed to
     // 0-confirmed or conflicted:
     for (const auto& tx : block.vtx) {
@@ -2277,6 +2312,8 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     {
         CCoinsViewCache view(pcoinsTip);
         bool rv = ConnectBlock(blockConnecting, state, pindexNew, view, chainparams);
+        if (ShutdownRequested())
+            LogPrintf("%s: After ConnectBlock() = %d\n", __func__, rv);
         GetMainSignals().BlockChecked(blockConnecting, state);
         if (!rv) {
             if (state.IsInvalid())
@@ -2291,15 +2328,17 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     int64_t nTime4 = GetTimeMicros(); nTimeFlush += nTime4 - nTime3;
     LogPrint("bench", "  - Flush: %.2fms [%.2fs]\n", (nTime4 - nTime3) * 0.001, nTimeFlush * 0.000001);
     // Write the chain state to disk, if necessary.
-    if (!FlushStateToDisk(state, FLUSH_STATE_IF_NEEDED))
+    if (!FlushStateToDisk(state, FLUSH_STATE_IF_NEEDED)) {
+        if (ShutdownRequested())
+            LogPrintf("%s: !FlushStateToDisk so quitting.\n", __func__);
         return false;
+    }
     int64_t nTime5 = GetTimeMicros(); nTimeChainState += nTime5 - nTime4;
     LogPrint("bench", "  - Writing chainstate: %.2fms [%.2fs]\n", (nTime5 - nTime4) * 0.001, nTimeChainState * 0.000001);
     // Remove conflicting transactions from the mempool.;
     mempool.removeForBlock(blockConnecting.vtx, pindexNew->nHeight);
     // Update chainActive & related variables.
     UpdateTip(pindexNew, chainparams);
-
 
     // update mempool stats
     int nMaxMempoolSize = GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
@@ -2309,6 +2348,8 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     int64_t nTime6 = GetTimeMicros(); nTimePostConnect += nTime6 - nTime5; nTimeTotal += nTime6 - nTime1;
     LogPrint("bench", "  - Connect postprocess: %.2fms [%.2fs]\n", (nTime6 - nTime5) * 0.001, nTimePostConnect * 0.000001);
     LogPrint("bench", "- Connect block: %.2fms [%.2fs]\n", (nTime6 - nTime1) * 0.001, nTimeTotal * 0.000001);
+    if (ShutdownRequested())
+        LogPrintf("%s: End\n", __func__);
     return true;
 }
 
@@ -2395,8 +2436,13 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
     // Disconnect active blocks which are no longer in the best chain.
     bool fBlocksDisconnected = false;
     while (chainActive.Tip() && chainActive.Tip() != pindexFork) {
-        if (!DisconnectTip(state, chainparams))
+        if (!DisconnectTip(state, chainparams)) {
+            if (ShutdownRequested())
+	        LogPrintf("%s: After DisconnectTip() = false\n", __func__);
             return false;
+	} else
+            if (ShutdownRequested())
+	        LogPrintf("%s: After DisconnectTip() = true\n", __func__);
         fBlocksDisconnected = true;
     }
 
@@ -2420,6 +2466,8 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
         // Connect new blocks.
         BOOST_REVERSE_FOREACH(CBlockIndex *pindexConnect, vpindexToConnect) {
             if (!ConnectTip(state, chainparams, pindexConnect, pindexConnect == pindexMostWork ? pblock : std::shared_ptr<const CBlock>(), connectTrace)) {
+                if (ShutdownRequested())
+	            LogPrintf("%s: After ConnectTip() = false\n", __func__);
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (!state.CorruptionPossible())
@@ -2435,6 +2483,8 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
                     return false;
                 }
             } else {
+                if (ShutdownRequested())
+	            LogPrintf("%s: After ConnectTip() = true\n", __func__);
                 PruneBlockIndexCandidates();
                 if (!pindexOldTip || chainActive.Tip()->nChainWork > pindexOldTip->nChainWork) {
                     // We're in a better position than we were. Return temporarily to release the lock.
@@ -2457,6 +2507,8 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
     else
         CheckForkWarningConditions();
 
+    if (ShutdownRequested())
+        LogPrintf("%s: End\n", __func__);
     return true;
 }
 
@@ -2504,6 +2556,7 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
 
     if (ShutdownRequested()) {
         fActivatingChain = false;
+        LogPrintf("%s: Exit as shutting down. fActivatingChain = false\n", __func__);
         return true;
     }
 
@@ -2511,8 +2564,10 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
     CBlockIndex *pindexNewTip = NULL;
     do {
         boost::this_thread::interruption_point();
-        if (ShutdownRequested())
+        if (ShutdownRequested()) {
+            LogPrintf("%s: break as ShutdownRequested\n", __func__);
             break;
+        }
 
         const CBlockIndex *pindexFork;
         ConnectTrace connectTrace;
@@ -2542,9 +2597,15 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
             bool fInvalidFound = false;
             std::shared_ptr<const CBlock> nullBlockPtr;
             if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connectTrace)) {
+                if (ShutdownRequested())
+	            LogPrintf("%s: After ActivateBestChainStep() = false\n", __func__);
                 fActivatingChain = false;
                 return false;
-            }
+            } else
+                if (ShutdownRequested()) {
+	            LogPrintf("%s: After ActivateBestChainStep() = true\n", __func__);
+                    fActivatingChain = false;
+                }
 
             if (fInvalidFound) {
                 // Wipe cache, we may need another branch now.
@@ -2558,6 +2619,8 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
 
             } // MemPoolConflictRemovalTracker destroyed and conflict evictions are notified
 
+            if (ShutdownRequested())
+                LogPrintf("%s: Before GetMainSignals().SyncTransaction()\n", __func__);
             // Transactions in the connnected block are notified
             for (const auto& pair : connectTrace.blocksConnected) {
                 assert(pair.second);
@@ -2570,23 +2633,34 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
 
         // Notifications/callbacks that can run without cs_main
 
+        if (ShutdownRequested())
+            LogPrintf("%s: Before GetMainSignals().UpdatedBlockTip()\n", __func__);
         // Notify external listeners about the new tip.
         GetMainSignals().UpdatedBlockTip(pindexNewTip, pindexFork, fInitialDownload);
 
         // Always notify the UI if a new block tip was connected
         if (pindexFork != pindexNewTip) {
+            if (ShutdownRequested())
+                LogPrintf("%s: Before uiInterface.NotifyBlockTip()\n", __func__);
             uiInterface.NotifyBlockTip(fInitialDownload, pindexNewTip);
         }
     } while (pindexNewTip != pindexMostWork);
+    if (ShutdownRequested())
+        LogPrintf("%s: Before CheckBlockIndex()\n", __func__);
     CheckBlockIndex(chainparams.GetConsensus());
 
     // Write changes periodically to disk, after relay.
     if (!FlushStateToDisk(state, FLUSH_STATE_PERIODIC)) {
         fActivatingChain = false;
+        if (ShutdownRequested())
+            LogPrintf("%s: !FlushStateToDisk. Exiting.\n", __func__);
         return false;
     }
 
     fActivatingChain = false;
+    if (ShutdownRequested())
+        LogPrintf("%s: End\n", __func__);
+    
     return true;
 }
 
@@ -2637,9 +2711,13 @@ bool InvalidateBlock(CValidationState& state, const CChainParams& chainparams, C
         // ActivateBestChain considers blocks already in chainActive
         // unconditionally valid already, so force disconnect away from it.
         if (!DisconnectTip(state, chainparams)) {
+            if (ShutdownRequested())
+	        LogPrintf("%s: After DisconnectTip() = false\n", __func__);
             mempool.removeForReorg(pcoinsTip, chainActive.Tip()->nHeight + 1, STANDARD_LOCKTIME_VERIFY_FLAGS);
             return false;
-        }
+        } else
+            if (ShutdownRequested())
+	        LogPrintf("%s: After DisconnectTip() = true\n", __func__);
     }
 
     LimitMempoolSize(mempool, GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000, GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY) * 60 * 60);
@@ -3327,6 +3405,8 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
             fBite ? " - EXPECTING THIS TO BITE!" : "");
         if (!ActivateBestChain(state, chainparams, pblock))
             return error("%s: ActivateBestChain failed", __func__);
+        else if (ShutdownRequested())
+            LogPrintf("%s: ActivateBestChain = true\n", __func__);
         int64_t tNow = GetTimeMillis();
         LogPrintf("%s: ActivateBestChain duration = %ds\n", __func__, (tNow - tStart) * .001);
     }
@@ -3811,8 +3891,12 @@ bool RewindBlockIndex(const CChainParams& params)
             break;
         }
         if (!DisconnectTip(state, params, true)) {
+            if (ShutdownRequested())
+	        LogPrintf("%s: After DisconnectTip() = false\n", __func__);
             return error("RewindBlockIndex: unable to disconnect block at height %i", pindex->nHeight);
-        }
+        } else
+            if (ShutdownRequested())
+	        LogPrintf("%s: After DisconnectTip() = true\n", __func__);
         // Occasionally flush state to disk.
         if (!FlushStateToDisk(state, FLUSH_STATE_PERIODIC))
             return false;
@@ -4017,8 +4101,12 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
                 if (hash == chainparams.GetConsensus().hashGenesisBlock) {
                     CValidationState state;
                     if (!ActivateBestChain(state, chainparams)) {
+                        if (ShutdownRequested())
+                            LogPrintf("%s: ActivateBestChain() failsed\n", __func__);
                         break;
-                    }
+                    } else
+                        if (ShutdownRequested())
+                            LogPrintf("%s: ActivateBestChain() = true\n", __func__);
                 }
 
                 NotifyHeaderTip();
