@@ -1466,13 +1466,15 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         {
             connman.SetServices(pfrom->addr, nServices);
         }
-        if (!pfrom->fFeeler && pfrom->nServicesExpected & ~nServices)
-        {
-            LogPrint("net", "recv version does not offer the expected services (0x%x offered, 0x%x expected); disconnecting peer=%d\n", nServices, pfrom->nServicesExpected, pfrom->id);
-            connman.PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
+        if (!pfrom->fFeeler && pfrom->nServicesExpected & ~nServices) {
+            if (!pfrom->fInbound) {
+                LogPrint("net", "recv version does not offer the expected services (0x%x offered, 0x%x expected); disconnecting peer=%d\n", nServices, pfrom->nServicesExpected, pfrom->id);
+                connman.PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
                                strprintf("Expected to offer services %08x", pfrom->nServicesExpected)));
-            pfrom->fDisconnect = true;
-            return true;
+                pfrom->fDisconnect = true;
+                return true;
+            } else
+                LogPrint("net", "recv version does not offer the expected services (0x%x offered, 0x%x expected); allowing inbound peer=%d\n", nServices, pfrom->nServicesExpected, pfrom->id);
         }
 
         if (nVersion < MIN_PEER_PROTO_VERSION) {
