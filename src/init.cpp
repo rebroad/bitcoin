@@ -703,7 +703,8 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
         if (!ActivateBestChain(state, chainparams)) {
             LogPrintf("Failed to connect best block\n");
             StartShutdown();
-        }
+        } else
+            LogPrintf("%s: After ActivateBestChain() = true\n", __func__);
     } else {
         LogPrint("tip", "%s: Setting fActivateChain true\n", __func__);
         fActivateChain = true;
