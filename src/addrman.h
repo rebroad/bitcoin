@@ -532,7 +532,7 @@ public:
             nAdd += Add_(*it, source, nTimePenalty) ? 1 : 0;
         Check();
         if (nAdd) {
-            LogPrint("addrman", "Added %i addresses from %s: %i tried, %i new\n", nAdd, strSource, nTried, nNew);
+            LogPrint("addrman", "Added %i (of %i) addresses from %s: %i tried, %i new\n", nAdd, vAddr.size(), strSource, nTried, nNew);
         }
         return nAdd > 0;
     }
