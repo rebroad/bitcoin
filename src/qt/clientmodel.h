@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QT_CLIENTMODEL_H
 #define BITCOIN_QT_CLIENTMODEL_H
 
+#include <QMutex>
 #include <QObject>
 #include <QDateTime>
 
@@ -14,17 +15,14 @@
 #include <sync.h>
 #include <uint256.h>
 
+#include <interfaces/node.h>
+
 class BanTableModel;
 class CBlockIndex;
 class OptionsModel;
 class PeerTableModel;
 class PeerTableSortProxy;
 enum class SynchronizationState;
-
-namespace interfaces {
-class Handler;
-class Node;
-}
 
 QT_BEGIN_NAMESPACE
 class QTimer;
@@ -90,6 +88,13 @@ public:
 
     mempoolSamples_t getMempoolStatsInRange(QDateTime &from, QDateTime &to);
 
+    typedef std::pair<int64_t, std::vector<interfaces::mempool_feeinfo>> mempool_feehist_sample; //!< sample plus timestamp
+    mutable QMutex m_mempool_locker;
+    const static size_t m_mempool_max_samples{540};
+    const static size_t m_mempool_collect_intervall{20}; // 540*20 = 3h of sample window
+    std::vector<mempool_feehist_sample> m_mempool_feehist;
+    std::atomic<int64_t> m_mempool_feehist_last_sample_timestamp{0};
+
 private:
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_show_progress;
@@ -115,6 +120,7 @@ Q_SIGNALS:
     void numConnectionsChanged(int count);
     void numBlocksChanged(int count, const QDateTime& blockDate, double nVerificationProgress, bool header, SynchronizationState sync_state);
     void mempoolSizeChanged(long count, size_t mempoolSizeInBytes);
+    void mempoolFeeHistChanged();
     void networkActiveChanged(bool networkActive);
     void alertsChanged(const QString &warnings);
     void bytesChanged(quint64 totalBytesIn, quint64 totalBytesOut);
