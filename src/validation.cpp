@@ -1744,6 +1744,47 @@ static int64_t nTimeIndex = 0;
 static int64_t nTimeCallbacks = 0;
 static int64_t nTimeTotal = 0;
 
+/** Find the last common ancestor two blocks have.
+ *  Both pa and pb must be non-NULL. */
+const CBlockIndex* LastCommonAncestor(const CBlockIndex* pa, const CBlockIndex* pb) {
+    if (pa->nHeight > pb->nHeight) {
+        pa = pa->GetAncestor(pb->nHeight);
+    } else if (pb->nHeight > pa->nHeight) {
+        pb = pb->GetAncestor(pa->nHeight);
+    }
+
+    while (pa != pb && pa && pb) {
+        pa = pa->pprev;
+        pb = pb->pprev;
+    }
+
+    // Eventually all chain branches meet at the genesis block.
+    assert(pa == pb);
+    return pa;
+}
+
+std::string strHeight(const CBlockIndex* pindex, bool *fFork /*= NULL*/) {
+    if (!pindex)
+        return "NULL";
+    const CBlockIndex *pindexFork = LastCommonAncestor(pindex, pindexBestHeader);
+    std::string strFork;
+    if (pindexFork->nHeight < pindex->nHeight) {
+        if (fFork) *fFork = true;
+        bool fEqualWork = (pindex->nChainWork == pindexBestHeader->nChainWork);
+        strFork = strprintf(" %sfork@%d", fEqualWork ? "=" : "", pindexFork->nHeight);
+    }
+    return strprintf("%d%s", pindex->nHeight, strFork);
+}
+
+std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork /*= NULL*/)
+{
+    if (!pindex)
+        return "NULL";
+    int nBehind = pindexBestHeader->nHeight - pindex->nHeight;
+    return strprintf("(%s) age=%s%s", strHeight(pindex, fFork), strAge(GetAdjustedTime()-pindex->GetBlockTime()),
+            nBehind ? strprintf(" behind=%d", nBehind) : "");
+}
+
 bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex,
                   CCoinsViewCache& view, const CChainParams& chainparams, bool fJustCheck)
 {

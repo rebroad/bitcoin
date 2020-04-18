@@ -401,8 +401,6 @@ bool MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const Consensus::Pa
     return true;
 }
 
-std::string strHeight(const CBlockIndex* pindex, bool *fFork = NULL);
-
 /** Check whether the last unknown block a peer advertised is not yet known. */
 void ProcessBlockAvailability(NodeId nodeid) {
     CNodeState *state = State(nodeid);
@@ -500,52 +498,11 @@ bool PeerHasHeader(CNodeState *state, const CBlockIndex *pindex)
     return false;
 }
 
-/** Find the last common ancestor two blocks have.
- *  Both pa and pb must be non-NULL. */
-const CBlockIndex* LastCommonAncestor(const CBlockIndex* pa, const CBlockIndex* pb) {
-    if (pa->nHeight > pb->nHeight) {
-        pa = pa->GetAncestor(pb->nHeight);
-    } else if (pb->nHeight > pa->nHeight) {
-        pb = pb->GetAncestor(pa->nHeight);
-    }
-
-    while (pa != pb && pa && pb) {
-        pa = pa->pprev;
-        pb = pb->pprev;
-    }
-
-    // Eventually all chain branches meet at the genesis block.
-    assert(pa == pb);
-    return pa;
-}
-
-std::string strHeight(const CBlockIndex* pindex, bool *fFork /*= NULL*/) {
-    if (!pindex)
-        return "NULL";
-    const CBlockIndex *pindexFork = LastCommonAncestor(pindex, pindexBestHeader);
-    std::string strFork;
-    if (pindexFork->nHeight < pindex->nHeight) {
-        if (fFork) *fFork = true;
-        bool fEqualWork = (pindex->nChainWork == pindexBestHeader->nChainWork);
-        strFork = strprintf(" %sfork@%d", fEqualWork ? "=" : "", pindexFork->nHeight);
-    }
-    return strprintf("%d%s", pindex->nHeight, strFork);
-}
-
 std::string strBlkHeight(const CBlockIndex* pindex)
 {
     if (!pindex)
         return "NULL";
     return strprintf("%s (%s)", pindex->GetBlockHash().ToString(), strHeight(pindex));
-}
-
-std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = NULL)
-{
-    if (!pindex)
-        return "NULL";
-    int nBehind = pindexBestHeader->nHeight - pindex->nHeight;
-    return strprintf("(%s) age=%s%s", strHeight(pindex, fFork), strAge(GetAdjustedTime()-pindex->GetBlockTime()),
-            nBehind ? strprintf(" behind=%d", nBehind) : "");
 }
 
 std::string strBlockInfo(const CBlockIndex* pindex, bool* fFork = NULL)
