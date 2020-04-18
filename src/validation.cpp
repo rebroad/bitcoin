@@ -1918,8 +1918,19 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     std::vector<PrecomputedTransactionData> txdata;
     txdata.reserve(block.vtx.size()); // Required so that pointers to individual PrecomputedTransactionData don't get invalidated
+    int64_t tStart = GetTimeMillis();
+    bool fShutNotified = false;
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
+        if (!fShutNotified && ShutdownRequested()) {
+            fShutNotified = true;
+            int64_t nTimeNeeded = (block.vtx.size() - i) * (GetTimeMillis() - tStart) / (i+1);
+            bool fAbort = nTimeNeeded > 2000;
+            LogPrint("block", "%s: Shutdown requested. %s %s at %d%% (%s %d more seconds).\n", __func__, strHeight(pindex), fAbort ? "Aborting" : "Continuing",
+                    i * 100 / (block.vtx.size()+1), fAbort ? "needed" : "only", nTimeNeeded * .001);
+            if (fAbort)
+                return false;
+        }
         const CTransaction &tx = *(block.vtx[i]);
 
         nInputs += tx.vin.size();
@@ -2359,7 +2370,11 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
         if (!rv) {
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
-            return error("ConnectTip(): ConnectBlock %s failed", pindexNew->GetBlockHash().ToString());
+            if (!ShutdownRequested())
+                error("ConnectTip(): ConnectBlock %s failed.", pindexNew->GetBlockHash().ToString());
+            else
+                LogPrintf("%s: Quitting as ConnectBlock failed\n", __func__);
+            return false;
         }
         nTime3 = GetTimeMicros(); nTimeConnectTotal += nTime3 - nTime2;
         LogPrint("bench", "  - Connect total: %.2fms [%.2fs]\n", (nTime3 - nTime2) * 0.001, nTimeConnectTotal * 0.000001);
