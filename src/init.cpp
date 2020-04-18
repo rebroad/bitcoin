@@ -678,7 +678,7 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
     CValidationState state;
     LogPrint("tip", "%s: Calling ActivateBestChain()\n", __func__);
     if (!ActivateBestChain(state, chainparams)) {
-        LogPrintf("Failed to connect best block");
+        LogPrintf("Failed to connect best block\n");
         StartShutdown();
     } else if (ShutdownRequested())
         LogPrintf("%s: After ActivateBestChain() = true\n", __func__);
