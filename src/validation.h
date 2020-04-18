@@ -278,6 +278,11 @@ bool IsInitialBlockDownload();
  * This function only returns the highest priority warning of the set selected by strFor.
  */
 std::string GetWarnings(const std::string& strFor);
+const CBlockIndex* LastCommonAncestor(const CBlockIndex* pa, const CBlockIndex* pb);
+/** Display the block height with fork info and age */
+std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = NULL);
+/** Display the block height with fork info */
+std::string strHeight(const CBlockIndex* pindex, bool *fFork = NULL);
 /** Retrieve a transaction (from memory pool, or from disk, if possible) */
 bool GetTransaction(const uint256 &hash, CTransactionRef &tx, const Consensus::Params& params, uint256 &hashBlock, bool fAllowSlow = false);
 /** Find the best known block, and make it the tip of the block chain */
