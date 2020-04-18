@@ -636,6 +636,7 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
         // are not yet downloaded and not in flight to vBlocks. In the mean time, update
         // pindexLastCommonBlock as long as all ancestors are already downloaded, or if it's
         // already part of our chain (and therefore don't need it even if pruned).
+        //LogPrint("blockblock", "nToFetch=%d vToFetch.size()=%d (%d to %d) count=%d peer=%d\n", nToFetch, vToFetch.size(), vToFetch[0]->nHeight, pindexWalk->nHeight, count, nodeid); // REBTEMP
         BOOST_FOREACH(const CBlockIndex* pindex, vToFetch) {
             if (!pindex->IsValid(BLOCK_VALID_TREE)) {
                 // We consider the chain that this peer is on invalid.
@@ -690,14 +691,17 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
                 vBlocks.push_back(pindex);
                 state->nBlockPaused = 0;
                 if (vBlocks.size() == count) {
+                    //LogPrint("blockblock", "vBlocks.size()=count=%d peer=%d\n", vBlocks.size(), nodeid); // REBTEMP
                     return;
                 }
             } else if (waitingfor == -1) {
                 // This is the first already-in-flight block.
                 waitingfor = mapBlocksInFlight[pindex->GetBlockHash()].first;
+                //LogPrint("block", "waitingfor=%d %s peer=%d\n", waitingfor, strHeight(pindex), nodeid); // REBTEMP
             }
         }
     }
+    LogPrint("blockblock", "vBlocks.size()==%d peer=%d\n", vBlocks.size(), nodeid); // REBTEMP
 }
 
 } // anon namespace
@@ -3607,6 +3611,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
             }
             if (prevCommonBlock != state.pindexLastCommonBlock)
                 LogPrint("blocklastcommon", "%s: LastCommonBlock (%s) -> (%s) peer=%d\n", __func__, strHeight(prevCommonBlock), strHeight(state.pindexLastCommonBlock), pto->id);
+            //LogPrint("blockblock", "vToDownload.size()=%d peer=%d\n", vToDownload.size(), pto->id); // REBTEMP
             BOOST_FOREACH(const CBlockIndex *pindex, vToDownload) {
                 uint32_t nFetchFlags = GetFetchFlags(pto, pindex->pprev, consensusParams);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
