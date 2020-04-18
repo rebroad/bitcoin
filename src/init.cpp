@@ -171,6 +171,8 @@ static std::unique_ptr<ECCVerifyHandle> globalVerifyHandle;
 
 void Interrupt(boost::thread_group& threadGroup)
 {
+    LogPrintf("%s: Setting fRequestShutdown to true\n", __func__);
+    fRequestShutdown = true;
     InterruptHTTPServer();
     InterruptHTTPRPC();
     InterruptRPC();
@@ -687,9 +689,11 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
         StartShutdown();
     }
     } // End scope of CImportingNow
-    LogPrintf("%s: Starting LoadMempool()\n", __func__);
-    LoadMempool();
-    LogPrintf("%s: Finished LoadMempool()\n", __func__);
+    if (!ShutdownRequested()) {
+        LogPrintf("%s: Starting LoadMempool()\n", __func__);
+        LoadMempool();
+        LogPrintf("%s: Finished LoadMempool()\n", __func__);
+    }
     fDumpMempoolLater = !fRequestShutdown;
 }
 
