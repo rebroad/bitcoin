@@ -2721,6 +2721,36 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
 }
 
 
+bool DeleteBlock(CValidationState& state, const CChainParams& params, CBlockIndex *pindex)
+{
+    {
+        LOCK(cs_main);
+        //pindex->nStatus |= BLOCK_HAVE_DATA;
+        //pindex->nStatus |= BLOCK_HAVE_UNDO;
+        pindex->nStatus &= ~BLOCK_FAILED_MASK;
+        pindex->nStatus |= BLOCK_VALID_TREE;
+        pindexBestInvalid = NULL;
+        LogPrintf("%s: %s %sBLOCK_VALID_TRANSACTIONS\n", __func__, strHeight(pindex), pindex->IsValid(BLOCK_VALID_TRANSACTIONS) ? "" : "not ");
+        LogPrintf("%s: %s %sBLOCK_VALID_TREE\n", __func__, strHeight(pindex), pindex->IsValid(BLOCK_VALID_TREE) ? "" : "not ");
+        setDirtyBlockIndex.insert(pindex);
+/*
+        std::pair<std::multimap<CBlockIndex*, CBlockIndex*>::iterator, std::multimap<CBlockIndex*, CBlockIndex*>::iterator> range = mapBlocksUnlinked.equal_range(pindex->pprev);
+        while (range.first != range.second) {
+            std::multimap<CBlockIndex *, CBlockIndex *>::iterator _it = range.first;
+            range.first++;
+            if (_it->second == pindex) {
+                mapBlocksUnlinked.erase(_it);
+            }
+        }
+*/
+        //mapBlockIndex.erase(pindex->GetBlockHash());
+        //DisconnectTip(state, params);
+        fActivateChain = true;
+    }
+
+    return true;
+}
+
 bool PreciousBlock(CValidationState& state, const CChainParams& params, CBlockIndex *pindex)
 {
     {
