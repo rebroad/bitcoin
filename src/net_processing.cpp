@@ -213,6 +213,8 @@ struct CNodeState {
      * otherwise: whether this peer sends non-witnesses in cmpctblocks/blocktxns.
      */
     bool fSupportsDesiredCmpctVersion;
+    // Whether we're in InitialBlockdownload
+    bool fAntisocial;
 
     CNodeState(CAddress addrIn, std::string addrNameIn) : address(addrIn), name(addrNameIn) {
         fCurrentlyConnected = false;
@@ -244,6 +246,7 @@ struct CNodeState {
         fHaveWitness = false;
         fWantsCmpctWitness = false;
         fSupportsDesiredCmpctVersion = false;
+        fAntisocial = true;
     }
 };
 
@@ -279,7 +282,7 @@ void PushNodeVersion(CNode *pnode, CConnman& connman, int64_t nTime)
     CAddress addrYou = (addr.IsRoutable() && !IsProxy(addr) ? addr : CAddress(CService(), addr.nServices));
     CAddress addrMe = CAddress(CService(), nLocalNodeServices);
 
-    bool fRelay = pnode->fFeeler ? false : ::fRelayTxes;
+    bool fRelay = pnode->fFeeler ? false : ::fRelayTxes ? !IsInitialBlockDownload() : false;
     if (pnode->fWhitelisted) // Advertise BLOOM to Whitelisted nodes
         nLocalNodeServices = ServiceFlags(nLocalNodeServices | NODE_BLOOM);
 
@@ -861,7 +864,7 @@ void Misbehaving(NodeId pnode, int howmuch)
     {
         LogPrintf("%s: %s peer=%d (%d -> %d) BAN THRESHOLD EXCEEDED\n", __func__, state->name, pnode, state->nMisbehavior-howmuch, state->nMisbehavior);
         state->fShouldBan = true;
-    } else
+    } else if (state->nMisbehavior < banscore)
         LogPrintf("%s: %s peer=%d (%d -> %d)\n", __func__, state->name, pnode, state->nMisbehavior-howmuch, state->nMisbehavior);
 }
 
@@ -1342,6 +1345,8 @@ void LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize
     }
 }
 
+bool fAntisocial = true;
+
 bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStream& vRecv, int64_t nTimeReceived, const CChainParams& chainparams, CConnman& connman, const std::atomic<bool>& interruptMsgProc)
 {
     if (IsArgSet("-dropmessagestest") && GetRand(GetArg("-dropmessagestest", 0)) == 0)
@@ -1745,13 +1750,17 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             if (inv.type == MSG_TX) {
                 bool fAlreadyHave = AlreadyHave(inv);
                 inv.type |= nFetchFlags;
-                pfrom->AddInventoryKnown(inv);
-                if (fBlocksOnly)
-                    LogPrint("tx", "recv inv %s in violation of protocol peer=%d\n", inv.ToString(), pfrom->id);
-                else if (fAlreadyHave) {
-                    // REBTODO - update stats (alreadyhave tx invs) for this peer
-                } else if (!fImporting && !fReindex && !IsInitialBlockDownload())
-                    pfrom->AskFor(inv); // REBTODO - update stats (new tx invs) for this peer
+                if (fBlocksOnly || fAntisocial) {
+                    if (!pfrom->fDisconnect)
+                        LogPrint("tx", "recv inv %s in violation of protocol peer=%d\n", inv.ToString(), pfrom->id);
+                    Misbehaving(pfrom->GetId(), 20);
+                } else {
+                    pfrom->AddInventoryKnown(inv);
+                    if (fAlreadyHave) {
+                        // REBTODO - update stats (alreadyhave tx invs) for this peer
+                    } else if (!fImporting && !fReindex && !IsInitialBlockDownload())
+                        pfrom->AskFor(inv); // REBTODO - update stats (new tx invs) for this peer
+                }
             } else if (inv.type == MSG_BLOCK) {
                 BlockMap::iterator it = mapBlockIndex.find(inv.hash);
                 bool fAlreadyHave = false;
@@ -1968,7 +1977,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
         // Stop processing the transaction early if
         // We are in blocks only mode and peer is either not whitelisted or whitelistrelay is off
-        if (!fRelayTxes && (!pfrom->fWhitelisted || !GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY)))
+        if ((!fRelayTxes || fAntisocial) && (!pfrom->fWhitelisted || !GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY)))
         {
             LogPrint("tx", "recv tx size=%u sent in violation of protocol peer=%d\n", nSize, pfrom->id);
             return true;
@@ -3149,11 +3158,25 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
             return true;
         CNodeState &state = *State(pto->GetId());
 
-        // Address refresh broadcast
         int64_t nNow = GetTimeMicros();
-        if (!IsInitialBlockDownload() && pto->nNextLocalAddrSend < nNow) {
-            AdvertiseLocal(pto);
-            pto->nNextLocalAddrSend = PoissonNextSend(nNow, AVG_LOCAL_ADDRESS_BROADCAST_INTERVAL);
+        if (!IsInitialBlockDownload()) {
+            // Address refresh broadcast
+            if (pto->nNextLocalAddrSend < nNow) {
+                AdvertiseLocal(pto);
+                pto->nNextLocalAddrSend = PoissonNextSend(nNow, AVG_LOCAL_ADDRESS_BROADCAST_INTERVAL);
+            }
+            // Check whether to be antisocial or not
+            if (fAntisocial) {
+                fAntisocial = false;
+                LogPrintf("CaughtUp. Becoming social again\n");
+            }
+            if (state.fAntisocial) {
+                state.fAntisocial = false;
+                connman.PushMessage(pto, msgMaker.Make(NetMsgType::FILTERCLEAR));
+            }
+        } else if (!fAntisocial) {
+            fAntisocial = true;
+            LogPrintf("Fallen behind. Becoming antisocial again\n");
         }
 
         //
