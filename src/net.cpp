@@ -1193,6 +1193,7 @@ void CConnman::ThreadSocketHandler()
                     if (fDelete) {
                         vNodesDisconnected.remove(pnode);
                         //LogPrint("net", "Deleting peer=%d\n", pnode->id);
+                        LogPrintf("%s: Before DeleteNode(%d)\n", __PRETTY_FUNCTION__, pnode->id);
                         DeleteNode(pnode);
                     }
                 }
@@ -2532,6 +2533,7 @@ void CConnman::DeleteNode(CNode* pnode)
 {
     assert(pnode);
     bool fUpdateConnectionTime = false;
+    LogPrintf("%s: Before FinalizeNode(%d)\n", __PRETTY_FUNCTION__, pnode->id); // REBTEMP
     GetNodeSignals().FinalizeNode(pnode, fUpdateConnectionTime);
     if(fUpdateConnectionTime)
         addrman.Connected(pnode->addr);
