@@ -727,6 +727,7 @@ void RegisterNodeSignals(CNodeSignals& nodeSignals)
     nodeSignals.ProcessMessages.connect(&ProcessMessages);
     nodeSignals.SendMessages.connect(&SendMessages);
     nodeSignals.InitializeNode.connect(&InitializeNode);
+    LogPrintf("%s: Before FinalizeNode\n", __func__); // REBTEMP
     nodeSignals.FinalizeNode.connect(&FinalizeNode);
 }
 
@@ -735,6 +736,7 @@ void UnregisterNodeSignals(CNodeSignals& nodeSignals)
     nodeSignals.ProcessMessages.disconnect(&ProcessMessages);
     nodeSignals.SendMessages.disconnect(&SendMessages);
     nodeSignals.InitializeNode.disconnect(&InitializeNode);
+    LogPrintf("%s: Before FinalizeNode\n", __func__); // REBTEMP
     nodeSignals.FinalizeNode.disconnect(&FinalizeNode);
 }
 

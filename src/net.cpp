@@ -1202,6 +1202,7 @@ void CConnman::ThreadSocketHandler()
                     if (fDelete) {
                         vNodesDisconnected.remove(pnode);
                         //LogPrint("net", "Deleting peer=%d\n", pnode->id);
+                        LogPrintf("%s: Before DeleteNode(%d)\n", __PRETTY_FUNCTION__, pnode->id);
                         DeleteNode(pnode);
                     }
                 }
