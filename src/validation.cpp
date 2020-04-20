@@ -2428,6 +2428,7 @@ static CBlockIndex* FindMostWorkChain() {
         // Check whether all blocks on the path between the currently active chain and the candidate are valid.
         // Just going until the active chain is an optimization, as we know all blocks in it are valid already.
         CBlockIndex *pindexTest = pindexNew;
+        LogPrintf("%s: pindexNew = %s\n", __func__, strBlkInfo(pindexNew));
         bool fInvalidAncestor = false;
         while (pindexTest && !chainActive.Contains(pindexTest)) {
             assert(pindexTest->nChainTx || pindexTest->nHeight == 0);
