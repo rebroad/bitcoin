@@ -682,6 +682,7 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
                     LogPrint("blockblock", "UNBLOCKED - Height (%s) within window (%d) peer=%d\n", strHeight(pindex), nWindowEnd, nodeid);
                     state->nBlockPaused = -7;
                 }
+                //if (pindex->nHeight != nWindowEnd && state->nBlockPaused != -7)
                 vBlocks.push_back(pindex);
                 state->nBlockPaused = 0;
                 if (vBlocks.size() == count) {
