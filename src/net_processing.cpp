@@ -313,6 +313,9 @@ void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
 
     fUpdateConnectionTime = false;
     nBlocksToBeProcessed -= pnode->nBlocksToBeProcessed;
+    if (pnode->nBlocksToBeProcessed)
+        LogPrint("block", "%s: nBlocks2b %d -> %d peer=%d\n", __func__, nBlocksToBeProcessed + pnode->nBlocksToBeProcessed, nBlocksToBeProcessed, pnode->id);
+
     LOCK(cs_main);
     NodeId nodeid = pnode->id;
     CNodeState *state = State(nodeid);
