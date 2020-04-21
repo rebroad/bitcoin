@@ -1457,6 +1457,8 @@ void CConnman::ThreadSocketHandler()
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
                 pnode->Release();
         }
+        if (!interruptNet.sleep_for(std::chrono::milliseconds(timeout.tv_usec/1000)))
+            return;
     }
 }
 
