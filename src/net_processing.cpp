@@ -3607,7 +3607,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 uint32_t nFetchFlags = GetFetchFlags(pto, pindex->pprev, consensusParams);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                 MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), consensusParams, pindex);
-                LogPrint("block", "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->id);
+                LogPrint("block", "send getdata block(%d/%d,%d/%d) %s peer=%d\n", State(pto->id)->nBlocksInFlight, mapBlocksInFlight.size(), pto->nBlocksToBeProcessed, nBlocksToBeProcessed, strBlockInfo(pindex), pto->id);
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->nStallingSince == 0) {
