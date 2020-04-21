@@ -313,6 +313,9 @@ void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
 
     fUpdateConnectionTime = false;
     nBlocksToBeProcessed -= pnode->nBlocksToBeProcessed;
+    if (pnode->nBlocksToBeProcessed)
+        LogPrint("block", "%s: nBlocks2b %d -> %d peer=%d\n", __func__, nBlocksToBeProcessed + pnode->nBlocksToBeProcessed, nBlocksToBeProcessed, pnode->id);
+
     LOCK(cs_main);
     NodeId nodeid = pnode->id;
     CNodeState *state = State(nodeid);
@@ -3592,7 +3595,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 uint32_t nFetchFlags = GetFetchFlags(pto, pindex->pprev, consensusParams);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                 MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), consensusParams, pindex);
-                LogPrint("block", "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->id);
+                LogPrint("block", "send getdata block(%d/%d,%d/%d) %s peer=%d\n", State(pto->id)->nBlocksInFlight, mapBlocksInFlight.size(), pto->nBlocksToBeProcessed, nBlocksToBeProcessed, strBlockInfo(pindex), pto->id);
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->nStallingSince == 0) {
