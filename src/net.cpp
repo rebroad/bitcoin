@@ -1438,6 +1438,8 @@ void CConnman::ThreadSocketHandler()
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
                 pnode->Release();
         }
+        if (!interruptNet.sleep_for(std::chrono::milliseconds(10))) // REBTEST
+            return;
     }
 }
 
