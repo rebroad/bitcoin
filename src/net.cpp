@@ -1161,8 +1161,11 @@ void CConnman::ThreadSocketHandler()
                     // hold in disconnected pool until all refs are released
                     pnode->Release();
                     vNodesDisconnected.push_back(pnode);
-                } else if (pnode->fDisconnect && pnode->fSuccessfullyConnected)
+                } else if (pnode->fDisconnect && pnode->fSuccessfullyConnected) {
+                    LogPrint("net", "%s: fDisconnect but %d blocks still to process. peer=%d\n", __func__,
+                        pnode->nBlocksToBeProcessed, pnode->id);
                     pnode->fSuccessfullyConnected = false; // Allow new nodes to be connected
+                }
             }
         }
         {

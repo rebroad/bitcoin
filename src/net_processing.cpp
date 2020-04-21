@@ -2647,7 +2647,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 strExtra += strprintf(" %s", strBlkInfo(mi->second));
         }
 
-        LogPrint("block", "recv block %s%s size=%d peer=%d\n", pblock->GetHash().ToString(), strExtra, nSize, pfrom->id);
+        LogPrint("block", "recv block(%d/%d,%d/%d) %s%s size=%d %speer=%d\n", State(pfrom->id)->nBlocksInFlight-1, mapBlocksInFlight.size()-1, pfrom->nBlocksToBeProcessed, nBlocksToBeProcessed, pblock->GetHash().ToString(), strExtra, nSize, pfrom->fDisconnect ? "!" : "", pfrom->id);
         std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator blockInFlightIt = mapBlocksInFlight.find(pblock->GetHash());
         bool fRequested = blockInFlightIt != mapBlocksInFlight.end();
         fRequested |= pfrom->fWhitelisted && !IsInitialBlockDownload();
