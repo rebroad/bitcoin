@@ -3001,9 +3001,11 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
     //  (x) data
     //
     bool fMoreWork = false;
+    bool fDidGetData = false;
 
     if (!pfrom->fDisconnect && !pfrom->vRecvGetData.empty()) {
         ProcessGetData(pfrom, chainparams.GetConsensus(), connman, interruptMsgProc);
+        fDidGetData = true;
         // this maintains the order of responses
         if (!pfrom->vRecvGetData.empty())
             return true;
@@ -3016,8 +3018,11 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
     std::list<CNetMessage> msgs;
     {
         LOCK(pfrom->cs_vProcessMsg);
-        if (pfrom->vProcessMsg.empty())
+        if (pfrom->vProcessMsg.empty()) {
+            if (fDidGetData)
+                LogPrintf("%s: vProcessMsg.empty() yet we did ProcessGetData() peer=%d\n", __func__, pfrom->id); // REBTEMP
             return false;
+        }
         // Just take one message
         msgs.splice(msgs.begin(), pfrom->vProcessMsg, pfrom->vProcessMsg.begin());
         pfrom->nProcessQueueSize -= msgs.front().vRecv.size() + CMessageHeader::HEADER_SIZE;
