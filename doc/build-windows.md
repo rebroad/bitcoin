@@ -68,6 +68,7 @@ To build executables for Windows 64-bit, install the following dependencies:
 Then build using:
 
     cd depends
+    PATH=$(echo "$PATH" | sed -e 's/:\/mnt.*//g')
     make HOST=x86_64-w64-mingw32
     cd ..
     ./autogen.sh # not required when building from tarball
