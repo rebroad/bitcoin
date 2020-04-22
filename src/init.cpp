@@ -670,6 +670,7 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
 
     // scan for better chains in the block chain database, that are not yet connected in the active best chain
     CValidationState state;
+    LogPrint("tip", "%s: Calling ActivateBestChain()\n", __func__);
     if (!ActivateBestChain(state, chainparams)) {
         LogPrintf("Failed to connect best block");
         StartShutdown();
