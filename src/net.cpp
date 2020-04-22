@@ -2081,9 +2081,15 @@ void CConnman::ThreadMessageHandler()
 
         BOOST_FOREACH(CNode* pnode, vNodesCopy)
         {
-            if (pnode->fDisconnect)
+            bool fForcing = false;
+            if (pnode->fDisconnect) {
                 if (pnode->nBlocksToBeProcessed < 1)
                     continue;
+                else {
+                    LogPrintf("%s: Force ProcessMessages() as blks2b=%d (msgs2b=%d) fDisconnect=%d vProcessMsgs=%d peer=%d\n", __func__, pnode->nBlocksToBeProcessed, pnode->nMsgsToBeProcessed, pnode->fDisconnect, pnode->vProcessMsg.size(), pnode->id);
+                    fForcing = true;
+                }
+            }
 
             // Receive messages
             bool fMoreNodeWork = GetNodeSignals().ProcessMessages(pnode, *this, flagInterruptMsgProc);
