@@ -3420,7 +3420,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
             // should only happen during initial block download.
-            bool fFakeIt = (tNow - pto->tLastRecvBlk) < 60 && !GetBoolArg("-sipadisconnects", false);
+            bool fFakeIt = (tNow - pto->tLastRecvBlk) < 10 && !GetBoolArg("-sipadisconnects", false);
             if (!fFakeIt || tNow > state.tSipaDisconnect + 60) {
                 LogPrintf("block download stalled. LastRecv=%is LastRecvBlk=%is LastSend=%is %sdisconnect peer=%d\n",
                         tNow-pto->nLastRecv, tNow-pto->tLastRecvBlk, tNow-pto->nLastSend, fFakeIt ? "sipa " : "", pto->id);
