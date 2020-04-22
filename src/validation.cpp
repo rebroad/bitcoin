@@ -2494,9 +2494,9 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
 
     if (fActivatingChain) {
         if (!fActivateChain)
-            LogPrint("tip", "%s: Setting fActivateChain\n", __func__);
+            LogPrint("tip", "%s: Setting fActivateChain and exiting\n", __func__);
         else
-            LogPrint("tip", "%s: fActivateChain already set\n", __func__);
+            LogPrint("tip", "%s: fActivatingChain && fActivateChain already set. Exiting\n", __func__);
         fActivateChain = true;
         return true;
     }
@@ -3274,15 +3274,9 @@ static bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CValidation
 
 void FormBestChain() {
     CValidationState state;
-    int64_t tStart = GetTimeMillis();
     const CChainParams& chainparams = Params();
     if (!ActivateBestChain(state, chainparams))
         LogPrint("block", "%s: ActivateBestChain failed\n", __func__);
-    else {
-        int64_t tNow = GetTimeMillis();
-        if (tNow != tStart)
-            LogPrint("block", "%s: ActivateBestChain duration = %ds\n", __func__, (tNow - tStart) * 0.001);
-    }
 }
 
 bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool *fNewBlock, bool *fSlowBiter)
