@@ -684,8 +684,8 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
                 if (pindex->nHeight > nWindowEnd) {
                     // We reached the end of the window.
                     if (state->nBlockPaused != 7) {
-                        LogPrint("blockblock", "BLOCKED - Height (%s) > window (%d) prevPause=%d nodeStaller=%d waitingfor=%d peer=%d\n", strHeight(pindex), nWindowEnd,
-                            state->nBlockPaused, nodeStaller, waitingfor, nodeid);
+                        LogPrint("blockblock", "BLOCKED - Height (%s) > window (%d) prevPause=%d wait4peer=%d peer=%d\n", strHeight(pindex), nWindowEnd,
+                            state->nBlockPaused, waitingfor, nodeid);
                         state->nBlockPaused = 7;
                     }
                     if (vBlocks.size() == 0 && waitingfor != nodeid) {
@@ -3549,7 +3549,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
         if (!pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             std::vector<const CBlockIndex*> vToDownload;
             if (state.nBlockPaused == 9) {
-                LogPrint("blockblock", "UNBLOCKED - InFlight (%d) < Max(%d) peer=%d\n", state.nBlocksInFlight, MAX_BLOCKS_IN_TRANSIT_PER_PEER, pto->id);
+                LogPrint("blockblock", "UNBLOCKED - (fFetch || !IsIBD) && InFlight(%d) < Max(%d) peer=%d\n", state.nBlocksInFlight, MAX_BLOCKS_IN_TRANSIT_PER_PEER, pto->id);
                 state.nBlockPaused = -9;
             }
             NodeId staller = -1;
@@ -3567,7 +3567,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 }
             }
         } else {
-            if (state.nBlockPaused != 9) {
+            if (!fFetch && IsInitialBlockDownload() && state.nBlockPaused != 9) {
                 state.nBlockPaused = 9;
                 std::string strReason;
                 if (pto->fClient)
