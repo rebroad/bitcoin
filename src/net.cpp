@@ -1813,7 +1813,7 @@ void CConnman::ThreadOpenConnections()
         //  * Only make a feeler connection once every few minutes.
         //
         bool fFeeler = false;
-        if (nOutboundRelevant >= nMaxOutbound) {
+        if (nOutboundRelevant >= nMaxOutbound) { // don't count fDisconnected nodes
             int64_t nTime = GetTimeMicros(); // The current time right now (in microseconds).
             if (nTime > nNextFeeler) {
                 nNextFeeler = PoissonNextSend(nTime, FEELER_INTERVAL);
@@ -2043,9 +2043,12 @@ void CConnman::ThreadMessageHandler()
 
         BOOST_FOREACH(CNode* pnode, vNodesCopy)
         {
-            if (pnode->fDisconnect)
+            if (pnode->fDisconnect) {
                 if (pnode->nBlocksToBeProcessed < 1)
                     continue;
+                else
+                    LogPrintf("%s: Force ProcessMessages() as blks2b=%d vProcessMsgs=%d fDisconnect=%d peer=%d\n", __func__, pnode->nBlocksToBeProcessed, pnode->vProcessMsg.size(), pnode->fDisconnect, pnode->id);
+            }
 
             // Receive messages
             bool fMoreNodeWork = GetNodeSignals().ProcessMessages(pnode, *this, flagInterruptMsgProc);
