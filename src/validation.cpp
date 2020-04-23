@@ -31,6 +31,7 @@
 #include "ui_interface.h"
 #include "undo.h"
 #include "util.h"
+#include "utilioprio.h"
 #include "utilmoneystr.h"
 #include "utilstrencodings.h"
 #include "validationinterface.h"
@@ -1093,7 +1094,8 @@ bool GetTransaction(const uint256 &hash, CTransactionRef &txOut, const Consensus
 
     if (pindexSlow) {
         CBlock block;
-        if (ReadBlockFromDisk(block, pindexSlow, consensusParams)) {
+        // Read block with low priority if during IBD
+        if (ReadBlockFromDisk(block, pindexSlow, consensusParams, IsInitialBlockDownload())) {
             for (const auto& tx : block.vtx) {
                 if (tx->GetHash() == hash) {
                     txOut = tx;
@@ -1138,9 +1140,12 @@ bool WriteBlockToDisk(const CBlock& block, CDiskBlockPos& pos, const CMessageHea
     return true;
 }
 
-bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams)
+bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams, const bool lowprio /*=false*/)
 {
     block.SetNull();
+
+    {
+    IOPRIO_IDLER(lowprio);
 
     // Open history file to read
     CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
@@ -1155,6 +1160,8 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
         return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
     }
 
+    } // end IOPRIO_IDLER scope
+
     // Check the header
     if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
@@ -1162,9 +1169,9 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
     return true;
 }
 
-bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams)
+bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams, const bool lowprio /*=false*/)
 {
-    if (!ReadBlockFromDisk(block, pindex->GetBlockPos(), consensusParams))
+    if (!ReadBlockFromDisk(block, pindex->GetBlockPos(), consensusParams, lowprio))
         return false;
     if (block.GetHash() != pindex->GetBlockHash())
         return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s",
@@ -2317,7 +2324,8 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     if (!pblock) {
         std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
         connectTrace.blocksConnected.emplace_back(pindexNew, pblockNew);
-        if (!ReadBlockFromDisk(*pblockNew, pindexNew, chainparams.GetConsensus()))
+        // Read from disk with low priority during IBD
+        if (!ReadBlockFromDisk(*pblockNew, pindexNew, chainparams.GetConsensus(), IsInitialBlockDownload()))
             return AbortNode(state, "Failed to read block");
     } else {
         connectTrace.blocksConnected.emplace_back(pindexNew, pblock);
