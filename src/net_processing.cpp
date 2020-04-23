@@ -1180,7 +1180,8 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                     // Send block from disk
                     CBlock block;
                     int nSize = 0;
-                    if (!ReadBlockFromDisk(block, (*mi).second, consensusParams))
+                    // Read block with low priority if not recent (i.e. historical)
+                    if (!ReadBlockFromDisk(block, (*mi).second, consensusParams, !fRecent))
                         assert(!"cannot load block from disk");
                     if (inv.type == MSG_BLOCK)
                         nSize += connman.PushMessage(pfrom, msgMaker.Make(SERIALIZE_TRANSACTION_NO_WITNESS, NetMsgType::BLOCK, block));
