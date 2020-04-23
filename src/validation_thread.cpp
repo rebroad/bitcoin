@@ -1,10 +1,14 @@
 #include "chainparams.h"
+#include "utilioprio.h"
 #include "validation.h"
 #include "validationinterface.h"
 #include "net.h"
 
 void CConnman::ThreadValidation()
 {
+    {
+    IOPRIO_IDLER(true);
+
     LogPrintf("%s: Starting\n", __func__);
     int nSleep = 0;
     while (!flagInterruptMsgProc) {
@@ -22,5 +26,7 @@ void CConnman::ThreadValidation()
         else
             nSleep = 0;
     }
+
+    } // end IOPRIO_IDLER scope
 }
 
