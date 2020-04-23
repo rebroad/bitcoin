@@ -3029,7 +3029,7 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
     msg.SetVersion(pfrom->GetRecvVersion());
 
     std::string strChk = HexStr(msg.hdr.pchChecksum, msg.hdr.pchChecksum+CMessageHeader::CHECKSUM_SIZE);
-    LogPrint("netrecv", "receive: %s %d%% size=%d chk=%s vProcessMsg.size=%d complete=%d peer=%d\n", msg.hdr.pchCommand, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, strChk, pfrom->vProcessMsg.size(), msg.complete(), pfrom->id);
+    LogPrint(pfrom->fDisconnect ? "net" : "netrecv", "receive: %s %d%% size=%d chk=%s vProcessMsg.size=%d complete=%d peer=%d\n", msg.hdr.pchCommand, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, strChk, pfrom->vProcessMsg.size(), msg.complete(), pfrom->id);
 
     if (msg.complete()) {
         std::string pchCommand = msg.hdr.pchCommand;
