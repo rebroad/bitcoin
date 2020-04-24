@@ -3047,6 +3047,8 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
     CMessageHeader& hdr = msg.hdr;
     if (!hdr.IsValid(chainparams.MessageStart())) {
         LogPrintf("PROCESSMESSAGE: ERRORS IN HEADER %s peer=%d\n", SanitizeString(hdr.GetCommand()), pfrom->id);
+        if (IsInitialBlockDownload())
+            pfrom->fDisconnect = true;
         return fMoreWork;
     }
     std::string strCommand = hdr.GetCommand();
@@ -3061,6 +3063,8 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
         LogPrintf("%s(%s, %u bytes): CHECKSUM ERROR expected=%s was=%s peer=%d\n", __func__,
            SanitizeString(strCommand), nMessageSize, strChk,
            HexStr(hash.begin(), hash.begin()+CMessageHeader::CHECKSUM_SIZE), pfrom->id);
+        if (IsInitialBlockDownload())
+            pfrom->fDisconnect = true;
         return fMoreWork;
     }
 
