@@ -98,7 +98,11 @@ CBlockIndex* CBlockIndex::GetAncestor(int height)
             pindexWalk = pindexWalk->pskip;
             heightWalk = heightSkip;
         } else {
+            if (!pindexWalk)
+                printf("%s: !pindexWalk\n", __PRETTY_FUNCTION__);
             assert(pindexWalk->pprev);
+            if (!pindexWalk->pprev) 
+                printf("%s: !pindexWalk->pprev pindexWalk->nHeight = %d\n", __PRETTY_FUNCTION__, pindexWalk->nHeight);
             pindexWalk = pindexWalk->pprev;
             heightWalk--;
         }
