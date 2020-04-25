@@ -356,7 +356,8 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     }
 
     /// debug print
-    LogPrint(fFeeler ? "feeler" : "conn", "%s connection %s lastseen=%s\n", fFeeler ? "feeler" : "trying",
+    LogPrint(fFeeler ? "feeler" : "conn", "%s connection %s lastseen=%s\n",
+        fFeeler ? "feeler" : strprintf("trying(%d)", vNodesSize),
         pszDest ? pszDest : addrConnect.ToString(),
         pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
@@ -2846,7 +2847,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
         mapRecvBytesPerMsgCmd[msg] = 0;
     mapRecvBytesPerMsgCmd[NET_MESSAGE_COMMAND_OTHER] = 0;
 
-    LogPrint(fFeeler ? "feeler" : "conn", "Added %s connection %speer=%d\n", fFeeler ? "feeler" : fInbound ? "inbound" : "outbound", fLogIPs ? addrName + " " : "", id);
+    LogPrint(fFeeler ? "feeler" : "conn", "Added %s connection %speer=%d\n", fFeeler ? "feeler" : fInbound ? "inbound" : strprintf("outbound(%d)", vNodesSize), fLogIPs ? addrName + " " : "", id);
 }
 
 CNode::~CNode()
