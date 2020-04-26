@@ -59,6 +59,7 @@ CCriticalSection cs_main;
 BlockMap mapBlockIndex;
 CChain chainActive;
 CBlockIndex *pindexBestHeader = NULL;
+CBlockIndex *pindexActivatingTip = NULL;
 CWaitableCriticalSection csBestBlock;
 CConditionVariable cvBlockChange;
 int nScriptCheckThreads = 0;
@@ -2509,6 +2510,7 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
                 fActivatingChain = false;
                 return true;
             }
+            pindexActivatingTip = pindexMostWork;
 
             bool fInvalidFound = false;
             std::shared_ptr<const CBlock> nullBlockPtr;
@@ -3272,8 +3274,11 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
 
     // If best header is within 6 blocks from our tip, activate best chain withtin the message handler thread to avoid the 100ms delay,
     // and to avoid breaking the miner tests.
+    bool fBetter = pindex->nChainWork > pindexActivatingTip->nChainWork;
+    bool fBite = fBetter && (pindex->nHeight <= pindexActivatingTip->nHeight + 1);
     if (fActivatingChain || pindexBestHeader->nChainWork > chainActive.Tip()->nChainWork + GetBlockProof(*chainActive.Tip()) * 6) {
-        fActivateChain = true;
+        if (fBite)
+            fActivateChain = true;
     } else {
         CValidationState state; // Only used to report errors, not invalidity - ignore it
         if (!ActivateBestChain(state, chainparams, pblock))
@@ -3609,6 +3614,7 @@ bool static LoadBlockIndexDB(const CChainParams& chainparams)
     if (it == mapBlockIndex.end())
         return true;
     chainActive.SetTip(it->second);
+    pindexActivatingTip=chainActive.Tip();
 
     PruneBlockIndexCandidates();
 
