@@ -72,6 +72,7 @@ static const uint64_t RANDOMIZER_ID_LOCALHOSTNONCE = 0xd93e69e2bbfa5735ULL; // S
 bool fDiscover = true;
 bool fListen = true;
 bool fRelayTxes = true;
+NodeId IBDnode = -1;
 size_t vNodesSize = 0;
 CCriticalSection cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost;
@@ -720,9 +721,9 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
         if (nSocketHandlerClicks > nLastRecvClick)
             strClicks += strprintf("clicks=%d ", nSocketHandlerClicks - nLastRecvClick);
         if (fBody)
-            LogPrint("netrecv", "%s: %sbody%d vRecvMsg.size=%d nBytes=%d hand=%d %d%% size=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
+            LogPrint(id == IBDnode ? "net" : "netrecv", "%s: %sbody%d vRecvMsg.size=%d nBytes=%d hand=%d %d%% size=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
         else
-            LogPrint("netrecv", "%s: %shead%d vRecvMsg.size=%d nBytes=%d hand=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
+            LogPrint(id == IBDnode ? "net" : "netrecv", "%s: %shead%d vRecvMsg.size=%d nBytes=%d hand=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
 
         nLastRecvClick = nSocketHandlerClicks;
 
