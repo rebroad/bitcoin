@@ -721,9 +721,9 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
         if (nSocketHandlerClicks > nLastRecvClick)
             strClicks += strprintf("clicks=%d ", nSocketHandlerClicks - nLastRecvClick);
         if (fBody)
-            LogPrint(id == IBDnode ? "net" : "netrecv", "%s: %sbody%d vRecvMsg.size=%d nBytes=%d hand=%d %d%% size=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
+            LogPrint("netrecv", "%s: %sbody%d vRecvMsg.size=%d nBytes=%d hand=%d %d%% size=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
         else
-            LogPrint(id == IBDnode ? "net" : "netrecv", "%s: %shead%d vRecvMsg.size=%d nBytes=%d hand=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
+            LogPrint("netrecv", "%s: %shead%d vRecvMsg.size=%d nBytes=%d hand=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
 
         nLastRecvClick = nSocketHandlerClicks;
 
@@ -741,7 +741,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
             if (pchCommand == NetMsgType::BLOCK || pchCommand == NetMsgType::CMPCTBLOCK || pchCommand == NetMsgType::BLOCKTXN || pchCommand == NetMsgType::HEADERS) {
                 std::string strChk = HexStr(msg.hdr.pchChecksum, msg.hdr.pchChecksum+CMessageHeader::CHECKSUM_SIZE);
                 int64_t nNow = GetTime();
-                bool fUpdate = nNow > tLastBlkRep + 10;
+                bool fUpdate = (nNow > tLastBlkRep + 10 || (id == IBDnode || fDisconnect));
                 tLastRecvBlk = nNow;
                 if (msg.complete()) {
                     tLastBlkRep = nNow;
@@ -772,7 +772,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
             msg.nTime = nTimeMicros;
             complete = true;
         }
-    }
+    } // while nBytes > 0
 
     return true;
 }
