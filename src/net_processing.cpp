@@ -487,7 +487,7 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
     if (state->pindexLastCommonBlock == NULL) {
         // Bootstrap quickly by guessing a parent of our best tip is the forking point.
         // Guessing wrong in either direction is not a problem.
-        state->pindexLastCommonBlock = chainActive[std::min(state->pindexBestKnownBlock->nHeight, chainActive.Height())];
+        state->pindexLastCommonBlock = LastCommonAncestor(state->pindexBestKnownBlock, pindexActivatingTip);
     }
 
     // If the peer reorganized, our previous pindexLastCommonBlock may not be an ancestor
