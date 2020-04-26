@@ -72,6 +72,7 @@ static const uint64_t RANDOMIZER_ID_LOCALHOSTNONCE = 0xd93e69e2bbfa5735ULL; // S
 bool fDiscover = true;
 bool fListen = true;
 bool fRelayTxes = true;
+NodeId IBDnode = -1;
 size_t vNodesSize = 0;
 CCriticalSection cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost;
@@ -734,7 +735,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
             if (pchCommand == NetMsgType::BLOCK || pchCommand == NetMsgType::CMPCTBLOCK || pchCommand == NetMsgType::BLOCKTXN || pchCommand == NetMsgType::HEADERS) {
                 std::string strChk = HexStr(msg.hdr.pchChecksum, msg.hdr.pchChecksum+CMessageHeader::CHECKSUM_SIZE);
                 int64_t nNow = GetTime();
-                bool fUpdate = nNow > tLastBlkRep + 10;
+                bool fUpdate = (nNow > tLastBlkRep + 10 || (id == IBDnode || fDisconnect));
                 tLastRecvBlk = nNow;
                 if (msg.complete()) {
                     tLastBlkRep = nNow;
@@ -765,7 +766,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
             msg.nTime = nTimeMicros;
             complete = true;
         }
-    }
+    } // while nBytes > 0
 
     return true;
 }

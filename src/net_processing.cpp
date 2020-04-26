@@ -670,6 +670,7 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
                         LogPrint("blockblock", "BLOCKED - Height (%s) > window (%d) prevPause=%d wait4peer=%d peer=%d\n", strHeight(pindex), nWindowEnd,
                             state->nBlockPaused, waitingfor, nodeid);
                         state->nBlockPaused = 7;
+                        IBDnode = waitingfor;
                         if (GetBoolArg("-dynmax", false) && waitingfor >= 0) {
                             int num = State(waitingfor)->nMaxInFlight;
                             LogPrint("block", "nMaxInFlight %d -> %d peer=%d\n", num*0.1, (num-2)*0.1, waitingfor);
@@ -684,6 +685,7 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
                 } else if (state->nBlockPaused == 7) {
                     LogPrint("blockblock", "UNBLOCKED - Height (%s) within window (%d) peer=%d\n", strHeight(pindex), nWindowEnd, nodeid);
                     state->nBlockPaused = -7;
+                    IBDnode = -1;
                 }
                 //if (pindex->nHeight != nWindowEnd && state->nBlockPaused != -7)
                 vBlocks.push_back(pindex);
