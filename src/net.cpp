@@ -2086,7 +2086,7 @@ void CConnman::ThreadMessageHandler()
                 if (pnode->nBlocksToBeProcessed < 1)
                     continue;
                 else {
-                    LogPrintf("%s: Force ProcessMessages() as blks2b=%d (msgs2b=%d) fDisconnect=%d vProcessMsgs=%d peer=%d\n", __func__, pnode->nBlocksToBeProcessed, pnode->nMsgsToBeProcessed, pnode->fDisconnect, pnode->vProcessMsg.size(), pnode->id);
+                    LogPrintf("%s: Force ProcessMessages() as blks2b=%d vProcessMsgs=%d fDisconnect=%d peer=%d\n", __func__, pnode->nBlocksToBeProcessed, pnode->vProcessMsg.size(), pnode->fDisconnect, pnode->id);
                     fForcing = true;
                 }
             }
