@@ -1365,11 +1365,12 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
     }
 
 
-    if (!(pfrom->GetLocalServices() & NODE_BLOOM) && !pfrom->fWhitelisted &&
+    ServiceFlags nLocalNodeServices = pfrom->GetLocalServices();
+    if (!(nLocalNodeServices & NODE_BLOOM) && !pfrom->fWhitelisted &&
               (strCommand == NetMsgType::FILTERLOAD ||
                strCommand == NetMsgType::FILTERADD)) {
         if (pfrom->nVersion >= NO_BLOOM_VERSION) {
-            LogPrintf("recv %s from a node that should know better! peer=%d\n", strCommand, pfrom->id);
+            LogPrintf("recv %s from a node that should know better! LocalServices=0x%x peer=%d\n", strCommand, nLocalNodeServices, pfrom->id);
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 1);
         } else {
@@ -2742,19 +2743,20 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
     else if (strCommand == NetMsgType::MEMPOOL)
     {
-        if (!(pfrom->GetLocalServices() & NODE_BLOOM) && !pfrom->fWhitelisted)
-        {
-            LogPrint("net", "recv mempool request with bloom filters disabled, disconnect peer=%d\n", pfrom->GetId());
-            pfrom->fDisconnect = true;
-            return true;
-        }
+	if (!pfrom->fWhitelisted) {
+            if (!(nLocalNodeServices & NODE_BLOOM)) {
+                LogPrint("net", "recv mempool request with bloom filters disabled. disconnect peer=%d\n", pfrom->GetId());
+                pfrom->fDisconnect = true;
+                return true;
+            } else
+		LogPrint("net", "recv mempool. LocalServices=0x%x peer=%d\n", nLocalNodeServices, pfrom->GetId()); // REBTEMP
 
-        if (connman.OutboundTargetReached(false) && !pfrom->fWhitelisted)
-        {
-            LogPrint("net", "recv mempool request with bandwidth limit reached, disconnect peer=%d\n", pfrom->GetId());
-            pfrom->fDisconnect = true;
-            return true;
-        }
+            if (connman.OutboundTargetReached(false)) {
+                LogPrint("net", "recv mempool request with bandwidth limit reached, disconnect peer=%d\n", pfrom->GetId());
+                pfrom->fDisconnect = true;
+                return true;
+            }
+	}
 
         LOCK(pfrom->cs_inventory);
         pfrom->fSendMempool = true;
