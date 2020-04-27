@@ -2142,7 +2142,7 @@ void CConnman::ThreadMessageHandler()
         int64_t nDuration = tAfter - tLastTime;
         if (!fMoreWork) {
             fMsgProcSleep = true;
-            condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(100), [this] { return fMsgProcWake; });
+            condMsgProc.wait_until(lock, std::chrono::steady_clock::now() + std::chrono::milliseconds(10000), [this] { return fMsgProcWake; });
             fMsgProcSleep = false;
             tAfter = GetTimeMillis();
         }
