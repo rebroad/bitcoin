@@ -1148,6 +1148,10 @@ void CConnman::ThreadSocketHandler()
     unsigned int nPrevNodeCount = 0;
     while (!interruptNet)
     {
+        int64_t nTime = GetSystemTimeInSeconds();
+        int64_t nPreviousTime;
+        int64_t nTimeMicros = GetTimeMicros(); // The current time right now (in microseconds).
+        int64_t nPrevTimeMicros;
         //
         // Disconnect nodes
         //
@@ -1424,27 +1428,26 @@ void CConnman::ThreadSocketHandler()
             //
             // Inactivity checking
             //
-            int64_t nTime = GetSystemTimeInSeconds();
-            if (nTime - pnode->nTimeConnected > 60 && !pnode->fDisconnect)
+            if (nPreviousTime - pnode->nTimeConnected > 60 && !pnode->fDisconnect)
             {
                 if (pnode->nLastRecv == 0 || pnode->nLastSend == 0)
                 {
                     LogPrint("net", "no messages in first 60 seconds, %s%speer=%d\n", pnode->nLastRecv ? "" : "nLastRecv=0 ", pnode->nLastSend ? "" : "nLastSend=0 ", pnode->id);
                     pnode->fDisconnect = true;
                 }
-                else if (nTime - pnode->nLastSend > TIMEOUT_INTERVAL)
+                else if (nPreviousTime - pnode->nLastSend > TIMEOUT_INTERVAL)
                 {
-                    LogPrintf("socket sending timeout: nLastSend=%is peer=%d\n", nTime - pnode->nLastSend, pnode->id);
+                    LogPrintf("socket sending timeout: nLastSend=%s peer=%d\n", strAge(nPreviousTime - pnode->nLastSend), pnode->id);
                     pnode->fDisconnect = true;
                 }
-                else if (nTime - pnode->nLastRecv > (pnode->nVersion > BIP0031_VERSION ? TIMEOUT_INTERVAL : 90*60))
+                else if (nPreviousTime - pnode->nLastRecv > (pnode->nVersion > BIP0031_VERSION ? TIMEOUT_INTERVAL : 90*60))
                 {
-                    LogPrintf("socket receive timeout: nLastRecv=%is peer=%d\n", nTime - pnode->nLastRecv, pnode->id);
+                    LogPrintf("socket receive timeout: nLastRecv=%s peer=%d\n", strAge(nPreviousTime - pnode->nLastRecv), pnode->id);
                     pnode->fDisconnect = true;
                 }
-                else if (pnode->nPingNonceSent && pnode->nPingUsecStart + TIMEOUT_INTERVAL * 1000000 < GetTimeMicros())
+                else if (pnode->nPingNonceSent && pnode->nPingUsecStart + TIMEOUT_INTERVAL * 1000000 < nPrevTimeMicros)
                 {
-                    LogPrintf("ping timeout: %fs peer=%d\n", 0.000001 * (GetTimeMicros() - pnode->nPingUsecStart), pnode->id);
+                    LogPrintf("ping timeout: %fs peer=%d\n", 0.000001 * (nPrevTimeMicros - pnode->nPingUsecStart), pnode->id);
                     pnode->fDisconnect = true;
                 }
                 else if (!pnode->fSuccessfullyConnected)
@@ -1461,7 +1464,9 @@ void CConnman::ThreadSocketHandler()
         }
         if (!interruptNet.sleep_for(std::chrono::milliseconds(10))) // REBTEST
             return;
-    }
+        nPreviousTime = nTime;
+        nPrevTimeMicros = nTimeMicros;
+    } // while (!interruptNet)
 }
 
 void CConnman::WakeMessageHandler()
