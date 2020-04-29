@@ -3323,7 +3323,8 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
     } else {
         CValidationState state; // Only used to report errors, not invalidity - ignore it
         int64_t tStart = GetTimeMillis();
-        LogPrint(fBite ? "tip" : "block", "%s: Calling ActivateBestChain()%s\n", __func__, fBite ? " - EXPECTING THIS TO BITE!" : "");
+        LogPrint("tip" "%s: BestHeader(%d) > ActiveTip(%d)+6 Calling ActivateBestChain()%s\n", __func__, pindexBestHeader->nHeight, chainActive.Tip()->nHeight,
+            fBite ? " - EXPECTING THIS TO BITE!" : "");
         if (!ActivateBestChain(state, chainparams, pblock))
             return error("%s: ActivateBestChain failed", __func__);
         int64_t tNow = GetTimeMillis();
