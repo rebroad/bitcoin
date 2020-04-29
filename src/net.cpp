@@ -1375,7 +1375,11 @@ void CConnman::ThreadSocketHandler()
                                     LOCK(pnode->cs_vProcessMsg);
                                     pnode->vProcessMsg.splice(pnode->vProcessMsg.end(), pnode->vRecvMsg, pnode->vRecvMsg.begin(), it);
                                     pnode->nProcessQueueSize += nSizeAdded;
-                                    pnode->fPauseRecv = pnode->nProcessQueueSize > nReceiveFloodSize;
+                                    if (pnode->nProcessQueueSize > nReceiveFloodSize) {
+                                        pnode->fPauseRecv = true;
+                                        LogPrint("net", "nProcessQueueSize=%d nReceiveFloodSize=%d PAUSE! peer=%d\n", pnode->nProcessQueueSize,
+                                            nReceiveFloodSize, pnode->id);
+                                    }
                                 }
                                 WakeMessageHandler();
                             }

@@ -1966,6 +1966,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
             if (fAbort)
                 return false;
         }
+        /* if (fActivatingChain)
+            MilliSleep(100); // REBTEMP
+        */
         const CTransaction &tx = *(block.vtx[i]);
 
         nInputs += tx.vin.size();
