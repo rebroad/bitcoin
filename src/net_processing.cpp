@@ -692,7 +692,7 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
             }
         }
     }
-    LogPrint("blockblock", "vBlocks.size()=%d peer=%d\n", vBlocks.size(), nodeid); // REBTEMP
+    LogPrint("blockblock", "vBlocks.size()==%d peer=%d\n", vBlocks.size(), nodeid); // REBTEMP
 }
 
 } // anon namespace
