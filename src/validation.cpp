@@ -2346,12 +2346,13 @@ bool static DisconnectTip(CValidationState& state, const CChainParams& chainpara
     // Update chainActive and related variables.
     UpdateTip(pindexDelete->pprev, chainparams);
     if (ShutdownRequested())
-	LogPrintf("%s: After UpdateTip()\n", __func__);
+        LogPrintf("%s: After UpdateTip()\n", __func__);
     // Let wallets know transactions went from 1-confirmed to
     // 0-confirmed or conflicted:
     for (const auto& tx : block.vtx) {
         GetMainSignals().SyncTransaction(*tx, pindexDelete->pprev, CMainSignals::SYNC_TRANSACTION_NOT_IN_BLOCK);
     }
+    LogPrintf("%s: After GetMainSignals().SyncTransaction()\n", __func__); // REBTEMP
     // update mempool stats
     int nMaxMempoolSize = GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
     int64_t nFeePerK = mempool.GetMinFee(nMaxMempoolSize).GetFeePerK() * (1.0 * mempool.DynamicMemoryUsage() / nMaxMempoolSize);
