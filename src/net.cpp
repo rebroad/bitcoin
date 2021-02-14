@@ -1150,8 +1150,11 @@ void CConnman::ThreadSocketHandler()
 {
     LogPrintf("%s: Start\n", __PRETTY_FUNCTION__);
     unsigned int nPrevNodeCount = 0;
-    while (!interruptNet)
-    {
+    int64_t tLastTime = 0;
+    while (!interruptNet) {
+        std::string strDurations;
+        int64_t tBefore = GetTimeMillis();
+        int64_t tAfter;
         //
         // Disconnect nodes
         //
@@ -1161,8 +1164,7 @@ void CConnman::ThreadSocketHandler()
             std::vector<CNode*> vNodesCopy = vNodes;
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
             {
-                if (pnode->fDisconnect && pnode->nBlocksToBeProcessed < 1)
-                {
+                if (pnode->fDisconnect && pnode->nBlocksToBeProcessed < 1) {
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
 
@@ -1182,36 +1184,56 @@ void CConnman::ThreadSocketHandler()
                 }
             }
         }
+        tAfter = GetTimeMillis();
+        if (tAfter > tBefore+1)
+            strDurations += strprintf("Disconnect(%d)=%dms ", vNodesDisconnected.size(), tAfter - tBefore);
+        tBefore = tAfter;
         {
             // Delete disconnected nodes
             std::list<CNode*> vNodesDisconnectedCopy = vNodesDisconnected;
+            if (tBefore - tLastTime > 1000)
+                LogPrintf("%s: Before FOREACH vNodesDisconnectedCopy\n", __func__);
             BOOST_FOREACH(CNode* pnode, vNodesDisconnectedCopy)
             {
                 // wait until threads are done using it
                 if (pnode->GetRefCount() <= 0) {
                     bool fDelete = false;
                     {
+                        if (tBefore - tLastTime > 1000)
+                            LogPrintf("%s: Before TRY_LOCK(cs_inv)  peer=%d\n", __func__, pnode->id);
                         TRY_LOCK(pnode->cs_inventory, lockInv);
                         if (lockInv) {
+                            if (tBefore - tLastTime > 1000)
+                                LogPrintf("%s: Before TRY_LOCK(cs_send) peer=%d\n", __func__, pnode->id);
                             TRY_LOCK(pnode->cs_vSend, lockSend);
                             if (lockSend) {
+                                //LogPrintf("%s: fDelete = true peer=%d\n", __func__, pnode->id);
                                 fDelete = true;
                             }
                         }
                     }
                     if (fDelete) {
+                        //LogPrintf("%s: Before remove() peer=%d\n", __func__, pnode->id);
                         vNodesDisconnected.remove(pnode);
                         //LogPrint("net", "Deleting peer=%d\n", pnode->id);
-                        LogPrintf("%s: Before DeleteNode(%d)\n", __PRETTY_FUNCTION__, pnode->id);
+                        LogPrintf("%s: Before DeleteNode() peer=%d\n", __func__, pnode->id);
                         DeleteNode(pnode);
                     }
                 }
             }
         }
+        tAfter = GetTimeMillis();
+        if (tAfter > tBefore+1)
+            strDurations += strprintf("Delete=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
         {
             LOCK(cs_vNodes);
             vNodesSize = vNodes.size();
         }
+        tAfter = GetTimeMillis();
+        if (tAfter > tBefore+1)
+            strDurations += strprintf("Lock=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
         if(vNodesSize != nPrevNodeCount) {
             nPrevNodeCount = vNodesSize;
             if(clientInterface)
@@ -1219,6 +1241,10 @@ void CConnman::ThreadSocketHandler()
             if (!vNodesSize)
                 LogPrint("net", "%s: NO PEERS CONNECTED.\n", __func__); // REBTODO - reset NodeId?
         }
+        tAfter = GetTimeMillis();
+        if (tAfter > tBefore+1)
+            strDurations += strprintf("Notify=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
 
         //
         // Find which sockets have data to receive
@@ -1301,6 +1327,10 @@ void CConnman::ThreadSocketHandler()
             if (!interruptNet.sleep_for(std::chrono::milliseconds(timeout.tv_usec/1000)))
                 return;
         }
+        tAfter = GetTimeMillis();
+        if (tAfter > tBefore+1)
+            strDurations += strprintf("Recv=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
 
         //
         // Accept new connections
@@ -1312,6 +1342,10 @@ void CConnman::ThreadSocketHandler()
                 AcceptConnection(hListenSocket);
             }
         }
+        tAfter = GetTimeMillis();
+        if (tAfter > tBefore+1)
+            strDurations += strprintf("Accept=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
 
         //
         // Service each socket
@@ -1461,14 +1495,26 @@ void CConnman::ThreadSocketHandler()
                 }
             }
         } // FOREACH node
+        tAfter = GetTimeMillis();
+        if (tAfter > tBefore+1)
+            strDurations += strprintf("Service=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
         {
             LOCK(cs_vNodes);
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
                 pnode->Release();
         }
+        tAfter = GetTimeMillis();
+        if (tAfter > tBefore+1)
+            strDurations += strprintf("Release=%dms ", tAfter - tBefore);
+        tBefore = tAfter;
         if (!interruptNet.sleep_for(std::chrono::milliseconds(10))) // REBTEST
             return;
-    }
+        int64_t nDuration = tAfter - tLastTime;
+        if (nDuration > 1000)
+            LogPrint("timings", "%s: DURATIONS: %s\n", __func__, strDurations);
+        tLastTime = tAfter;
+    } // while (!interruptNet)
 }
 
 void CConnman::WakeMessageHandler()
