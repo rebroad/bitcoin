@@ -2431,7 +2431,7 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
                     connectTrace.blocksConnected.pop_back();
                     break;
                 } else {
-                    // A system error occurred (disk space, database error, ...).
+                    // A system error occurred (disk space, database error, ...) or shutting down.
                     return false;
                 }
             } else {
