@@ -308,7 +308,6 @@ void InitializeNode(CNode *pnode, CConnman& connman) {
 }
 
 void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
-    LogPrintf("%s: Start peer=%d\n", __func__, pnode->id);
     if (ShutdownRequested())
         return;
 
@@ -344,6 +343,7 @@ void FinalizeNode(CNode *pnode, bool& fUpdateConnectionTime) {
         assert(nPreferredDownload == 0);
         assert(nPeersWithValidatedDownloads == 0);
     }
+    //LogPrintf("%s: End peer=%d\n", __func__, pnode->id);
 }
 
 // Requires cs_main.

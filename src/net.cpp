@@ -1176,6 +1176,7 @@ void CConnman::ThreadSocketHandler()
 
                     // hold in disconnected pool until all refs are released
                     pnode->Release();
+                    //LogPrintf("%s: GetRefCount()=%d Queued for deletion. peer=%d\n", __func__, pnode->GetRefCount(), pnode->id);
                     vNodesDisconnected.push_back(pnode);
                 } else if (pnode->fDisconnect && pnode->fSuccessfullyConnected) {
                     LogPrint("net", "%s: fDisconnect but %d blocks still to process. peer=%d\n", __func__,
@@ -1215,8 +1216,7 @@ void CConnman::ThreadSocketHandler()
                     if (fDelete) {
                         //LogPrintf("%s: Before remove() peer=%d\n", __func__, pnode->id);
                         vNodesDisconnected.remove(pnode);
-                        //LogPrint("net", "Deleting peer=%d\n", pnode->id);
-                        LogPrintf("%s: Before DeleteNode() peer=%d\n", __func__, pnode->id);
+                        //LogPrintf("%s: Before DeleteNode() peer=%d\n", __func__, pnode->id);
                         DeleteNode(pnode);
                     }
                 }
@@ -2608,10 +2608,11 @@ void CConnman::Stop()
                 LogPrintf("CloseSocket(hListenSocket) failed with error %s\n", NetworkErrorString(WSAGetLastError()));
 
     // clean up some globals (to help leak detection)
-    LogPrintf("%s: Before DeleteNode()\n", __PRETTY_FUNCTION__);
+    LogPrintf("%s: Before DeleteNode() vNodes=%d\n", __PRETTY_FUNCTION__, vNodes.size());
     BOOST_FOREACH(CNode *pnode, vNodes) {
         DeleteNode(pnode);
     }
+    LogPrintf("%s: Before DeleteNode() vNodesDisc=%d\n", __PRETTY_FUNCTION__, vNodesDisconnected.size());
     BOOST_FOREACH(CNode *pnode, vNodesDisconnected) {
         DeleteNode(pnode);
     }
@@ -2629,9 +2630,12 @@ void CConnman::DeleteNode(CNode* pnode)
 {
     assert(pnode);
     bool fUpdateConnectionTime = false;
+    //LogPrintf("%s: Before GetNodeSignals().FinalizeNode()\n", __func__);
     GetNodeSignals().FinalizeNode(pnode, fUpdateConnectionTime);
-    if(fUpdateConnectionTime)
+    if(fUpdateConnectionTime) {
+        //LogPrintf("%s: Before addrman.Connected() peer=%d\n", __func__, pnode->id);
         addrman.Connected(pnode->addr);
+    }
     delete pnode;
 }
 
