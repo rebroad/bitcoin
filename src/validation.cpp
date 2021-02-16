@@ -1194,6 +1194,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 
 bool IsInitialBlockDownload()
 {
+    static int reason;
     const CChainParams& chainParams = Params();
 
     // Once this function has returned false, it must remain false.
@@ -1205,15 +1206,40 @@ bool IsInitialBlockDownload()
     LOCK(cs_main);
     if (latchToFalse.load(std::memory_order_relaxed))
         return false;
-    if (fImporting || fReindex)
+    if (fReindex) {
+        if (reason != 1)
+            LogPrintf("%s: true because fReindex == true\n", __func__);
+        reason = 1;
         return true;
-    if (chainActive.Tip() == NULL)
+    }
+    if (fImporting) {
+        if (reason != 2)
+            LogPrintf("%s: true because fImporting == true\n", __func__);
+        reason = 2;
         return true;
-    if (chainActive.Tip()->nChainWork < UintToArith256(chainParams.GetConsensus().nMinimumChainWork))
+    }
+    if (chainActive.Tip() == NULL) {
+        if (reason != 3)
+            LogPrintf("%s: true because chainActive.Tip() == MULL\n", __func__);
+        reason = 3;
         return true;
-    if (pindexActivatingTip->GetBlockTime() < (GetTime() - nMaxTipAge))
+    }
+    if (chainActive.Tip()->nChainWork < UintToArith256(chainParams.GetConsensus().nMinimumChainWork)) {
+        if (reason != 4)
+            LogPrintf("%s: true because nChainWork < minimum\n", __func__);
+        reason = 4;
         return true;
+    }
+    if (pindexActivatingTip->GetBlockTime() < (GetTime() - nMaxTipAge)) {
+        if (reason != 5)
+            LogPrintf("%s: true because ActivatingTip too old\n", __func__);
+        reason = 5;
+        return true;
+    }
     latchToFalse.store(true, std::memory_order_relaxed);
+    if (reason != 0)
+        LogPrintf("%s: NOW FALSE\n", __func__);
+    reason = 0;
     return false;
 }
 
