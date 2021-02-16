@@ -2051,12 +2051,14 @@ void CConnman::ThreadMessageHandler()
                 return;
 
             // Send messages
-            if (!flagInterruptMsgProc)
+            if (!flagInterruptMsgProc && !pnode->fDisconnect)
             {
                 LOCK(pnode->cs_sendProcessing);
                 GetNodeSignals().SendMessages(pnode, *this, flagInterruptMsgProc);
-            } else if (nBlocksToBeProcessed < 1)
+            } else if (flagInterruptMsgProc && nBlocksToBeProcessed < 1)
                 return;
+            else if (pnode->fDisconnect)
+                continue;
         }
 
         {
