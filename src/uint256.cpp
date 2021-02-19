@@ -63,8 +63,11 @@ void base_blob<BITS>::SetHex(const std::string& str)
 
 template <unsigned int BITS>
 std::string base_blob<BITS>::ToString() const
-{
-    return (GetHex());
+{ // REBTODO - change to base64
+    char psz[sizeof(m_data) * 2 + 1];
+    for (unsigned int i = 0; i < sizeof(m_data); i++)
+        sprintf(psz + i * 2, "%02x", m_data[sizeof(m_data) - i - 1]);
+    return std::string(psz, psz + sizeof(m_data) * 2);
 }
 
 // Explicit instantiations for base_blob<160>
