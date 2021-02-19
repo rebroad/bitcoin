@@ -2687,6 +2687,7 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
             // Whether we have anything to do at all.
             if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip()) {
                 fActivatingChain = false;
+                LogPrintf("%s: Exiting as nothing to do\n", __func__);
                 return true;
             }
             pindexActivatingTip = pindexMostWork;
