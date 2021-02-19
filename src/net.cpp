@@ -80,6 +80,7 @@ static bool vfLimited[NET_MAX] = {};
 std::string strSubVersion;
 std::atomic<int> nBlocksToBeProcessed(0);
 int64_t tLastBlkRep = 0; // Time block download last reported.
+int64_t nSocketHandlerClicks = 0;
 
 limitedmap<uint256, int64_t> mapAlreadyAskedFor(MAX_INV_SZ);
 
@@ -712,14 +713,14 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
         }
 
         std::string strClicks;
-        if (nNetClicks)
-            strClicks += strprintf("clicks=%d ", nNetClicks);
+        if (nSocketHandlerClicks > nLastRecvClick)
+            strClicks += strprintf("clicks=%d ", nSocketHandlerClicks - nLastRecvClick);
         if (fBody)
             LogPrint("netrecv", "%s: %sbody%d vRecvMsg.size=%d nBytes=%d hand=%d %d%% size=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, msg.hdr.nMessageSize ? (msg.nDataPos * 100 / msg.hdr.nMessageSize) : 100, msg.hdr.nMessageSize, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
         else
             LogPrint("netrecv", "%s: %shead%d vRecvMsg.size=%d nBytes=%d hand=%d cmd=%s complete=%s peer=%d\n", __func__, strClicks, iter, vRecvMsg.size(), nBytes, handled, SanitizeString(msg.hdr.pchCommand), msg.complete() ? "1" : "0", id);
 
-        nNetClicks = 0;
+        nLastRecvClick = nSocketHandlerClicks;
 
         if (handled < 0)
                 return false;
@@ -1323,10 +1324,9 @@ void CConnman::ThreadSocketHandler()
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
                 pnode->AddRef(); // REBTODO - what does this do?
         }
+        nSocketHandlerClicks++;
         BOOST_FOREACH(CNode* pnode, vNodesCopy)
         {
-            pnode->nNetClicks++;
-
             if (interruptNet)
                 return;
 
@@ -2833,7 +2833,6 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     nLastRecv = 0;
     tLastRecvBlk = 0;
     nBlocksToBeProcessed = 0;
-    nNetClicks = 0;
     nSendBytes = 0;
     nRecvBytes = 0;
     nTimeOffset = 0;
