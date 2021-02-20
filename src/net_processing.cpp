@@ -3002,7 +3002,7 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
     //  (4) checksum
     //  (x) data
     //
-    bool fMoreWork = false;
+    bool fMoreWork = true; // Set to true for the loop to start
     bool fDidGetData = false;
 
     if (!pfrom->fDisconnect && !pfrom->vRecvGetData.empty()) {
@@ -3012,6 +3012,8 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
         if (!pfrom->vRecvGetData.empty())
             return true;
     }
+
+    while (fMoreWork) {
 
     // Don't bother if send buffer is too full to respond anyway
     if ((pfrom->fDisconnect || pfrom->fPauseSend) && pfrom->nBlocksToBeProcessed < 1)
@@ -3117,6 +3119,9 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, const std::atomic<bool>& i
 
     LOCK(cs_main);
     SendRejectsAndCheckIfBanned(pfrom, connman);
+
+        break; // REBTODO - Don't break if IBDnode
+    } // of while
 
     return fMoreWork;
 }
