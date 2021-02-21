@@ -2590,9 +2590,9 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 }
             }
 
-            LogPrint("block", "send more getheaders (%s%d) to end. peer=%d (startheight:%d)\n", strDesc, pindexContinue->nHeight, pfrom->id, pfrom->nStartingHeight);
-            connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexContinue), uint256()));
-            nodestate->fExpectingHeaders = true; // we are expecting again
+            //LogPrint("block", "send more getheaders (%s%d) to end. peer=%d (startheight:%d)\n", strDesc, pindexContinue->nHeight, pfrom->id, pfrom->nStartingHeight);
+            //connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::GETHEADERS, chainActive.GetLocator(pindexContinue), uint256()));
+            //nodestate->fExpectingHeaders = true; // we are expecting again
         }
 
         bool fCanDirectFetch = CanDirectFetch(chainparams.GetConsensus());
