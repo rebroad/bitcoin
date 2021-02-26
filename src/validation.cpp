@@ -659,7 +659,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
                 }
             }
             // Otherwise assume this might be an orphan tx for which we just haven't seen parents yet
-            return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent");
+            return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent"); // REBTODO
         }
     }
 
