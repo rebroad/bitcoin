@@ -732,6 +732,8 @@ private:
     friend ChainstateManager;
 };
 
+bool DisconnectTip(BlockValidationState& state, const CChainParams& chainparams, DisconnectedBlockTransactions* disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_mempool.cs);
+
 /** Mark a block as precious and reorganize.
  *
  * May not be called in a

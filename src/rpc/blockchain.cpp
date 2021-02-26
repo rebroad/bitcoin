@@ -1616,6 +1616,8 @@ static RPCHelpMan reconsiderblock()
 {
     uint256 hash(ParseHashV(request.params[0], "blockhash"));
 
+    BlockValidationState state;
+
     {
         LOCK(cs_main);
         CBlockIndex* pblockindex = LookupBlockIndex(hash);
@@ -1624,9 +1626,10 @@ static RPCHelpMan reconsiderblock()
         }
 
         ResetBlockFailureFlags(pblockindex);
+        //LOCK(m_mempool.cs);
+        DisconnectTip(state, Params(), nullptr);
     }
 
-    BlockValidationState state;
     ActivateBestChain(state, Params());
 
     if (!state.IsValid()) {

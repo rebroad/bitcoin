@@ -2507,7 +2507,8 @@ static void UpdateTip(CTxMemPool& mempool, const CBlockIndex* pindexNew, const C
 bool CChainState::DisconnectTip(BlockValidationState& state, const CChainParams& chainparams, DisconnectedBlockTransactions* disconnectpool)
 {
     AssertLockHeld(cs_main);
-    AssertLockHeld(m_mempool.cs);
+    if (disconnectpool)
+        AssertLockHeld(m_mempool.cs);
 
     CBlockIndex *pindexDelete = m_chain.Tip();
     assert(pindexDelete);
@@ -2523,6 +2524,8 @@ bool CChainState::DisconnectTip(BlockValidationState& state, const CChainParams&
         assert(view.GetBestBlock() == pindexDelete->GetBlockHash());
         if (DisconnectBlock(block, pindexDelete, view) != DISCONNECT_OK)
             return error("DisconnectTip(): DisconnectBlock %s failed", pindexDelete->GetBlockHash().ToString());
+        else
+            LogPrintf("%s: DisconnectBlock %s successful\n", pindexDelete->GetBlockHash().ToString());
         bool flushed = view.Flush();
         assert(flushed);
     }
@@ -2551,6 +2554,10 @@ bool CChainState::DisconnectTip(BlockValidationState& state, const CChainParams&
     // 0-confirmed or conflicted:
     GetMainSignals().BlockDisconnected(pblock, pindexDelete);
     return true;
+}
+
+bool DisconnectTip(BlockValidationState& state, const CChainParams& chainparams, DisconnectedBlockTransactions* disconnectpool) {
+    return ::ChainstateActive().DisconnectTip(state, chainparams, disconnectpool);
 }
 
 static int64_t nTimeReadFromDisk = 0;
