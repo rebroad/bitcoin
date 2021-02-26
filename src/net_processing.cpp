@@ -4502,6 +4502,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         // Responses to MEMPOOL requests bypass the m_recently_announced_invs filter.
                         vInv.push_back(inv);
                         if (vInv.size() == MAX_INV_SZ) {
+                            if (m_chainman.ActiveChainstate().IsInitialBlockDownload())
+                                LogPrintf("Send %d tx invs to peer=%d\n", MAX_INV_SZ, pto->GetId());
                             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
                             vInv.clear();
                         }
@@ -4574,6 +4576,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                             }
                         }
                         if (vInv.size() == MAX_INV_SZ) {
+                            if (m_chainman.ActiveChainstate().IsInitialBlockDownload())
+                                LogPrintf("Send %d tx invs to peer=%d\n", MAX_INV_SZ, pto->GetId());
                             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
                             vInv.clear();
                         }
@@ -4589,8 +4593,11 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     }
                 }
         }
-        if (!vInv.empty())
+        if (!vInv.empty()) {
+            if (m_chainman.ActiveChainstate().IsInitialBlockDownload())
+                LogPrintf("Send %d tx invs to peer=%d\n", vInv.size(), pto->GetId());
             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
+        }
 
         // Detect whether we're stalling
         if (state.m_stalling_since.count() && state.m_stalling_since < current_time - BLOCK_STALLING_TIMEOUT) {
