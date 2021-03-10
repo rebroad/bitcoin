@@ -150,6 +150,10 @@ namespace BCLog {
 BCLog::Logger& LogInstance();
 
 /** Return true if log accepts specified category */
+static inline bool LogAcceptCategory(const char* category)
+{
+    return true; // REBTODO
+}
 static inline bool LogAcceptCategory(BCLog::LogFlags category)
 {
     return LogInstance().WillLogCategory(category);
