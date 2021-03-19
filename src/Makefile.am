@@ -236,6 +236,7 @@ BITCOIN_CORE_H = \
   txdb.h \
   txmempool.h \
   txorphanage.h \
+  txreconciliation.h \
   txrequest.h \
   undo.h \
   util/asmap.h \
@@ -380,6 +381,7 @@ libbitcoin_node_a_SOURCES = \
   txdb.cpp \
   txmempool.cpp \
   txorphanage.cpp \
+  txreconciliation.cpp \
   txrequest.cpp \
   validation.cpp \
   validationinterface.cpp \
