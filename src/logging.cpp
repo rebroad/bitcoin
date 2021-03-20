@@ -204,7 +204,7 @@ std::string BCLog::Logger::LogTimestampStr(const std::string& str)
         strStamped = FormatISO8601DateTime(nTimeMicros/1000000);
         if (m_log_time_micros) {
             strStamped.pop_back();
-            strStamped += strprintf(".%06dZ", nTimeMicros%1000000);
+            strStamped += strprintf(".%03d", (nTimeMicros/1000)%1000);
         }
         std::chrono::seconds mocktime = GetMockTime();
         if (mocktime > 0s) {
