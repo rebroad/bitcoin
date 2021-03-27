@@ -60,8 +60,8 @@ private:
     QGraphicsTextItem *txCountValueItem;
     QGraphicsTextItem *minFeeValueItem;
 
-    ClickableTextItem *last10MinLabel;
     ClickableTextItem *lastHourLabel;
+    ClickableTextItem *last3HoursLabel;
     ClickableTextItem *lastDayLabel;
     ClickableTextItem *allDataLabel;
 

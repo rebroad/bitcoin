@@ -15,8 +15,8 @@ static const char *LABEL_FONT = "Arial";
 static int LABEL_TITLE_SIZE = 22;
 static int LABEL_KV_SIZE = 12;
 
-static const int TEN_MINS = 600;
 static const int ONE_HOUR = 3600;
+static const int THREE_HOURS = ONE_HOUR*3;
 static const int ONE_DAY = ONE_HOUR*24;
 
 static const int LABEL_LEFT_SIZE = 30;
@@ -46,7 +46,7 @@ QWidget(parent, Qt::Window),
 clientModel(0),
 titleItem(0),
 scene(0),
-timeFilter(TEN_MINS),
+timeFilter(ONE_HOUR),
 ui(new Ui::MempoolStats)
 {
     ui->setupUi(this);
@@ -123,14 +123,14 @@ void MempoolStats::drawChart()
         noDataItem->setFont(QFont(LABEL_FONT, LABEL_TITLE_SIZE, QFont::Light));
         noDataItem->setDefaultTextColor(QColor(100,100,100, 200));
 
-        last10MinLabel = new ClickableTextItem(); last10MinLabel->setPlainText(tr("Last 10 min"));
-        scene->addItem(last10MinLabel);
-        connect(last10MinLabel, SIGNAL(objectClicked(QGraphicsItem*)), this, SLOT(objectClicked(QGraphicsItem*)));
-        last10MinLabel->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
         lastHourLabel = new ClickableTextItem(); lastHourLabel->setPlainText(tr("Last Hour"));
         scene->addItem(lastHourLabel);
         connect(lastHourLabel, SIGNAL(objectClicked(QGraphicsItem*)), this, SLOT(objectClicked(QGraphicsItem*)));
         lastHourLabel->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
+        last3HoursLabel = new ClickableTextItem(); last3HoursLabel->setPlainText(tr("Last 3 Hours"));
+        scene->addItem(last3HoursLabel);
+        connect(last3HoursLabel, SIGNAL(objectClicked(QGraphicsItem*)), this, SLOT(objectClicked(QGraphicsItem*)));
+        last3HoursLabel->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
         lastDayLabel = new ClickableTextItem(); lastDayLabel->setPlainText(tr("Last Day"));
         scene->addItem(lastDayLabel);
         connect(lastDayLabel, SIGNAL(objectClicked(QGraphicsItem*)), this, SLOT(objectClicked(QGraphicsItem*)));
@@ -141,8 +141,8 @@ void MempoolStats::drawChart()
         allDataLabel->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
     }
 
-    last10MinLabel->setEnabled((timeFilter == TEN_MINS));
     lastHourLabel->setEnabled((timeFilter == ONE_HOUR));
+    last3HoursLabel->setEnabled((timeFilter == THREE_HOURS));
     lastDayLabel->setEnabled((timeFilter == ONE_DAY));
     allDataLabel->setEnabled((timeFilter == 0));
 
@@ -198,11 +198,11 @@ void MempoolStats::drawChart()
 
     // set the position of the filter icons
     static const int filterBottomPadding = 30;
-    int totalWidth = last10MinLabel->boundingRect().width()+lastHourLabel->boundingRect().width()+lastDayLabel->boundingRect().width()+allDataLabel->boundingRect().width()+30;
-    last10MinLabel->setPos((width()-totalWidth)/2.0,height()-filterBottomPadding);
-    lastHourLabel->setPos((width()-totalWidth)/2.0+last10MinLabel->boundingRect().width()+10,height()-filterBottomPadding);
-    lastDayLabel->setPos((width()-totalWidth)/2.0+last10MinLabel->boundingRect().width()+lastHourLabel->boundingRect().width()+20,height()-filterBottomPadding);
-    allDataLabel->setPos((width()-totalWidth)/2.0+last10MinLabel->boundingRect().width()+lastHourLabel->boundingRect().width()+lastDayLabel->boundingRect().width()+30,height()-filterBottomPadding);
+    int totalWidth = lastHourLabel->boundingRect().width()+last3HoursLabel->boundingRect().width()+lastDayLabel->boundingRect().width()+allDataLabel->boundingRect().width()+30;
+    lastHourLabel->setPos((width()-totalWidth)/2.0,height()-filterBottomPadding);
+    last3HoursLabel->setPos((width()-totalWidth)/2.0+lastHourLabel->boundingRect().width()+10,height()-filterBottomPadding);
+    lastDayLabel->setPos((width()-totalWidth)/2.0+lastHourLabel->boundingRect().width()+last3HoursLabel->boundingRect().width()+20,height()-filterBottomPadding);
+    allDataLabel->setPos((width()-totalWidth)/2.0+lastHourLabel->boundingRect().width()+last3HoursLabel->boundingRect().width()+lastDayLabel->boundingRect().width()+30,height()-filterBottomPadding);
 
     // don't paint the grind/graph if there are no or only a single sample
     if (vSamples.size() < 2)
@@ -375,11 +375,11 @@ void MempoolStats::showEvent(QShowEvent *event)
 
 void MempoolStats::objectClicked(QGraphicsItem *item)
 {
-    if (item == last10MinLabel)
-        timeFilter = 600;
-
     if (item == lastHourLabel)
         timeFilter = 3600;
+
+    if (item == last3HoursLabel)
+        timeFilter = 3*3600;
 
     if (item == lastDayLabel)
         timeFilter = 24*3600;
@@ -407,8 +407,8 @@ MempoolStats::~MempoolStats()
         delete dynMemUsageValueItem;
         delete txCountValueItem;
         delete minFeeValueItem;
-        delete last10MinLabel;
         delete lastHourLabel;
+        delete last3HoursLabel;
         delete lastDayLabel;
         delete allDataLabel;
         delete txCountSwitch;
