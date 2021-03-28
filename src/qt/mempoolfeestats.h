@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QT_MEMPOOLSTATS_H
-#define BITCOIN_QT_MEMPOOLSTATS_H
+#ifndef BITCOIN_QT_MEMPOOLFEESTATS_H
+#define BITCOIN_QT_MEMPOOLFEESTATS_H
 
 #include <QEvent>
 #include <QWidget>
@@ -15,7 +15,7 @@
 
 class ClientModel;
 
-class ClickableTextItem : public QObject, public QGraphicsSimpleTextItem
+class FeeClickableTextItem : public QObject, public QGraphicsSimpleTextItem
 {
     Q_OBJECT
 protected:
@@ -34,12 +34,12 @@ Q_SIGNALS:
 };
 
 
-class MempoolStats : public QWidget
+class MempoolFeeStats : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit MempoolStats(QWidget *parent = nullptr);
+    explicit MempoolFeeStats(QWidget *parent = nullptr);
     void setClientModel(ClientModel *model);
 
 public Q_SLOTS:
@@ -57,4 +57,4 @@ private:
     int m_selected_range = -1;
 };
 
-#endif // BITCOIN_QT_MEMPOOLSTATS_H
+#endif // BITCOIN_QT_MEMPOOLFEESTATS_H

@@ -925,7 +925,7 @@
        </size>
       </property>
       <attribute name="title">
-       <string>Mempool</string>
+       <string>MempoolFee</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_9" stretch="0">
        <property name="leftMargin">
@@ -941,7 +941,7 @@
         <number>0</number>
        </property>
        <item>
-        <widget class="MempoolStats" name="mempool_graph" native="true">
+        <widget class="MempoolFeeStats" name="mempool_graph" native="true">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
            <horstretch>0</horstretch>
@@ -1575,9 +1575,9 @@
    </slots>
   </customwidget>
   <customwidget>
-   <class>MempoolStats</class>
+   <class>MempoolFeeStats</class>
    <extends>QWidget</extends>
-   <header>qt/mempoolstats.h</header>
+   <header>qt/mempoolfeestats.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

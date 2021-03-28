@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qt/mempoolstats.h>
-#include <qt/forms/ui_mempoolstats.h>
+#include <qt/mempoolfeestats.h>
+#include <qt/forms/ui_mempoolfeestats.h>
 
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
@@ -20,7 +20,7 @@ static const int GRAPH_PADDING_TOP = 10;
 static const int GRAPH_PADDING_TOP_LABEL = 10;
 static const int GRAPH_PADDING_BOTTOM = 50;
 
-void ClickableTextItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+void FeeClickableTextItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     Q_EMIT objectClicked(this);
 }
@@ -30,7 +30,7 @@ void ClickableRectItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     Q_EMIT objectClicked(this);
 }
 
-MempoolStats::MempoolStats(QWidget *parent) :
+MempoolFeeStats::MempoolFeeStats(QWidget *parent) :
 QWidget(parent)
 {
     if (parent) {
@@ -52,11 +52,11 @@ QWidget(parent)
         drawChart();
 }
 
-void MempoolStats::setClientModel(ClientModel *model)
+void MempoolFeeStats::setClientModel(ClientModel *model)
 {
     m_clientmodel = model;
     if (model) {
-        connect(model, &ClientModel::mempoolFeeHistChanged, this, &MempoolStats::drawChart);
+        connect(model, &ClientModel::mempoolFeeHistChanged, this, &MempoolFeeStats::drawChart);
         drawChart();
     }
 }
@@ -69,7 +69,7 @@ const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac")
                                             QColor("#800000"), QColor("#a00000"), QColor("#c00000"), QColor("#e00000"), QColor("#e02020"), QColor("#e04040"), QColor("#e06060"),
                                             QColor("#800080"), QColor("#ac00ac"), QColor("#d800d8"), QColor("#ff00ff"), QColor("#ff2cff"), QColor("#ff58ff"), QColor("#ff80ff"),
                                             QColor("#000000") };
-void MempoolStats::drawChart()
+void MempoolFeeStats::drawChart()
 {
     if (!m_clientmodel)
         return;
@@ -201,7 +201,7 @@ void MempoolStats::drawChart()
             });
             m_scene->addItem(fee_rect);
 
-            ClickableTextItem *fee_text = new ClickableTextItem();
+            FeeClickableTextItem *fee_text = new FeeClickableTextItem();
             fee_text->setText(QString::number(list_entry.fee_from)+"-"+QString::number(list_entry.fee_to));
             if (i+1 == static_cast<int>(m_clientmodel->m_mempool_feehist[0].second.size())) {
                 fee_text->setText(QString::number(list_entry.fee_from)+"+");
@@ -209,7 +209,7 @@ void MempoolStats::drawChart()
             fee_text->setFont(gridFont);
             fee_text->setPos(4+c_w+2, c_y);
             m_scene->addItem(fee_text);
-            connect(fee_text, &ClickableTextItem::objectClicked, [&fee_rect](QGraphicsItem*item) {
+            connect(fee_text, &FeeClickableTextItem::objectClicked, [&fee_rect](QGraphicsItem*item) {
                 fee_rect->objectClicked(item);
             });
 
@@ -275,7 +275,7 @@ void MempoolStats::drawChart()
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column
 // sizes as the tables width is proportional to the dialogs width.
-void MempoolStats::resizeEvent(QResizeEvent *event)
+void MempoolFeeStats::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     m_gfx_view->resize(size());
@@ -283,7 +283,7 @@ void MempoolStats::resizeEvent(QResizeEvent *event)
     drawChart();
 }
 
-void MempoolStats::showEvent(QShowEvent *event)
+void MempoolFeeStats::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
     if (m_clientmodel)
