@@ -197,8 +197,8 @@ public:
          /* TODO: define log scale formular for dynamically creating the
           * feelimits but with the property of not constantly changing
           * (and thus screw up client implementations) */
-         static const std::vector<CAmount> feelimits{1, 2, 3, 4, 5, 6, 7, 8, 10,
-          12, 14, 17, 20, 25, 30, 40, 50, 60, 70, 80, 100,
+         static const std::vector<CAmount> feelimits{0, 1, 2, 3, 4, 5, 6, 7, 8,
+          10, 12, 14, 17, 20, 25, 30, 40, 50, 60, 70, 80, 100,
           120, 140, 170, 200, 250, 300, 400, 500, 600, 700, 800, 1000,
           1200, 1400, 1700, 2000, 2500, 3000, 4000, 5000, 6000, 7000, 8000, 10000};
 
@@ -209,11 +209,13 @@ public:
          std::vector<uint64_t> sizes(feelimits.size(), 0);
          std::vector<uint64_t> count(feelimits.size(), 0);
          std::vector<uint64_t> fees(feelimits.size(), 0);
-
+         size_t totalmemusage = 0;
          {
              LOCK(m_context->mempool->cs);
              for (const CTxMemPoolEntry& e : m_context->mempool->mapTx) {
                  int size = (int)e.GetTxSize();
+		 size_t memusage = e.DynamicMemoryUsage();
+                 totalmemusage += memusage;
                  CAmount fee = e.GetFee();
                  uint64_t asize = e.GetSizeWithAncestors();
                  CAmount afees = e.GetModFeesWithAncestors();
@@ -229,7 +231,7 @@ public:
                  // distribute feerates into feelimits
                  for (size_t i = 0; i < feelimits.size(); i++) {
                      if (feeperbyte >= feelimits[i] && (i == feelimits.size() - 1 || feeperbyte < feelimits[i + 1])) {
-                         sizes[i] += size;
+                         sizes[i] += memusage;
                          count[i]++;
                          fees[i] += fee;
                          break;
@@ -237,13 +239,28 @@ public:
                  }
              }
          }
+	 double newratio = totalmemusage ? 1.0 * getMempoolDynamicUsage() / totalmemusage : 0;
+         static size_t oldtotalmemusage = 0;
+         static double oldratio = newratio;
+         static unsigned int adjusting = 0;
+         double ratio;
+         if (adjusting || oldtotalmemusage > totalmemusage) {
+             if (oldtotalmemusage > totalmemusage) adjusting = 30;
+             ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
+             adjusting--;
+         } else
+             ratio = newratio;
+         oldtotalmemusage = totalmemusage;
+         oldratio = ratio;
+         for (size_t i = 0; i < feelimits.size(); i++)
+             sizes[i] = sizes[i] * ratio;
          interfaces::mempool_feehistogram feeinfo;
          for (size_t i = 0; i < feelimits.size(); i++) {
              feeinfo.push_back({sizes[i], fees[i], count[i], feelimits[i], (i == feelimits.size() - 1 ? std::numeric_limits<int64_t>::max() : feelimits[i + 1])});
          }
 
          return feeinfo;
-     }
+    }
 
     bool getHeaderTip(int& height, int64_t& block_time) override
     {
