@@ -54,6 +54,16 @@ struct update_ancestor_state
         int64_t modifySigOpsCost;
 };
 
+struct update_mem_delta
+{
+    explicit update_mem_delta(int64_t _memDelta) : memDelta(_memDelta) { }
+
+    void operator() (CTxMemPoolEntry &e) { e.UpdateMemDelta(memDelta); }
+
+private:
+    int64_t memDelta;
+};
+
 struct update_fee_delta
 {
     explicit update_fee_delta(int64_t _feeDelta) : feeDelta(_feeDelta) { }
@@ -98,6 +108,7 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& tx, CAmount fee,
       nFee{fee},
       nTxWeight(GetTransactionWeight(*tx)),
       nUsageSize{RecursiveDynamicUsage(tx)},
+      nMemDelta{0},
       nTime{time},
       entryHeight{entry_height},
       spendsCoinbase{spends_coinbase},
@@ -108,6 +119,11 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& tx, CAmount fee,
       nSizeWithAncestors{GetTxSize()},
       nModFeesWithAncestors{nFee},
       nSigOpCostWithAncestors{sigOpCost} {}
+
+void CTxMemPoolEntry::UpdateMemDelta(int64_t memDelta)
+{
+    nMemDelta = memDelta;
+}
 
 void CTxMemPoolEntry::UpdateFeeDelta(int64_t newFeeDelta)
 {
@@ -485,6 +501,7 @@ void CTxMemPool::AddTransactionsUpdated(unsigned int n)
 
 void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAncestors, bool validFeeEstimate)
 {
+    int nMemUsageBefore = DynamicMemoryUsage();
     // Add to memory pool without checking anything.
     // Used by AcceptToMemoryPool(), which DOES do
     // all the appropriate checks.
@@ -533,6 +550,7 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
 
     vTxHashes.emplace_back(tx.GetWitnessHash(), newit);
     newit->vTxHashesIdx = vTxHashes.size() - 1;
+    mapTx.modify(newit, update_mem_delta(DynamicMemoryUsage() - nMemUsageBefore));
 }
 
 void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)

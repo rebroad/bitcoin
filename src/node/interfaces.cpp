@@ -223,13 +223,22 @@ public:
           * ... txns (count)
           * ... cumulated fees */
          std::vector<uint64_t> sizes(feelimits.size(), 0);
+         static uint64_t oldsmallest = 0;
+         static int oldi = 0;
+         uint64_t newsmallest = 0;
+         int newi = 0;
          std::vector<uint64_t> count(feelimits.size(), 0);
          std::vector<uint64_t> fees(feelimits.size(), 0);
-
+         size_t totalmemusage = 0;
+         size_t totalmemdelta = 0;
          {
              LOCK(m_context->mempool->cs);
              for (const CTxMemPoolEntry& e : m_context->mempool->mapTx) {
                  int size = (int)e.GetTxSize();
+                 size_t memusage = e.DynamicMemoryUsage();
+                 size_t memdelta = e.MemoryDelta();
+                 totalmemusage += memusage;
+                 totalmemdelta += memdelta;
                  CAmount fee = e.GetFee();
                  uint64_t asize = e.GetSizeWithAncestors();
                  CAmount afees = e.GetModFeesWithAncestors();
@@ -245,21 +254,56 @@ public:
                  // distribute feerates into feelimits
                  for (size_t i = 0; i < feelimits.size(); i++) {
                      if (feeperbyte >= feelimits[i] && (i == feelimits.size() - 1 || feeperbyte < feelimits[i + 1])) {
-                         sizes[i] += size;
+                         sizes[i] += memdelta;
                          count[i]++;
                          fees[i] += fee;
                          break;
                      }
                  }
+             } // for (const CTxMemPoolEntry& e : m_context->mempool->mapTx)
+         } // LOCK(m_context->mempool->cs)
+
+         for (size_t i = 0; i < feelimits.size(); i++) {
+             if (sizes[i]) {
+                 newsmallest = sizes[i];
+                 newi = i;
+                 break;
              }
          }
+         size_t memusage = getMempoolDynamicUsage();
+         double newratio = totalmemdelta ? 1.0 * memusage / totalmemdelta : 0;
+         static size_t oldtotalmemusage = 0;
+         static size_t oldtotalmemdelta = 0;
+         static double oldratio = newratio;
+         static int adjusting = 0;
+         double ratio;
+         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && labs((long)oldsmallest - (long)newsmallest) > labs((long)totalmemdelta - (long)oldtotalmemdelta)))
+             adjusting = 0;
+         else if (oldtotalmemdelta > totalmemdelta)
+             adjusting = 30;
+         oldsmallest = newsmallest;
+         oldi = newi;
+         ratio = (oldratio * (adjusting) + newratio) / (adjusting + 1);
+         if (totalmemdelta >= oldtotalmemdelta && ratio * totalmemdelta < oldratio * oldtotalmemdelta)
+             ratio = oldratio; // Don't let the graph go down unless totalmemdelta has gone down
+         size_t maxmempool = gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
+         int utilized = 100 * ratio * totalmemdelta / maxmempool;
+         if (adjusting > 0) {
+             adjusting--;
+             if (utilized >= 100) ratio = newratio;
+         }
+         oldtotalmemusage = totalmemusage;
+         oldtotalmemdelta = totalmemdelta;
+         oldratio = ratio;
+         for (size_t i = 0; i < feelimits.size(); i++)
+             sizes[i] = sizes[i] * ratio;
          interfaces::mempool_feehistogram feeinfo;
          for (size_t i = 0; i < feelimits.size(); i++) {
              feeinfo.push_back({sizes[i], fees[i], count[i], feelimits[i], (i == feelimits.size() - 1 ? std::numeric_limits<int64_t>::max() : feelimits[i + 1])});
          }
 
          return feeinfo;
-     }
+    }
 
     bool getHeaderTip(int& height, int64_t& block_time) override
     {
