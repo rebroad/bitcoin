@@ -53,8 +53,10 @@ private:
 
     virtual void resizeEvent(QResizeEvent* event) override;
     virtual void showEvent(QShowEvent* event) override;
+    virtual void mousePressEvent(QMouseEvent *event) override;
 
     int m_selected_range = -1;
+    bool fCount = true;
 };
 
 #endif // BITCOIN_QT_MEMPOOLSTATS_H
