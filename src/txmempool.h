@@ -485,8 +485,9 @@ protected:
     CAmount m_total_fee GUARDED_BY(cs);       //!< sum of all mempool tx's fees (NOT modified fee)
     uint64_t cachedInnerUsage GUARDED_BY(cs); //!< sum of dynamic memory usage of all the map elements (NOT the maps themselves)
 
-    mutable int64_t lastRollingFeeUpdate GUARDED_BY(cs);
+    mutable int64_t lastRollingFeeUpdate GUARDED_BY(cs); //!< the last time rollingMinimumFeeRate was updated
     mutable double rollingMinimumFeeRate GUARDED_BY(cs); //!< minimum fee to get into the pool, decreases exponentially
+    mutable double bumpedMinimumFeeRate GUARDED_BY(cs); //!< The highest the fee rate got to last time mempool was full
     mutable Epoch m_epoch GUARDED_BY(cs);
 
     // In-memory counter for external mempool tracking purposes.
@@ -499,9 +500,6 @@ protected:
     bool m_is_loaded GUARDED_BY(cs){false};
 
 public:
-
-    static const int ROLLING_FEE_HALFLIFE = 60 * 60 * 12; // public only for testing
-
     typedef boost::multi_index_container<
         CTxMemPoolEntry,
         boost::multi_index::indexed_by<
