@@ -599,6 +599,7 @@ void CTxMemPool::_clear()
     lastRollingFeeUpdate = GetTime();
     blockSinceLastRollingFeeBump = false;
     rollingMinimumFeeRate = 0;
+    bumpedMinimumFeeRate = 0;
     ++nTransactionsUpdated;
 }
 
@@ -999,24 +1000,21 @@ void CTxMemPool::UpdateParent(txiter entry, txiter parent, bool add)
 
 CFeeRate CTxMemPool::GetMinFee(size_t sizelimit) const {
     LOCK(cs);
-    if (!blockSinceLastRollingFeeBump || rollingMinimumFeeRate == 0)
+    if (!blockSinceLastRollingFeeBump || rollingMinimumFeeRate == 0) {
+        bumpedMinimumFeeRate = rollingMinimumFeeRate;
         return CFeeRate(llround(rollingMinimumFeeRate));
+    }
 
     int64_t time = GetTime();
-    if (time > lastRollingFeeUpdate + 10) {
-        double halflife = ROLLING_FEE_HALFLIFE;
-        if (DynamicMemoryUsage() < sizelimit / 4)
-            halflife /= 4;
-        else if (DynamicMemoryUsage() < sizelimit / 2)
-            halflife /= 2;
-
-        rollingMinimumFeeRate = rollingMinimumFeeRate / pow(2.0, (time - lastRollingFeeUpdate) / halflife);
-        lastRollingFeeUpdate = time;
-
-        if (rollingMinimumFeeRate < (double)incrementalRelayFee.GetFeePerK() / 2) {
-            rollingMinimumFeeRate = 0;
-            return CFeeRate(0);
+    if (time >= lastRollingFeeUpdate + 10) {
+        double newrolling = bumpedMinimumFeeRate * ((1.0 * DynamicMemoryUsage() / sizelimit) - 0.5) * 2.2;
+        if (newrolling < rollingMinimumFeeRate) {
+            double fraction = pow(2.0, (time - lastRollingFeeUpdate) / 300.0);
+            rollingMinimumFeeRate = rollingMinimumFeeRate / fraction + newrolling * ((fraction - 1) / fraction);
+            if (rollingMinimumFeeRate < 0)
+                rollingMinimumFeeRate = 0;
         }
+        lastRollingFeeUpdate = time;
     }
     return std::max(CFeeRate(llround(rollingMinimumFeeRate)), incrementalRelayFee);
 }
