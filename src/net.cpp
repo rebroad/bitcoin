@@ -526,7 +526,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
 void CNode::CloseSocketDisconnect()
 {
     fDisconnect = true;
-    LOCK(cs_hSocket);
+    LOCK(m_sock_mutex);
     if (m_sock) {
         LogPrint(BCLog::NET, "disconnecting peer=%d\n", id);
         m_sock.reset();
@@ -823,7 +823,7 @@ size_t CConnman::SocketSendData(CNode& node) const
         assert(data.size() > node.nSendOffset);
         int nBytes = 0;
         {
-            LOCK(node.cs_hSocket);
+            LOCK(node.m_sock_mutex);
             if (!node.m_sock) {
                 break;
             }
@@ -1416,7 +1416,7 @@ bool CConnman::GenerateSelectSet(const std::vector<CNode*>& nodes,
             select_send = !pnode->vSendMsg.empty();
         }
 
-        LOCK(pnode->cs_hSocket);
+        LOCK(pnode->m_sock_mutex);
         if (!pnode->m_sock) {
             continue;
         }
@@ -1801,7 +1801,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
         bool sendSet = false;
         int errorSet = 0;
         {
-            LOCK(pnode->cs_hSocket);
+            LOCK(pnode->m_sock_mutex);
             if (!pnode->m_sock) {
                 continue;
             }
@@ -1815,7 +1815,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             uint8_t pchBuf[0x10000];
             int nBytes = 0;
             {
-                LOCK(pnode->cs_hSocket);
+                LOCK(pnode->m_sock_mutex);
                 if (!pnode->m_sock) {
                     continue;
                 }
