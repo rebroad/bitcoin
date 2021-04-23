@@ -2,14 +2,62 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-# Pattern rule to print variables, e.g. make print-top_srcdir
-print-%:
-	@echo '$*'='$($*)'
+lib_LTLIBRARIES = libsecp256k1.la
+include_HEADERS = include/secp256k1.h
+include_HEADERS += include/secp256k1_preallocated.h
+noinst_HEADERS =
+noinst_HEADERS += src/scalar.h
+noinst_HEADERS += src/scalar_4x64.h
+noinst_HEADERS += src/scalar_8x32.h
+noinst_HEADERS += src/scalar_low.h
+noinst_HEADERS += src/scalar_impl.h
+noinst_HEADERS += src/scalar_4x64_impl.h
+noinst_HEADERS += src/scalar_8x32_impl.h
+noinst_HEADERS += src/scalar_low_impl.h
+noinst_HEADERS += src/group.h
+noinst_HEADERS += src/group_impl.h
+noinst_HEADERS += src/ecdsa.h
+noinst_HEADERS += src/ecdsa_impl.h
+noinst_HEADERS += src/eckey.h
+noinst_HEADERS += src/eckey_impl.h
+noinst_HEADERS += src/ecmult.h
+noinst_HEADERS += src/ecmult_impl.h
+noinst_HEADERS += src/ecmult_const.h
+noinst_HEADERS += src/ecmult_const_impl.h
+noinst_HEADERS += src/ecmult_gen.h
+noinst_HEADERS += src/ecmult_gen_impl.h
+noinst_HEADERS += src/field_10x26.h
+noinst_HEADERS += src/field_10x26_impl.h
+noinst_HEADERS += src/field_5x52.h
+noinst_HEADERS += src/field_5x52_impl.h
+noinst_HEADERS += src/field_5x52_int128_impl.h
+noinst_HEADERS += src/field_5x52_asm_impl.h
+noinst_HEADERS += src/modinv32.h
+noinst_HEADERS += src/modinv32_impl.h
+noinst_HEADERS += src/modinv64.h
+noinst_HEADERS += src/modinv64_impl.h
+noinst_HEADERS += src/assumptions.h
+noinst_HEADERS += src/util.h
+noinst_HEADERS += src/scratch.h
+noinst_HEADERS += src/scratch_impl.h
+noinst_HEADERS += src/selftest.h
+noinst_HEADERS += src/testrand.h
+noinst_HEADERS += src/testrand_impl.h
+noinst_HEADERS += src/hash.h
+noinst_HEADERS += src/hash_impl.h
+noinst_HEADERS += src/field.h
+noinst_HEADERS += src/field_impl.h
+noinst_HEADERS += src/bench.h
+noinst_HEADERS += contrib/lax_der_parsing.h
+noinst_HEADERS += contrib/lax_der_parsing.c
+noinst_HEADERS += contrib/lax_der_privatekey_parsing.h
+noinst_HEADERS += contrib/lax_der_privatekey_parsing.c
 
-ACLOCAL_AMFLAGS = -I build-aux/m4
-SUBDIRS = src
-if ENABLE_MAN
-SUBDIRS += doc/man
+if USE_EXTERNAL_ASM
+COMMON_LIB = libsecp256k1_common.la
+noinst_LTLIBRARIES = $(COMMON_LIB)
+else
+COMMON_LIB =
 endif
 .PHONY: deploy FORCE
 .INTERMEDIATE: $(OSX_TEMP_ISO) $(COVERAGE_INFO)
