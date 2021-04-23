@@ -75,7 +75,7 @@ public Q_SLOTS:
 
 private:
     interfaces::Node& m_node;
-    const QStringList columns{tr("Peer Id"), tr("Address"), tr("Type"), tr("Network"), tr("Ping"), tr("Sent"), tr("Recv"), tr("TxRecv"), tr("User Agent")};
+    const QStringList columns{tr("Peer"), tr("Address"), tr("Type"), tr("Network"), tr("Ping"), tr("Sent"), tr("Recv"), tr("TxRecv"), tr("User Agent")};
     std::unique_ptr<PeerTablePriv> priv;
     QTimer *timer;
 };
