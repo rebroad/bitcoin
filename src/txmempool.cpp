@@ -587,7 +587,6 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigne
         ClearPrioritisation(tx->GetHash());
     }
     lastRollingFeeUpdate = GetTime();
-    blockSinceLastRollingFeeBump = true;
 }
 
 void CTxMemPool::_clear()
@@ -597,7 +596,6 @@ void CTxMemPool::_clear()
     totalTxSize = 0;
     cachedInnerUsage = 0;
     lastRollingFeeUpdate = GetTime();
-    blockSinceLastRollingFeeBump = false;
     rollingMinimumFeeRate = 0;
     bumpedMinimumFeeRate = 0;
     ++nTransactionsUpdated;
@@ -1000,8 +998,7 @@ void CTxMemPool::UpdateParent(txiter entry, txiter parent, bool add)
 
 CFeeRate CTxMemPool::GetMinFee(size_t sizelimit) const {
     LOCK(cs);
-    if (!blockSinceLastRollingFeeBump || rollingMinimumFeeRate == 0) {
-        bumpedMinimumFeeRate = rollingMinimumFeeRate;
+    if (rollingMinimumFeeRate == 0) {
         return CFeeRate(llround(rollingMinimumFeeRate));
     }
 
@@ -1016,14 +1013,14 @@ CFeeRate CTxMemPool::GetMinFee(size_t sizelimit) const {
         }
         lastRollingFeeUpdate = time;
     }
-    return std::max(CFeeRate(llround(rollingMinimumFeeRate)), incrementalRelayFee);
+    return CFeeRate(llround(rollingMinimumFeeRate));
 }
 
 void CTxMemPool::trackPackageRemoved(const CFeeRate& rate) {
     AssertLockHeld(cs);
     if (rate.GetFeePerK() > rollingMinimumFeeRate) {
         rollingMinimumFeeRate = rate.GetFeePerK();
-        blockSinceLastRollingFeeBump = false;
+        bumpedMinimumFeeRate = rollingMinimumFeeRate;
     }
 }
 

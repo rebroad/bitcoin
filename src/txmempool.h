@@ -496,7 +496,6 @@ private:
     uint64_t cachedInnerUsage; //!< sum of dynamic memory usage of all the map elements (NOT the maps themselves)
 
     mutable int64_t lastRollingFeeUpdate;
-    mutable bool blockSinceLastRollingFeeBump;
     mutable double rollingMinimumFeeRate; //!< minimum fee to get into the pool, decreases exponentially
     mutable double bumpedMinimumFeeRate; //!< The highest the fee rate got to last time mempool was full
     mutable uint64_t m_epoch;
