@@ -423,6 +423,17 @@ std::string FormatParagraph(const std::string& in, size_t width, size_t indent)
     return out.str();
 }
 
+std::string strAge(const int64_t nAge) {
+    if (abs(nAge) < 360)
+        return strprintf("%ds", nAge);
+    else if (abs(nAge) < 3600)
+        return strprintf("%dm", nAge/60);
+    else if (abs(nAge) < 86400)
+        return strprintf("%.1fh", nAge/3600.0);
+    else
+        return strprintf("%.1fd", nAge/86400.0);
+}
+
 int64_t atoi64(const std::string& str)
 {
 #ifdef _MSC_VER

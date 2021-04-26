@@ -68,6 +68,7 @@ std::string EncodeBase32(Span<const unsigned char> input, bool pad = true);
 std::string EncodeBase32(const std::string& str, bool pad = true);
 
 void SplitHostPort(std::string in, int& portOut, std::string& hostOut);
+std::string strAge(const int64_t nAge);
 int64_t atoi64(const std::string& str);
 int atoi(const std::string& str);
 
