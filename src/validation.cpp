@@ -4238,6 +4238,11 @@ void CChainState::LoadMempool(const ArgsManager& args)
     m_mempool.SetIsLoaded(!ShutdownRequested());
 }
 
+void CChainState::LoadMempoolCache(const ArgsManager& args)
+{
+    ::LoadMempoolCache(m_mempool);
+}
+
 bool CChainState::LoadChainTip(const CChainParams& chainparams)
 {
     AssertLockHeld(cs_main);
@@ -5147,6 +5152,11 @@ bool LoadMempool(CTxMemPool& pool)
 
     LogPrintf("Imported mempool transactions from disk: %i succeeded, %i failed, %i expired, %i already there, %i waiting for initial broadcast\n", count, failed, expired, already_there, unbroadcast);
     return true;
+}
+
+bool LoadMempoolCache(CTxMemPool& pool)
+{
+    return true; // REBTODO
 }
 
 bool DumpMempool(const CTxMemPool& pool)

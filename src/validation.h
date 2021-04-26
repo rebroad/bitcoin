@@ -700,6 +700,9 @@ public:
     /** Load the persisted mempool from disk */
     void LoadMempool(const ArgsManager& args);
 
+    /** Load the cached mempool from disk */
+    void LoadMempoolCache(const ArgsManager& args);
+
     /** Update the chain tip based on database information, i.e. CoinsTip()'s best block. */
     bool LoadChainTip(const CChainParams& chainparams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -974,6 +977,9 @@ bool DumpMempool(const CTxMemPool& pool);
 
 /** Load the mempool from disk. */
 bool LoadMempool(CTxMemPool& pool);
+
+/** Load the mempool cache from disk. */
+bool LoadMempoolCache(CTxMemPool& pool);
 
 //! Check whether the block associated with this index entry is pruned or not.
 inline bool IsBlockPruned(const CBlockIndex* pblockindex)
