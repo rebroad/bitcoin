@@ -3321,7 +3321,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     return true;
 }
 
-bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
+int BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
     // Check for duplicate
@@ -3404,24 +3404,25 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
     if (ppindex)
         *ppindex = pindex;
 
-    return true;
+    return 2; // 2 means it was new
 }
 
 // Exposed wrapper for AcceptBlockHeader
-bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex)
+int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex)
 {
     AssertLockNotHeld(cs_main);
+    int nCount = 0;
     {
         LOCK(cs_main);
         for (const CBlockHeader& header : headers) {
             CBlockIndex *pindex = nullptr; // Use a temp pindex instead of ppindex to avoid a const_cast
-            bool accepted = m_blockman.AcceptBlockHeader(
+            int accepted = m_blockman.AcceptBlockHeader(
                 header, state, chainparams, &pindex);
             ActiveChainstate().CheckBlockIndex(chainparams.GetConsensus());
 
-            if (!accepted) {
-                return false;
-            }
+            if (accepted == 2) nCount++;
+            if (accepted == false) return 0;
+
             if (ppindex) {
                 *ppindex = pindex;
             }
@@ -3432,7 +3433,7 @@ bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& 
             LogPrintf("Synchronizing blockheaders, height: %d (~%.2f%%)\n", (*ppindex)->nHeight, 100.0/((*ppindex)->nHeight+(GetAdjustedTime() - (*ppindex)->GetBlockTime()) / Params().GetConsensus().nPowTargetSpacing) * (*ppindex)->nHeight);
         }
     }
-    return true;
+    return nCount;
 }
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */

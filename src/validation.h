@@ -479,7 +479,7 @@ public:
      * If a block header hasn't already been seen, call CheckBlockHeader on it, ensure
      * that it doesn't descend from an invalid block, and then add it to m_block_index.
      */
-    bool AcceptBlockHeader(
+    int AcceptBlockHeader(
         const CBlockHeader& block,
         BlockValidationState& state,
         const CChainParams& chainparams,
@@ -999,7 +999,7 @@ public:
      * @param[in]  chainparams The params for the chain we want to connect to
      * @param[out] ppindex If set, the pointer will be set to point to the last new block index object for the given headers
      */
-    bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& block, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
+    int ProcessNewBlockHeaders(const std::vector<CBlockHeader>& block, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
 
     //! Load the block tree and coins database from disk, initializing state if we're running with -reindex
     bool LoadBlockIndex(const CChainParams& chainparams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);

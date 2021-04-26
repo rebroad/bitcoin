@@ -85,7 +85,7 @@ int TxOrphanage::EraseTx(const uint256& txid)
     return 1;
 }
 
-void TxOrphanage::EraseForPeer(NodeId peer)
+int TxOrphanage::EraseForPeer(NodeId peer)
 {
     AssertLockHeld(g_cs_orphans);
 
@@ -100,6 +100,8 @@ void TxOrphanage::EraseForPeer(NodeId peer)
         }
     }
     if (nErased > 0) LogPrint(BCLog::MEMPOOL, "Erased %d orphan tx from peer=%d\n", nErased, peer);
+
+    return nErased;
 }
 
 unsigned int TxOrphanage::LimitOrphans(unsigned int max_orphans)
