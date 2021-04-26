@@ -47,7 +47,7 @@ namespace BCLog {
         ADDRMAN     = (1 <<  9),
         SELECTCOINS = (1 << 10),
         REINDEX     = (1 << 11),
-        CMPCTBLOCK  = (1 << 12),
+        BLOCK       = (1 << 12),
         RAND        = (1 << 13),
         PRUNE       = (1 << 14),
         PROXY       = (1 << 15),
@@ -62,6 +62,8 @@ namespace BCLog {
         LOCK        = (1 << 24),
         UTIL        = (1 << 25),
         BLOCKSTORE  = (1 << 26),
+        CONN        = (1 << 27),
+        BLOCKSEND   = (1 << 28),
         ALL         = ~(uint32_t)0,
     };
 

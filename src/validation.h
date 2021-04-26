@@ -462,7 +462,7 @@ public:
      * If a block header hasn't already been seen, call CheckBlockHeader on it, ensure
      * that it doesn't descend from an invalid block, and then add it to m_block_index.
      */
-    bool AcceptBlockHeader(
+    int AcceptBlockHeader(
         const CBlockHeader& block,
         BlockValidationState& state,
         const CChainParams& chainparams,
@@ -524,6 +524,8 @@ enum class CoinsCacheSizeState
     LARGE = 1,
     OK = 0
 };
+
+std::string strHeight(const CBlockIndex* pindex, bool *fFork = nullptr);
 
 /**
  * CChainState stores and provides an API to update our local knowledge of the
@@ -1002,7 +1004,7 @@ public:
      * @param[in]  chainparams The params for the chain we want to connect to
      * @param[out] ppindex If set, the pointer will be set to point to the last new block index object for the given headers
      */
-    bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& block, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
+    int ProcessNewBlockHeaders(const std::vector<CBlockHeader>& block, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
 
     /**
      * Try to add a transaction to the memory pool.

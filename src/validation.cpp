@@ -2177,14 +2177,12 @@ static void UpdateTipLog(
 {
 
     AssertLockHeld(::cs_main);
-    LogPrintf("%s%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n",
+    int nBehind = pindexBestHeader->nHeight - tip->nHeight;
+    LogPrintf("%s%s: new best=%s (%d) ver=0x%x age=%s%s work=%.8g tx=%lu%s\n",
         prefix, func_name,
         tip->GetBlockHash().ToString(), tip->nHeight, tip->nVersion,
-        log(tip->nChainWork.getdouble()) / log(2.0), (unsigned long)tip->nChainTx,
-        FormatISO8601DateTime(tip->GetBlockTime()),
-        GuessVerificationProgress(params.TxData(), tip),
-        coins_tip.DynamicMemoryUsage() * (1.0 / (1 << 20)),
-        coins_tip.GetCacheSize(),
+        strAge(GetAdjustedTime()-tip->GetBlockTime()), nBehind ? strprintf(" behind=%s", nBehind) : "",
+        log(tip->nChainWork.getdouble()) / log(2.0), (unsigned long)tip->nTx,
         !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages) : "");
 }
 
@@ -2612,6 +2610,19 @@ static void LimitValidationInterfaceQueue() LOCKS_EXCLUDED(cs_main) {
     if (GetMainSignals().CallbacksPending() > 10) {
         SyncWithValidationInterfaceQueue();
     }
+}
+
+std::string strHeight(const CBlockIndex* pindex, bool *fFork /* = nullptr */) {
+    if (!pindex)
+        return "NULL";
+    const CBlockIndex *pindexFork = LastCommonAncestor(pindex, pindexBestHeader);
+    std::string strFork;
+    if (pindexFork->nHeight < pindex->nHeight) {
+        if (fFork) *fFork = true;
+        bool fEqualWork = (pindex->nChainWork == pindexBestHeader->nChainWork);
+        strFork = strprintf(" %sfork@%d", fEqualWork ? "=" : "", pindexFork->nHeight);
+    }
+    return strprintf("%d%s", pindex->nHeight, strFork);
 }
 
 bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
@@ -3274,7 +3285,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     return true;
 }
 
-bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
+int BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
     // Check for duplicate
@@ -3359,24 +3370,25 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
     if (ppindex)
         *ppindex = pindex;
 
-    return true;
+    return 2; // 2 means it was new
 }
 
 // Exposed wrapper for AcceptBlockHeader
-bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex)
+int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex)
 {
     AssertLockNotHeld(cs_main);
+    int nCount = 0;
     {
         LOCK(cs_main);
         for (const CBlockHeader& header : headers) {
             CBlockIndex *pindex = nullptr; // Use a temp pindex instead of ppindex to avoid a const_cast
-            bool accepted = m_blockman.AcceptBlockHeader(
+            int accepted = m_blockman.AcceptBlockHeader(
                 header, state, chainparams, &pindex);
             ActiveChainstate().CheckBlockIndex();
 
-            if (!accepted) {
-                return false;
-            }
+            if (accepted == 2) nCount++;
+            if (accepted == false) return 0;
+
             if (ppindex) {
                 *ppindex = pindex;
             }
@@ -3387,7 +3399,7 @@ bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& 
             LogPrintf("Synchronizing blockheaders, height: %d (~%.2f%%)\n", (*ppindex)->nHeight, 100.0/((*ppindex)->nHeight+(GetAdjustedTime() - (*ppindex)->GetBlockTime()) / Params().GetConsensus().nPowTargetSpacing) * (*ppindex)->nHeight);
         }
     }
-    return true;
+    return nCount;
 }
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */

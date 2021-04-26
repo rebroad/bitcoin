@@ -132,7 +132,7 @@ std::vector<std::string> GetNetworkNames(bool append_unroutable)
     return names;
 }
 
-static bool LookupIntern(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
+static int LookupIntern(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
 {
     vIP.clear();
 
@@ -164,10 +164,10 @@ static bool LookupIntern(const std::string& name, std::vector<CNetAddr>& vIP, un
         }
     }
 
-    return (vIP.size() > 0);
+    return vIP.size();
 }
 
-bool LookupHost(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
+int LookupHost(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
 {
     if (!ValidAsCString(name)) {
         return false;
@@ -450,7 +450,7 @@ bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* a
     }
     if (pchRet2[1] != SOCKS5Reply::SUCCEEDED) {
         // Failures to connect to a peer that are not proxy errors
-        LogPrintf("Socks5() connect to %s:%d failed: %s\n", strDest, port, Socks5ErrorString(pchRet2[1]));
+        LogPrint(BCLog::NET, "Socks5() connect to %s:%d failed: %s\n", strDest, port, Socks5ErrorString(pchRet2[1]));
         return false;
     }
     if (pchRet2[2] != 0x00) { // Reserved field must be 0
@@ -585,8 +585,7 @@ bool ConnectSocketDirectly(const CService &addrConnect, const Sock& sock, int nT
                 return false;
             }
             if (sockerr != 0) {
-                LogConnectFailure(manual_connection,
-                                  "connect() to %s failed after wait: %s",
+                LogPrint(BCLog::NET, "connect() to %s failed after wait: %s",
                                   addrConnect.ToString(),
                                   NetworkErrorString(sockerr));
                 return false;
