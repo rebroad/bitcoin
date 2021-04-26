@@ -35,7 +35,7 @@ public:
     int EraseTx(const uint256& txid) EXCLUSIVE_LOCKS_REQUIRED(g_cs_orphans);
 
     /** Erase all orphans announced by a peer (eg, after that peer disconnects) */
-    void EraseForPeer(NodeId peer) EXCLUSIVE_LOCKS_REQUIRED(g_cs_orphans);
+    int EraseForPeer(NodeId peer) EXCLUSIVE_LOCKS_REQUIRED(g_cs_orphans);
 
     /** Erase all orphans included in or invalidated by a new block */
     void EraseForBlock(const CBlock& block) LOCKS_EXCLUDED(::g_cs_orphans);

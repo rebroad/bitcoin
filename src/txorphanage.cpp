@@ -48,8 +48,8 @@ bool TxOrphanage::AddTx(const CTransactionRef& tx, NodeId peer)
         m_outpoint_to_orphan_it[txin.prevout].insert(ret.first);
     }
 
-    LogPrint(BCLog::MEMPOOL, "stored orphan tx %s (mapsz %u outsz %u)\n", hash.ToString(),
-             m_orphans.size(), m_outpoint_to_orphan_it.size());
+    LogPrint(BCLog::MEMPOOL, "stored orphan tx %s (mapsz %u outsz %u) peer=%d\n", hash.ToString(),
+             m_orphans.size(), m_outpoint_to_orphan_it.size(), peer);
     return true;
 }
 
@@ -85,7 +85,7 @@ int TxOrphanage::EraseTx(const uint256& txid)
     return 1;
 }
 
-void TxOrphanage::EraseForPeer(NodeId peer)
+int TxOrphanage::EraseForPeer(NodeId peer)
 {
     AssertLockHeld(g_cs_orphans);
 
@@ -100,6 +100,8 @@ void TxOrphanage::EraseForPeer(NodeId peer)
         }
     }
     if (nErased > 0) LogPrint(BCLog::MEMPOOL, "Erased %d orphan tx from peer=%d\n", nErased, peer);
+
+    return nErased;
 }
 
 unsigned int TxOrphanage::LimitOrphans(unsigned int max_orphans)
