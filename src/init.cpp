@@ -1067,11 +1067,8 @@ bool AppInitParameterInteraction(const ArgsManager& args)
 
         if (std::none_of(categories.begin(), categories.end(),
             [](std::string cat){return cat == "0" || cat == "none";})) {
-            for (const auto& cat : categories) {
-                if (!LogInstance().EnableCategory(cat)) {
-                    InitWarning(strprintf(_("Unsupported logging category %s=%s."), "-debug", cat));
-                }
-            }
+            for (const auto& cat : categories)
+                LogInstance().EnableCategory(cat);
         }
     }
 
