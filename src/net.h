@@ -1022,6 +1022,7 @@ public:
         // Minimum fee rate with which to filter inv's to this node
         CAmount minFeeFilter GUARDED_BY(cs_feeFilter){0};
         CAmount lastSentFeeFilter{0};
+        CAmount lastFeeFilter{0};
         int64_t nextSendTimeFeeFilter{0};
     };
 
