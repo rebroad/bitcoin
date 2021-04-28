@@ -3061,8 +3061,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     best_block = &inv.hash;
                 }
             } else if (inv.IsGenTxMsg()) {
-                if (reject_tx_invs) {
-                    LogPrint(BCLog::NET, "transaction (%s) inv sent in violation of protocol, disconnecting peer=%d\n", inv.hash.ToString(), pfrom.GetId());
+                if (reject_tx_invs || pfrom.IsFeelerConn()) {
+                    LogPrintf("recv inv tx violation rti=%d HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", reject_tx_invs, pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
                     pfrom.fDisconnect = true;
                     return;
                 }
@@ -3300,9 +3300,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // Stop processing the transaction early if
         // 1) We are in blocks only mode and peer has no relay permission
         // 2) This peer is a block-relay-only peer
-        if ((m_ignore_incoming_txs && !pfrom.HasPermission(NetPermissionFlags::Relay)) || (pfrom.m_tx_relay == nullptr))
+        if ((m_ignore_incoming_txs && !pfrom.HasPermission(NetPermissionFlags::Relay)) || (pfrom.m_tx_relay == nullptr) || pfrom.IsFeelerConn())
         {
-            LogPrint(BCLog::NET, "transaction sent in violation of protocol peer=%d\n", pfrom.GetId());
+            LogPrintf("recv tx violation iit=%d HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", m_ignore_incoming_txs, pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
         }
