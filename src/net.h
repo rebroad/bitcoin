@@ -704,8 +704,10 @@ public:
     bool m_manual_connection;
     int nStartingHeight;
     uint64_t nSendBytes;
+    int nSendBps;
     mapMsgCmdSize mapSendBytesPerMsgCmd;
     uint64_t nRecvBytes;
+    int nRecvBps;
     mapMsgCmdSize mapRecvBytesPerMsgCmd;
     NetPermissionFlags m_permissionFlags;
     bool m_legacyWhitelisted;
@@ -852,6 +854,7 @@ public:
     size_t nSendSize{0}; // total size of all vSendMsg entries
     size_t nSendOffset{0}; // offset inside the first vSendMsg already sent
     uint64_t nSendBytes GUARDED_BY(cs_vSend){0};
+    int nSendBps GUARDED_BY(cs_vSend){0};
     std::deque<std::vector<unsigned char>> vSendMsg GUARDED_BY(cs_vSend);
     RecursiveMutex cs_vSend;
     RecursiveMutex cs_hSocket;
@@ -864,6 +867,7 @@ public:
     RecursiveMutex cs_sendProcessing;
 
     uint64_t nRecvBytes GUARDED_BY(cs_vRecv){0};
+    int nRecvBps GUARDED_BY(cs_vRecv){0};
 
     std::atomic<int64_t> nLastSend{0};
     std::atomic<int64_t> nLastRecv{0};

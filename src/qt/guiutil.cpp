@@ -829,6 +829,18 @@ QString formatNiceTimeOffset(qint64 secs)
     return timeBehindText;
 }
 
+QString formatBps(uint64_t bytes) // bits per second
+{
+    if(bytes < 10 * 1000)
+        return QString(QObject::tr("%1 bps")).arg(bytes);
+    if(bytes < 10 * 1000 * 1000)
+        return QString(QObject::tr("%1 Kbps")).arg(bytes / 1000);
+    if(bytes < (uint64_t)10000000000)
+        return QString(QObject::tr("%1 Mbps")).arg(bytes / 1000 / 1000);
+
+    return QString(QObject::tr("%1 Gbps")).arg(bytes / 1000 / 1000 / 1000);
+}
+
 QString formatBytes(uint64_t bytes)
 {
     if(bytes < 1000)

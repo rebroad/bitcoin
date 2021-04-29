@@ -594,11 +594,13 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
         LOCK(cs_vSend);
         X(mapSendBytesPerMsgCmd);
         X(nSendBytes);
+        X(nSendBps);
     }
     {
         LOCK(cs_vRecv);
         X(mapRecvBytesPerMsgCmd);
         X(nRecvBytes);
+        X(nRecvBps);
     }
     X(m_legacyWhitelisted);
     X(m_permissionFlags);
@@ -650,6 +652,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes, bool& complete
     LOCK(cs_vRecv);
     nLastRecv = std::chrono::duration_cast<std::chrono::seconds>(time).count();
     nRecvBytes += nBytes;
+    nRecvBps = nRecvBytes * 8 / (nLastRecv + 1 - nTimeConnected);
     while (nBytes > 0) {
         // absorb network data
         int handled = m_deserializer->Read(pch, nBytes);
@@ -823,6 +826,7 @@ size_t CConnman::SocketSendData(CNode *pnode) const EXCLUSIVE_LOCKS_REQUIRED(pno
         if (nBytes > 0) {
             pnode->nLastSend = GetSystemTimeInSeconds();
             pnode->nSendBytes += nBytes;
+            pnode->nSendBps = pnode->nSendBytes * 8 / (pnode->nLastSend + 1 - pnode->nTimeConnected);
             pnode->nSendOffset += nBytes;
             nSentSize += nBytes;
             if (pnode->nSendOffset == data.size()) {
