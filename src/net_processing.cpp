@@ -4602,6 +4602,9 @@ bool PeerManager::SendMessages(CNode* pto)
                     // Send the current filter if we sent MAX_FILTER previously
                     // and made it out of IBD.
                     pto->m_tx_relay->nextSendTimeFeeFilter = count_microseconds(current_time) - 1;
+                } else if (pto->m_tx_relay->lastFeeFilter == MAX_MONEY) { // REBTEMP
+                    LogPrint(BCLog::BLOCK, "Caught a missed feefilter reset for peer=%d\n", pto->GetId());
+                    pto->m_tx_relay->nextSendTimeFeeFilter = count_microseconds(current_time) - 1;
                 }
             }
             if (count_microseconds(current_time) > pto->m_tx_relay->nextSendTimeFeeFilter) {
