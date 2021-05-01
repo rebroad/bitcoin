@@ -126,10 +126,21 @@ void TrafficGraphWidget::updateRates()
 {
     if(!clientModel) return;
 
+    static int64_t nTime = 0;
+    static int64_t nLastTime = 0;
+    nTime = GetTimeMillis();
+    int nRealInterval = nTime - nLastTime;
+    nLastTime = nTime;
+    //static int64_t nLastReport = 0;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
-    float inRate = (bytesIn - nLastBytesIn) / 1024.0f * 1000 / timer->interval();
-    float outRate = (bytesOut - nLastBytesOut) / 1024.0f * 1000 / timer->interval();
+    //int nInterval = timer->interval();
+    //if ((nTime >= nLastReport + 10000) && ((nRealInterval <= nInterval * 0.9) || (nRealInterval >= nInterval * 1.1))) {
+    //    LogPrintf("%s: nInterval=%d nRealInterval=%d\n", __func__, nInterval, nRealInterval);
+    //    nLastReport = nTime;
+    //}
+    float inRate = (bytesIn - nLastBytesIn) / 1024.0f * 1000 / nRealInterval;
+    float outRate = (bytesOut - nLastBytesOut) / 1024.0f * 1000 / nRealInterval;
     vSamplesIn.push_front(inRate);
     vSamplesOut.push_front(outRate);
     nLastBytesIn = bytesIn;
