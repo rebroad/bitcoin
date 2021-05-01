@@ -3607,7 +3607,8 @@ bool BlockManager::LoadBlockIndex(
     const Consensus::Params& consensus_params,
     std::set<CBlockIndex*, CBlockIndexWorkComparator>& block_index_candidates)
 {
-    if (!m_block_tree_db->LoadBlockIndexGuts(consensus_params, [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return this->InsertBlockIndex(hash); })) {
+    int nHighest = 1;
+    if (!m_block_tree_db->LoadBlockIndexGuts(consensus_params, [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return this->InsertBlockIndex(hash); }, nHighest)) {
         return false;
     }
 
@@ -3620,10 +3621,24 @@ bool BlockManager::LoadBlockIndex(
         vSortedByHeight.push_back(std::make_pair(pindex->nHeight, pindex));
     }
     sort(vSortedByHeight.begin(), vSortedByHeight.end());
+    int64_t nNow;
+    int64_t nLastNow = 0;
+    int nHeight = 0;
+    int nLastPercent = -1;
     for (const std::pair<int, CBlockIndex*>& item : vSortedByHeight)
     {
+        nNow = GetTime();
+        if (nNow >= nLastNow + 5) {
+            int nPercent = 100 * nHeight / nHighest;
+            if (nPercent > nLastPercent) {
+                uiInterface.InitMessage(strprintf(_("Indexing blocks... %d%%").translated, (100 * nHeight) / nHighest));
+                nLastPercent = nPercent;
+            }
+            nLastNow = nNow;
+        }
         if (ShutdownRequested()) return false;
         CBlockIndex* pindex = item.second;
+        nHeight = pindex->nHeight;
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
         // We can link the chain of blocks for which we've received transactions at some point.
