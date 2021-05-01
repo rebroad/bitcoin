@@ -294,14 +294,29 @@ bool CBlockTreeDB::ReadFlag(const std::string &name, bool &fValue) {
     return true;
 }
 
-bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, std::function<CBlockIndex*(const uint256&)> insertBlockIndex)
+bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, std::function<CBlockIndex*(const uint256&)> insertBlockIndex, int& nHighest)
 {
     AssertLockHeld(::cs_main);
     std::unique_ptr<CDBIterator> pcursor(NewIterator());
     pcursor->Seek(std::make_pair(DB_BLOCK_INDEX, uint256()));
 
+    int64_t nNow;
+    int64_t nLastNow = 0;
+    int nCount = 0;
+    int nLastPercent = -1;
     // Load m_block_index
     while (pcursor->Valid()) {
+        int nPercent = 100 * nCount / nHighest;
+        if (nPercent > nLastPercent) {
+            nNow = GetTime();
+            if (nNow >= nLastNow + 60) {
+                LogPrintf("%s: Loading blocks... %d%%\n", __func__, (100 * nCount) / nHighest);
+                nLastNow = nNow;
+            }
+            uiInterface.ShowProgress(_("Loading blocks…").translated, (100 * nCount) / nHighest, false);
+            nLastPercent = nPercent;
+        }
+        nCount++;
         if (ShutdownRequested()) return false;
         std::pair<uint8_t, uint256> key;
         if (pcursor->GetKey(key) && key.first == DB_BLOCK_INDEX) {
@@ -311,6 +326,8 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 CBlockIndex* pindexNew = insertBlockIndex(diskindex.GetBlockHash());
                 pindexNew->pprev          = insertBlockIndex(diskindex.hashPrev);
                 pindexNew->nHeight        = diskindex.nHeight;
+                if (diskindex.nHeight > nHighest)
+                    nHighest = diskindex.nHeight;
                 pindexNew->nFile          = diskindex.nFile;
                 pindexNew->nDataPos       = diskindex.nDataPos;
                 pindexNew->nUndoPos       = diskindex.nUndoPos;

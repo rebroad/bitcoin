@@ -11,6 +11,7 @@
 #include <flatfile.h>
 #include <fs.h>
 #include <hash.h>
+#include <node/ui_interface.h>
 #include <pow.h>
 #include <reverse_iterator.h>
 #include <shutdown.h>
@@ -217,7 +218,8 @@ bool BlockManager::LoadBlockIndex(
     const Consensus::Params& consensus_params,
     ChainstateManager& chainman)
 {
-    if (!m_block_tree_db->LoadBlockIndexGuts(consensus_params, [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return this->InsertBlockIndex(hash); })) {
+    int nHighest = 1;
+    if (!m_block_tree_db->LoadBlockIndexGuts(consensus_params, [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return this->InsertBlockIndex(hash); }, nHighest)) {
         return false;
     }
 
@@ -250,9 +252,24 @@ bool BlockManager::LoadBlockIndex(
         }
     }
 
+    int64_t nNow;
+    int64_t nLastNow = 0;
+    int nHeight = 0;
+    int nLastPercent = -1;
     for (const std::pair<int, CBlockIndex*>& item : vSortedByHeight) {
         if (ShutdownRequested()) return false;
+        int nPercent = (int)(100.0 * nHeight / nHighest + 0.5);
+        if (nPercent > nLastPercent) {
+            nNow = GetTime();
+            if (nNow >= nLastNow + 5 || nPercent == 100) {
+                LogPrintf("%s: Indexing blocks... %d%%\n", __func__, nPercent);
+                nLastNow = nNow;
+            }
+            uiInterface.ShowProgress(_("Indexing blocks…").translated, nPercent, false);
+            nLastPercent = nPercent;
+        }
         CBlockIndex* pindex = item.second;
+        nHeight = pindex->nHeight;
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
 
