@@ -126,10 +126,15 @@ void TrafficGraphWidget::updateRates()
 {
     if(!clientModel) return;
 
+    static int64_t nTime = 0;
+    static int64_t nLastTime = 0;
+    nTime = GetTimeMillis();
+    int nRealInterval = nTime - nLastTime;
+    nLastTime = nTime;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
-    float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / timer->interval();
-    float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / timer->interval();
+    float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / nRealInterval;
+    float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
     vSamplesIn.push_front(in_rate_kilobytes_per_sec);
     vSamplesOut.push_front(out_rate_kilobytes_per_sec);
     nLastBytesIn = bytesIn;
