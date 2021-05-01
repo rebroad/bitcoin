@@ -3713,17 +3713,31 @@ void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPr
 
 CBlockIndex * BlockManager::InsertBlockIndex(const uint256& hash)
 {
+    static int nExisting = 0;
+    static int nNew = 0;
+    static int nNull = 0;
+    static int64_t nLast = 0;
+    int64_t nTime = GetTime();
+    if (nTime > nLast) {
+        LogPrintf("%s: Existing=%d New=%d Null=%d\n", __func__, nExisting, nNew, nNull);
+        nLast = nTime;
+    }
     AssertLockHeld(cs_main);
 
-    if (hash.IsNull())
+    if (hash.IsNull()) {
+        nNull++;
         return nullptr;
+    }
 
     // Return existing
     BlockMap::iterator mi = m_block_index.find(hash);
-    if (mi != m_block_index.end())
+    if (mi != m_block_index.end()) {
+        nExisting++;
         return (*mi).second;
+    }
 
     // Create new
+    nNew++;
     CBlockIndex* pindexNew = new CBlockIndex();
     mi = m_block_index.insert(std::make_pair(hash, pindexNew)).first;
     pindexNew->phashBlock = &((*mi).first);
