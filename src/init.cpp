@@ -1583,8 +1583,6 @@ bool AppInitMain(const util::Ref& context, NodeContext& node, interfaces::BlockA
         };
         bilingual_str strLoadError;
 
-        uiInterface.InitMessage(_("Loading block index...").translated);
-
         do {
             const int64_t load_block_index_start_time = GetTimeMillis();
             try {
