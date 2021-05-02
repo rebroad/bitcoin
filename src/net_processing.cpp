@@ -2186,6 +2186,9 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                     }
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
+                    // Next line needed because now we'll use the first cmpctblock block received,
+                    // not necessarily the one we're requesting here.
+                    mapBlockSource.emplace(vGetData[0].hash, std::make_pair(pfrom.GetId(), false));
                 }
             }
         }
@@ -3574,7 +3577,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // Keep a CBlock for "optimistic" compactblock reconstructions (see
         // below)
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
-        bool fBlockReconstructed = false;
 
         {
         LOCK2(cs_main, g_cs_orphans);
@@ -3623,7 +3625,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // possibilities in compact block processing...
         if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 2) {
             if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
-                 (fAlreadyInFlight && blockInFlightIt->second.first == pfrom.GetId())) {
+                 (fAlreadyInFlight && !(blockInFlightIt->second.second->partialBlock))) { // allow announce cmpctblocks
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
                 if (!BlockRequested(pfrom.GetId(), *pindex, &queuedBlockIt)) {
                     if (!(*queuedBlockIt)->partialBlock)
@@ -3664,23 +3666,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
                 }
-            } else {
-                // This block is either already in flight from a different
-                // peer, or this peer has too many blocks outstanding to
-                // download from.
-                // Optimistically try to reconstruct anyway since we might be
-                // able to without any round trips.
-                PartiallyDownloadedBlock tempBlock(&m_mempool);
-                ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact);
-                if (status != READ_STATUS_OK) {
-                    // TODO: don't ignore failures
-                    return;
-                }
-                std::vector<CTransactionRef> dummy;
-                status = tempBlock.FillBlock(*pblock, dummy);
-                if (status == READ_STATUS_OK) {
-                    fBlockReconstructed = true;
-                }
             }
         } else {
             if (fAlreadyInFlight) {
@@ -3710,32 +3695,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return ProcessHeadersMessage(pfrom, *peer, {cmpctblock.header}, /*via_compact_block=*/true);
         }
 
-        if (fBlockReconstructed) {
-            // If we got here, we were able to optimistically reconstruct a
-            // block that is in flight from some other peer.
-            {
-                LOCK(cs_main);
-                mapBlockSource.emplace(pblock->GetHash(), std::make_pair(pfrom.GetId(), false));
-            }
-            // Setting force_processing to true means that we bypass some of
-            // our anti-DoS protections in AcceptBlock, which filters
-            // unrequested blocks that might be trying to waste our resources
-            // (eg disk space). Because we only try to reconstruct blocks when
-            // we're close to caught up (via the CanDirectFetch() requirement
-            // above, combined with the behavior of not requesting blocks until
-            // we have a chain with at least nMinimumChainWork), and we ignore
-            // compact blocks with less work than our tip, it is safe to treat
-            // reconstructed compact blocks as having been requested.
-            ProcessBlock(pfrom, pblock, /*force_processing=*/true);
-            LOCK(cs_main); // hold cs_main for CBlockIndex::IsValid()
-            if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS)) {
-                // Clear download state for this block, which is in
-                // process from some other peer.  We do this after calling
-                // ProcessNewBlock so that a malleated cmpctblock announcement
-                // can't be used to interfere with block relay.
-                RemoveBlockRequest(pblock->GetHash());
-            }
-        }
         return;
     }
 
