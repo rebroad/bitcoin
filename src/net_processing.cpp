@@ -546,15 +546,22 @@ static bool MarkBlockAsInFlight(CTxMemPool& mempool, NodeId nodeid, const uint25
     assert(state != nullptr);
 
     // Short-circuit most stuff in case it is from the same node
-    std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash);
+    std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash); // REB - how do we deal with finding more than one?
     if (itInFlight != mapBlocksInFlight.end() && itInFlight->second.first == nodeid) {
         if (pit) {
-            *pit = &itInFlight->second.second;
-        }
+            *pit = &itInFlight->second.second; // REB - what is this? QueuedBlock?
+            LogPrintf("%s: inflight. pit set. peer=%d\n", __func__, nodeid);
+        } else
+            LogPrintf("%s: inflight. pit not set. peer=%d\n", __func__, nodeid);
+        if (itInFlight->second.second->partialBlock) // Have we gone as far as requesting a BLOCKTXN?
+            LogPrintf("%s: inflight. We also seem to have a partialBlock\n", __func__);
+        else
+            LogPrintf("%s: inflight. We don't have a partialBlock\n", __func__);
+
         return false;
     }
 
-    // Make sure it's not listed somewhere already.
+    // Make sure it's not listed somewhere already. - REBTODO - why?! Why because InitData will crash otherwise.
     MarkBlockAsReceived(hash);
 
     std::list<QueuedBlock>::iterator it = state->vBlocksInFlight.insert(state->vBlocksInFlight.end(),
@@ -569,8 +576,20 @@ static bool MarkBlockAsInFlight(CTxMemPool& mempool, NodeId nodeid, const uint25
         nPeersWithValidatedDownloads++;
     }
     itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it))).first;
-    if (pit)
+    if (pit) {
+        if (!::ChainstateActive().IsInitialBlockDownload())
+            LogPrintf("%s: NotInFlight. pit set. peer=%d\n", __func__, nodeid);
         *pit = &itInFlight->second.second;
+    } else
+        if (!::ChainstateActive().IsInitialBlockDownload())
+            LogPrintf("%s: NotInFlight. pit not set. peer=%d\n", __func__, nodeid);
+    if (!::ChainstateActive().IsInitialBlockDownload()) {
+        if (itInFlight->second.second->partialBlock) // Have we gone as far as requesting a BLOCKTXN?
+            LogPrintf("%s: NotInFlight. We also seem to have a partialBlock\n", __func__);
+        else
+            LogPrintf("%s: NotInFlight. We don't have a partialBlock\n", __func__);
+    }
+
     return true;
 }
 
@@ -3261,18 +3280,26 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
         if (pindex->nHeight <= ::ChainActive().Height() + 2) {
             if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
                  (fAlreadyInFlight && !(blockInFlightIt->second.second->partialBlock))) { // allow announce cmpctblocks
+                if (fAlreadyInFlight && blockInFlightIt->second.first != pfrom.GetId()) {
+                    LogPrint(BCLog::BLOCK, "Rather than wait for peer=%d we'll use this one peer=%d\n",
+                        blockInFlightIt->second.first, pfrom.GetId());
+                }
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
-                if (!MarkBlockAsInFlight(m_mempool, pfrom.GetId(), pindex->GetBlockHash(), pindex, &queuedBlockIt)) {
-                    if (!(*queuedBlockIt)->partialBlock)
+                if (!MarkBlockAsInFlight(m_mempool, pfrom.GetId(), pindex->GetBlockHash(), pindex, &queuedBlockIt)) { // REBTODO - Maybe don't do this if fWibble..?
+                    LogPrint(BCLog::BLOCK, "MarkBlockAsInFlight=false (was already in flight). peer=%d\n", pfrom.GetId());
+                    if (!(*queuedBlockIt)->partialBlock) { // REBTODO - we already know this is true
+                        LogPrint(BCLog::BLOCK, "No partialBlock. Call reset()\n"); // REB - what is reset()?
                         (*queuedBlockIt)->partialBlock.reset(new PartiallyDownloadedBlock(&m_mempool));
-                    else {
-                        // The block was already in flight using compact blocks from the same peer
-                        LogPrint(BCLog::NET, "Peer sent us compact block we were already syncing!\n");
+                    } else {
+                        // The block was already in flight using compact blocks
+                        LogPrint(BCLog::BLOCK, "And we have a partialBlock already. Exit?\n");
                         return;
                     }
-                }
+                } else
+                    LogPrint(BCLog::BLOCK, "MarkBlockAsInFlight=true (was NOT in flight) peer=%d\n", pfrom.GetId());
 
                 PartiallyDownloadedBlock& partialBlock = *(*queuedBlockIt)->partialBlock;
+                LogPrintf("before 1st InitData. peer=%d\n", pfrom.GetId());
                 ReadStatus status = partialBlock.InitData(cmpctblock, vExtraTxnForCompact);
                 if (status == READ_STATUS_INVALID) {
                     MarkBlockAsReceived(pindex->GetBlockHash()); // Reset in-flight state in case Misbehaving does not result in a disconnect
@@ -3292,6 +3319,7 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
                         req.indexes.push_back(i);
                 }
                 if (req.indexes.empty()) {
+                    LogPrintf("%s: req.index.empty() peer=%d\n", __func__, pfrom.GetId()); // REBTEMP
                     // Dirty hack to jump to BLOCKTXN code (TODO: move message handling into their own functions)
                     BlockTransactions txn;
                     txn.blockhash = cmpctblock.header.GetHash();
@@ -3307,6 +3335,7 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
                 // download from.
                 // Optimistically try to reconstruct anyway since we might be
                 // able to without any round trips.
+                LogPrintf("before 2nd InitData. %shave partialblock. peer=%d\n", blockInFlightIt->second.second->partialBlock ? "" : "Don't ", pfrom.GetId());
                 PartiallyDownloadedBlock tempBlock(&m_mempool);
                 ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact);
                 if (status != READ_STATUS_OK) {
@@ -3396,6 +3425,7 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
 
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
         bool fBlockRead = false;
+        bool fWrongPeer = false;
         {
             LOCK(cs_main);
 
@@ -3408,11 +3438,16 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
             if (status == READ_STATUS_INVALID) {
+                if (!fWrongPeer) {
+                    LogPrint(BCLog::BLOCK, "blocktxn %s INVALID peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
                 MarkBlockAsReceived(resp.blockhash); // Reset in-flight state in case Misbehaving does not result in a disconnect
                 Misbehaving(pfrom.GetId(), 100, "invalid compact block/non-matching block transactions");
-                return;
+                } else
+                    LogPrint(BCLog::BLOCK, "blocktxn %s INVALID wrong peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
+                return; // This return isn't needed as it'll hit the one later on
             } else if (status == READ_STATUS_FAILED) {
                 // Might have collided, fall back to getdata now :(
+                if (!fWrongPeer) {
                 std::vector<CInv> invs;
                 invs.push_back(CInv(MSG_BLOCK | GetFetchFlags(pfrom), resp.blockhash));
                 m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, invs));
@@ -3453,6 +3488,8 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
             // disk-space attacks), but this should be safe due to the
             // protections in the compact block handler -- see related comment
             // in compact block optimistic reconstruction handling.
+            if (fWrongPeer)
+                LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessNewBlock() wrong peer=%d\n", pfrom.GetId());
             m_chainman.ProcessNewBlock(m_chainparams, pblock, /*fForceProcessing=*/true, &fNewBlock);
             if (fNewBlock) {
                 pfrom.nLastBlockTime = GetTime();
