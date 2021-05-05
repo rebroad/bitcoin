@@ -1026,7 +1026,7 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans)
         while (iter != mapOrphanTransactions.end())
         {
             std::map<uint256, COrphanTx>::iterator maybeErase = iter++;
-            if (maybeErase->second.nTimeExpire <= nNow) {
+            if (maybeErase->second.nTimeExpire <= nNow) { // REBTODO - explore nTimeExpire
                 nErased += EraseOrphanTx(maybeErase->second.tx->GetHash());
             } else {
                 nMinExpTime = std::min(maybeErase->second.nTimeExpire, nMinExpTime);
@@ -1039,7 +1039,7 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans)
     FastRandomContext rng;
     while (mapOrphanTransactions.size() > nMaxOrphans)
     {
-        // Evict a random orphan:
+        // Evict a random orphan: REBTODO - limit per node?
         size_t randompos = rng.randrange(g_orphan_list.size());
         EraseOrphanTx(g_orphan_list[randompos]->first);
         ++nEvicted;
@@ -1991,7 +1991,7 @@ void PeerManager::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         TxValidationState state;
         std::list<CTransactionRef> removed_txn;
 
-        if (AcceptToMemoryPool(m_mempool, state, porphanTx, &removed_txn, false /* bypass_limits */)) {
+        if (AcceptToMemoryPool(m_mempool, state, porphanTx, &removed_txn, false /* bypass_limits */)) { // REBTODO - check if minrelayfee used - also log how many per minute
             LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
             RelayTransaction(orphanHash, porphanTx->GetWitnessHash(), m_connman);
             for (unsigned int i = 0; i < porphanTx->vout.size(); i++) {
@@ -3078,7 +3078,7 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
 
                 // DoS prevention: do not allow mapOrphanTransactions to grow unbounded (see CVE-2012-3789)
                 unsigned int nMaxOrphanTx = (unsigned int)std::max((int64_t)0, gArgs.GetArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
-                unsigned int nEvicted = LimitOrphanTxSize(nMaxOrphanTx);
+                unsigned int nEvicted = LimitOrphanTxSize(nMaxOrphanTx); // REBTODO - based on fee/vB?
                 if (nEvicted > 0) {
                     LogPrint(BCLog::MEMPOOL, "mapOrphan overflow, removed %u tx\n", nEvicted);
                 }
