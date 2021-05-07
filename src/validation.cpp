@@ -1878,6 +1878,11 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
+        if (ShutdownRequested()) {
+            LogPrintf("%s: Shutdown requested. Aborting at %d%%.\n", __func__, i * 100 / block.vtx.size());
+            return true;
+        }
+
         const CTransaction &tx = *(block.vtx[i]);
 
         nInputs += tx.vin.size();
@@ -2365,6 +2370,8 @@ bool CChainState::ConnectTip(BlockValidationState& state, const CChainParams& ch
     {
         CCoinsViewCache view(&CoinsTip());
         bool rv = ConnectBlock(blockConnecting, state, pindexNew, view, chainparams);
+        if (ShutdownRequested())
+            return true;
         GetMainSignals().BlockChecked(blockConnecting, state);
         if (!rv) {
             if (state.IsInvalid())
