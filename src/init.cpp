@@ -307,11 +307,13 @@ void Shutdown(NodeContext& node)
 #ifndef WIN32
 static void HandleSIGTERM(int)
 {
+    LogPrintf("%s: Calling StartShutdown()\n", __func__);
     StartShutdown();
 }
 
 static void HandleSIGHUP(int)
 {
+    LogPrintf("%s: Closing this file...\n", __func__);
     LogInstance().m_reopen_file = true;
 }
 #else
