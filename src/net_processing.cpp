@@ -23,6 +23,7 @@
 #include <random.h>
 #include <reverse_iterator.h>
 #include <scheduler.h>
+#include <shutdown.h>
 #include <streams.h>
 #include <tinyformat.h>
 #include <txmempool.h>
@@ -4049,7 +4050,7 @@ bool PeerManager::SendMessages(CNode* pto)
     if (MaybeDiscourageAndDisconnect(*pto)) return true;
 
     // Don't send anything until the version handshake is complete
-    if (!pto->fSuccessfullyConnected || pto->fDisconnect)
+    if (!pto->fSuccessfullyConnected || pto->fDisconnect || ShutdownRequested())
         return true;
 
     // If we get here, the outgoing message serialization version is set and can't change.
