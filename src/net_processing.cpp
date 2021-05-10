@@ -3712,10 +3712,6 @@ void PeerManager::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDat
     }
 
     if (msg_type == NetMsgType::FILTERCLEAR) {
-        if (!(pfrom.GetLocalServices() & NODE_BLOOM)) {
-            pfrom.fDisconnect = true;
-            return;
-        }
         if (pfrom.m_tx_relay == nullptr) {
             return;
         }
