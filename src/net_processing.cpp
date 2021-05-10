@@ -2720,6 +2720,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (pfrom.m_tx_relay != nullptr) {
             LOCK(pfrom.m_tx_relay->cs_filter);
             pfrom.m_tx_relay->fRelayTxes = fRelay; // set to true after we get the first filter* message
+            pfrom.m_tx_relay->lastRecvFeeFilter = -1;
         }
 
         if((nServices & NODE_WITNESS))
@@ -4135,9 +4136,20 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         vRecv >> newFeeFilter;
         if (MoneyRange(newFeeFilter)) {
             if (pfrom.m_tx_relay != nullptr) {
-                pfrom.m_tx_relay->minFeeFilter = newFeeFilter;
+                bool fWobble = false;
+                bool fRepeat = false;
+                int lastRecvFeeFilter = pfrom.m_tx_relay->lastRecvFeeFilter;
+                int minFeeFilter = pfrom.m_tx_relay->minFeeFilter;
+                if (newFeeFilter != minFeeFilter) {
+                    if (lastRecvFeeFilter == newFeeFilter && newFeeFilter < minFeeFilter)
+                        fWobble = true;
+                    pfrom.m_tx_relay->lastRecvFeeFilter = minFeeFilter;
+                    pfrom.m_tx_relay->minFeeFilter = newFeeFilter;
+                } else
+                    fRepeat = true;
+                LogPrintf("recv feefilter %d->%d->%d %speer=%d\n", lastRecvFeeFilter, minFeeFilter, newFeeFilter,
+                    fWobble ? "WOBBLE " : fRepeat ? "REPEAT " : "", pfrom.GetId());
             }
-            LogPrint(BCLog::NET, "received: feefilter of %s from peer=%d\n", CFeeRate(newFeeFilter).ToString(), pfrom.GetId());
         }
         return;
     }
