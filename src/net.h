@@ -263,6 +263,7 @@ public:
     std::chrono::microseconds m_last_ping_time;
     std::chrono::microseconds m_min_ping_time;
     CAmount minFeeFilter;
+    CAmount lastRecvFeeFilter;
     // Our address, as reported by the peer
     std::string addrLocal;
     // Address of this peer
@@ -570,6 +571,7 @@ public:
 
         /** Minimum fee rate with which to filter inv's to this node */
         std::atomic<CAmount> minFeeFilter{0};
+        std::atomic<CAmount> lastRecvFeeFilter{0};
         CAmount lastSentFeeFilter{0};
         std::chrono::microseconds m_next_send_feefilter{0};
     };
