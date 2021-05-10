@@ -3972,11 +3972,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::FILTERCLEAR) {
-        if (!(pfrom.GetLocalServices() & NODE_BLOOM)) {
-            LogPrint(BCLog::NET, "filterclear received despite not offering bloom services from peer=%d; disconnecting\n", pfrom.GetId());
-            pfrom.fDisconnect = true;
-            return;
-        }
         if (pfrom.m_tx_relay == nullptr) {
             return;
         }
