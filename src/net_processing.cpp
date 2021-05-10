@@ -1343,14 +1343,18 @@ void PeerManager::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlockInde
             }
         }
         // Relay inventory, but don't relay old inventory during initial block download.
-        m_connman.ForEachNode([nNewHeight, &vHashes](CNode* pnode) {
+        std::string strDebug = strprintf("%s: PushBlockHash to", __func__);
+        m_connman.ForEachNode([nNewHeight, &vHashes, &strDebug](CNode* pnode) {
             LOCK(pnode->cs_inventory);
             if (nNewHeight > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : 0)) {
+                strDebug += strprintf(" %d", pnode->GetId());
                 for (const uint256& hash : reverse_iterate(vHashes)) {
                     pnode->vBlockHashesToAnnounce.push_back(hash);
                 }
-            }
+            } else
+                strDebug += strprintf(" !%d", pnode->GetId());
         });
+        LogPrint(BCLog::BLOCK, "%s\n", strDebug);
         m_connman.WakeMessageHandler();
     }
 }
