@@ -1540,16 +1540,19 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
         }
     }
 
+    std::string strDebug = strprintf("%s: PushBlockHeaders to", __func__);
     {
         LOCK(m_peer_mutex);
         for (auto& it : m_peer_map) {
             Peer& peer = *it.second;
+            strDebug += strprintf(" %d", peer.m_id);
             LOCK(peer.m_block_inv_mutex);
             for (const uint256& hash : reverse_iterate(vHashes)) {
                 peer.m_blocks_for_headers_relay.push_back(hash);
             }
         }
     }
+    LogPrint(BCLog::BLOCKSEND, "%s\n", strDebug);
 
     m_connman.WakeMessageHandler();
 }
