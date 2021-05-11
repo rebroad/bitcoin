@@ -1,3 +1,5 @@
+Log TXs sent and received per minute per peer
+
 Log the newest and the oldest tx that went into the last block
 
 When a peer sends a reduced feefilter, treat it as a mempool request for the range between the last feefilter and the new one, unless it sends wobbling feefilters.
