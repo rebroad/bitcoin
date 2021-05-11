@@ -3588,9 +3588,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 LogPrint(BCLog::BLOCK, "recv blocktxn %s but no partial. peer=%d\n", strBlkHeight(pindex), pfrom.GetId());
                 return;
             }
+            if (it->second.first != pfrom.GetId())
+                fWrongPeer = true;
 
             if (resp.txn.size()) // Don't log where we were called from cmpctblock
-                LogPrint(BCLog::BLOCK, "recv blocktxn %s indexes=%d size=%d peer=%d\n", strBlockInfo(pindex), resp.txn.size(), nSize, pfrom.GetId());
+                LogPrint(BCLog::BLOCK, "recv blocktxn %s indexes=%d size=%d %speer=%d\n", strBlkHeight(pindex), resp.txn.size(), nSize, fWrongPeer ? "wrong " : "", pfrom.GetId());
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
             if (status == READ_STATUS_INVALID) {
@@ -3608,6 +3610,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 invs.push_back(CInv(MSG_BLOCK | GetFetchFlags(pfrom), resp.blockhash));
                 m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, invs));
                 LogPrint(BCLog::BLOCK, "blocktxn %s FAILED. send getdata block peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
+                } else
+                    LogPrint(BCLog::BLOCK, "blocktxn %s FAILED. wrong peer=%d\n", strBlkHeight(pindex), pfrom.GetId());
             } else {
                 // Block is either okay, or possibly we received
                 // READ_STATUS_CHECKBLOCK_FAILED.
