@@ -4763,6 +4763,7 @@ bool PeerManager::SendMessages(CNode* pto)
                 filterToSend = std::max(filterToSend, ::minRelayTxFee.GetFeePerK());
                 if ((filterToSend < pto->m_tx_relay->lastSentFeeFilter && currentFilter < pto->m_tx_relay->lastFeeFilter) ||
                         (filterToSend > pto->m_tx_relay->lastSentFeeFilter && currentFilter > pto->m_tx_relay->lastFeeFilter)) {
+                    LogPrintf("send feefilter %d->%d (actual: %d->%d) peer=%d\n", pto->m_tx_relay->lastSentFeeFilter, filterToSend, pto->m_tx_relay->lastFeeFilter, currentFilter, pto->GetId());
                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::FEEFILTER, filterToSend));
                     pto->m_tx_relay->lastSentFeeFilter = filterToSend;
                     pto->m_tx_relay->lastFeeFilter = currentFilter;
