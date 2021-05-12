@@ -117,7 +117,7 @@ unsigned int TxOrphanage::LimitOrphans(unsigned int max_orphans)
         while (iter != m_orphans.end())
         {
             std::map<uint256, OrphanTx>::iterator maybeErase = iter++;
-            if (maybeErase->second.nTimeExpire <= nNow) {
+            if (maybeErase->second.nTimeExpire <= nNow) { // REBTODO - explore nTimeExpire
                 nErased += EraseTx(maybeErase->second.tx->GetHash());
             } else {
                 nMinExpTime = std::min(maybeErase->second.nTimeExpire, nMinExpTime);
@@ -130,7 +130,7 @@ unsigned int TxOrphanage::LimitOrphans(unsigned int max_orphans)
     FastRandomContext rng;
     while (m_orphans.size() > max_orphans)
     {
-        // Evict a random orphan:
+        // Evict a random orphan: REBTODO - limit per node?
         size_t randompos = rng.randrange(m_orphan_list.size());
         EraseTx(m_orphan_list[randompos]->first);
         ++nEvicted;

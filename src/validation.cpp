@@ -700,7 +700,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     }
 
     entry.reset(new CTxMemPoolEntry(ptx, ws.m_base_fees, nAcceptTime, nodeid, m_active_chainstate.m_chain.Height(),
-            fSpendsCoinbase, nSigOpsCost, lp));
+            fSpendsCoinbase, nSigOpsCost, lp)); // REBTODO - use Earliest to get the height based on nAcceptTime
     unsigned int nSize = entry->GetTxSize();
 
     if (nSigOpsCost > MAX_STANDARD_TX_SIGOPS_COST)
@@ -895,7 +895,7 @@ bool MemPoolAccept::Finalize(const ATMPArgs& args, Workspace& ws)
                 FormatMoney(nModifiedFees - nConflictingFees),
                 (int)entry->GetTxSize() - (int)nConflictingSize,
                 it->GetPeer(), entry->GetPeer());
-        ws.m_replaced_transactions.push_back(it->GetSharedTx());
+        ws.m_replaced_transactions.push_back(it->GetSharedTx()); // REBTODO - could include peer in this info
     }
     m_pool.RemoveStaged(allConflicting, false, MemPoolRemovalReason::REPLACED);
 
@@ -3403,7 +3403,7 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
 {
     AssertLockNotHeld(cs_main);
 
-    { // TODO: Calculate the lowest Sat/B TX still in the mempool after the TXs in this block have removed the TXs
+    { // REBTODO: Calculate the lowest Sat/B TX still in the mempool after the TXs in this block have removed the TXs
         CBlockIndex *pindex = nullptr;
         if (new_block) *new_block = false;
         BlockValidationState state;

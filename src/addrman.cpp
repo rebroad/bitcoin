@@ -847,7 +847,7 @@ void CAddrMan::GetAddr_(std::vector<CAddress>& vAddr, size_t max_addresses, size
 {
     AssertLockHeld(cs);
 
-    size_t nNodes = vRandom.size();
+    size_t nNodes = vRandom.size(); // REBTODO - what is vRandom?
     if (max_pct != 0) {
         nNodes = max_pct * nNodes / 100;
     }
