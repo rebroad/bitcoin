@@ -425,7 +425,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         m_nodesSize = m_nodes.size();
     }
     LogPrint(BCLog::CONN, "trying %s connection(%d) %s lastseen=%s\n", ConnectionTypeAsString(conn_type),
-        m_nodesSize, pszDest ? pszDest : addrConnect.ToString(),
+        m_nodesSize, pszDest ? pszDest : addrConnect.ToString(), // REBTODO - lastseen by us? new?
         pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
     // Resolve
@@ -1653,6 +1653,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                     worstNodePctBPct = nBlockPct;
                 } else if (nMempoolPct < nSecondLowestPct)
                     nSecondLowestPct = nMempoolPct;
+                // REBTODO - Rather than check nBlockPct > 0, instead check if we've received a block since TimeConn+60
                 if (nBlockPct && nBlockPct < nLowestBPct) {
                     nSecondLowestBPct = nLowestBPct;
                     nLowestBPct = nBlockPct;
@@ -1980,7 +1981,7 @@ void CConnman::ThreadDNSAddressSeed()
             } while (!fNetworkActive);
         }
 
-        LogPrintf("Loading addresses from DNS seed %s\n", seed);
+        LogPrintf("Loading addresses from DNS seed %s\n", seed); // REBTODO - if bitnodes make them all "good"
         if (HaveNameProxy()) { // We're using a proxy server
             AddAddrFetch(seed); // We'll ask the peer directly in a special "address" mode.
         } else { // Use the DNS way
@@ -1992,7 +1993,7 @@ void CConnman::ThreadDNSAddressSeed()
             if (!resolveSource.SetInternal(host)) {
                 continue;
             }
-            unsigned int nMaxIPs = 256; // Limits number of IPs learned from a DNS seed
+            unsigned int nMaxIPs = 256; // Limits number of IPs learned from a DNS seed - REBTODO - increase for bitnodes
             if (LookupHost(host, vIPs, nMaxIPs, true)) {
                 for (const CNetAddr& ip : vIPs) {
                     int nOneDay = 24*3600;
@@ -2093,7 +2094,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
     {
         for (int64_t nLoop = 0;; nLoop++)
         {
-            ProcessAddrFetch();
+            ProcessAddrFetch(); // REBTODO - what's this?
             for (const std::string& strAddr : connect)
             {
                 CAddress addr(CService(), NODE_NONE);
@@ -2178,7 +2179,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             for (const CNode* pnode : m_nodes) {
                 if (pnode->IsFullOutboundConn()) nOutboundFullRelay++;
                 if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
-                if (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000) nPeersIBD++;
+                if (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000) nPeersIBD++; // REBTODO - is this number reliable?
 
                 // Netgroups for inbound and manual peers are not excluded because our goal here
                 // is to not use multiple of our limited outbound slots on a single netgroup
@@ -2260,7 +2261,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
         addrman.ResolveCollisions();
 
-        int64_t nANow = GetAdjustedTime();
+        int64_t nANow = GetAdjustedTime(); // REBTODO - why the Adjusted one?
         int nTries = 0;
         while (!interruptNet)
         {
@@ -2355,7 +2356,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     // address as Good(). We won't be able to initiate the
                     // connection anyway, so this avoids inadvertently evicting
                     // a currently-connected peer.
-                    addrman.Good(addr);
+                    addrman.Good(addr); // REBTODO - we need to do this for nodes seeded from bitnodes
                     // Select a new table address for our feeler instead.
                     std::tie(addr, addr_last_try) = addrman.Select(true);
                 }

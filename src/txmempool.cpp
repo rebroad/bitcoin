@@ -258,7 +258,7 @@ bool CTxMemPool::CalculateAncestorsAndCheckLimits(size_t entry_size,
         staged_ancestors.erase(stage);
         totalSizeWithAncestors += stageit->GetTxSize();
 
-        if (stageit->GetSizeWithDescendants() + entry_size > limitDescendantSize) {
+        if (stageit->GetSizeWithDescendants() + entry_size > limitDescendantSize) { // REBTODO - where is limitDescendantSize defined?
             errString = strprintf("exceeds descendant size limit for tx %s [limit: %u]", stageit->GetTx().GetHash().ToString(), limitDescendantSize);
             return false;
         } else if (stageit->GetCountWithDescendants() + entry_count > limitDescendantCount) {
@@ -1053,7 +1053,7 @@ void CCoinsViewMemPool::PackageAddTransaction(const CTransactionRef& tx)
 }
 
 size_t CTxMemPool::DynamicMemoryUsage(bool fDebug/*=false*/) const {
-    LOCK(cs);
+    LOCK(cs); // REBTODO - seems quite guessy!
     // Estimate the overhead of mapTx to be 15 pointers + an allocation, as no exact formula for boost::multi_index_contained is implemented.
     auto two = mapNextTx.size();
     auto three = mapDeltas.size();

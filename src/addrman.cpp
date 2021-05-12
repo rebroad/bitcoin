@@ -774,7 +774,7 @@ std::vector<CAddress> AddrManImpl::GetAddr_(size_t max_addresses, size_t max_pct
 {
     AssertLockHeld(cs);
 
-    size_t nNodes = vRandom.size();
+    size_t nNodes = vRandom.size(); // REBTODO - what is vRandom?
     if (max_pct != 0) {
         nNodes = max_pct * nNodes / 100;
     }

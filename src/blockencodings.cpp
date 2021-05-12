@@ -73,7 +73,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
             // have neither a prefilled txn or a shorttxid!
             return READ_STATUS_INVALID;
         }
-        txn_available[lastprefilledindex] = cmpctblock.prefilledtxn[i].tx;
+        txn_available[lastprefilledindex] = cmpctblock.prefilledtxn[i].tx; // REBTODO - where is txn_available defined?
     }
     prefilled_count = cmpctblock.prefilledtxn.size();
 

@@ -432,7 +432,7 @@ private:
     int64_t m_stale_tip_check_time{0};
 
     /** Last time we had no connections */
-    int64_t m_last_no_connections{GetTime()};
+    int64_t m_last_no_connections{GetTime()}; // REBTODO - move to net.cpp?
 
     /** Number of times net.cpp has run a ProcessMessages() loop */
     int64_t nNetClicks{0};
@@ -821,7 +821,7 @@ static void PushAddress(Peer& peer, const CAddress& addr, FastRandomContext& ins
     assert(peer.m_addr_known);
     if (addr.IsValid() && !peer.m_addr_known->contains(addr.GetKey()) && IsAddrCompatible(peer, addr)) {
         if (peer.m_addrs_to_send.size() >= MAX_ADDR_TO_SEND) {
-            peer.m_addrs_to_send[insecure_rand.randrange(peer.m_addrs_to_send.size())] = addr;
+            peer.m_addrs_to_send[insecure_rand.randrange(peer.m_addrs_to_send.size())] = addr; // REBTODO - log when this happens
         } else {
             peer.m_addrs_to_send.push_back(addr);
         }
@@ -2779,7 +2779,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             bool fDisconnect = !pfrom.IsInboundConn(); // Allow inbound to connect
             LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%x offered, %x expected) %speer=%d\n",
                 nServices, GetDesirableServiceFlags(nServices), fDisconnect ? "disconnecting " : "", pfrom.GetId());
-            if (fDisconnect) {
+            if (fDisconnect) { // REBTODO - Allow 8 and (1024 OR 1) (witness and limited or node)
                 pfrom.fDisconnect = true;
                 return;
             }
@@ -3343,9 +3343,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         {
             LOCK(cs_most_recent_block);
             if (most_recent_block_hash == req.blockhash)
-                recent_block = most_recent_block;
+                recent_block = most_recent_block; // REBTODO - see where this is created - use to cache cmpctblocks
             // Unlock cs_most_recent_block to avoid cs_main lock inversion
         }
+        // REBTODO - store with nodestate the last block hash of the cmpctblk sent to this node - if the requested hash is different, log as CURIOUS
         if (recent_block) {
             LogPrint(BCLog::BLOCKSEND, "send cached blocktxn %s peer=%d\n", req.blockhash.ToString(), pfrom.GetId());
             SendBlockTransactions(pfrom, *recent_block, req);
@@ -3492,7 +3493,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
 
         const uint256& hash = nodestate->m_wtxid_relay ? wtxid : txid;
-        pfrom.AddKnownTx(hash);
+        pfrom.AddKnownTx(hash); // REBTODO - check what this does
         if (nodestate->m_wtxid_relay && txid != wtxid) {
             // Insert txid into filterInventoryKnown, even for
             // wtxidrelay peers. This prevents re-adding of
@@ -3502,7 +3503,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             pfrom.AddKnownTx(txid);
         }
 
-        m_txrequest.ReceivedResponse(pfrom.GetId(), txid);
+        m_txrequest.ReceivedResponse(pfrom.GetId(), txid); // REBTODO - what does this do?
         if (tx.HasWitness()) m_txrequest.ReceivedResponse(pfrom.GetId(), wtxid);
 
         // We do the AlreadyHaveTx() check using wtxid, rather than txid - in the
@@ -3784,7 +3785,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
-        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here
+        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here relating to age
             if (pindex->nHeight > m_chainman.ActiveChain().Height() + 2) // REBTODO - for now, some debug
                 LogPrintf("CURIOUS: recv cmpctblk.age=%s tip.age=%s diff=%s\n", strAge(GetAdjustedTime()-pindex->GetBlockTime()),
                     strAge(GetAdjustedTime()-m_chainman.ActiveChain().Tip()->GetBlockTime()),
@@ -3798,7 +3799,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
                 if (!BlockRequested(pfrom.GetId(), *pindex, &queuedBlockIt)) {
                     LogPrint(BCLog::BLOCK, "MarkBlockAsInFlight=false (was already in flight). peer=%d\n", pfrom.GetId());
-                    if (!(*queuedBlockIt)->partialBlock) { // REBTODO - we already know this is true
+                    if (!(*queuedBlockIt)->partialBlock) {
                         LogPrint(BCLog::BLOCK, "No partialBlock. Call reset()\n"); // REB - what is reset()?
                         (*queuedBlockIt)->partialBlock.reset(new PartiallyDownloadedBlock(&m_mempool));
                     } else {
@@ -3837,7 +3838,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
                                 pnode->nBlockBytes += nSize;
-                                pnode->nBlockTXs++;
+                                pnode->nBlockTXs++; // REBTODO - move this to State and apply only when block added to Tip? i.e. can we fake headers?
                                 return true;
                             });
                             nFromConPeers++;
@@ -3883,7 +3884,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
             } // if a cmpctblock that we can process
         } else {
-            if (fAlreadyInFlight) {
+            if (fAlreadyInFlight) { // REBTODO - probably don't do this
                 // We requested this block, but its far into the future, so our
                 // mempool will probably be useless - request the block normally
                 LogPrint(BCLog::BLOCK, "resend getdata block %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
@@ -5134,8 +5135,9 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         if (txinfo.fee < filterrate.GetFee(txinfo.vsize)) {
                             continue;
                         }
+                        // REBTODO - also don't send if it's inputs are newer than the height of the receiving peer
                         if (pto->m_tx_relay->pfilter) {
-                            if (!pto->m_tx_relay->pfilter->IsRelevantAndUpdate(*txinfo.tx)) continue;
+                            if (!pto->m_tx_relay->pfilter->IsRelevantAndUpdate(*txinfo.tx)) continue; // REBTODO - ?
                         }
                         pto->m_tx_relay->filterInventoryKnown.insert(hash);
                         // Responses to MEMPOOL requests bypass the m_recently_announced_invs filter.
@@ -5248,7 +5250,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         }
         if (state.nBlockAfterTXs == 1) {
             LogPrintf("getblocktxn ignored. disconnecting peer=%d\n", pto->GetId());
-            pto->fDisconnect = true;
+            pto->fDisconnect = true; // REBTODO - mark as misbehaving?
             return true;
         }
         // In case there is a block that has been in flight from this peer for block_interval * (1 + 0.5 * N)

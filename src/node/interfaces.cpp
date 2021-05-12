@@ -291,6 +291,7 @@ public:
          int utilized = 100 * ratio * totalmemdelta / maxmempool;
          if (adjusting > 0) {
              adjusting--;
+             // REBTODO - set adjusting based on how fast approaching maxmempool
              if (utilized >= 100) ratio = newratio;
          }
          if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0
