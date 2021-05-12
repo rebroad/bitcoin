@@ -3834,6 +3834,13 @@ void CChainState::LoadMempool(const ArgsManager& args)
     m_mempool->SetIsLoaded(!ShutdownRequested());
 }
 
+void CChainState::LoadMempoolCache(const ArgsManager& args)
+{
+    if (!m_mempool) return;
+    if (args.GetBoolArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL))
+        ::LoadMempoolCache(*m_mempool, *this);
+}
+
 bool CChainState::LoadChainTip()
 {
     AssertLockHeld(cs_main);
@@ -4624,6 +4631,11 @@ bool LoadMempool(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mocka
 
     LogPrintf("Imported mempool transactions from disk: %i succeeded, %i failed, %i expired, %i already there, %i waiting for initial broadcast\n", count, failed, expired, already_there, unbroadcast);
     return true;
+}
+
+bool LoadMempoolCache(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mockable_fopen_function)
+{
+    return true; // REBTODO
 }
 
 bool DumpMempool(const CTxMemPool& pool, FopenFn mockable_fopen_function, bool skip_file_commit)
