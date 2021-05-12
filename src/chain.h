@@ -147,7 +147,7 @@ public:
     CBlockIndex* pskip{nullptr};
 
     //! height of the entry in the chain. The genesis block has height 0
-    int nHeight{0};
+    int nHeight{0}; // REBTODO - why not unsigned int as with entryHeight?
 
     //! Which # file this block is stored in (blk?????.dat)
     int nFile{0};

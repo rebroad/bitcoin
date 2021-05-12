@@ -818,7 +818,7 @@ static void PushAddress(Peer& peer, const CAddress& addr, FastRandomContext& ins
     assert(peer.m_addr_known);
     if (addr.IsValid() && !peer.m_addr_known->contains(addr.GetKey()) && IsAddrCompatible(peer, addr)) {
         if (peer.m_addrs_to_send.size() >= MAX_ADDR_TO_SEND) {
-            peer.m_addrs_to_send[insecure_rand.randrange(peer.m_addrs_to_send.size())] = addr;
+            peer.m_addrs_to_send[insecure_rand.randrange(peer.m_addrs_to_send.size())] = addr; // REBTODO - log when this happens
         } else {
             peer.m_addrs_to_send.push_back(addr);
         }
@@ -1632,7 +1632,7 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         LOCK(cs_most_recent_block);
         most_recent_block_hash = hashBlock;
         most_recent_block = pblock;
-        most_recent_compact_block = pcmpctblock;
+        most_recent_compact_block = pcmpctblock; // REBTODO - check where this is defined and used.
         fWitnessesPresentInMostRecentCompactBlock = fWitnessEnabled;
     }
 
@@ -3347,7 +3347,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         {
             LOCK(cs_most_recent_block);
             if (most_recent_block_hash == req.blockhash)
-                recent_block = most_recent_block;
+                recent_block = most_recent_block; // REBTODO - see where this is created - use to cache cmpctblocks
             // Unlock cs_most_recent_block to avoid cs_main lock inversion
         }
         if (recent_block) {
@@ -3482,7 +3482,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
 
         const uint256& hash = nodestate->m_wtxid_relay ? wtxid : txid;
-        pfrom.AddKnownTx(hash);
+        pfrom.AddKnownTx(hash); // REBTODO - check what this does
         if (nodestate->m_wtxid_relay && txid != wtxid) {
             // Insert txid into filterInventoryKnown, even for
             // wtxidrelay peers. This prevents re-adding of
@@ -3492,7 +3492,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             pfrom.AddKnownTx(txid);
         }
 
-        m_txrequest.ReceivedResponse(pfrom.GetId(), txid);
+        m_txrequest.ReceivedResponse(pfrom.GetId(), txid); // REBTODO - what does this do?
         if (tx.HasWitness()) m_txrequest.ReceivedResponse(pfrom.GetId(), wtxid);
 
         // We do the AlreadyHaveTx() check using wtxid, rather than txid - in the
@@ -3879,8 +3879,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // download from.
                 // Optimistically try to reconstruct anyway since we might be
                 // able to without any round trips.
-                PartiallyDownloadedBlock tempBlock(&m_mempool);
-                ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact);
+                PartiallyDownloadedBlock tempBlock(&m_mempool); // REBTODO - no point if not received any TXs since last InitData
+                ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact); // REBTODO - as above
                 if (status != READ_STATUS_OK) {
                     LogPrintf("after 2nd InitData failed. %shave partialblock. peer=%d\n", blockInFlightIt->second.second->partialBlock ? "" : "Don't ", pfrom.GetId());
                     // TODO: don't ignore failures
@@ -3895,7 +3895,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     LogPrintf("after 2nd InitData succeeded, FillBlock failed\n");
             }
         } else {
-            if (fAlreadyInFlight) {
+            if (fAlreadyInFlight) { // REBTODO - probably don't do this
                 // We requested this block, but its far into the future, so our
                 // mempool will probably be useless - request the block normally
                 LogPrint(BCLog::BLOCK, "resend getdata block %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
@@ -3912,7 +3912,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (fProcessBLOCKTXN) {
             LogPrint(BCLog::BLOCK, "Calling ProcessMessage(BLOCKTXN) peer=%d\n", pfrom.GetId());
-            pfrom.nMempoolBytes += nSize;
+            pfrom.nMempoolBytes += nSize; // REBTODO - is this right?
             return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, time_received, interruptMsgProc);
         }
 

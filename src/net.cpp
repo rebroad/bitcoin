@@ -405,7 +405,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         vNodesSize = vNodes.size();
     }
     LogPrint(BCLog::CONN, "trying %s connection(%d) %s lastseen=%s\n", ConnectionTypeAsString(conn_type),
-        vNodesSize, pszDest ? pszDest : addrConnect.ToString(),
+        vNodesSize, pszDest ? pszDest : addrConnect.ToString(), // REBTODO - lastseen by us? new?
         pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
     // Resolve
@@ -2231,7 +2231,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
         addrman.ResolveCollisions();
 
-        int64_t nANow = GetAdjustedTime();
+        int64_t nANow = GetAdjustedTime(); // REBTODO - why the Adjusted one?
         int nTries = 0;
         while (!interruptNet)
         {
@@ -2321,7 +2321,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     // address as Good(). We won't be able to initiate the
                     // connection anyway, so this avoids inadvertently evicting
                     // a currently-connected peer.
-                    addrman.Good(addr);
+                    addrman.Good(addr); // REBTODO - we need to do this for nodes seeded from bitnodes
                     // Select a new table address for our feeler instead.
                     addr = addrman.Select(true);
                 }
