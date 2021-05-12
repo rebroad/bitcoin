@@ -772,6 +772,9 @@ public:
     /** Load the persisted mempool from disk */
     void LoadMempool(const ArgsManager& args);
 
+    /** Load the cached mempool from disk */
+    void LoadMempoolCache(const ArgsManager& args);
+
     /** Update the chain tip based on database information, i.e. CoinsTip()'s best block. */
     bool LoadChainTip(const CChainParams& chainparams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -1038,6 +1041,9 @@ bool DumpMempool(const CTxMemPool& pool, FopenFn mockable_fopen_function = fsbri
 
 /** Load the mempool from disk. */
 bool LoadMempool(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mockable_fopen_function = fsbridge::fopen);
+
+/** Load the mempool cache from disk. */
+bool LoadMempoolCache(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mockable_fopen_function = fsbridge::fopen);
 
 /**
  * Return the expected assumeutxo value for a given height, if one exists.
