@@ -3185,17 +3185,18 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             m_mempool.check(m_chainman.ActiveChainstate());
             // As this version of the transaction was acceptable, we can forget about any
             // requests for it.
-            m_txrequest.ForgetTxHash(tx.GetHash());
-            m_txrequest.ForgetTxHash(tx.GetWitnessHash());
+            bool fRequestedTX = m_txrequest.ForgetTxHash(tx.GetHash(), pfrom.GetId());
+            bool fRequestedWTX = m_txrequest.ForgetTxHash(tx.GetWitnessHash(), pfrom.GetId());
             _RelayTransaction(tx.GetHash(), tx.GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
             pfrom.nLastTXTime = GetTime();
 
-            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n",
-                pfrom.GetId(),
+            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB) req:%d%d peer=%d\n",
                 tx.GetHash().ToString(),
-                m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
+                m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
+                fRequestedTX ? 1:0, fRequestedWTX ? 1:0,
+                pfrom.GetId());
 
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
                 AddToCompactExtraTransactions(removedTx);
