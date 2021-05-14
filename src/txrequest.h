@@ -142,7 +142,7 @@ public:
      * This should be called when a transaction is no longer needed. The caller should ensure that new announcements
      * for the same txhash will not trigger new ReceivedInv calls, at least in the short term after this call.
      */
-    void ForgetTxHash(const uint256& txhash);
+    int ForgetTxHash(const uint256& txhash, NodeId peer = 0);
 
     /** Find the txids to request now from peer.
      *

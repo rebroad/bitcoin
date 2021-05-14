@@ -565,12 +565,17 @@ public:
         }
     }
 
-    void ForgetTxHash(const uint256& txhash)
+    int ForgetTxHash(const uint256& txhash, NodeId peer = 0)
     {
+        int nFound = 0;
+        int nMatch = 0;
         auto it = m_index.get<ByTxHash>().lower_bound(ByTxHashView{txhash, State::CANDIDATE_DELAYED, 0});
         while (it != m_index.get<ByTxHash>().end() && it->m_txhash == txhash) {
+            nFound = 1;
+            if (it->m_peer == peer) nMatch = 1;
             it = Erase<ByTxHash>(it);
         }
+        return nFound + nMatch;
     }
 
     void ReceivedInv(NodeId peer, const GenTxid& gtxid, bool preferred,
@@ -714,7 +719,7 @@ TxRequestTracker::TxRequestTracker(bool deterministic) :
 
 TxRequestTracker::~TxRequestTracker() = default;
 
-void TxRequestTracker::ForgetTxHash(const uint256& txhash) { m_impl->ForgetTxHash(txhash); }
+int TxRequestTracker::ForgetTxHash(const uint256& txhash, NodeId peer) { return m_impl->ForgetTxHash(txhash, peer); }
 void TxRequestTracker::DisconnectedPeer(NodeId peer) { m_impl->DisconnectedPeer(peer); }
 size_t TxRequestTracker::CountInFlight(NodeId peer) const { return m_impl->CountInFlight(peer); }
 size_t TxRequestTracker::CountCandidates(NodeId peer) const { return m_impl->CountCandidates(peer); }

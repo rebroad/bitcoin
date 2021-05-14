@@ -3396,22 +3396,24 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (pfrom)
         const TxValidationState& state = result.m_state;
-
+        int nRequestedTX = 3;
+        int nRequestedWTX = 3;
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
             m_mempool.check(m_chainman.ActiveChainstate());
             // As this version of the transaction was acceptable, we can forget about any
             // requests for it.
-            m_txrequest.ForgetTxHash(tx.GetHash());
-            m_txrequest.ForgetTxHash(tx.GetWitnessHash());
+            nRequestedTX = m_txrequest.ForgetTxHash(tx.GetHash(), pfrom.GetId());
+            nRequestedWTX = m_txrequest.ForgetTxHash(tx.GetWitnessHash(), pfrom.GetId());
             _RelayTransaction(tx.GetHash(), tx.GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
             pfrom.nLastTXTime = GetTime();
 
-            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n",
-                pfrom.GetId(),
+            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB) req:%d%d peer=%d\n",
                 tx.GetHash().ToString(),
-                m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
+                m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
+                nRequestedTX, nRequestedWTX,
+                pfrom.GetId());
 
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
                 AddToCompactExtraTransactions(removedTx);
@@ -3459,8 +3461,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
 
                 // Once added to the orphan pool, a tx is considered AlreadyHave, and we shouldn't request it anymore.
-                m_txrequest.ForgetTxHash(tx.GetHash());
-                m_txrequest.ForgetTxHash(tx.GetWitnessHash());
+                nRequestedTX = m_txrequest.ForgetTxHash(tx.GetHash(), pfrom.GetId());
+                nRequestedWTX = m_txrequest.ForgetTxHash(tx.GetWitnessHash(), pfrom.GetId());
 
                 // DoS prevention: do not allow m_orphanage to grow unbounded (see CVE-2012-3789)
                 unsigned int nMaxOrphanTx = (unsigned int)std::max((int64_t)0, gArgs.GetArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
@@ -3478,8 +3480,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // from any of our non-wtxidrelay peers.
                 recentRejects->insert(tx.GetHash());
                 recentRejects->insert(tx.GetWitnessHash());
-                m_txrequest.ForgetTxHash(tx.GetHash());
-                m_txrequest.ForgetTxHash(tx.GetWitnessHash());
+                nRequestedTX = m_txrequest.ForgetTxHash(tx.GetHash(), pfrom.GetId());
+                nRequestedWTX = m_txrequest.ForgetTxHash(tx.GetWitnessHash(), pfrom.GetId());
             }
         } else {
             if (state.GetResult() != TxValidationResult::TX_WITNESS_STRIPPED) {
@@ -3498,7 +3500,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // if we start doing this too early.
                 assert(recentRejects);
                 recentRejects->insert(tx.GetWitnessHash());
-                m_txrequest.ForgetTxHash(tx.GetWitnessHash());
+                nRequestedWTX = m_txrequest.ForgetTxHash(tx.GetWitnessHash(), pfrom.GetId());
                 // If the transaction failed for TX_INPUTS_NOT_STANDARD,
                 // then we know that the witness was irrelevant to the policy
                 // failure, since this check depends only on the txid
@@ -3509,7 +3511,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // parent-fetching by txid via the orphan-handling logic).
                 if (state.GetResult() == TxValidationResult::TX_INPUTS_NOT_STANDARD && tx.GetWitnessHash() != tx.GetHash()) {
                     recentRejects->insert(tx.GetHash());
-                    m_txrequest.ForgetTxHash(tx.GetHash());
+                    nRequestedTX = m_txrequest.ForgetTxHash(tx.GetHash(), pfrom.GetId());
                 }
                 if (RecursiveDynamicUsage(*ptx) < 100000) {
                     AddToCompactExtraTransactions(ptx);
