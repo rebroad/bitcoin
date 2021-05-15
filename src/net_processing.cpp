@@ -3070,15 +3070,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         for (CInv& inv : vInv) {
             if (interruptMsgProc) return;
 
-            // Ignore INVs that don't match wtxidrelay setting.
-            // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
-            // This is fine as no INV messages are involved in that process.
-            if (State(pfrom.GetId())->m_wtxid_relay) {
-                if (inv.IsMsgTx()) continue;
-            } else {
-                if (inv.IsMsgWtx()) continue;
-            }
-
             if (inv.IsMsgBlk()) {
                 bool fAlreadyHave = false;
                 const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(inv.hash);
@@ -3102,6 +3093,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     LogPrintf("recv inv tx violation HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
                     pfrom.fDisconnect = true;
                     return;
+                }
+                // Ignore INVs that don't match wtxidrelay setting.
+                // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
+                // This is fine as no INV messages are involved in that process.
+                if (State(pfrom.GetId())->m_wtxid_relay) {
+                    if (inv.IsMsgTx()) continue;
+                } else {
+                    if (inv.IsMsgWtx()) continue;
                 }
                 const GenTxid gtxid = ToGenTxid(inv);
                 const bool fAlreadyHave = AlreadyHaveTx(gtxid);
