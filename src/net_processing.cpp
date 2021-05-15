@@ -3036,6 +3036,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         const auto current_time = GetTime<std::chrono::microseconds>();
         uint256* best_block{nullptr};
+        bool fIBD = m_chainman.ActiveChainstate().IsInitialBlockDownload();
 
         for (CInv& inv : vInv) {
             if (interruptMsgProc) return;
@@ -3073,13 +3074,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 LogPrint(BCLog::NET, "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
 
                 pfrom.AddKnownTx(inv.hash);
-                if (!fAlreadyHave && !m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
+                if (!fAlreadyHave && !fIBD) {
                     AddTxAnnouncement(pfrom, gtxid, current_time);
                 }
             } else {
                 LogPrint(BCLog::NET, "Unknown inv type \"%s\" received from peer=%d\n", inv.ToString(), pfrom.GetId());
             }
-        }
+        } // for loop of vInv
 
         if (best_block != nullptr) {
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), *best_block));
