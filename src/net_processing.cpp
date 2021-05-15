@@ -3065,6 +3065,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         const auto current_time = GetTime<std::chrono::microseconds>();
         uint256* best_block{nullptr};
+        bool fIBD = m_chainman.ActiveChainstate().IsInitialBlockDownload();
 
         for (CInv& inv : vInv) {
             if (interruptMsgProc) return;
@@ -3106,13 +3107,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     LogPrintf("recv inv tx violation HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
                     pfrom.fDisconnect = true;
                     return;
-                } else if (!fAlreadyHave && !m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
+                } else if (!fAlreadyHave && !fIBD) {
                     AddTxAnnouncement(pfrom, gtxid, current_time);
                 }
             } else {
                 LogPrint(BCLog::NET, "Unknown inv type \"%s\" received from peer=%d\n", inv.ToString(), pfrom.GetId());
             }
-        }
+        } // for loop of vInv
 
         if (best_block != nullptr) {
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), *best_block));
