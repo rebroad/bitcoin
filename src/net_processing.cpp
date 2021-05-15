@@ -2551,7 +2551,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (pfrom.m_tx_relay != nullptr) {
             LOCK(pfrom.m_tx_relay->cs_filter);
             pfrom.m_tx_relay->fRelayTxes = fRelay; // set to true after we get the first filter* message
-            pfrom.m_tx_relay->lastFeeFilter = -1;
+            pfrom.m_tx_relay->lastRecvFeeFilter = -1;
         }
 
         if((nServices & NODE_WITNESS))
@@ -3921,16 +3921,16 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (pfrom.m_tx_relay != nullptr) {
                 bool fWobble = false;
                 bool fRepeat = false;
-                int lastFeeFilter = pfrom.m_tx_relay->lastFeeFilter;
+                int lastRecvFeeFilter = pfrom.m_tx_relay->lastRecvFeeFilter;
                 int minFeeFilter = pfrom.m_tx_relay->minFeeFilter;
                 if (newFeeFilter != minFeeFilter) {
-                    if (lastFeeFilter == newFeeFilter && newFeeFilter < minFeeFilter)
+                    if (lastRecvFeeFilter == newFeeFilter && newFeeFilter < minFeeFilter)
                         fWobble = true;
-                    pfrom.m_tx_relay->lastFeeFilter = minFeeFilter;
+                    pfrom.m_tx_relay->lastRecvFeeFilter = minFeeFilter;
                     pfrom.m_tx_relay->minFeeFilter = newFeeFilter;
                 } else
                     fRepeat = true;
-                LogPrintf("recv feefilter %d->%d->%d %speer=%d\n", lastFeeFilter, minFeeFilter, newFeeFilter,
+                LogPrintf("recv feefilter %d->%d->%d %speer=%d\n", lastRecvFeeFilter, minFeeFilter, newFeeFilter,
                     fWobble ? "WOBBLE " : fRepeat ? "REPEAT " : "", pfrom.GetId());
             }
         }
