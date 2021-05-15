@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QT_MEMPOOLSTATS_H
-#define BITCOIN_QT_MEMPOOLSTATS_H
+#ifndef BITCOIN_QT_MEMPOOLSTATSOLD_H
+#define BITCOIN_QT_MEMPOOLSTATSOLD_H
 
 #include <QWidget>
 #include <QGraphicsLineItem>
@@ -16,7 +16,7 @@
 
 class ClientModel;
 
-class ClickableTextItem : public QGraphicsTextItem
+class ClickableTextItemOld : public QGraphicsTextItem
 {
     Q_OBJECT
 public:
@@ -29,16 +29,16 @@ Q_SIGNALS:
 
 
 namespace Ui {
-    class MempoolStats;
+    class MempoolStatsOld;
 }
 
-class MempoolStats : public QWidget
+class MempoolStatsOld : public QWidget
 {
     Q_OBJECT
 
 public:
-    MempoolStats(QWidget *parent = 0);
-    ~MempoolStats();
+    MempoolStatsOld(QWidget *parent = 0);
+    ~MempoolStatsOld();
 
     void setClientModel(ClientModel *model);
 
@@ -60,10 +60,10 @@ private:
     QGraphicsTextItem *txCountValueItem;
     QGraphicsTextItem *minFeeValueItem;
 
-    ClickableTextItem *lastHourLabel;
-    ClickableTextItem *last3HoursLabel;
-    ClickableTextItem *lastDayLabel;
-    ClickableTextItem *allDataLabel;
+    ClickableTextItemOld *lastHourLabel;
+    ClickableTextItemOld *last3HoursLabel;
+    ClickableTextItemOld *lastDayLabel;
+    ClickableTextItemOld *allDataLabel;
 
     QGraphicsProxyWidget *txCountSwitch;
     QGraphicsProxyWidget *minFeeSwitch;
@@ -78,7 +78,7 @@ private:
 
     int64_t timeFilter;
 
-    Ui::MempoolStats *ui;
+    Ui::MempoolStatsOld *ui;
 };
 
-#endif // BITCOIN_QT_MEMPOOLSTATS_H
+#endif // BITCOIN_QT_MEMPOOLSTATSOLD_H
