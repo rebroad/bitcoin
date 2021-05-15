@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qt/mempoolstats.h>
-#include <qt/forms/ui_mempoolstats.h>
+#include <qt/mempoolstatsold.h>
+#include <qt/forms/ui_mempoolstatsold.h>
 
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
@@ -28,12 +28,12 @@ static const int GRAPH_PADDING_TOP_LABEL = 150;
 static const int GRAPH_PADDING_BOTTOM = 50;
 static const int LABEL_HEIGHT = 15;
 
-void ClickableTextItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+void ClickableTextItemOld::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     Q_EMIT objectClicked(this);
 }
 
-void ClickableTextItem::setEnabled(bool state)
+void ClickableTextItemOld::setEnabled(bool state)
 {
     if (state)
         setDefaultTextColor(QColor(15,68,113, 250));
@@ -41,13 +41,13 @@ void ClickableTextItem::setEnabled(bool state)
         setDefaultTextColor(QColor(100,100,100, 200));
 }
 
-MempoolStats::MempoolStats(QWidget *parent) :
+MempoolStatsOld::MempoolStatsOld(QWidget *parent) :
 QWidget(parent, Qt::Window),
 clientModel(0),
 titleItem(0),
 scene(0),
 timeFilter(ONE_HOUR),
-ui(new Ui::MempoolStats)
+ui(new Ui::MempoolStatsOld)
 {
     ui->setupUi(this);
     if (parent) {
@@ -69,7 +69,7 @@ ui(new Ui::MempoolStats)
         drawChart();
 }
 
-void MempoolStats::setClientModel(ClientModel *model)
+void MempoolStatsOld::setClientModel(ClientModel *model)
 {
     clientModel = model;
 
@@ -77,7 +77,7 @@ void MempoolStats::setClientModel(ClientModel *model)
         connect(model, SIGNAL(mempoolStatsDidUpdate()), this, SLOT(drawChart()));
 }
 
-void MempoolStats::drawChart()
+void MempoolStatsOld::drawChart()
 {
     if (!(isVisible() && clientModel))
         return;
@@ -123,19 +123,19 @@ void MempoolStats::drawChart()
         noDataItem->setFont(QFont(LABEL_FONT, LABEL_TITLE_SIZE, QFont::Light));
         noDataItem->setDefaultTextColor(QColor(100,100,100, 200));
 
-        lastHourLabel = new ClickableTextItem(); lastHourLabel->setPlainText(tr("Last Hour"));
+        lastHourLabel = new ClickableTextItemOld(); lastHourLabel->setPlainText(tr("Last Hour"));
         scene->addItem(lastHourLabel);
         connect(lastHourLabel, SIGNAL(objectClicked(QGraphicsItem*)), this, SLOT(objectClicked(QGraphicsItem*)));
         lastHourLabel->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
-        last3HoursLabel = new ClickableTextItem(); last3HoursLabel->setPlainText(tr("Last 3 Hours"));
+        last3HoursLabel = new ClickableTextItemOld(); last3HoursLabel->setPlainText(tr("Last 3 Hours"));
         scene->addItem(last3HoursLabel);
         connect(last3HoursLabel, SIGNAL(objectClicked(QGraphicsItem*)), this, SLOT(objectClicked(QGraphicsItem*)));
         last3HoursLabel->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
-        lastDayLabel = new ClickableTextItem(); lastDayLabel->setPlainText(tr("Last Day"));
+        lastDayLabel = new ClickableTextItemOld(); lastDayLabel->setPlainText(tr("Last Day"));
         scene->addItem(lastDayLabel);
         connect(lastDayLabel, SIGNAL(objectClicked(QGraphicsItem*)), this, SLOT(objectClicked(QGraphicsItem*)));
         lastDayLabel->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
-        allDataLabel = new ClickableTextItem(); allDataLabel->setPlainText(tr("All Data"));
+        allDataLabel = new ClickableTextItemOld(); allDataLabel->setPlainText(tr("All Data"));
         scene->addItem(allDataLabel);
         connect(allDataLabel, SIGNAL(objectClicked(QGraphicsItem*)), this, SLOT(objectClicked(QGraphicsItem*)));
         allDataLabel->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
@@ -358,7 +358,7 @@ void MempoolStats::drawChart()
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column
 // sizes as the tables width is proportional to the dialogs width.
-void MempoolStats::resizeEvent(QResizeEvent *event)
+void MempoolStatsOld::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     ui->graphicsView->resize(size());
@@ -366,14 +366,14 @@ void MempoolStats::resizeEvent(QResizeEvent *event)
     drawChart();
 }
 
-void MempoolStats::showEvent(QShowEvent *event)
+void MempoolStatsOld::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
     if (clientModel)
         drawChart();
 }
 
-void MempoolStats::objectClicked(QGraphicsItem *item)
+void MempoolStatsOld::objectClicked(QGraphicsItem *item)
 {
     if (item == lastHourLabel)
         timeFilter = 3600;
@@ -390,7 +390,7 @@ void MempoolStats::objectClicked(QGraphicsItem *item)
     drawChart();
 }
 
-MempoolStats::~MempoolStats()
+MempoolStatsOld::~MempoolStatsOld()
 {
     if (titleItem)
     {

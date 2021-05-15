@@ -9,7 +9,7 @@
 #include <qt/createwalletdialog.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
-#include <qt/mempoolstats.h>
+#include <qt/mempoolstatsold.h>
 #include <qt/modaloverlay.h>
 #include <qt/networkstyle.h>
 #include <qt/notificator.h>
@@ -880,7 +880,7 @@ void BitcoinGUI::showMempoolStatsWindow()
 {
     // only build the mempool stats window if its requested
     if (!mempoolStats)
-        mempoolStats = new MempoolStats(this);
+        mempoolStats = new MempoolStatsOld(this);
     if (clientModel)
         mempoolStats->setClientModel(clientModel);
     mempoolStats->showNormal();
