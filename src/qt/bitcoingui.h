@@ -40,7 +40,7 @@ class WalletFrame;
 class WalletModel;
 class HelpMessageDialog;
 class ModalOverlay;
-class MempoolStats;
+class MempoolStatsOld;
 enum class SynchronizationState;
 
 namespace interfaces {
@@ -176,7 +176,7 @@ private:
     RPCConsole* rpcConsole = nullptr;
     HelpMessageDialog* helpMessageDialog = nullptr;
     ModalOverlay* modalOverlay = nullptr;
-    MempoolStats* mempoolStats = nullptr;
+    MempoolStatsOld* mempoolStats = nullptr;
 
     QMenu* m_network_context_menu = new QMenu(this);
 
