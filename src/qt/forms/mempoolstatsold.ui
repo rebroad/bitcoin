@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>MempoolStats</class>
- <widget class="QWidget" name="MempoolStats">
+ <class>MempoolStatsOld</class>
+ <widget class="QWidget" name="MempoolStatsOld">
   <property name="geometry">
    <rect>
     <x>0</x>
