@@ -27,7 +27,6 @@ struct MockedTxPool : public CTxMemPool {
     {
         LOCK(cs);
         lastRollingFeeUpdate = GetTime();
-        blockSinceLastRollingFeeBump = true;
     }
 };
 
