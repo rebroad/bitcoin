@@ -471,13 +471,13 @@ private:
      *  - the block has been recieved from a peer
      *  - the request for the block has timed out
      */
-    void MarkBlockAsReceived(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void RemoveBlockRequest(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /* Mark a block as in flight
      * Returns false, still setting pit, if the block was already in flight from the same peer
      * pit will only be valid as long as the same cs_main lock is being held
      */
-    bool MarkBlockAsInFlight(NodeId nodeid, const CBlockIndex* pindex, std::list<QueuedBlock>::iterator** pit = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool BlockRequested(NodeId nodeid, const CBlockIndex* pindex, std::list<QueuedBlock>::iterator** pit = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool TipMayBeStale() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -776,7 +776,7 @@ bool PeerManagerImpl::IsBlockRequested(const uint256& hash)
     return mapBlocksInFlight.find(hash) != mapBlocksInFlight.end();
 }
 
-void PeerManagerImpl::MarkBlockAsReceived(const uint256& hash)
+void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
 {
     auto it = mapBlocksInFlight.find(hash);
     if (it == mapBlocksInFlight.end()) {
@@ -803,7 +803,7 @@ void PeerManagerImpl::MarkBlockAsReceived(const uint256& hash)
     mapBlocksInFlight.erase(it);
 }
 
-bool PeerManagerImpl::MarkBlockAsInFlight(NodeId nodeid, const CBlockIndex* pindex, std::list<QueuedBlock>::iterator** pit)
+bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex* pindex, std::list<QueuedBlock>::iterator** pit)
 {
     assert(pindex);
     const uint256& hash{pindex->GetBlockHash()};
@@ -828,7 +828,7 @@ bool PeerManagerImpl::MarkBlockAsInFlight(NodeId nodeid, const CBlockIndex* pind
     }
 
     // Make sure it's not listed somewhere already. - REBTODO - why?! Why because InitData will crash otherwise.
-    MarkBlockAsReceived(hash);
+    RemoveBlockRequest(hash);
 
     std::list<QueuedBlock>::iterator it = state->vBlocksInFlight.insert(state->vBlocksInFlight.end(),
             {pindex, std::unique_ptr<PartiallyDownloadedBlock>(pit ? new PartiallyDownloadedBlock(&m_mempool) : nullptr)});
@@ -2202,7 +2202,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     }
                     uint32_t nFetchFlags = GetFetchFlags(pfrom);
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-                    MarkBlockAsInFlight(pfrom.GetId(), pindex);
+                    BlockRequested(pfrom.GetId(), pindex);
                 }
                 if (vGetData.size() > 1) {
                     LogPrint(BCLog::BLOCK, "Requesting %d blocks toward %s peer=%d\n", vGetData.size(),
@@ -3554,7 +3554,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         blockInFlightIt->second.first, pfrom.GetId());
                 }
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
-                if (!MarkBlockAsInFlight(pfrom.GetId(), pindex, &queuedBlockIt)) {
+                if (!BlockRequested(pfrom.GetId(), pindex, &queuedBlockIt)) {
                     LogPrint(BCLog::BLOCK, "MarkBlockAsInFlight=false (was already in flight). peer=%d\n", pfrom.GetId());
                     if (!(*queuedBlockIt)->partialBlock) { // REBTODO - we already know this is true
                         LogPrint(BCLog::BLOCK, "No partialBlock. Call reset()\n"); // REB - what is reset()?
@@ -3572,7 +3572,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 ReadStatus status = partialBlock.InitData(cmpctblock, vExtraTxnForCompact);
                 if (status == READ_STATUS_INVALID) {
                     LogPrint(BCLog::BLOCK, "cmpctblock %s INVALID peer=%d\n", strBlkHeight(pindex), pfrom.GetId());
-                    MarkBlockAsReceived(pindex->GetBlockHash()); // Reset in-flight state in case Misbehaving does not result in a disconnect
+                    RemoveBlockRequest(pindex->GetBlockHash()); // Reset in-flight state in case Misbehaving does not result in a disconnect
                     Misbehaving(pfrom.GetId(), 100, "invalid compact block");
                     return;
                 } else if (status == READ_STATUS_FAILED) {
@@ -3675,7 +3675,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // process from some other peer.  We do this after calling
                 // ProcessNewBlock so that a malleated cmpctblock announcement
                 // can't be used to interfere with block relay.
-                MarkBlockAsReceived(pblock->GetHash());
+                RemoveBlockRequest(pblock->GetHash());
             }
         }
         return;
@@ -3721,7 +3721,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (status == READ_STATUS_INVALID) {
                 if (!fWrongPeer) {
                     LogPrint(BCLog::BLOCK, "blocktxn %s INVALID peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
-                MarkBlockAsReceived(resp.blockhash); // Reset in-flight state in case Misbehaving does not result in a disconnect
+                RemoveBlockRequest(resp.blockhash); // Reset in-flight state in case Misbehaving does not result in a disconnect
                 Misbehaving(pfrom.GetId(), 100, "invalid compact block/non-matching block transactions");
                 } else
                     LogPrint(BCLog::BLOCK, "blocktxn %s INVALID wrong peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
@@ -3753,7 +3753,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // though the block was successfully read, and rely on the
                 // handling in ProcessNewBlock to ensure the block index is
                 // updated, etc.
-                MarkBlockAsReceived(resp.blockhash); // it is now an empty pointer
+                RemoveBlockRequest(resp.blockhash); // it is now an empty pointer
                 fBlockRead = true;
                 // mapBlockSource is used for potentially punishing peers and
                 // updating which peers send us compact blocks, so the race
@@ -3824,7 +3824,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // Always process the block if we requested it, since we may
             // need it even when it's not a candidate for a new best tip.
             forceProcessing = IsBlockRequested(hash);
-            MarkBlockAsReceived(hash);
+            RemoveBlockRequest(hash);
             // mapBlockSource is only used for punishing peers and setting
             // which peers send us compact blocks, so the race between here and
             // cs_main in ProcessNewBlock is fine.
@@ -5009,7 +5009,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             for (const CBlockIndex *pindex : vToDownload) {
                 uint32_t nFetchFlags = GetFetchFlags(*pto);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-                MarkBlockAsInFlight(pto->GetId(), pindex);
+                BlockRequested(pto->GetId(), pindex);
                 LogPrint(BCLog::BLOCK, "Requesting block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
