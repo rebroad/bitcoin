@@ -473,7 +473,7 @@ private:
      * Returns false, still setting pit, if the block was already in flight from the same peer
      * pit will only be valid as long as the same cs_main lock is being held
      */
-    bool MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const CBlockIndex* pindex = nullptr, std::list<QueuedBlock>::iterator** pit = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool MarkBlockAsInFlight(NodeId nodeid, const CBlockIndex* pindex, std::list<QueuedBlock>::iterator** pit = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     bool TipMayBeStale() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -792,8 +792,11 @@ bool PeerManagerImpl::MarkBlockAsReceived(const uint256& hash)
     return false;
 }
 
-bool PeerManagerImpl::MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const CBlockIndex* pindex, std::list<QueuedBlock>::iterator** pit)
+bool PeerManagerImpl::MarkBlockAsInFlight(NodeId nodeid, const CBlockIndex* pindex, std::list<QueuedBlock>::iterator** pit)
 {
+    assert(pindex);
+    const uint256& hash{pindex->GetBlockHash()};
+
     CNodeState *state = State(nodeid);
     assert(state != nullptr);
 
@@ -824,7 +827,7 @@ bool PeerManagerImpl::MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, co
         // We're starting a block download (batch) from this peer.
         state->m_downloading_since = GetTime<std::chrono::microseconds>();
     }
-    if (state->nBlocksInFlightValidHeaders == 1 && pindex != nullptr) {
+    if (state->nBlocksInFlightValidHeaders == 1) {
         nPeersWithValidatedDownloads++;
     }
     itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it))).first;
@@ -2191,7 +2194,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     }
                     uint32_t nFetchFlags = GetFetchFlags(pfrom);
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-                    MarkBlockAsInFlight(pfrom.GetId(), pindex->GetBlockHash(), pindex);
+                    MarkBlockAsInFlight(pfrom.GetId(), pindex);
                 }
                 if (vGetData.size() > 1) {
                     LogPrint(BCLog::BLOCK, "Requesting %d blocks toward %s peer=%d\n", vGetData.size(),
@@ -3543,7 +3546,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         blockInFlightIt->second.first, pfrom.GetId());
                 }
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
-                if (!MarkBlockAsInFlight(pfrom.GetId(), pindex->GetBlockHash(), pindex, &queuedBlockIt)) {
+                if (!MarkBlockAsInFlight(pfrom.GetId(), pindex, &queuedBlockIt)) {
                     LogPrint(BCLog::BLOCK, "MarkBlockAsInFlight=false (was already in flight). peer=%d\n", pfrom.GetId());
                     if (!(*queuedBlockIt)->partialBlock) { // REBTODO - we already know this is true
                         LogPrint(BCLog::BLOCK, "No partialBlock. Call reset()\n"); // REB - what is reset()?
@@ -4997,7 +5000,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             for (const CBlockIndex *pindex : vToDownload) {
                 uint32_t nFetchFlags = GetFetchFlags(*pto);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-                MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), pindex);
+                MarkBlockAsInFlight(pto->GetId(), pindex);
                 LogPrint(BCLog::BLOCK, "Requesting block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
