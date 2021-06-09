@@ -591,6 +591,11 @@ struct CNodeState {
     std::chrono::microseconds m_downloading_since{0us};
     int nBlocksInFlight{0};
     int nBlocksInFlightValidHeaders{0};
+    int nTxRequested{0};
+    int nTxRecvOld{0};
+    int nTxRecvNew{0};
+    int nTxNotFound{0};
+    int nTxToMempool{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -1460,7 +1465,7 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         if (state.fPreferHeaderAndIDs && (!fWitnessEnabled || state.fWantsCmpctWitness) &&
                 !PeerHasHeader(&state, pindex) && PeerHasHeader(&state, pindex->pprev)) {
 
-            LogPrint(BCLog::BLOCK, "send cmpctblock %s peer=%d\n", strBlockInfo(pindex), pnode->GetId());
+            LogPrint(BCLog::BLOCK, "send cmpctblock %s %s peer=%d\n", hashBlock.ToString(), strBlkInfo(pindex), pnode->GetId());
             m_connman.PushMessage(pnode, msgMaker.Make(NetMsgType::CMPCTBLOCK, *pcmpctblock));
             state.pindexBestHeaderSent = pindex;
         }
@@ -2198,6 +2203,8 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
             LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
+            CNodeState *nodestate = State(from_peer);
+            nodestate->nTxToMempool++;
             _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
             m_orphanage.EraseTx(orphanHash);
@@ -3165,6 +3172,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // (older than our recency filter) if trying to DoS us, without any need
         // for witness malleation.
         if (AlreadyHaveTx(GenTxid(/* is_wtxid=*/true, wtxid))) {
+            nodestate->nTxRecvOld++;
             if (pfrom.HasPermission(PF_FORCERELAY)) {
                 // Always relay transactions received from peers with forcerelay
                 // permission, even if they were already in the mempool, allowing
@@ -3178,6 +3186,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
             return;
         }
+        nodestate->nTxRecvNew++;
 
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (pfrom)
         const TxValidationState& state = result.m_state;
@@ -3195,11 +3204,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
             pfrom.nLastTXTime = GetTime();
+            nodestate->nTxToMempool++;
 
-            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB) req:%d%d peer=%d\n",
+            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB) req:%d%d G-G=%d peer=%d\n",
                 tx.GetHash().ToString(),
                 m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
                 nRequestedTX, nRequestedWTX,
+		nodestate->nTxRequested-nodestate->nTxRecvNew-nodestate->nTxRecvOld-nodestate->nTxNotFound,
                 pfrom.GetId());
 
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
@@ -3969,6 +3980,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 if (inv.IsGenTxMsg()) {
                     // If we receive a NOTFOUND message for a tx we requested, mark the announcement for it as
                     // completed in TxRequestTracker.
+                    CNodeState *nodestate = State(pfrom.GetId());
+                    nodestate->nTxNotFound++;
                     m_txrequest.ReceivedResponse(pfrom.GetId(), inv.hash);
                 }
             }
@@ -4863,6 +4876,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     gtxid.GetHash().ToString(), pto->GetId());
                 vGetData.emplace_back(gtxid.IsWtxid() ? MSG_WTX : (MSG_TX | GetFetchFlags(*pto)), gtxid.GetHash());
                 if (vGetData.size() >= MAX_GETDATA_SZ) {
+	            state.nTxRequested += vGetData.size();
                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     vGetData.clear();
                 }
@@ -4875,8 +4889,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         }
 
 
-        if (!vGetData.empty())
+        if (!vGetData.empty()) {
+	    state.nTxRequested += vGetData.size();
             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
+        }
 
         //
         // Message: feefilter
