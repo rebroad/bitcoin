@@ -258,10 +258,9 @@ public:
     bool m_bip152_highbandwidth_from;
     int m_starting_height;
     uint64_t nSendBytes;
-    uint64_t nSendBps;
     mapMsgCmdSize mapSendBytesPerMsgCmd;
     uint64_t nRecvBytes;
-    uint64_t nRecvBps;
+    uint64_t nMempoolBytes;
     mapMsgCmdSize mapRecvBytesPerMsgCmd;
     NetPermissionFlags m_permissionFlags;
     std::chrono::microseconds m_last_ping_time;
@@ -413,7 +412,6 @@ public:
     /** Offset inside the first vSendMsg already sent */
     size_t nSendOffset GUARDED_BY(cs_vSend){0};
     uint64_t nSendBytes GUARDED_BY(cs_vSend){0};
-    uint64_t nSendBps GUARDED_BY(cs_vSend){0};
     std::deque<std::vector<unsigned char>> vSendMsg GUARDED_BY(cs_vSend);
     Mutex cs_vSend;
     Mutex cs_hSocket;
@@ -426,7 +424,7 @@ public:
     RecursiveMutex cs_sendProcessing;
 
     uint64_t nRecvBytes GUARDED_BY(cs_vRecv){0};
-    uint64_t nRecvBps GUARDED_BY(cs_vRecv){0};
+    std::atomic<uint64_t> nMempoolBytes{0};
 
     std::atomic<int64_t> nLastSend{0};
     std::atomic<int64_t> nLastRecv{0};

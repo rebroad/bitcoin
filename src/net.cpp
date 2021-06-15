@@ -596,14 +596,13 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
         LOCK(cs_vSend);
         X(mapSendBytesPerMsgCmd);
         X(nSendBytes);
-        X(nSendBps);
     }
     {
         LOCK(cs_vRecv);
         X(mapRecvBytesPerMsgCmd);
         X(nRecvBytes);
-        X(nRecvBps);
     }
+    X(nMempoolBytes);
     X(m_permissionFlags);
     if (m_tx_relay != nullptr) {
         stats.minFeeFilter = m_tx_relay->minFeeFilter;
@@ -629,7 +628,6 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
     LOCK(cs_vRecv);
     nLastRecv = std::chrono::duration_cast<std::chrono::seconds>(time).count();
     nRecvBytes += msg_bytes.size();
-    nRecvBps = nRecvBytes * 8 / (nLastRecv + 1 - nTimeConnected);
     while (msg_bytes.size() > 0) {
         // absorb network data
         int handled = m_deserializer->Read(msg_bytes);
@@ -800,7 +798,6 @@ size_t CConnman::SocketSendData(CNode& node) const
         if (nBytes > 0) {
             node.nLastSend = GetSystemTimeInSeconds();
             node.nSendBytes += nBytes;
-            node.nSendBps = node.nSendBytes * 8 / (node.nLastSend + 1 - node.nTimeConnected);
             node.nSendOffset += nBytes;
             nSentSize += nBytes;
             if (node.nSendOffset == data.size()) {
@@ -1038,7 +1035,7 @@ bool CConnman::AttemptToEvictConnection()
     LOCK(cs_vNodes);
     for (CNode* pnode : vNodes) {
         if (pnode->GetId() == *node_id_to_evict) {
-            LogPrint(BCLog::NET, "selected %s connection for eviction peer=%d; disconnecting\n", pnode->ConnectionTypeAsString(), pnode->GetId());
+            LogPrintf("selected %s connection for eviction peer=%d; disconnecting\n", pnode->ConnectionTypeAsString(), pnode->GetId());
             pnode->fDisconnect = true;
             return true;
         }

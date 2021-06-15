@@ -195,6 +195,7 @@ public:
              LOCK(m_context->mempool->cs);
              for (const CTxMemPoolEntry& e : m_context->mempool->mapTx) {
                  int size = (int)e.GetTxSize();
+		 int memusage = e.DynamicMemoryUsage();
                  CAmount fee = e.GetFee();
                  uint64_t asize = e.GetSizeWithAncestors();
                  CAmount afees = e.GetModFeesWithAncestors();
@@ -210,7 +211,7 @@ public:
                  // distribute feerates into feelimits
                  for (size_t i = 0; i < feelimits.size(); i++) {
                      if (feeperbyte >= feelimits[i] && (i == feelimits.size() - 1 || feeperbyte < feelimits[i + 1])) {
-                         sizes[i] += size;
+                         sizes[i] += memusage;
                          count[i]++;
                          fees[i] += fee;
                          break;

@@ -109,6 +109,9 @@ QVariant PeerTableModel::data(const QModelIndex &index, int role) const
 
     const auto column = static_cast<ColumnIndex>(index.column());
     if (role == Qt::DisplayRole) {
+        int nSendBps = rec->nodeStats.nSendBytes * 8 / (rec->nodeStats.nLastSend + 1 - rec->nodeStats.nTimeConnected);
+        int nRecvBps = rec->nodeStats.nRecvBytes * 8 / (rec->nodeStats.nLastRecv + 1 - rec->nodeStats.nTimeConnected);
+        int nMempoolBps = rec->nodeStats.nMempoolBytes * 8 / (rec->nodeStats.nLastRecv + 1 - rec->nodeStats.nTimeConnected);
         switch (column) {
         case NetNodeId:
             return (qint64)rec->nodeStats.nodeid;
@@ -122,9 +125,11 @@ QVariant PeerTableModel::data(const QModelIndex &index, int role) const
         case Ping:
             return GUIUtil::formatPingTime(rec->nodeStats.m_min_ping_time);
         case Sent:
-            return GUIUtil::formatBps(rec->nodeStats.nSendBps);
-        case Received:
-            return GUIUtil::formatBps(rec->nodeStats.nRecvBps);
+            return GUIUtil::formatBps(nSendBps);
+        case Recv:
+            return GUIUtil::formatBps(nRecvBps);
+        case TxRecv:
+            return GUIUtil::formatBps(nMempoolBps);
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
         } // no default case, so the compiler can warn about missing cases
@@ -133,16 +138,14 @@ QVariant PeerTableModel::data(const QModelIndex &index, int role) const
         switch (column) {
         case NetNodeId:
         case Address:
-            return {};
         case ConnectionType:
         case Network:
-            return QVariant(Qt::AlignCenter);
         case Ping:
         case Sent:
-        case Received:
-            return QVariant(Qt::AlignRight | Qt::AlignVCenter);
+        case Recv:
+        case TxRecv:
         case Subversion:
-            return {};
+            return QVariant(Qt::AlignCenter);
         } // no default case, so the compiler can warn about missing cases
         assert(false);
     } else if (role == StatsRole) {

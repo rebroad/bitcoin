@@ -21,6 +21,13 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
     const CNodeStats left_stats = Assert(sourceModel()->data(left_index, PeerTableModel::StatsRole).value<CNodeCombinedStats*>())->nodeStats;
     const CNodeStats right_stats = Assert(sourceModel()->data(right_index, PeerTableModel::StatsRole).value<CNodeCombinedStats*>())->nodeStats;
 
+    int RightSendBps = right_stats.nSendBytes * 8 / (right_stats.nLastSend + 1 - right_stats.nTimeConnected);
+    int LeftSendBps = left_stats.nSendBytes * 8 / (left_stats.nLastSend + 1 - left_stats.nTimeConnected);
+    int RightRecvBps = right_stats.nRecvBytes * 8 / (right_stats.nLastRecv + 1 - right_stats.nTimeConnected);
+    int LeftRecvBps = left_stats.nRecvBytes * 8 / (left_stats.nLastRecv + 1 - left_stats.nTimeConnected);
+    int RightTxRecvBps = right_stats.nMempoolBytes * 8 / (right_stats.nLastRecv + 1 - right_stats.nTimeConnected);
+    int LeftTxRecvBps = left_stats.nMempoolBytes * 8 / (left_stats.nLastRecv + 1 - left_stats.nTimeConnected);
+
     switch (static_cast<PeerTableModel::ColumnIndex>(left_index.column())) {
     case PeerTableModel::NetNodeId:
         return left_stats.nodeid < right_stats.nodeid;
@@ -33,9 +40,11 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
     case PeerTableModel::Ping:
         return left_stats.m_min_ping_time < right_stats.m_min_ping_time;
     case PeerTableModel::Sent:
-        return left_stats.nSendBps < right_stats.nSendBps;
-    case PeerTableModel::Received:
-        return left_stats.nRecvBps < right_stats.nRecvBps;
+        return LeftSendBps < RightSendBps;
+    case PeerTableModel::Recv:
+        return LeftRecvBps < RightRecvBps;
+    case PeerTableModel::TxRecv:
+        return LeftTxRecvBps < RightTxRecvBps;
     case PeerTableModel::Subversion:
         return left_stats.cleanSubVer.compare(right_stats.cleanSubVer) < 0;
     } // no default case, so the compiler can warn about missing cases

@@ -596,6 +596,9 @@ struct CNodeState {
     int nTxRecvNew{0};
     int nTxNotFound{0};
     int nTxToMempool{0};
+    int nTxToMempoolReq{0};
+    int nTxToMempoolSeen{0};
+    int nMempoolBytes{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2198,13 +2201,19 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const auto [porphanTx, from_peer] = m_orphanage.GetTx(orphanHash);
         if (porphanTx == nullptr) continue;
 
+	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
+
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (from_peer)
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
-            LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
+	    const CTransaction& tx = *porphanTx;
+            LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) mem=%d delta=%d peer=%d\n",
+                orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000, tx.DynamicMemoryUsage(),
+		m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
             CNodeState *nodestate = State(from_peer);
             nodestate->nTxToMempool++;
+	    nodestate->nMempoolBytes += tx.GetTotalSize();
             _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
             m_orphanage.EraseTx(orphanHash);
@@ -3135,6 +3144,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         CTransactionRef ptx;
+        int nSize = vRecv.size();
         vRecv >> ptx;
         const CTransaction& tx = *ptx;
 
@@ -3144,6 +3154,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LOCK2(cs_main, g_cs_orphans);
 
         CNodeState* nodestate = State(pfrom.GetId());
+	if (nodestate->nMempoolBytes) {
+            pfrom.nMempoolBytes += nodestate->nMempoolBytes;
+            nodestate->nMempoolBytes = 0;
+        }
 
         const uint256& hash = nodestate->m_wtxid_relay ? wtxid : txid;
         pfrom.AddKnownTx(hash); // REBTODO - check what this does
@@ -3188,6 +3202,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         nodestate->nTxRecvNew++;
 
+	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
+	// REBTODO - record m_mempool.DynamicMemoryUsage() before and after accept to get the actual memory use of the tx - store this in a way that it can be graphed - do this for accepted orphans too
+
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (pfrom)
         const TxValidationState& state = result.m_state;
         int nRequestedTX = 3;
@@ -3204,12 +3221,15 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
             pfrom.nLastTXTime = GetTime();
+	    pfrom.nMempoolBytes += nSize;
+	    if (nRequestedTX == 2 || nRequestedWTX == 2) nodestate->nTxToMempoolReq++;
+            else if (nRequestedTX == 1 || nRequestedWTX == 1) nodestate->nTxToMempoolSeen++;
             nodestate->nTxToMempool++;
 
-            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB) req:%d%d G-G=%d peer=%d\n",
+            LogPrint(BCLog::MEMPOOL, "tx accepted %s (poolsz %u, %ukB) req:%d%d mem=%d delta=%d IF=%d peer=%d\n",
                 tx.GetHash().ToString(),
                 m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
-                nRequestedTX, nRequestedWTX,
+                nRequestedTX, nRequestedWTX, tx.DynamicMemoryUsage(), m_mempool.DynamicMemoryUsage() - nMemUsageBefore,
 		nodestate->nTxRequested-nodestate->nTxRecvNew-nodestate->nTxRecvOld-nodestate->nTxNotFound,
                 pfrom.GetId());
 
