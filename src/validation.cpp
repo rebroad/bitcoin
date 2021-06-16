@@ -499,6 +499,7 @@ private:
         CAmount m_modified_fees;
         CAmount m_conflicting_fees;
         size_t m_conflicting_size;
+	size_t m_dynmemusage;
 
         const CTransactionRef& m_ptx;
         const uint256& m_hash;
@@ -1026,7 +1027,7 @@ bool MemPoolAccept::Finalize(const ATMPArgs& args, Workspace& ws)
     assert(std::addressof(::ChainstateActive()) == std::addressof(m_active_chainstate));
     bool validForFeeEstimation = !fReplacementTransaction && !bypass_limits && IsCurrentForFeeEstimation(m_active_chainstate) && m_pool.HasNoInputsOf(tx);
 
-    // Store transaction in memory
+    // Store transaction in memory - REBTODO measure m_pool size before and after
     m_pool.addUnchecked(*entry, setAncestors, validForFeeEstimation);
 
     // trim mempool and check if tx was trimmed
@@ -1070,6 +1071,9 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
     // update mempool stats cache
     const CFeeRate mempool_min_fee_rate = m_pool.GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
     CStats::DefaultStats()->addMempoolSample(m_pool.size(), m_pool.DynamicMemoryUsage(), mempool_min_fee_rate.GetFeePerK());
+
+    std::unique_ptr<CTxMemPoolEntry>& entry = ws.m_entry;
+    ws.m_dynmemusage = entry->DynamicMemoryUsage();
 
     return MempoolAcceptResult(std::move(ws.m_replaced_transactions), ws.m_base_fees);
 }

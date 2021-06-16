@@ -184,6 +184,7 @@ struct MempoolAcceptResult {
     const std::optional<std::list<CTransactionRef>> m_replaced_transactions;
     /** Raw base fees in satoshis. */
     const std::optional<CAmount> m_base_fees;
+    const size_t m_dynmemusage{0};
 
     /** Constructor for failure case */
     explicit MempoolAcceptResult(TxValidationState state)
