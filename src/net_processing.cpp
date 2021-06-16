@@ -2209,7 +2209,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
 	    const CTransaction& tx = *porphanTx;
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) mem=%d delta=%d peer=%d\n",
-                orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000, tx.DynamicMemoryUsage(),
+                orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000, result.m_dynmemusage,
 		m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
             CNodeState *nodestate = State(from_peer);
             nodestate->nTxToMempool++;
@@ -3229,7 +3229,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LogPrint(BCLog::MEMPOOL, "tx accepted %s (poolsz %u, %ukB) req:%d%d mem=%d delta=%d IF=%d peer=%d\n",
                 tx.GetHash().ToString(),
                 m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
-                nRequestedTX, nRequestedWTX, tx.DynamicMemoryUsage(), m_mempool.DynamicMemoryUsage() - nMemUsageBefore,
+                nRequestedTX, nRequestedWTX, result.m_dynmemusage, m_mempool.DynamicMemoryUsage() - nMemUsageBefore,
 		nodestate->nTxRequested-nodestate->nTxRecvNew-nodestate->nTxRecvOld-nodestate->nTxNotFound,
                 pfrom.GetId());
 
