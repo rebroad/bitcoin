@@ -39,6 +39,13 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFe
     nSigOpCostWithAncestors = sigOpCost;
 }
 
+void CTxMemPoolEntry::UpdateUsageSize(size_t memUsage)
+{
+    size_t nOldUsageSize = nUsageSize;
+    nUsageSize = memUsage;
+    LogPrintf("%s: old=%d new=%d\n", __func__, nOldUsageSize, nUsageSize);
+}
+
 void CTxMemPoolEntry::UpdateFeeDelta(int64_t newFeeDelta)
 {
     nModFeesWithDescendants += newFeeDelta - feeDelta;
@@ -935,7 +942,7 @@ bool CCoinsViewMemPool::GetCoin(const COutPoint &outpoint, Coin &coin) const {
 }
 
 size_t CTxMemPool::DynamicMemoryUsage() const {
-    LOCK(cs);
+    LOCK(cs); // REBTODO - seems quite guessy!
     // Estimate the overhead of mapTx to be 15 pointers + an allocation, as no exact formula for boost::multi_index_contained is implemented.
     return memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 15 * sizeof(void*)) * mapTx.size() + memusage::DynamicUsage(mapNextTx) + memusage::DynamicUsage(mapDeltas) + memusage::DynamicUsage(vTxHashes) + cachedInnerUsage;
 }

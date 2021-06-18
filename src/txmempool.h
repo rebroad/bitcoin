@@ -92,7 +92,7 @@ private:
     mutable Children m_children;
     const CAmount nFee;             //!< Cached to avoid expensive parent-transaction lookups
     const size_t nTxWeight;         //!< ... and avoid recomputing tx weight (also used for GetTxSize())
-    const size_t nUsageSize;        //!< ... and total memory usage
+    size_t nUsageSize;        //!< ... and total memory usage - REBTODO - where used?!
     const int64_t nTime;            //!< Local time when entering the mempool
     const unsigned int entryHeight; //!< Chain height when entering the mempool
     const bool spendsCoinbase;      //!< keep track of transactions that spend a coinbase
@@ -131,6 +131,8 @@ public:
     size_t DynamicMemoryUsage() const { return nUsageSize; }
     const LockPoints& GetLockPoints() const { return lockPoints; }
 
+    // Sets the Memory Usage
+    void UpdateUsageSize(size_t memUsage);
     // Adjusts the descendant state.
     void UpdateDescendantState(int64_t modifySize, CAmount modifyFee, int64_t modifyCount);
     // Adjusts the ancestor state
