@@ -191,11 +191,15 @@ public:
          std::vector<uint64_t> count(feelimits.size(), 0);
          std::vector<uint64_t> fees(feelimits.size(), 0);
 
+	 static double ratio = 1.5;
+	 size_t totalmemusage = 0;
          {
              LOCK(m_context->mempool->cs);
              for (const CTxMemPoolEntry& e : m_context->mempool->mapTx) {
                  int size = (int)e.GetTxSize();
-		 int memusage = e.MemoryDelta();
+		 size_t memusage = e.DynamicMemoryUsage();
+		 totalmemusage += memusage;
+		 memusage = memusage * ratio;
                  CAmount fee = e.GetFee();
                  uint64_t asize = e.GetSizeWithAncestors();
                  CAmount afees = e.GetModFeesWithAncestors();
@@ -219,6 +223,10 @@ public:
                  }
              }
          }
+	 double oldratio = ratio;
+	 double newratio = 1.0 * getMempoolDynamicUsage() / totalmemusage;
+	 ratio = oldratio * 0.9 + newratio * 0.1;
+	 LogPrintf("%s: oldratio = %f ratio = %f newratio = %f\n", __func__, oldratio, ratio, newratio);
          interfaces::mempool_feehistogram feeinfo;
          for (size_t i = 0; i < feelimits.size(); i++) {
              feeinfo.push_back({sizes[i], fees[i], count[i], feelimits[i], (i == feelimits.size() - 1 ? std::numeric_limits<int64_t>::max() : feelimits[i + 1])});

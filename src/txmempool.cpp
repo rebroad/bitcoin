@@ -24,7 +24,7 @@
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFee,
                                  int64_t _nTime, unsigned int _entryHeight,
                                  bool _spendsCoinbase, int64_t _sigOpsCost, LockPoints lp)
-    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nMemDelta(1), nTime(_nTime), entryHeight(_entryHeight), // REBTODO check out nUsageSize and RecursiveDynamicUsage and nTxWeight and GetTransactionWeight
+    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nTime(_nTime), entryHeight(_entryHeight),
     spendsCoinbase(_spendsCoinbase), sigOpCost(_sigOpsCost), lockPoints(lp)
 {
     nCountWithDescendants = 1;
@@ -37,12 +37,6 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFe
     nSizeWithAncestors = GetTxSize();
     nModFeesWithAncestors = nFee;
     nSigOpCostWithAncestors = sigOpCost;
-}
-
-void CTxMemPoolEntry::UpdateMemDelta(size_t memDelta)
-{
-    nMemDelta = memDelta;
-    LogPrintf("%s: txSize=%d usageSize=%d memDelta=%d\n", __func__, GetTxSize(), nUsageSize, nMemDelta);
 }
 
 void CTxMemPoolEntry::UpdateFeeDelta(int64_t newFeeDelta)
@@ -363,7 +357,6 @@ void CTxMemPool::AddTransactionsUpdated(unsigned int n)
 
 void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAncestors, bool validFeeEstimate)
 {
-    int nMemUsageBefore = DynamicMemoryUsage();
     // Add to memory pool without checking anything.
     // Used by AcceptToMemoryPool(), which DOES do
     // all the appropriate checks.
@@ -413,7 +406,6 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
 
     vTxHashes.emplace_back(tx.GetWitnessHash(), newit);
     newit->vTxHashesIdx = vTxHashes.size() - 1;
-    mapTx.modify(newit, update_mem_delta(DynamicMemoryUsage() - nMemUsageBefore));
 }
 
 void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
