@@ -3226,10 +3226,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             else if (nRequestedTX == 1 || nRequestedWTX == 1) nodestate->nTxToMempoolSeen++;
             nodestate->nTxToMempool++;
 
-            LogPrint(BCLog::MEMPOOL, "tx accepted %s (poolsz %u, %ukB) req:%d%d delta=%d IF=%d peer=%d\n",
+            LogPrint(BCLog::MEMPOOL, "tx accepted %s (poolsz %u, %ukB) req:%d%d size=%d delta=%d IF=%d peer=%d\n",
                 tx.GetHash().ToString(),
                 m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
-                nRequestedTX, nRequestedWTX, m_mempool.DynamicMemoryUsage() - nMemUsageBefore,
+                nRequestedTX, nRequestedWTX, tx.GetTotalSize(), m_mempool.DynamicMemoryUsage() - nMemUsageBefore,
 		nodestate->nTxRequested-nodestate->nTxRecvNew-nodestate->nTxRecvOld-nodestate->nTxNotFound,
                 pfrom.GetId());
 
