@@ -254,8 +254,8 @@ void MempoolStatsOld::drawChart()
     int64_t bottomDynMemUsage = floor((double)minDynMemUsage/dynMemUsagelog10Val)*dynMemUsagelog10Val;
 
     int64_t txCountLog10Val = pow(10.0, floor(log10(maxTxCount*paddingTopSizeFactor-minTxCount)));
-    LogPrintf("%s: vSamples.size()=%d maxTx=%d minTx=%d pad=%d Log=%d\n", __func__, vSamples.size(),
-        maxTxCount, minTxCount, paddingTopSizeFactor, txCountLog10Val);
+    //LogPrintf("%s: vSamples.size()=%d maxTx=%d minTx=%d pad=%d Log=%d\n", __func__, vSamples.size(),
+    //    maxTxCount, minTxCount, paddingTopSizeFactor, txCountLog10Val);
     if (txCountLog10Val == 0) {
         LogPrintf("%s: txCountLog10Val == 0. Exiting\n", __func__);
         return;
@@ -277,9 +277,9 @@ void MempoolStatsOld::drawChart()
         if (sample.m_time_delta == vSamples.front().m_time_delta)
         {
             dynMemUsagePath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topDynMemUsage-bottomDynMemUsage)*(sample.m_dyn_mem_usage-bottomDynMemUsage));
-            LogPrintf("%s: top=%d bottom=%d m_tx=%d\n", __func__, topTxCount, bottomTxCount, sample.m_tx_count);
+            //LogPrintf("%s: top=%d bottom=%d m_tx=%d\n", __func__, topTxCount, bottomTxCount, sample.m_tx_count);
             double divide = (topTxCount-bottomTxCount)*((sample.m_tx_count)-bottomTxCount);
-            LogPrintf("%s: divide=%d\n", __func__, divide);
+            //LogPrintf("%s: divide=%d\n", __func__, divide);
             if (divide == 0) divide=1;
             txCountPath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/divide);
             minFeePath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/maxMinFee*sample.m_min_fee_per_k);

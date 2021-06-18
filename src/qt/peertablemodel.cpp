@@ -111,7 +111,7 @@ QVariant PeerTableModel::data(const QModelIndex &index, int role) const
     if (role == Qt::DisplayRole) {
         int nSendBps = rec->nodeStats.nSendBytes * 8 / (rec->nodeStats.nLastSend + 1 - rec->nodeStats.nTimeConnected);
         int nRecvBps = rec->nodeStats.nRecvBytes * 8 / (rec->nodeStats.nLastRecv + 1 - rec->nodeStats.nTimeConnected);
-        int nMempoolBps = rec->nodeStats.nMempoolBytes * 8 / (rec->nodeStats.nLastRecv + 1 - rec->nodeStats.nTimeConnected);
+        int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes + 1);
         switch (column) {
         case NetNodeId:
             return (qint64)rec->nodeStats.nodeid;
@@ -129,7 +129,7 @@ QVariant PeerTableModel::data(const QModelIndex &index, int role) const
         case Recv:
             return GUIUtil::formatBps(nRecvBps);
         case TxRecv:
-            return GUIUtil::formatBps(nMempoolBps);
+            return QString::fromStdString(strprintf("%d %%", nMempoolPct));
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
         } // no default case, so the compiler can warn about missing cases

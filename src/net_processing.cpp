@@ -3691,6 +3691,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (fWrongPeer)
                 LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessBlock() wrong peer=%d\n", pfrom.GetId());
             ProcessBlock(pfrom, pblock, /*fForceProcessing=*/true);
+            pfrom.nMempoolBytes += nSize;
         }
         return;
     }
