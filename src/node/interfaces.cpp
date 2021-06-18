@@ -195,7 +195,7 @@ public:
              LOCK(m_context->mempool->cs);
              for (const CTxMemPoolEntry& e : m_context->mempool->mapTx) {
                  int size = (int)e.GetTxSize();
-		 int memusage = e.DynamicMemoryUsage();
+		 int memusage = e.MemoryDelta();
                  CAmount fee = e.GetFee();
                  uint64_t asize = e.GetSizeWithAncestors();
                  CAmount afees = e.GetModFeesWithAncestors();

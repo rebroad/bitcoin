@@ -24,7 +24,7 @@
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFee,
                                  int64_t _nTime, unsigned int _entryHeight,
                                  bool _spendsCoinbase, int64_t _sigOpsCost, LockPoints lp)
-    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nTime(_nTime), entryHeight(_entryHeight), // REBTODO check out nUsageSize and RecursiveDynamicUsage and nTxWeight and GetTransactionWeight
+    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nMemDelta(1), nTime(_nTime), entryHeight(_entryHeight), // REBTODO check out nUsageSize and RecursiveDynamicUsage and nTxWeight and GetTransactionWeight
     spendsCoinbase(_spendsCoinbase), sigOpCost(_sigOpsCost), lockPoints(lp)
 {
     nCountWithDescendants = 1;
@@ -39,11 +39,10 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFe
     nSigOpCostWithAncestors = sigOpCost;
 }
 
-void CTxMemPoolEntry::UpdateUsageSize(size_t memUsage)
+void CTxMemPoolEntry::UpdateMemDelta(size_t memDelta)
 {
-    size_t nOldUsageSize = nUsageSize;
-    nUsageSize = memUsage;
-    LogPrintf("%s: old=%d new=%d\n", __func__, nOldUsageSize, nUsageSize);
+    nMemDelta = memDelta;
+    LogPrintf("%s: txSize=%d usageSize=%d memDelta=%d\n", __func__, GetTxSize(), nUsageSize, nMemDelta);
 }
 
 void CTxMemPoolEntry::UpdateFeeDelta(int64_t newFeeDelta)
@@ -384,7 +383,6 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
     // further updated.)
     cachedInnerUsage += entry.DynamicMemoryUsage();
 
-    mapTx.modify(newit, update_mem_usage(DynamicMemoryUsage() - nMemUsageBefore));
 
     const CTransaction& tx = newit->GetTx();
     std::set<uint256> setParentTransactions;
@@ -415,6 +413,7 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
 
     vTxHashes.emplace_back(tx.GetWitnessHash(), newit);
     newit->vTxHashesIdx = vTxHashes.size() - 1;
+    mapTx.modify(newit, update_mem_delta(DynamicMemoryUsage() - nMemUsageBefore));
 }
 
 void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
