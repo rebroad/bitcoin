@@ -195,6 +195,16 @@ struct update_ancestor_state
         int64_t modifySigOpsCost;
 };
 
+struct update_mem_usage
+{
+    explicit update_mem_usage(int64_t _memUsage) : memUsage(_memUsage) { }
+
+    void operator() (CTxMemPoolEntry &e) { e.UpdateUsageSize(memUsage); }
+
+private:
+    int64_t memUsage;
+};
+
 struct update_fee_delta
 {
     explicit update_fee_delta(int64_t _feeDelta) : feeDelta(_feeDelta) { }

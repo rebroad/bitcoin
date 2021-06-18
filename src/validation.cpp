@@ -499,7 +499,6 @@ private:
         CAmount m_modified_fees;
         CAmount m_conflicting_fees;
         size_t m_conflicting_size;
-	size_t m_memdelta;
 
         const CTransactionRef& m_ptx;
         const uint256& m_hash;
@@ -531,7 +530,7 @@ private:
     bool CheckFeeRate(size_t package_size, CAmount package_fee, TxValidationState& state) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_pool.cs)
     {
         CAmount mempoolRejectFee = m_pool.GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFee(package_size);
-        if (mempoolRejectFee > 0 && package_fee < mempoolRejectFee) {
+        if (mempoolRejectFee > 0 && package_fee < mempoolRejectFee && m_pool.DynamicMemoryUsage() > (size_t)(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE)-1) * 1000000) {
             return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "mempool min fee not met", strprintf("%d < %d", package_fee, mempoolRejectFee));
         }
 
@@ -1027,11 +1026,8 @@ bool MemPoolAccept::Finalize(const ATMPArgs& args, Workspace& ws)
     assert(std::addressof(::ChainstateActive()) == std::addressof(m_active_chainstate));
     bool validForFeeEstimation = !fReplacementTransaction && !bypass_limits && IsCurrentForFeeEstimation(m_active_chainstate) && m_pool.HasNoInputsOf(tx);
 
-    // Store transaction in memory - REBTODO measure m_pool size before and after
-    int nBeforeMemUsage = m_pool.DynamicMemoryUsage();
+    // Store transaction in memory
     m_pool.addUnchecked(*entry, setAncestors, validForFeeEstimation);
-    entry->UpdateUsageSize(m_pool.DynamicMemoryUsage() - nBeforeMemUsage);
-    ws.m_memdelta = m_pool.DynamicMemoryUsage() - nBeforeMemUsage;
 
     // trim mempool and check if tx was trimmed
     if (!bypass_limits) {
@@ -1064,7 +1060,7 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
 
     // Tx was accepted, but not added
     if (args.m_test_accept) {
-        return MempoolAcceptResult(std::move(ws.m_replaced_transactions), ws.m_base_fees, ws.m_memdelta);
+        return MempoolAcceptResult(std::move(ws.m_replaced_transactions), ws.m_base_fees);
     }
 
     if (!Finalize(args, ws)) return MempoolAcceptResult(ws.m_state);
@@ -1075,7 +1071,7 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
     const CFeeRate mempool_min_fee_rate = m_pool.GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
     CStats::DefaultStats()->addMempoolSample(m_pool.size(), m_pool.DynamicMemoryUsage(), mempool_min_fee_rate.GetFeePerK());
 
-    return MempoolAcceptResult(std::move(ws.m_replaced_transactions), ws.m_base_fees, ws.m_memdelta);
+    return MempoolAcceptResult(std::move(ws.m_replaced_transactions), ws.m_base_fees);
 }
 
 } // anon namespace
@@ -1215,6 +1211,9 @@ bool CChainState::IsInitialBlockDownload() const
         return true;
     if (m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
         return true;
+    if (pindexBestHeader != nullptr && pindexBestHeader->nHeight > m_chain.Tip()->nHeight + 6)
+        return true;
+
     LogPrintf("Leaving InitialBlockDownload (latching to false)\n");
     m_cached_finished_ibd.store(true, std::memory_order_relaxed);
     return false;

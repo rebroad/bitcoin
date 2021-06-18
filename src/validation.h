@@ -184,7 +184,6 @@ struct MempoolAcceptResult {
     const std::optional<std::list<CTransactionRef>> m_replaced_transactions;
     /** Raw base fees in satoshis. */
     const std::optional<CAmount> m_base_fees;
-    const size_t m_memdelta{0};
 
     /** Constructor for failure case */
     explicit MempoolAcceptResult(TxValidationState state)
@@ -193,9 +192,9 @@ struct MempoolAcceptResult {
         }
 
     /** Constructor for success case */
-    explicit MempoolAcceptResult(std::list<CTransactionRef>&& replaced_txns, CAmount fees, size_t memdelta)
+    explicit MempoolAcceptResult(std::list<CTransactionRef>&& replaced_txns, CAmount fees)
         : m_result_type(ResultType::VALID),
-        m_replaced_transactions(std::move(replaced_txns)), m_base_fees(fees), m_memdelta(memdelta) {}
+        m_replaced_transactions(std::move(replaced_txns)), m_base_fees(fees) {}
 };
 
 /**
