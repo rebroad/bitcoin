@@ -109,12 +109,6 @@ QVariant PeerTableModel::data(const QModelIndex &index, int role) const
 
     const auto column = static_cast<ColumnIndex>(index.column());
     if (role == Qt::DisplayRole) {
-        int nSendBps = rec->nodeStats.nSendBytes * 8 / (rec->nodeStats.nLastSend + 1 - rec->nodeStats.nTimeConnected);
-        int nRecvBps = rec->nodeStats.nRecvBytes * 8 / (rec->nodeStats.nLastRecv + 1 - rec->nodeStats.nTimeConnected);
-        int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
-        if (nMempoolPct >= 98)
-            LogPrintf("%s: MPB=%d RB=%d RB1TX=%d\n", __func__, rec->nodeStats.nMempoolBytes, rec->nodeStats.nRecvBytes,
-                rec->nodeStats.nRecvBytes1stTx);
         switch (column) {
         case NetNodeId:
             return (qint64)rec->nodeStats.nodeid;
@@ -128,11 +122,15 @@ QVariant PeerTableModel::data(const QModelIndex &index, int role) const
         case Ping:
             return GUIUtil::formatPingTime(rec->nodeStats.m_min_ping_time);
         case Sent:
-            return GUIUtil::formatBps(nSendBps);
+            return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8 / (rec->nodeStats.nLastSend+1 - rec->nodeStats.nTimeConnected));
         case Recv:
-            return GUIUtil::formatBps(nRecvBps);
-        case TxRecv:
-            return QString::fromStdString(strprintf("%d %%", nMempoolPct));
+            return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8 / (rec->nodeStats.nLastRecv+1 - rec->nodeStats.nTimeConnected));
+        case TxRecv: {
+            int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
+            if (nMempoolPct > 100)
+                LogPrintf("%s: MPB=%d RB=%d RB1TX=%d peer=%d\n", __func__, rec->nodeStats.nMempoolBytes, rec->nodeStats.nRecvBytes,
+                    rec->nodeStats.nRecvBytes1stTx, rec->nodeStats.nodeid);
+            return QString::fromStdString(strprintf("%d %%", nMempoolPct)); }
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
         } // no default case, so the compiler can warn about missing cases
