@@ -3145,7 +3145,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         CTransactionRef ptx;
         int nSize = vRecv.size();
-        if (!pfrom.nRecvBytes1stTx) pfrom.nRecvBytes1stTx = pfrom.nRecvBytes - nSize;
         vRecv >> ptx;
         const CTransaction& tx = *ptx;
 
