@@ -649,7 +649,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
             }
 
             if (result->m_command == NetMsgType::TX && !nRecvBytes1stTx) {
-                nRecvBytes1stTx = nRecvBytes - handled - msg_bytes.size();
+                nRecvBytes1stTx = nRecvBytes - result->m_raw_message_size - msg_bytes.size();
                 LogPrintf("%s: 1stTx size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, result->m_raw_message_size, nRecvBytes1stTx,
                     nRecvBytes, handled, msg_bytes.size(), GetId());
             }
