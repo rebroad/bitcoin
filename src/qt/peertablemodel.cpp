@@ -111,7 +111,10 @@ QVariant PeerTableModel::data(const QModelIndex &index, int role) const
     if (role == Qt::DisplayRole) {
         int nSendBps = rec->nodeStats.nSendBytes * 8 / (rec->nodeStats.nLastSend + 1 - rec->nodeStats.nTimeConnected);
         int nRecvBps = rec->nodeStats.nRecvBytes * 8 / (rec->nodeStats.nLastRecv + 1 - rec->nodeStats.nTimeConnected);
-        int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes + 1);
+        int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
+        if (nMempoolPct >= 98)
+            LogPrintf("%s: MPB=%d RB=%d RB1TX=%d\n", __func__, rec->nodeStats.nMempoolBytes, rec->nodeStats.nRecvBytes,
+                rec->nodeStats.nRecvBytes1stTx);
         switch (column) {
         case NetNodeId:
             return (qint64)rec->nodeStats.nodeid;

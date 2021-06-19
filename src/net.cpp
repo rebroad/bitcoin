@@ -603,6 +603,7 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
         X(nRecvBytes);
     }
     X(nMempoolBytes);
+    X(nRecvBytes1stTx);
     X(m_permissionFlags);
     if (m_tx_relay != nullptr) {
         stats.minFeeFilter = m_tx_relay->minFeeFilter;
