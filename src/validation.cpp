@@ -3488,7 +3488,7 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
     AssertLockNotHeld(cs_main);
     assert(std::addressof(::ChainstateActive()) == std::addressof(ActiveChainstate()));
 
-    { // TODO: Calculate the lowest Sat/B TX still in the mempool after the TXs in this block have removed the TXs
+    { // REBTODO: Calculate the lowest Sat/B TX still in the mempool after the TXs in this block have removed the TXs
         CBlockIndex *pindex = nullptr;
         if (fNewBlock) *fNewBlock = false;
         BlockValidationState state;

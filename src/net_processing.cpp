@@ -2136,6 +2136,9 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                     }
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
+                    // Next line needed because now we'll use the first cmpctblock block received,
+                    // not necessarily the one we're requesting here.
+                    mapBlockSource.emplace(vGetData[0].hash, std::make_pair(pfrom.GetId(), false));
                     if (vGetData.size() == 1) {
                         LogPrint(BCLog::BLOCK, "Requesting cmpctblock %s peer=%d\n",
                             strBlockInfo(vToFetch[0]), pfrom.GetId());
