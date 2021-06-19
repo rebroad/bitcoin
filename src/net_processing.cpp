@@ -2201,7 +2201,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const auto [porphanTx, from_peer] = m_orphanage.GetTx(orphanHash);
         if (porphanTx == nullptr) continue;
 
-	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
+	int64_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
 
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (from_peer)
         const TxValidationState& state = result.m_state;
