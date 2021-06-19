@@ -821,7 +821,7 @@ size_t CConnman::SocketSendData(CNode& node) const
                 // error
                 int nErr = WSAGetLastError();
                 if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS) {
-                    LogPrint(BCLog::NET, "socket send error for peer=%d: %s\n", node.GetId(), NetworkErrorString(nErr));
+                    LogPrintf("%s: socket send error for peer=%d: %s\n", __func__, node.GetId(), NetworkErrorString(nErr));
                     node.CloseSocketDisconnect();
                 }
             }
@@ -1518,8 +1518,10 @@ void CConnman::SocketHandler()
             if (nBytes > 0)
             {
                 bool notify = false;
-                if (!pnode->ReceiveMsgBytes(Span<const uint8_t>(pchBuf, nBytes), notify))
+                if (!pnode->ReceiveMsgBytes(Span<const uint8_t>(pchBuf, nBytes), notify)) {
+                    LogPrintf("%s: ReceiveMsgBytes failed. Disconnect peer=%d\n", __func__, pnode->GetId());
                     pnode->CloseSocketDisconnect();
+                }
                 RecordBytesRecv(nBytes);
                 if (notify) {
                     size_t nSizeAdded = 0;
@@ -1542,7 +1544,7 @@ void CConnman::SocketHandler()
             {
                 // socket closed gracefully
                 if (!pnode->fDisconnect) {
-                    LogPrint(BCLog::NET, "socket closed for peer=%d\n", pnode->GetId());
+                    LogPrintf("%s: nBytes=0. Disconnect peer=%d\n", __func__, pnode->GetId());
                 }
                 pnode->CloseSocketDisconnect();
             }
@@ -1553,7 +1555,7 @@ void CConnman::SocketHandler()
                 if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                 {
                     if (!pnode->fDisconnect) {
-                        LogPrint(BCLog::NET, "socket recv error for peer=%d: %s\n", pnode->GetId(), NetworkErrorString(nErr));
+                        LogPrintf("%s: socket recv error for peer=%d: %s\n", __func__, pnode->GetId(), NetworkErrorString(nErr));
                     }
                     pnode->CloseSocketDisconnect();
                 }
@@ -1566,7 +1568,10 @@ void CConnman::SocketHandler()
             if (bytes_sent) RecordBytesSent(bytes_sent);
         }
 
-        if (InactivityCheck(*pnode)) pnode->fDisconnect = true;
+        if (InactivityCheck(*pnode)) {
+            LogPrintf("%s: Inactivity. Disconnect peer=%d\n", __func__, pnode->GetId());
+            pnode->fDisconnect = true;
+        }
     }
     {
         LOCK(cs_vNodes);
@@ -2783,7 +2788,7 @@ bool CConnman::DisconnectNode(const std::string& strNode)
 {
     LOCK(cs_vNodes);
     if (CNode* pnode = FindNode(strNode)) {
-        LogPrint(BCLog::NET, "disconnect by address%s matched peer=%d; disconnecting\n", (fLogIPs ? strprintf("=%s", strNode) : ""), pnode->GetId());
+        LogPrintf("disconnect by address%s matched peer=%d; disconnecting\n", (fLogIPs ? strprintf("=%s", strNode) : ""), pnode->GetId());
         pnode->fDisconnect = true;
         return true;
     }
@@ -2796,7 +2801,7 @@ bool CConnman::DisconnectNode(const CSubNet& subnet)
     LOCK(cs_vNodes);
     for (CNode* pnode : vNodes) {
         if (subnet.Match(pnode->addr)) {
-            LogPrint(BCLog::NET, "disconnect by subnet%s matched peer=%d; disconnecting\n", (fLogIPs ? strprintf("=%s", subnet.ToString()) : ""), pnode->GetId());
+            LogPrintf("disconnect by subnet%s matched peer=%d; disconnecting\n", (fLogIPs ? strprintf("=%s", subnet.ToString()) : ""), pnode->GetId());
             pnode->fDisconnect = true;
             disconnected = true;
         }
@@ -2814,7 +2819,7 @@ bool CConnman::DisconnectNode(NodeId id)
     LOCK(cs_vNodes);
     for(CNode* pnode : vNodes) {
         if (id == pnode->GetId()) {
-            LogPrint(BCLog::NET, "disconnect by id peer=%d; disconnecting\n", pnode->GetId());
+            LogPrintf("disconnect by id peer=%d; disconnecting\n", pnode->GetId());
             pnode->fDisconnect = true;
             return true;
         }
