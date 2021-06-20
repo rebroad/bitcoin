@@ -1543,13 +1543,13 @@ void CConnman::SocketHandler()
             else if (nBytes == 0)
             {
                 pnode->nBytesZeroCount++;
-                if (pnode->nBytesZeroCount > 2) {
+                if (pnode->nBytesZeroCount > 1000) {
                     // socket closed gracefully
                     if (!pnode->fDisconnect) {
-                        LogPrintf("%s: nBytes=0 count=3 Disconnect peer=%d\n", __func__, pnode->GetId());
+                        LogPrintf("%s: nBytes=0 count=1001 Disconnect peer=%d\n", __func__, pnode->GetId());
                     }
                     pnode->CloseSocketDisconnect();
-                } else
+                } else if (pnode->nBytesZeroCount == 1)
                     LogPrintf("%s: nBytes=0 count=%d peer=%d\n", __func__, pnode->nBytesZeroCount, pnode->GetId());
             }
             else if (nBytes < 0)
