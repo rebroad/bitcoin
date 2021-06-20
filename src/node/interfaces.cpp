@@ -224,10 +224,14 @@ public:
          static size_t oldtotalmemusage = 0;
          static double oldratio = newratio;
          double ratio;
-         if (newratio < oldratio && oldtotalmemusage * oldratio < totalmemusage * newratio)
+         if (newratio < oldratio && oldtotalmemusage > totalmemusage) {
              ratio = oldratio * 0.9 + newratio * 0.1;
-         else
+             LogPrintf("%s: ratio: %f -> %f (newratio=%f) memusage: %f -> %f \n", __func__, oldratio, ratio, newratio,
+                 oldtotalmemusage, totalmemusage);
+         } else {
              ratio = newratio;
+             LogPrintf("%s: oldratio=%f ratio=newratio=%f\n", __func__, oldratio, ratio);
+         }
          oldtotalmemusage = totalmemusage;
          oldratio = ratio;
          for (size_t i = 0; i < feelimits.size(); i++)
