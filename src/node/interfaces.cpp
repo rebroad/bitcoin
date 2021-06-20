@@ -223,15 +223,17 @@ public:
 	 double newratio = 1.0 * getMempoolDynamicUsage() / totalmemusage;
          static size_t oldtotalmemusage = 0;
          static double oldratio = newratio;
+         static int adjusting = 0;
          double ratio;
-         if (newratio < oldratio && oldtotalmemusage > totalmemusage) {
-             ratio = oldratio * 0.9 + newratio * 0.1;
-             LogPrintf("%s: ratio: %f -> %f (newratio=%f) memusage: %f -> %f \n", __func__, oldratio, ratio, newratio,
-                 oldtotalmemusage, totalmemusage);
-         } else {
+         if (newratio < oldratio && (adjusting || oldtotalmemusage > totalmemusage)) {
+             if (oldtotalmemusage > totalmemusage) adjusting = 19;
+             ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
+             adjusting--;
+         } else
              ratio = newratio;
-             LogPrintf("%s: oldratio=%f ratio=newratio=%f\n", __func__, oldratio, ratio);
-         }
+         LogPrintf("%s: ratio: %f %s %f (newratio%s) split=%d memusage: %f %s %f\n", __func__, oldratio, 
+             oldratio > ratio ? "↓" : "↑", ratio, newratio!=ratio ? strprintf("=%f", newratio) : "", adjusting,
+             oldtotalmemusage, oldtotalmemusage > totalmemusage ? "↓" : "↑", totalmemusage);
          oldtotalmemusage = totalmemusage;
          oldratio = ratio;
          for (size_t i = 0; i < feelimits.size(); i++)
