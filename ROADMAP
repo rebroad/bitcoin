@@ -1,8 +1,10 @@
+Cache cmpctblock (for is a node disconnected before we received the blocktxn) to save from requesting it again from another peer.
+
+For mempool graph - don't increase the ratio but instead have a band for the extra data.
+
 For determining misbehaviour of incoming TXs - we know the time it was announced (I think) - so we need to keep track of what when we announced to them our minrelayfee and what that was. If they announced after that, then and only then are they misbehaving.
 
 When a block arrives, show the oldest and youngest TX (based on time they entered our mempool)
-
-Count: unrequested TXs from peers (count and bytes), requested TXs not yet arrives, requested TXs arrived (count and bytes), tx invs (bytes), requested TX into mempool (count and bytes), unrequested TXs into mempool (count and bytes), requested and rejected, unrequested and rejected.
 
 Don't announce block headers to nodes that have that block.
 

@@ -648,7 +648,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                 continue;
             }
 
-            if (result->m_command == NetMsgType::TX && !nRecvBytes1stTx) {
+            if ((result->m_command == NetMsgType::TX || result->m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx) {
                 nRecvBytes1stTx = nRecvBytes - result->m_raw_message_size - msg_bytes.size();
                 LogPrintf("%s: 1stTx size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, result->m_raw_message_size, nRecvBytes1stTx,
                     nRecvBytes, handled, msg_bytes.size(), GetId());
