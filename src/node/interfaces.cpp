@@ -191,6 +191,7 @@ public:
          std::vector<uint64_t> count(feelimits.size(), 0);
          std::vector<uint64_t> fees(feelimits.size(), 0);
          size_t totalmemusage = 0;
+         static size_t oldtotalmemusage = 0;
          {
              LOCK(m_context->mempool->cs);
              for (const CTxMemPoolEntry& e : m_context->mempool->mapTx) {
