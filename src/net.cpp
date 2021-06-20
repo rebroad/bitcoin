@@ -1493,18 +1493,18 @@ void CConnman::SocketHandler()
         //
         // Receive
         //
-        bool recvSet = false;
-        bool sendSet = false;
-        bool errorSet = false;
+        int recvSet = 0;
+        int sendSet = 0;
+        int errorSet = 0;
         {
             LOCK(pnode->cs_hSocket);
             if (pnode->hSocket == INVALID_SOCKET)
                 continue;
-            recvSet = recv_set.count(pnode->hSocket) > 0;
-            sendSet = send_set.count(pnode->hSocket) > 0;
-            errorSet = error_set.count(pnode->hSocket) > 0;
+            recvSet = recv_set.count(pnode->hSocket);
+            sendSet = send_set.count(pnode->hSocket);
+            errorSet = error_set.count(pnode->hSocket);
         }
-        if (recvSet || errorSet)
+        if (recvSet > 0 || errorSet > 0)
         {
             // typical socket buffer is 8K-64K
             uint8_t pchBuf[0x10000];
@@ -1542,15 +1542,12 @@ void CConnman::SocketHandler()
             }
             else if (nBytes == 0)
             {
-                pnode->nBytesZeroCount++;
-                if (pnode->nBytesZeroCount > 1000) {
-                    // socket closed gracefully
-                    if (!pnode->fDisconnect) {
-                        LogPrintf("%s: nBytes=0 count=1001 Disconnect peer=%d\n", __func__, pnode->GetId());
-                    }
+                // socket closed gracefully
+                if (!pnode->fDisconnect) {
+                    LogPrintf("%s: nBytes=0 recvSet=%d errorSet=%d Disconnect peer=%d\n", __func__, recvSet, errorSet,
+                        pnode->GetId());
                     pnode->CloseSocketDisconnect();
-                } else if (pnode->nBytesZeroCount == 1)
-                    LogPrintf("%s: nBytes=0 count=%d peer=%d\n", __func__, pnode->nBytesZeroCount, pnode->GetId());
+                }
             }
             else if (nBytes < 0)
             {
@@ -1566,7 +1563,7 @@ void CConnman::SocketHandler()
             }
         }
 
-        if (sendSet) {
+        if (sendSet > 0) {
             // Send data
             size_t bytes_sent = WITH_LOCK(pnode->cs_vSend, return SocketSendData(*pnode));
             if (bytes_sent) RecordBytesSent(bytes_sent);
