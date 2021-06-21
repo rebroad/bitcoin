@@ -3024,7 +3024,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         {
             LOCK(cs_most_recent_block);
             if (most_recent_block_hash == req.blockhash)
-                recent_block = most_recent_block;
+                recent_block = most_recent_block; // REBTODO - see where this is created - use to cache cmpctblocks
             // Unlock cs_most_recent_block to avoid cs_main lock inversion
         }
         if (recent_block) {
@@ -3522,6 +3522,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), pfrom.GetId());
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
+                    // REBTODO - set a variable to check if node ignores this request - e.g. see if it responds to other requests sent after this (e.g. txs)
                 }
             } else {
                 // This block is either already in flight from a different
