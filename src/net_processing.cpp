@@ -4929,12 +4929,15 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         ) {
             CAmount currentFilter = m_mempool.GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK();
             static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
+            static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
             if (m_chainman.ActiveChainstate().IsInitialBlockDownload() || pto->IsFeelerConn()) {
                 // Received tx-inv messages are discarded when the active
                 // chainstate is in IBD, so tell the peer to not send them.
-                currentFilter = MAX_MONEY;
+                if (pto->m_tx_relay->lastSentFeeFilter != MAX_FILTER) {
+                    currentFilter = MAX_MONEY;
+                    pto->m_tx_relay->m_next_send_feefilter = 0us;
+                }
             } else {
-                static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
                 if (pto->m_tx_relay->lastSentFeeFilter == MAX_FILTER) {
                     // Send the current filter if we sent MAX_FILTER previously
                     // and made it out of IBD.
