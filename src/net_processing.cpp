@@ -591,6 +591,8 @@ struct CNodeState {
     std::chrono::microseconds m_downloading_since{0us};
     int nBlocksInFlight{0};
     int nBlocksInFlightValidHeaders{0};
+    int nBlockAfterTXs{0};
+    int nTxInFlight{0};
     int nTxRequested{0};
     int nTxRecvOld{0};
     int nTxRecvNew{0};
@@ -3156,6 +3158,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LOCK2(cs_main, g_cs_orphans);
 
         CNodeState* nodestate = State(pfrom.GetId());
+        nodestate->nTxInFlight--;
+        if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
 	if (nodestate->nMempoolBytes) {
             pfrom.nMempoolBytes += nodestate->nMempoolBytes;
             nodestate->nMempoolBytes = 0;
@@ -3522,7 +3526,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), pfrom.GetId());
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
-                    // REBTODO - set a variable to check if node ignores this request - e.g. see if it responds to other requests sent after this (e.g. txs)
+                    nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // If we get more TXs than currently in flight then we know the request has been ignored.
                 }
             } else {
                 // This block is either already in flight from a different
@@ -4006,6 +4010,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // completed in TxRequestTracker.
                     CNodeState *nodestate = State(pfrom.GetId());
                     nodestate->nTxNotFound++;
+                    nodestate->nTxInFlight--;
+                    if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
                     m_txrequest.ReceivedResponse(pfrom.GetId(), inv.hash);
                 }
             }
@@ -4809,7 +4815,12 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
             // should only happen during initial block download.
-            LogPrintf("Peer=%d is stalling block download, disconnecting\n", pto->GetId());
+            LogPrintf("block download stalled. disconnecting peer=%d\n", pto->GetId());
+            pto->fDisconnect = true;
+            return true;
+        }
+        if (state.nBlockAfterTXs == 1) {
+            LogPrintf("getblocktxn ignored. disconnecting peer=%d\n", pto->GetId());
             pto->fDisconnect = true;
             return true;
         }
@@ -4903,6 +4914,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 vGetData.emplace_back(gtxid.IsWtxid() ? MSG_WTX : (MSG_TX | GetFetchFlags(*pto)), gtxid.GetHash());
                 if (vGetData.size() >= MAX_GETDATA_SZ) {
 	            state.nTxRequested += vGetData.size();
+                    state.nTxInFlight += vGetData.size();
                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     vGetData.clear();
                 }
@@ -4917,6 +4929,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
         if (!vGetData.empty()) {
 	    state.nTxRequested += vGetData.size();
+	    state.nTxInFlight += vGetData.size();
             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
         }
 
