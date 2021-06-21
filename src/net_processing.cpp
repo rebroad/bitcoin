@@ -631,8 +631,9 @@ struct CNodeState {
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     std::chrono::microseconds m_downloading_since{0us};
     int nBlocksInFlight{0};
-    int nBlockAfterTXs{0};
     int nTxInFlight{0};
+    //! How many TXs were in flight when we sent GETBLOCKTXN
+    int nBlockAfterTXs{0};
     int nTxRequested{0};
     int nTxRecvOld{0};
     int nTxRecvNew{0};
@@ -3613,7 +3614,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), pfrom.GetId());
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
-                    nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // If we get more TXs than currently in flight then we know the request has been ignored.
+                    // If we get more TXs than currently in flight then we know the request has been ignored.
+                    nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // Add 2 so that one more TX is requested.
                 }
             } else {
                 // This block is either already in flight from a different
