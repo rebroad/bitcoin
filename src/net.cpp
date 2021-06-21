@@ -1271,22 +1271,22 @@ bool CConnman::InactivityCheck(const CNode& node) const
     if (!ShouldRunInactivityChecks(node, now)) return false;
 
     if (node.nLastRecv == 0 || node.nLastSend == 0) {
-        LogPrint(BCLog::NET, "socket no message in first %i seconds, %d %d peer=%d\n", m_peer_connect_timeout, node.nLastRecv != 0, node.nLastSend != 0, node.GetId());
+        LogPrintf( "socket no message in first %i seconds, %d %d disconnect peer=%d\n", m_peer_connect_timeout, node.nLastRecv != 0, node.nLastSend != 0, node.GetId());
         return true;
     }
 
     if (now > node.nLastSend + TIMEOUT_INTERVAL) {
-        LogPrint(BCLog::NET, "socket sending timeout: %is peer=%d\n", now - node.nLastSend, node.GetId());
+        LogPrintf("socket sending timeout: %is disconnect peer=%d\n", now - node.nLastSend, node.GetId());
         return true;
     }
 
     if (now > node.nLastRecv + TIMEOUT_INTERVAL) {
-        LogPrint(BCLog::NET, "socket receive timeout: %is peer=%d\n", now - node.nLastRecv, node.GetId());
+        LogPrintf("socket receive timeout: %is disconnect peer=%d\n", now - node.nLastRecv, node.GetId());
         return true;
     }
 
     if (!node.fSuccessfullyConnected) {
-        LogPrint(BCLog::NET, "version handshake timeout peer=%d\n", node.GetId());
+        LogPrintf("version handshake timeout disconnect peer=%d\n", node.GetId());
         return true;
     }
 
@@ -1570,7 +1570,6 @@ void CConnman::SocketHandler()
         }
 
         if (InactivityCheck(*pnode)) {
-            LogPrintf("%s: Inactivity. Disconnect peer=%d\n", __func__, pnode->GetId());
             pnode->fDisconnect = true;
         }
     }
