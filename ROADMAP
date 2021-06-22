@@ -1,4 +1,6 @@
-Cache cmpctblock (for is a node disconnected before we received the blocktxn) to save from requesting it again from another peer.
+Cache cmpctblock (for if a node disconnected before we received the blocktxn) to save from requesting it again from another peer.
+
+Request BLOCKTXNs from two peers
 
 For mempool graph - don't increase the ratio but instead have a band for the extra data.
 
@@ -35,8 +37,6 @@ Don't reduce the recognised feefilter of a node unless at least 3 blocks have be
 Don't lose blocks in flight when disconnecting nodes (BlocksToBeProcessed)
 
 Reduce network traffic by only sending TXs that are likely to be in the next few blocks (the top 4MB) and being careful not to send duplicates to the same nods. Also, keep track of how useful the TXs are from other nodes (e.g. were they used by the last 4 blocks if dated before the last 4 blocks) - and report on the overhead (from the less useful ones).
-
-If we have already received a cmpctblock for a block but we lose the connection, don't ask for the cmpctblock again, but go staight to getblocktxn when another node reveals it has the block. (done by caching the last received cmpctblock).
 
 Log RecvBytes for AcceptedTxs and AcceptedBlocks - then report RecvBps overhead (by deducting the TX and Block Bps)
 
