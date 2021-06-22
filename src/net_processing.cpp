@@ -3611,9 +3611,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     {
         // Ignore blocktxn received while importing
         if (fImporting || fReindex) {
-            LogPrint(BCLog::NET, "Unexpected blocktxn message received from peer %d\n", pfrom.GetId());
+            LogPrint(BCLog::NET, "Unexpected blocktxn message received from peer=%d\n", pfrom.GetId());
             return;
         }
+        CNodeState *nodestate = State(pfrom.GetId());
+        nodestate->nBlockAfterTXs = 0;
 
         BlockTransactions resp;
         int nSize = vRecv.size();
