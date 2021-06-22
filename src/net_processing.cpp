@@ -1453,7 +1453,7 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         LOCK(cs_most_recent_block);
         most_recent_block_hash = hashBlock;
         most_recent_block = pblock;
-        most_recent_compact_block = pcmpctblock;
+        most_recent_compact_block = pcmpctblock; // REBTODO - check where this is defined and used.
         fWitnessesPresentInMostRecentCompactBlock = fWitnessEnabled;
     }
 
@@ -3480,7 +3480,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         blockInFlightIt->second.first, pfrom.GetId());
                 }
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
-                if (!MarkBlockAsInFlight(pfrom.GetId(), pindex->GetBlockHash(), pindex, &queuedBlockIt)) { // REBTODO - Maybe don't do this if fWibble..?
+                if (!MarkBlockAsInFlight(pfrom.GetId(), pindex->GetBlockHash(), pindex, &queuedBlockIt)) {
                     LogPrint(BCLog::BLOCK, "MarkBlockAsInFlight=false (was already in flight). peer=%d\n", pfrom.GetId());
                     if (!(*queuedBlockIt)->partialBlock) { // REBTODO - we already know this is true
                         LogPrint(BCLog::BLOCK, "No partialBlock. Call reset()\n"); // REB - what is reset()?
