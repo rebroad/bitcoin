@@ -870,7 +870,7 @@ void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256 &hash
     }
 }
 
-std::string strHeight(const CBlockIndex* pindex, bool *fFork = NULL) {
+std::string strHeight(const CBlockIndex* pindex, bool *fFork = nullptr) {
     if (!pindex)
         return "NULL";
     const CBlockIndex *pindexFork = LastCommonAncestor(pindex, pindexBestHeader);
@@ -890,7 +890,7 @@ std::string strBlkHeight(const CBlockIndex* pindex)
     return strprintf("%s (%s)", pindex->GetBlockHash().ToString(), strHeight(pindex));
 }
 
-std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = NULL)
+std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = nullptr)
 {
     if (!pindex)
         return "NULL";
@@ -899,7 +899,7 @@ std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = NULL)
             nBehind ? strprintf(" behind=%d", nBehind) : "");
 }
 
-std::string strBlockInfo(const CBlockIndex* pindex, bool* fFork = NULL)
+std::string strBlockInfo(const CBlockIndex* pindex, bool* fFork = nullptr)
 {
     if (!pindex)
         return "NULL";
