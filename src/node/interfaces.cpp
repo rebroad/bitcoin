@@ -226,7 +226,7 @@ public:
          static int adjusting = 0;
          double ratio;
          if (newratio < oldratio && (adjusting || oldtotalmemusage > totalmemusage)) {
-             if (oldtotalmemusage > totalmemusage) adjusting = 19;
+             if (oldtotalmemusage > totalmemusage) adjusting = 39;
              ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
              adjusting--;
          } else
