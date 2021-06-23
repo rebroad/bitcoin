@@ -4539,7 +4539,7 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
         // chainstate is in IBD, so tell the peer to not send them.
         if (pto.m_tx_relay->lastSentFeeFilter != MAX_FILTER) {
             currentFilter = MAX_MONEY;
-            pto.m_tx_relay->m_next_send_feefilter = 0us;
+            pto.m_tx_relay->m_next_send_feefilter = 1us;
         }
     } else {
         if (pto.m_tx_relay->lastSentFeeFilter == MAX_FILTER) {
@@ -4558,7 +4558,8 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
             m_connman.PushMessage(&pto, CNetMsgMaker(pto.GetCommonVersion()).Make(NetMsgType::FEEFILTER, filterToSend));
             pto.m_tx_relay->lastSentFeeFilter = filterToSend;
         }
-        pto.m_tx_relay->m_next_send_feefilter = PoissonNextSend(current_time, AVG_FEEFILTER_BROADCAST_INTERVAL);
+        if (pto.m_tx_relay->m_next_send_feefilter != 1us) // Wait until IBD finished
+            pto.m_tx_relay->m_next_send_feefilter = PoissonNextSend(current_time, AVG_FEEFILTER_BROADCAST_INTERVAL);
     }
     // If the fee filter has changed substantially and it's still more than MAX_FEEFILTER_CHANGE_DELAY
     // until scheduled broadcast, then move the broadcast to within MAX_FEEFILTER_CHANGE_DELAY.
