@@ -2306,7 +2306,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
 	    const CTransaction& tx = *porphanTx;
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
-		tx.GetTotalSize(), m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
+		tx.GetTotalSize(), (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
             CNodeState *nodestate = State(from_peer);
             nodestate->nTxToMempool++;
 	    nodestate->nMempoolBytes += tx.GetTotalSize();

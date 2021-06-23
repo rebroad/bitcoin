@@ -242,7 +242,7 @@ public:
 	 double newratio = 1.0 * getMempoolDynamicUsage() / totalmemusage;
          static size_t oldtotalmemusage = 0;
          static double oldratio = newratio;
-         static int adjusting = 0;
+         static unsigned int adjusting = 0;
          double ratio;
          if (newratio < oldratio && (adjusting || oldtotalmemusage > totalmemusage)) {
              if (oldtotalmemusage > totalmemusage) adjusting = 39;
@@ -250,8 +250,8 @@ public:
              adjusting--;
          } else
              ratio = newratio;
-         LogPrintf("%s: ratio: %f %s %f (newratio%s) split=%d memusage: %f %s %f\n", __func__, oldratio, 
-             oldratio > ratio ? "↓" : "↑", ratio, newratio!=ratio ? strprintf("=%f", newratio) : "", adjusting,
+         LogPrintf("%s: ratio: %f %s %f (newratio%s memusage: %f %s %f\n", __func__, oldratio, 
+             oldratio > ratio ? "↓" : "↑", ratio, newratio!=ratio ? strprintf("=%f) split=%d", newratio, adjusting+2) : ")",
              oldtotalmemusage, oldtotalmemusage > totalmemusage ? "↓" : "↑", totalmemusage);
          oldtotalmemusage = totalmemusage;
          oldratio = ratio;
