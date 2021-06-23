@@ -331,6 +331,7 @@ private:
     bool MaybeDiscourageAndDisconnect(CNode& pnode, Peer& peer);
 
     void ProcessOrphanTx(std::set<uint256>& orphan_work_set) EXCLUSIVE_LOCKS_REQUIRED(cs_main, g_cs_orphans);
+    void LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize, int node);
     /** Process a single headers message from a peer. */
     void ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                                const std::vector<CBlockHeader>& headers,
@@ -840,13 +841,13 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, st
     }
     itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it))).first;
     if (pit) {
-        if (!::ChainstateActive().IsInitialBlockDownload())
+        if (!m_chainman.ActiveChainstate().IsInitialBlockDownload())
             LogPrintf("%s: NotInFlight. pit set. peer=%d\n", __func__, nodeid);
         *pit = &itInFlight->second.second;
     } else
-        if (!::ChainstateActive().IsInitialBlockDownload())
+        if (!m_chainman.ActiveChainstate().IsInitialBlockDownload())
             LogPrintf("%s: NotInFlight. pit not set. peer=%d\n", __func__, nodeid);
-    if (!::ChainstateActive().IsInitialBlockDownload()) {
+    if (!m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
         if (itInFlight->second.second->partialBlock) // Have we gone as far as requesting a BLOCKTXN?
             LogPrintf("%s: NotInFlight. We also seem to have a partialBlock\n", __func__);
         else
@@ -2052,7 +2053,7 @@ void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, const CBlock& block, c
     m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCKTXN, resp));
 }
 
-void LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize, int node)
+void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize, int node)
 {
     std::string strDesc;
     std::string strNew;
@@ -2067,11 +2068,11 @@ void LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize
     std::string strExtra;
     bool fRecent = false;
     if (pindex) {
-        if (pindex == ::ChainActive().Tip())
+        if (pindex == m_chainman.ActiveChain().Tip())
             strDesc += "tip "; // it's the current tip
         else if (pindex == pindexBestHeader)
             strDesc += "best "; // it's the current best header
-        else if (pindex->nChainWork < ::ChainActive().Tip()->nChainWork)
+        else if (pindex->nChainWork < m_chainman.ActiveChain().Tip()->nChainWork)
             strDesc += "old "; // it's behind our current tip
         else if (pindex->nTx > 0)
             strDesc += "got "; // it's been downloaded
@@ -2085,8 +2086,8 @@ void LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize
         strSize = strprintf("size=%d ", nSize);
     LogPrint((nNew || fCheck || fRecent) ? BCLog::BLOCK : BCLog::NET, "recv %s%s%s %s%speer=%d\n", strNew, strDesc, strType, strExtra, strSize, node);
     if (fCheck && nNew) {
-        const CBlockIndex *pindexTipFork = LastCommonAncestor(pindex, ::ChainActive().Tip());
-        if (pindexTipFork->nHeight < ::ChainActive().Tip()->nHeight)
+        const CBlockIndex *pindexTipFork = LastCommonAncestor(pindex, m_chainman.ActiveChain().Tip());
+        if (pindexTipFork->nHeight < m_chainman.ActiveChain().Tip()->nHeight)
             LogPrint(BCLog::BLOCK, "WARNING: current headers indicate a re-org may happen, back to height %d\n", pindexTipFork->nHeight);
     }
 }
@@ -2982,7 +2983,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
             } else if (inv.IsGenTxMsg()) {
                 if (fBlocksOnly || pfrom.IsFeelerConn()) {
-                    LogPrintf("recv inv tx violation HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", pfrom.HasPermission(PF_RELAY) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
+                    LogPrintf("recv inv tx violation HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
                     pfrom.fDisconnect = true;
                     return;
                 }
@@ -3230,7 +3231,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // 2) This peer is a block-relay-only peer
         if ((m_ignore_incoming_txs && !pfrom.HasPermission(NetPermissionFlags::Relay)) || (pfrom.m_tx_relay == nullptr) || pfrom.IsFeelerConn())
         {
-            LogPrintf("recv tx violation HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", pfrom.HasPermission(PF_RELAY) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
+            LogPrintf("recv tx violation HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
         }

@@ -3903,10 +3903,8 @@ void CChainState::LoadMempool(const ArgsManager& args)
 
 void CChainState::LoadMempoolCache(const ArgsManager& args)
 {
-    if (args.GetArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL)) {
-        assert(std::addressof(::ChainstateActive()) == std::addressof(*this));
+    if (args.GetArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL))
         ::LoadMempoolCache(m_mempool, *this);
-    }
 }
 
 bool CChainState::LoadChainTip(const CChainParams& chainparams)
