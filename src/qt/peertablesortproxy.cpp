@@ -42,7 +42,11 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
         int LeftRecvBps = left_stats.nRecvBytes * 8 / (left_stats.nLastRecv + 1 - left_stats.nTimeConnected);
         return LeftRecvBps < RightRecvBps;
     }
-
+    case PeerTableModel::TxRecv: {
+        int RightMempoolPct = 100 * right_stats.nMempoolBytes / (right_stats.nRecvBytes - right_stats.nRecvBytes1stTx + 1);
+        int LeftMempoolPct = 100 * left_stats.nMempoolBytes / (left_stats.nRecvBytes - left_stats.nRecvBytes1stTx + 1);
+        return LeftMempoolPct < RightMempoolPct;
+    }
     case PeerTableModel::Subversion:
         return left_stats.cleanSubVer.compare(right_stats.cleanSubVer) < 0;
     } // no default case, so the compiler can warn about missing cases

@@ -84,7 +84,12 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8 / (rec->nodeStats.nLastSend+1 - rec->nodeStats.nTimeConnected));
         case Recv:
             return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8 / (rec->nodeStats.nLastRecv+1 - rec->nodeStats.nTimeConnected));
-
+        case TxRecv: {
+            int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
+            if (nMempoolPct > 100)
+                LogPrintf("%s: MPB=%d RB=%d RB1TX=%d peer=%d\n", __func__, rec->nodeStats.nMempoolBytes, rec->nodeStats.nRecvBytes,
+                    rec->nodeStats.nRecvBytes1stTx, rec->nodeStats.nodeid);
+            return QString::fromStdString(strprintf("%d %%", nMempoolPct)); }
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
         } // no default case, so the compiler can warn about missing cases
@@ -101,6 +106,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         case Ping:
         case Sent:
         case Recv:
+        case TxRecv:
             return QVariant(Qt::AlignRight | Qt::AlignVCenter);
         case Subversion:
             return {};

@@ -643,6 +643,8 @@ struct CNodeState {
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     std::chrono::microseconds m_downloading_since{0us};
     int nBlocksInFlight{0};
+    //! How many bytes of useful TX data received (specifically orphans)
+    int nMempoolBytes{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2305,6 +2307,9 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+            const CTransaction& tx = *porphanTx;
+            CNodeState *nodestate = State(from_peer);
+            nodestate->nMempoolBytes += tx.GetTotalSize();
             LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
             _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
@@ -3353,6 +3358,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LOCK2(cs_main, g_cs_orphans);
 
         CNodeState* nodestate = State(pfrom.GetId());
+        if (nodestate->nMempoolBytes) {
+            pfrom.nMempoolBytes += nodestate->nMempoolBytes;
+            nodestate->nMempoolBytes = 0;
+        }
 
         const uint256& hash = nodestate->m_wtxid_relay ? wtxid : txid;
         pfrom.AddKnownTx(hash); // REBTODO - check what this does
@@ -3409,6 +3418,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
             pfrom.nLastTXTime = GetTime();
+            pfrom.nMempoolBytes += tx.GetTotalSize();
 
             LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB) req:%d%d peer=%d\n",
                 tx.GetHash().ToString(),
@@ -3871,6 +3881,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (fWrongPeer)
                 LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessBlock() wrong peer=%d\n", pfrom.GetId());
             ProcessBlock(pfrom, pblock, /*force_processing=*/true);
+            pfrom.nMempoolBytes += nSize;
         }
         return;
     }

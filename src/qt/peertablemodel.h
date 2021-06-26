@@ -53,6 +53,7 @@ public:
         Ping,
         Sent,
         Recv,
+	TxRecv,
         Subversion
     };
 
@@ -102,6 +103,9 @@ private:
         /*: Title of Peers Table column which indicates the total amount of
             network information we have received from the peer. */
         tr("Recv"),
+        /*: Title of Peers Table column which indicates the percentage of
+            useful TX traffic we're receiving from the peer. */
+        tr("TxRecv"),
         /*: Title of Peers Table column which contains the peer's
             User Agent string. */
         tr("User Agent")};

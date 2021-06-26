@@ -604,6 +604,8 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
         X(mapRecvBytesPerMsgCmd);
         X(nRecvBytes);
     }
+    X(nMempoolBytes);
+    X(nRecvBytes1stTx);
     X(m_permissionFlags);
     if (m_tx_relay != nullptr) {
         stats.minFeeFilter = m_tx_relay->minFeeFilter;
@@ -648,6 +650,8 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                 continue;
             }
 
+            if ((result->m_command == NetMsgType::TX || result->m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx)
+                nRecvBytes1stTx = nRecvBytes - result->m_raw_message_size - msg_bytes.size();
             //store received bytes per message command
             //to prevent a memory DOS, only allow valid commands
             mapMsgCmdSize::iterator i = mapRecvBytesPerMsgCmd.find(result->m_command);
