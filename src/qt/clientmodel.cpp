@@ -55,7 +55,7 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
         // the following calls will acquire the required lock
 
         int64_t now = GetTime();
-        if (m_mempool_feehist_last_sample_timestamp == 0 || static_cast<uint64_t>(m_mempool_feehist_last_sample_timestamp)+static_cast<uint64_t>(m_mempool_collect_intervall) < static_cast<uint64_t>(now)) {
+        if (m_mempool_feehist_last_sample_timestamp == 0 || static_cast<uint64_t>(m_mempool_feehist_last_sample_timestamp)+static_cast<uint64_t>(m_mempool_collect_intervall) <= static_cast<uint64_t>(now)) {
             QMutexLocker locker(&m_mempool_locker);
             interfaces::mempool_feehistogram fee_histogram = m_node.getMempoolFeeHistogram();
             m_mempool_feehist.push_back({now, fee_histogram});
