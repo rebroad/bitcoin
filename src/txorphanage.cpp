@@ -10,8 +10,6 @@
 
 #include <cassert>
 
-/** Expiration time for orphan transactions in seconds */
-static constexpr int64_t ORPHAN_TX_EXPIRE_TIME = 20 * 60;
 /** Minimum time between orphan transactions expire time checks in seconds */
 static constexpr int64_t ORPHAN_TX_EXPIRE_INTERVAL = 5 * 60;
 
@@ -163,13 +161,13 @@ bool TxOrphanage::HaveTx(const GenTxid& gtxid) const
     }
 }
 
-std::pair<CTransactionRef, NodeId> TxOrphanage::GetTx(const uint256& txid) const
+TxOrphanage::OrphanTx TxOrphanage::GetTx(const uint256& txid) const
 {
     AssertLockHeld(g_cs_orphans);
 
     const auto it = m_orphans.find(txid);
-    if (it == m_orphans.end()) return {nullptr, -1};
-    return {it->second.tx, it->second.fromPeer};
+    if (it == m_orphans.end()) return {nullptr, 0, 0, 0};
+    return {it->second.tx, it->second.fromPeer, it->second.nTimeExpire, it->second.list_pos};
 }
 
 void TxOrphanage::EraseForBlock(const CBlock& block)

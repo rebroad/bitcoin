@@ -221,7 +221,7 @@ struct PackageMempoolAcceptResult
  * @param[in]  test_accept     When true, run validation checks but don't submit to mempool.
  */
 MempoolAcceptResult AcceptToMemoryPool(CChainState& active_chainstate, CTxMemPool& pool, const CTransactionRef& tx,
-                                       bool bypass_limits, bool test_accept=false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+                                   NodeId nodeid, bool bypass_limits, bool test_accept=false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /**
 * Atomically test acceptance of a package. If the package only contains one tx, package rules still

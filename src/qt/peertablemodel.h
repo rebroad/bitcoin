@@ -54,6 +54,8 @@ public:
         Ping,
         Sent,
         Recv,
+	TxBpsPct,
+        MPpm,
         Subversion
     };
 
@@ -103,6 +105,12 @@ private:
         /*: Title of Peers Table column which indicates the speed of
             network information we have received from the peer. */
         tr("Recv"),
+        /*: Title of Peers Table column which indicates the percentage of
+            useful TX traffic we're receiving from the peer. */
+        tr("Bps%"),
+        /*: Title of Peers Table column which indicates the number of TX
+            that make it into the mempool per minute on average */
+        tr("MPpm"),
         /*: Title of Peers Table column which contains the peer's
             User Agent string. */
         tr("User Agent")};
