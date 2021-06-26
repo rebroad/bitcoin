@@ -132,17 +132,15 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         case NetNodeId:
             return QVariant(Qt::AlignRight | Qt::AlignVCenter);
         case Address:
-            return {};
         case Direction:
         case ConnectionType:
         case Network:
-            return QVariant(Qt::AlignCenter);
         case Ping:
         case Sent:
         case Recv:
         case TxBpsPct:
         case MPpm:
-            return QVariant(Qt::AlignRight | Qt::AlignVCenter);
+            return QVariant(Qt::AlignCenter);
         case Subversion:
             return {};
         } // no default case, so the compiler can warn about missing cases
