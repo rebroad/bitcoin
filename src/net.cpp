@@ -819,7 +819,7 @@ size_t CConnman::SocketSendData(CNode& node) const
                 // error
                 int nErr = WSAGetLastError();
                 if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS) {
-                    LogPrint(BCLog::NET, "socket send error for peer=%d: %s\n", node.GetId(), NetworkErrorString(nErr));
+                    LogPrintf("%s: socket send error for peer=%d: %s\n", __func__, node.GetId(), NetworkErrorString(nErr));
                     node.CloseSocketDisconnect();
                 }
             }
@@ -1079,7 +1079,7 @@ bool CConnman::AttemptToEvictConnection()
     LOCK(cs_vNodes);
     for (CNode* pnode : vNodes) {
         if (pnode->GetId() == *node_id_to_evict) {
-            LogPrint(BCLog::NET, "selected %s connection for eviction peer=%d; disconnecting\n", pnode->ConnectionTypeAsString(), pnode->GetId());
+            LogPrintf("selected %s connection for eviction peer=%d; disconnecting\n", pnode->ConnectionTypeAsString(), pnode->GetId());
             pnode->fDisconnect = true;
             return true;
         }
@@ -1308,22 +1308,22 @@ bool CConnman::InactivityCheck(const CNode& node) const
     if (!ShouldRunInactivityChecks(node, now)) return false;
 
     if (node.nLastRecv == 0 || node.nLastSend == 0) {
-        LogPrint(BCLog::NET, "socket no message in first %i seconds, %d %d peer=%d\n", m_peer_connect_timeout, node.nLastRecv != 0, node.nLastSend != 0, node.GetId());
+        LogPrintf( "socket no message in first %i seconds, %d %d disconnect peer=%d\n", m_peer_connect_timeout, node.nLastRecv != 0, node.nLastSend != 0, node.GetId());
         return true;
     }
 
     if (now > node.nLastSend + TIMEOUT_INTERVAL) {
-        LogPrint(BCLog::NET, "socket sending timeout: %is peer=%d\n", now - node.nLastSend, node.GetId());
+        LogPrintf("socket sending timeout: %is disconnect peer=%d\n", now - node.nLastSend, node.GetId());
         return true;
     }
 
     if (now > node.nLastRecv + TIMEOUT_INTERVAL) {
-        LogPrint(BCLog::NET, "socket receive timeout: %is peer=%d\n", now - node.nLastRecv, node.GetId());
+        LogPrintf("socket receive timeout: %is disconnect peer=%d\n", now - node.nLastRecv, node.GetId());
         return true;
     }
 
     if (!node.fSuccessfullyConnected) {
-        LogPrint(BCLog::NET, "version handshake timeout peer=%d\n", node.GetId());
+        LogPrintf("version handshake timeout disconnect peer=%d\n", node.GetId());
         return true;
     }
 
@@ -1530,18 +1530,18 @@ void CConnman::SocketHandler()
         //
         // Receive
         //
-        bool recvSet = false;
+        int recvSet = 0;
         bool sendSet = false;
-        bool errorSet = false;
+        int errorSet = 0;
         {
             LOCK(pnode->cs_hSocket);
             if (pnode->hSocket == INVALID_SOCKET)
                 continue;
-            recvSet = recv_set.count(pnode->hSocket) > 0;
+            recvSet = recv_set.count(pnode->hSocket);
             sendSet = send_set.count(pnode->hSocket) > 0;
-            errorSet = error_set.count(pnode->hSocket) > 0;
+            errorSet = error_set.count(pnode->hSocket);
         }
-        if (recvSet || errorSet)
+        if (recvSet > 0 || errorSet > 0)
         {
             // typical socket buffer is 8K-64K
             uint8_t pchBuf[0x10000];
@@ -1555,8 +1555,10 @@ void CConnman::SocketHandler()
             if (nBytes > 0)
             {
                 bool notify = false;
-                if (!pnode->ReceiveMsgBytes(Span<const uint8_t>(pchBuf, nBytes), notify))
+                if (!pnode->ReceiveMsgBytes(Span<const uint8_t>(pchBuf, nBytes), notify)) {
+                    LogPrintf("%s: ReceiveMsgBytes failed. Disconnect peer=%d\n", __func__, pnode->GetId());
                     pnode->CloseSocketDisconnect();
+                }
                 RecordBytesRecv(nBytes);
                 if (notify) {
                     size_t nSizeAdded = 0;
@@ -1579,7 +1581,8 @@ void CConnman::SocketHandler()
             {
                 // socket closed gracefully
                 if (!pnode->fDisconnect) {
-                    LogPrint(BCLog::NET, "socket closed for peer=%d\n", pnode->GetId());
+                    LogPrintf("%s: nBytes=0 recvSet=%d errorSet=%d Disconnect peer=%d\n", __func__, recvSet, errorSet,
+                        pnode->GetId());
                 }
                 pnode->CloseSocketDisconnect();
             }
@@ -1590,7 +1593,7 @@ void CConnman::SocketHandler()
                 if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                 {
                     if (!pnode->fDisconnect) {
-                        LogPrint(BCLog::NET, "socket recv error for peer=%d: %s\n", pnode->GetId(), NetworkErrorString(nErr));
+                        LogPrintf("%s: socket recv error for peer=%d: %s\n", __func__, pnode->GetId(), NetworkErrorString(nErr));
                     }
                     pnode->CloseSocketDisconnect();
                 }
@@ -2826,7 +2829,7 @@ bool CConnman::DisconnectNode(const std::string& strNode)
 {
     LOCK(cs_vNodes);
     if (CNode* pnode = FindNode(strNode)) {
-        LogPrint(BCLog::NET, "disconnect by address%s matched peer=%d; disconnecting\n", (fLogIPs ? strprintf("=%s", strNode) : ""), pnode->GetId());
+        LogPrintf("disconnect by address%s matched peer=%d; disconnecting\n", (fLogIPs ? strprintf("=%s", strNode) : ""), pnode->GetId());
         pnode->fDisconnect = true;
         return true;
     }
@@ -2839,7 +2842,7 @@ bool CConnman::DisconnectNode(const CSubNet& subnet)
     LOCK(cs_vNodes);
     for (CNode* pnode : vNodes) {
         if (subnet.Match(pnode->addr)) {
-            LogPrint(BCLog::NET, "disconnect by subnet%s matched peer=%d; disconnecting\n", (fLogIPs ? strprintf("=%s", subnet.ToString()) : ""), pnode->GetId());
+            LogPrintf("disconnect by subnet%s matched peer=%d; disconnecting\n", (fLogIPs ? strprintf("=%s", subnet.ToString()) : ""), pnode->GetId());
             pnode->fDisconnect = true;
             disconnected = true;
         }
@@ -2857,7 +2860,7 @@ bool CConnman::DisconnectNode(NodeId id)
     LOCK(cs_vNodes);
     for(CNode* pnode : vNodes) {
         if (id == pnode->GetId()) {
-            LogPrint(BCLog::NET, "disconnect by id peer=%d; disconnecting\n", pnode->GetId());
+            LogPrintf("disconnect by id peer=%d; disconnecting\n", pnode->GetId());
             pnode->fDisconnect = true;
             return true;
         }
