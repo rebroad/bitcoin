@@ -436,6 +436,9 @@ private:
     /** Next time to check for stale tip */
     int64_t m_stale_tip_check_time{0};
 
+    /** Last time we had no connections */
+    int64_t m_last_no_connections{GetTime()}; // REBTODO - move to net.cpp?
+
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
 
@@ -586,12 +589,12 @@ private:
     /** Storage for orphan information */
     TxOrphanage m_orphanage;
 
-    void AddToCompactExtraTransactions(const CTransactionRef& tx) EXCLUSIVE_LOCKS_REQUIRED(g_cs_orphans);
+    void AddToCompactExtraTransactions(const CTransactionRef& tx, const NodeId nodeid) EXCLUSIVE_LOCKS_REQUIRED(g_cs_orphans);
 
     /** Orphan/conflicted/etc transactions that are kept for compact block reconstruction.
      *  The last -blockreconstructionextratxn/DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN of
      *  these are kept in a ring buffer */
-    std::vector<std::pair<uint256, CTransactionRef>> vExtraTxnForCompact GUARDED_BY(g_cs_orphans);
+    std::vector<std::pair<uint256, std::pair<CTransactionRef, NodeId>>> vExtraTxnForCompact GUARDED_BY(g_cs_orphans);
     /** Offset into vExtraTxnForCompact to insert the next tx */
     size_t vExtraTxnForCompactIt GUARDED_BY(g_cs_orphans) = 0;
 
@@ -1298,6 +1301,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         assert(m_wtxid_relay_peers == 0);
         assert(m_txrequest.Size() == 0);
         assert(m_orphanage.Size() == 0);
+        m_last_no_connections = GetTime();
     }
     } // cs_main
     if (node.fSuccessfullyConnected && misbehavior == 0 &&
@@ -1365,14 +1369,14 @@ bool PeerManagerImpl::GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) c
     return true;
 }
 
-void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx)
+void PeerManagerImpl::AddToCompactExtraTransactions(const CTransactionRef& tx, const NodeId nodeid)
 {
     size_t max_extra_txn = gArgs.GetArg("-blockreconstructionextratxn", DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN);
     if (max_extra_txn <= 0)
         return;
     if (!vExtraTxnForCompact.size())
         vExtraTxnForCompact.resize(max_extra_txn);
-    vExtraTxnForCompact[vExtraTxnForCompactIt] = std::make_pair(tx->GetWitnessHash(), tx);
+    vExtraTxnForCompact[vExtraTxnForCompactIt] = std::make_pair(tx->GetWitnessHash(), std::make_pair(tx, nodeid));
     vExtraTxnForCompactIt = (vExtraTxnForCompactIt + 1) % max_extra_txn;
 }
 
@@ -2331,19 +2335,28 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const uint256 orphanHash = *orphan_work_set.begin();
         orphan_work_set.erase(orphan_work_set.begin());
 
-        const auto [porphanTx, from_peer] = m_orphanage.GetTx(orphanHash);
+        const auto [porphanTx, from_peer, nTimeExpire, list_pos] = m_orphanage.GetTx(orphanHash);
         if (porphanTx == nullptr) continue;
 
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, false /* bypass_limits */);
+        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, from_peer, false /* bypass_limits */);
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+            const CTransaction& tx = *porphanTx;
+            int nSize = tx.GetTotalSize();
+            int64_t nTime = nTimeExpire - ORPHAN_TX_EXPIRE_TIME;
+            m_connman.ForNode(from_peer, [nSize, nTime](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
+                pnode->nMempoolBytes += nSize;
+                pnode->nMempoolTXs++;
+                pnode->nLastTXTime = nTime;
+                return true;
+            });
             LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
             _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
             m_orphanage.EraseTx(orphanHash);
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
-                AddToCompactExtraTransactions(removedTx);
+                AddToCompactExtraTransactions(removedTx, from_peer);
             }
             break;
         } else if (state.GetResult() != TxValidationResult::TX_MISSING_INPUTS) {
@@ -3467,7 +3480,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         m_reconciliation.TryRemovingFromReconSet(pfrom.GetId(), wtxid);
 
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false /* bypass_limits */);
+        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, pfrom.GetId(), false /* bypass_limits */);
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
@@ -3480,6 +3493,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
             pfrom.nLastTXTime = GetTime();
+            pfrom.nMempoolBytes += tx.GetTotalSize();
+            pfrom.nMempoolTXs++;
 
             LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n",
                 pfrom.GetId(),
@@ -3487,7 +3502,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
 
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
-                AddToCompactExtraTransactions(removedTx);
+                AddToCompactExtraTransactions(removedTx, pfrom.GetId());
             }
 
             // Recursively process any orphan transactions that depended on this one
@@ -3527,9 +3542,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     if (!AlreadyHaveTx(gtxid)) AddTxAnnouncement(pfrom, gtxid, current_time);
                 }
 
-                if (m_orphanage.AddTx(ptx, pfrom.GetId())) {
-                    AddToCompactExtraTransactions(ptx);
-                }
+                if (m_orphanage.AddTx(ptx, pfrom.GetId()))
+                    AddToCompactExtraTransactions(ptx, pfrom.GetId());
 
                 // Once added to the orphan pool, a tx is considered AlreadyHave, and we shouldn't request it anymore.
                 m_txrequest.ForgetTxHash(tx.GetHash());
@@ -3584,7 +3598,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     m_txrequest.ForgetTxHash(tx.GetHash());
                 }
                 if (RecursiveDynamicUsage(*ptx) < 100000) {
-                    AddToCompactExtraTransactions(ptx);
+                    AddToCompactExtraTransactions(ptx, pfrom.GetId());
                 }
             }
         }
@@ -3749,6 +3763,16 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
                     if (!partialBlock.IsTxAvailable(i))
                         req.indexes.push_back(i);
+                    else {
+                        if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
+                            m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
+                                pnode->nBlockBytes += nSize;
+                                pnode->nBlockTXs++;
+                                return true;
+                            });
+                            nFromConPeers++;
+                        }
+                    }
                 }
                 if (req.indexes.empty()) {
                     // Dirty hack to jump to BLOCKTXN code (TODO: move message handling into their own functions)
@@ -3797,6 +3821,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (fProcessBLOCKTXN) {
             LogPrint(BCLog::BLOCK, "Calling ProcessMessage(BLOCKTXN) peer=%d\n", pfrom.GetId());
+            pfrom.nMempoolBytes += nSize;
             return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, time_received, interruptMsgProc);
         }
 
@@ -3867,8 +3892,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 return;
             }
 
-            if (resp.txn.size()) // Don't log where we were called from cmpctblock
+            if (resp.txn.size()) {// Don't run where we were called from cmpctblock
+                pfrom.nMempoolTXs += resp.txn.size();
+                pfrom.nBlockTXs += resp.txn.size();
+                pfrom.nMempoolBytes += nSize;
+                pfrom.nBlockBytes += nSize;
                 LogPrint(BCLog::BLOCK, "recv blocktxn %s indexes=%d size=%d peer=%d\n", strBlkHeight(pindex), resp.txn.size(), nSize, pfrom.GetId());
+            }
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
             if (status == READ_STATUS_INVALID) {

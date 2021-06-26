@@ -17,6 +17,7 @@
 #include <amount.h>
 #include <coins.h>
 #include <indirectmap.h>
+#include <net.h> // For NodeId
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -95,6 +96,7 @@ private:
     const size_t nUsageSize;        //!< ... and total memory usage
     size_t nMemDelta;               //!< Memory change after added
     const int64_t nTime;            //!< Local time when entering the mempool
+    const NodeId nodeid;            //!< Peer that provided the tx
     const unsigned int entryHeight; //!< Chain height when entering the mempool
     const bool spendsCoinbase;      //!< keep track of transactions that spend a coinbase
     const int64_t sigOpCost;        //!< Total sigop cost
@@ -116,7 +118,7 @@ private:
 
 public:
     CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFee,
-                    int64_t _nTime, unsigned int _entryHeight,
+                    int64_t _nTime, NodeId _nodeid, unsigned int _entryHeight,
                     bool spendsCoinbase,
                     int64_t nSigOpsCost, LockPoints lp);
 
@@ -126,6 +128,7 @@ public:
     size_t GetTxSize() const;
     size_t GetTxWeight() const { return nTxWeight; }
     std::chrono::seconds GetTime() const { return std::chrono::seconds{nTime}; }
+    NodeId GetPeer() const { return nodeid; }
     unsigned int GetHeight() const { return entryHeight; }
     int64_t GetSigOpCost() const { return sigOpCost; }
     int64_t GetModifiedFee() const { return nFee + feeDelta; }

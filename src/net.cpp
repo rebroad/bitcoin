@@ -606,6 +606,12 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
         X(mapRecvBytesPerMsgCmd);
         X(nRecvBytes);
     }
+    X(nMempoolBytes);
+    X(nMempoolTXs);
+    X(nBlockBytes);
+    X(nBlockTXs);
+    X(nRecvBytes1stTx);
+    X(nTime1stTx);
     X(m_permissionFlags);
     if (m_tx_relay != nullptr) {
         stats.minFeeFilter = m_tx_relay->minFeeFilter;
@@ -648,6 +654,11 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                 // store the size of the corrupt message
                 mapRecvBytesPerMsgCmd.find(NET_MESSAGE_COMMAND_OTHER)->second += out_err_raw_size;
                 continue;
+            }
+
+            if ((result->m_command == NetMsgType::INV || result->m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx) {
+                nRecvBytes1stTx = nRecvBytes - result->m_raw_message_size - msg_bytes.size();
+                nTime1stTx = GetTimeSeconds();
             }
 
             //store received bytes per message command

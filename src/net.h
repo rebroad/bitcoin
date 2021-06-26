@@ -247,6 +247,7 @@ public:
     int64_t nLastTXTime;
     int64_t nLastBlockTime;
     int64_t nTimeConnected;
+    int64_t nTime1stTx;
     int64_t nTimeOffset;
     std::string addrName;
     int nVersion;
@@ -258,6 +259,11 @@ public:
     uint64_t nSendBytes;
     mapMsgCmdSize mapSendBytesPerMsgCmd;
     uint64_t nRecvBytes;
+    uint64_t nRecvBytes1stTx;
+    uint64_t nMempoolBytes;
+    uint64_t nBlockBytes;
+    unsigned int nMempoolTXs;
+    unsigned int nBlockTXs;
     mapMsgCmdSize mapRecvBytesPerMsgCmd;
     NetPermissionFlags m_permissionFlags;
     std::chrono::microseconds m_last_ping_time;
@@ -421,6 +427,13 @@ public:
     RecursiveMutex cs_sendProcessing;
 
     uint64_t nRecvBytes GUARDED_BY(cs_vRecv){0};
+    std::atomic<uint64_t> nMempoolBytes{0};
+    std::atomic<uint64_t> nBlockBytes{0};
+    std::atomic<unsigned int> nMempoolTXs{0};
+    std::atomic<unsigned int> nBlockTXs{0};
+    std::atomic<uint64_t> nRecvBytes1stTx{0};
+    std::atomic<int64_t> nTime1stTx{0};
+
     std::atomic<int64_t> nLastSend{0};
     std::atomic<int64_t> nLastRecv{0};
     //! Unix epoch time at peer connection, in seconds.

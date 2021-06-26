@@ -684,7 +684,7 @@ public:
     {
         if (!m_node.mempool) return true;
         LockPoints lp;
-        CTxMemPoolEntry entry(tx, 0, 0, 0, false, 0, lp);
+        CTxMemPoolEntry entry(tx, 0 /*fee*/, 0 /*time*/, -1 /*node*/, 0 /*height*/, false /*coinbase*/, 0 /*SigOpsCost*/, lp);
         CTxMemPool::setEntries ancestors;
         auto limit_ancestor_count = gArgs.GetArg("-limitancestorcount", DEFAULT_ANCESTOR_LIMIT);
         auto limit_ancestor_size = gArgs.GetArg("-limitancestorsize", DEFAULT_ANCESTOR_SIZE_LIMIT) * 1000;
