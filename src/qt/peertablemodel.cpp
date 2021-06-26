@@ -94,10 +94,35 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         }
         case Recv: {
             int64_t now = GetTimeSeconds();
-            if (rec->nodeStats.nTimeConnected != now)
+            if (rec->nodeStats.nRecvBytes1stTx && rec->nodeStats.nTime1stTx != now)
+                return GUIUtil::formatBps((rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx) * 8.0 / (now - rec->nodeStats.nTime1stTx));
+            else if (rec->nodeStats.nTimeConnected != now)
                 return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8.0 / (now - rec->nodeStats.nTimeConnected));
             else
                 return QString::fromStdString("");
+        }
+        case TxBpsPct: {
+            int64_t now = GetTimeSeconds();
+            std::string dots;
+            if (now - rec->nodeStats.nTimeConnected >= 120) dots="";
+            else if (now - rec->nodeStats.nTimeConnected >= 60) dots=".";
+            else dots="..";
+            if (rec->nodeStats.nRecvBytes1stTx && rec->nodeStats.nRecvBytes1stTx != rec->nodeStats.nRecvBytes) {
+                float nTxBpsPct = 100.0 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx);
+                return QString::fromStdString(strprintf("%s%d", dots, (int)nTxBpsPct));
+            } else
+                return QString::fromStdString(dots);
+        }
+        case MPpm: {
+            int64_t now = GetTimeSeconds();
+            if (rec->nodeStats.nRecvBytes1stTx && now != rec->nodeStats.nTime1stTx) {
+                float nMPpm = 60.0 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTime1stTx);
+                std::string strMPpm;
+                if (nMPpm < 1) strMPpm = strprintf("%d", 0.1 * (int)(nMPpm * 10));
+                else strMPpm = strprintf("%d", (int)nMPpm);
+                return QString::fromStdString(strMPpm);
+            } else
+                return {};
         }
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
@@ -116,6 +141,8 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         case Ping:
         case Sent:
         case Recv:
+        case TxBpsPct:
+        case MPpm:
             return QVariant(Qt::AlignRight | Qt::AlignVCenter);
         case Subversion:
             return {};

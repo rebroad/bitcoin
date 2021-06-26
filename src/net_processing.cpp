@@ -427,6 +427,9 @@ private:
     /** Next time to check for stale tip */
     int64_t m_stale_tip_check_time{0};
 
+    /** Last time we had no connections */
+    int64_t m_last_no_connections{GetTime()};
+
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
 
@@ -1245,6 +1248,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         assert(m_wtxid_relay_peers == 0);
         assert(m_txrequest.Size() == 0);
         assert(m_orphanage.Size() == 0);
+        m_last_no_connections = GetTime();
     }
     } // cs_main
     if (node.fSuccessfullyConnected && misbehavior == 0 &&
@@ -2293,6 +2297,14 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
+            const CTransaction& tx = *porphanTx;
+            int nSize = tx.GetTotalSize();
+            m_connman.ForNode(from_peer, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
+                pnode->nMempoolBytes += nSize;
+                pnode->nMempoolTXs++;
+                pnode->nLastTXTime = GetTime();
+                return true;
+            });
             LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
             _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
@@ -3378,6 +3390,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
             pfrom.nLastTXTime = GetTime();
+            pfrom.nMempoolBytes += tx.GetTotalSize();
+            pfrom.nMempoolTXs++;
 
             LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n",
                 pfrom.GetId(),
@@ -3522,6 +3536,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         CBlockHeaderAndShortTxIDs cmpctblock;
+        int nSize = vRecv.size();
         vRecv >> cmpctblock;
 
         bool received_new_header = false;
@@ -3670,6 +3685,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         } // cs_main
 
         if (fProcessBLOCKTXN) {
+            pfrom.nMempoolBytes += nSize;
             return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, time_received, interruptMsgProc);
         }
 
@@ -3694,6 +3710,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         BlockTransactions resp;
+        int nSize = vRecv.size();
         vRecv >> resp;
 
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
@@ -3707,6 +3724,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 return;
             }
 
+            if (resp.txn.size()) {
+                pfrom.nMempoolTXs += resp.txn.size();
+                pfrom.nMempoolBytes += nSize;
+            }
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
             if (status == READ_STATUS_INVALID) {
@@ -3809,6 +3830,16 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // which peers send us compact blocks, so the race between here and
             // cs_main in ProcessNewBlock is fine.
             mapBlockSource.emplace(hash, std::make_pair(pfrom.GetId(), true));
+        }
+        if (pfrom.nRecvBytes1stTx) {
+            int nBIF;
+            WITH_LOCK(cs_main, nBIF = State(pfrom.GetId())->nBlocksInFlight);
+            int nLBT = int(GetTime() - pfrom.nLastBlockTime);
+            if (nBIF > 3 || nLBT < 60) {
+                pfrom.nRecvBytes1stTx = 0;
+                pfrom.nMempoolBytes = 0;
+                pfrom.nMempoolTXs = 0;
+            }
         }
         ProcessBlock(pfrom, pblock, forceProcessing);
         return;
@@ -4513,6 +4544,8 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
             // Send the current filter if we sent MAX_FILTER previously
             // and made it out of IBD.
             pto.m_tx_relay->m_next_send_feefilter = 0us;
+            if (pto.nRecvBytes1stTx)
+                pto.nRecvBytes1stTx = 0;
         }
     }
     if (current_time > pto.m_tx_relay->m_next_send_feefilter) {

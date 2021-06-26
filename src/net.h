@@ -246,6 +246,7 @@ public:
     int64_t nLastTXTime;
     int64_t nLastBlockTime;
     int64_t nTimeConnected;
+    int64_t nTime1stTx;
     int64_t nTimeOffset;
     std::string m_addr_name;
     int nVersion;
@@ -257,6 +258,9 @@ public:
     uint64_t nSendBytes;
     mapMsgCmdSize mapSendBytesPerMsgCmd;
     uint64_t nRecvBytes;
+    uint64_t nRecvBytes1stTx;
+    uint64_t nMempoolBytes;
+    unsigned int nMempoolTXs;
     mapMsgCmdSize mapRecvBytesPerMsgCmd;
     NetPermissionFlags m_permissionFlags;
     std::chrono::microseconds m_last_ping_time;
@@ -423,6 +427,10 @@ public:
 
     std::atomic<std::chrono::seconds> m_last_send{0s};
     std::atomic<std::chrono::seconds> m_last_recv{0s};
+    std::atomic<uint64_t> nMempoolBytes{0};
+    std::atomic<unsigned int> nMempoolTXs{0};
+    std::atomic<uint64_t> nRecvBytes1stTx{0};
+    std::atomic<int64_t> nTime1stTx{0};
     //! Unix epoch time at peer connection, in seconds.
     const int64_t nTimeConnected;
     std::atomic<int64_t> nTimeOffset{0};
