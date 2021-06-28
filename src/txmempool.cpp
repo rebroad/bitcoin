@@ -1052,9 +1052,26 @@ void CCoinsViewMemPool::PackageAddTransaction(const CTransactionRef& tx)
     }
 }
 
-size_t CTxMemPool::DynamicMemoryUsage() const {
+size_t CTxMemPool::DynamicMemoryUsage(bool fDebug/*=false*/) const {
     LOCK(cs);
     // Estimate the overhead of mapTx to be 15 pointers + an allocation, as no exact formula for boost::multi_index_contained is implemented.
+    auto two = mapNextTx.size();
+    auto three = mapDeltas.size();
+    auto four = vTxHashes.size();
+    auto six = mapTx.size();
+    auto one = cachedInnerUsage;
+    if (fDebug) {
+        static auto oldtwo = 0;
+        static auto oldthree = 0;
+        static auto oldfour = 0;
+        static auto oldsix = 0;
+        static auto oldone = 0;
+        LogPrintf("nextTx %f%%, deltas %f%%, TxHashes %f%%, mapTx %f%% cache %f%%\n",
+           oldtwo ? 100.0 * two / oldtwo : 0, oldthree ? 100.0 * three / oldthree : 0,
+           oldfour ? 100.0 * four / oldfour : 0, oldsix ? 100.0 * six / oldsix : 0,
+           oldone ? 100.0 * one / oldone : 0);
+        oldtwo = two; oldthree = three; oldfour = four; oldsix = six; oldone = one;
+    }
     return memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 15 * sizeof(void*)) * mapTx.size() + memusage::DynamicUsage(mapNextTx) + memusage::DynamicUsage(mapDeltas) + memusage::DynamicUsage(vTxHashes) + cachedInnerUsage;
 }
 

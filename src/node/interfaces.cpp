@@ -208,7 +208,7 @@ public:
     int64_t getTotalBytesRecv() override { return m_context->connman ? m_context->connman->GetTotalBytesRecv() : 0; }
     int64_t getTotalBytesSent() override { return m_context->connman ? m_context->connman->GetTotalBytesSent() : 0; }
     size_t getMempoolSize() override { return m_context->mempool ? m_context->mempool->size() : 0; }
-    size_t getMempoolDynamicUsage() override { return m_context->mempool ? m_context->mempool->DynamicMemoryUsage() : 0; }
+    size_t getMempoolDynamicUsage(bool fDebug = false) override { return m_context->mempool ? m_context->mempool->DynamicMemoryUsage(fDebug) : 0; }
     interfaces::mempool_feehistogram getMempoolFeeHistogram() override {
          /* TODO: define log scale formular for dynamically creating the
           * feelimits but with the property of not constantly changing
@@ -277,9 +277,10 @@ public:
          static double oldratio = newratio;
          static int adjusting = 0;
          double ratio;
-         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && labs((long)oldsmallest - (long)newsmallest) > labs((long)totalmemdelta - (long)oldtotalmemdelta)))
+         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && labs((long)oldsmallest - (long)newsmallest) > labs((long)totalmemdelta - (long)oldtotalmemdelta))) {
+             LogPrintf("%s: newi=%d oldi=%d smallest %d -> %d (%d) mem %d -> %d (%d)\n", __func__, newi, oldi, oldsmallest, newsmallest, labs((long)newsmallest - (long)oldsmallest), oldtotalmemdelta, totalmemdelta, labs((long)totalmemdelta - (long)oldtotalmemdelta));
              adjusting = 0;
-         else if (oldtotalmemdelta > totalmemdelta)
+         } else if (oldtotalmemdelta > totalmemdelta)
              adjusting = 30;
          oldsmallest = newsmallest;
          oldi = newi;
@@ -291,6 +292,14 @@ public:
          if (adjusting > 0) {
              adjusting--;
              if (utilized >= 100) ratio = newratio;
+         }
+         if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0
+                 || utilized > 95) {
+             getMempoolDynamicUsage(true);
+             LogPrintf("%s: ratio: %f -> %f (newratio%s mem: %d -> %d (%f%%) (%f%% of max)\n", __func__, oldratio, 
+                 ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
+                 oldtotalmemdelta, totalmemdelta, oldtotalmemdelta ? 100.0 * totalmemdelta / oldtotalmemdelta : 0,
+                 utilized);
          }
          oldtotalmemusage = totalmemusage;
          oldtotalmemdelta = totalmemdelta;

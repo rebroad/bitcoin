@@ -152,7 +152,7 @@ public:
     virtual size_t getMempoolSize() = 0;
 
     //! Get mempool dynamic usage.
-    virtual size_t getMempoolDynamicUsage() = 0;
+    virtual size_t getMempoolDynamicUsage(bool fDebug = false) = 0;
 
     //! Get mempool fee histogram
     virtual mempool_feehistogram getMempoolFeeHistogram() = 0;
