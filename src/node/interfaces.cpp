@@ -250,6 +250,9 @@ public:
              adjusting--;
          } else
              ratio = newratio;
+         LogPrintf("%s: ratio: %f %s %f (newratio%s memusage: %f %s %f\n", __func__, oldratio, 
+             oldratio > ratio ? "↓" : "↑", ratio, newratio!=ratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
+             oldtotalmemusage, oldtotalmemusage > totalmemusage ? "↓" : "↑", totalmemusage);
          oldtotalmemusage = totalmemusage;
          oldratio = ratio;
          for (size_t i = 0; i < feelimits.size(); i++)
