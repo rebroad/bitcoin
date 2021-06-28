@@ -1261,6 +1261,9 @@ bool CChainState::IsInitialBlockDownload() const
         return true;
     if (m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
         return true;
+    if (pindexBestHeader != nullptr && pindexBestHeader->nHeight > m_chain.Tip()->nHeight + 6)
+        return true;
+
     LogPrintf("Leaving InitialBlockDownload (latching to false)\n");
     m_cached_finished_ibd.store(true, std::memory_order_relaxed);
     return false;
