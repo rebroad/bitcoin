@@ -584,8 +584,7 @@ bool ConnectSocketDirectly(const CService &addrConnect, const Sock& sock, int nT
                 return false;
             }
             if (sockerr != 0) {
-                LogConnectFailure(manual_connection,
-                                  "connect() to %s failed after wait: %s",
+                LogPrint(BCLog::NET, "connect() to %s failed after wait: %s",
                                   addrConnect.ToString(),
                                   NetworkErrorString(sockerr));
                 return false;
