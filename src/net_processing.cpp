@@ -632,16 +632,11 @@ struct CNodeState {
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     std::chrono::microseconds m_downloading_since{0us};
     int nBlocksInFlight{0};
+    //! How many TXs are currently in flight
     int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
     int nBlockAfterTXs{0};
-    int nTxRequested{0};
-    int nTxRecvOld{0};
-    int nTxRecvNew{0};
-    int nTxNotFound{0};
-    int nTxToMempool{0};
-    int nTxToMempoolReq{0};
-    int nTxToMempoolSeen{0};
+    //! How many bytes of useful TX data received (specifically orphans)
     int nMempoolBytes{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
@@ -2303,13 +2298,12 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
-	    const CTransaction& tx = *porphanTx;
+            const CTransaction& tx = *porphanTx;
+            CNodeState *nodestate = State(from_peer);
+            nodestate->nMempoolBytes += tx.GetTotalSize();
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
 		tx.GetTotalSize(), (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
-            CNodeState *nodestate = State(from_peer);
-            nodestate->nTxToMempool++;
-	    nodestate->nMempoolBytes += tx.GetTotalSize();
             _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
             m_orphanage.EraseTx(orphanHash);
@@ -3247,12 +3241,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LOCK2(cs_main, g_cs_orphans);
 
         CNodeState* nodestate = State(pfrom.GetId());
-        nodestate->nTxInFlight--;
-        if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
-	if (nodestate->nMempoolBytes) {
+        if (nodestate->nMempoolBytes) {
             pfrom.nMempoolBytes += nodestate->nMempoolBytes;
             nodestate->nMempoolBytes = 0;
         }
+        nodestate->nTxInFlight--;
+        if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
 
         const uint256& hash = nodestate->m_wtxid_relay ? wtxid : txid;
         pfrom.AddKnownTx(hash); // REBTODO - check what this does
@@ -3281,7 +3275,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // (older than our recency filter) if trying to DoS us, without any need
         // for witness malleation.
         if (AlreadyHaveTx(GenTxid(/* is_wtxid=*/true, wtxid))) {
-            nodestate->nTxRecvOld++;
             if (pfrom.HasPermission(NetPermissionFlags::ForceRelay)) {
                 // Always relay transactions received from peers with forcerelay
                 // permission, even if they were already in the mempool, allowing
@@ -3295,8 +3288,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
             return;
         }
-        nodestate->nTxRecvNew++;
-
 	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
 	// REBTODO - record m_mempool.DynamicMemoryUsage() before and after accept to get the actual memory use of the tx - store this in a way that it can be graphed - do this for accepted orphans too
 
@@ -3317,16 +3308,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
             pfrom.nLastTXTime = GetTime();
 	    pfrom.nMempoolBytes += nSize;
-	    if (nRequestedTX == 2 || nRequestedWTX == 2) nodestate->nTxToMempoolReq++;
-            else if (nRequestedTX == 1 || nRequestedWTX == 1) nodestate->nTxToMempoolSeen++;
-            nodestate->nTxToMempool++;
 
             LogPrint(BCLog::MEMPOOL, "tx accepted %s (poolsz %u, %ukB) req:%d%d size=%d delta=%d IF=%d peer=%d\n",
                 tx.GetHash().ToString(),
                 m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
                 nRequestedTX, nRequestedWTX, tx.GetTotalSize(), m_mempool.DynamicMemoryUsage() - nMemUsageBefore,
-		nodestate->nTxRequested-nodestate->nTxRecvNew-nodestate->nTxRecvOld-nodestate->nTxNotFound,
-                pfrom.GetId());
+		nodestate->nTxInFlight, pfrom.GetId());
 
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
                 AddToCompactExtraTransactions(removedTx);
@@ -4102,7 +4089,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // If we receive a NOTFOUND message for a tx we requested, mark the announcement for it as
                     // completed in TxRequestTracker.
                     CNodeState *nodestate = State(pfrom.GetId());
-                    nodestate->nTxNotFound++;
                     nodestate->nTxInFlight--;
                     if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
                     m_txrequest.ReceivedResponse(pfrom.GetId(), inv.hash);
@@ -4533,7 +4519,7 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
 
     CAmount currentFilter = m_mempool.GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK();
     static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
-    if (m_chainman.ActiveChainstate().IsInitialBlockDownload() || pto.IsFeelerConn() ) {
+    if (m_chainman.ActiveChainstate().IsInitialBlockDownload() || pto.IsFeelerConn()) {
         // Received tx-inv messages are discarded when the active
         // chainstate is in IBD, so tell the peer to not send them.
         currentFilter = MAX_MONEY;
@@ -5048,7 +5034,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     gtxid.GetHash().ToString(), pto->GetId());
                 vGetData.emplace_back(gtxid.IsWtxid() ? MSG_WTX : (MSG_TX | GetFetchFlags(*pto)), gtxid.GetHash());
                 if (vGetData.size() >= MAX_GETDATA_SZ) {
-	            state.nTxRequested += vGetData.size();
                     state.nTxInFlight += vGetData.size();
                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     vGetData.clear();
@@ -5063,8 +5048,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
 
         if (!vGetData.empty()) {
-	    state.nTxRequested += vGetData.size();
-	    state.nTxInFlight += vGetData.size();
+            state.nTxInFlight += vGetData.size();
             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
         }
 

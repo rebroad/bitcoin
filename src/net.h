@@ -255,7 +255,6 @@ public:
     bool m_bip152_highbandwidth_to;
     bool m_bip152_highbandwidth_from;
     int m_starting_height;
-    int nBytesZeroCount;
     uint64_t nSendBytes;
     mapMsgCmdSize mapSendBytesPerMsgCmd;
     uint64_t nRecvBytes;
@@ -412,7 +411,6 @@ public:
     /** Offset inside the first vSendMsg already sent */
     size_t nSendOffset GUARDED_BY(cs_vSend){0};
     uint64_t nSendBytes GUARDED_BY(cs_vSend){0};
-    int nBytesZeroCount{0};
     std::deque<std::vector<unsigned char>> vSendMsg GUARDED_BY(cs_vSend);
     Mutex cs_vSend;
     Mutex cs_hSocket;

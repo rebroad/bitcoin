@@ -1535,14 +1535,14 @@ void CConnman::SocketHandler()
         // Receive
         //
         int recvSet = 0;
-        int sendSet = 0;
+        bool sendSet = false;
         int errorSet = 0;
         {
             LOCK(pnode->cs_hSocket);
             if (pnode->hSocket == INVALID_SOCKET)
                 continue;
             recvSet = recv_set.count(pnode->hSocket);
-            sendSet = send_set.count(pnode->hSocket);
+            sendSet = send_set.count(pnode->hSocket) > 0;
             errorSet = error_set.count(pnode->hSocket);
         }
         if (recvSet > 0 || errorSet > 0)
@@ -1587,8 +1587,8 @@ void CConnman::SocketHandler()
                 if (!pnode->fDisconnect) {
                     LogPrintf("%s: nBytes=0 recvSet=%d errorSet=%d Disconnect peer=%d\n", __func__, recvSet, errorSet,
                         pnode->GetId());
-                    pnode->CloseSocketDisconnect();
                 }
+                pnode->CloseSocketDisconnect();
             }
             else if (nBytes < 0)
             {
@@ -1604,15 +1604,13 @@ void CConnman::SocketHandler()
             }
         }
 
-        if (sendSet > 0) {
+        if (sendSet) {
             // Send data
             size_t bytes_sent = WITH_LOCK(pnode->cs_vSend, return SocketSendData(*pnode));
             if (bytes_sent) RecordBytesSent(bytes_sent);
         }
 
-        if (InactivityCheck(*pnode)) {
-            pnode->fDisconnect = true;
-        }
+        if (InactivityCheck(*pnode)) pnode->fDisconnect = true;
     }
     {
         LOCK(cs_vNodes);

@@ -788,7 +788,7 @@ QString formatBps(uint64_t bits)
         return QObject::tr("%1 bps").arg(bits);
     if (bits < 10'000'000)
         //: "Kilobits per second"
-        return QObject::tr("%1 Kbps").arg(bits / 1'000);
+        return QObject::tr("%1 kbps").arg(bits / 1'000);
     if (bits < 10'000'000'000)
         //: "Megabits per second"
         return QObject::tr("%1 Mbps").arg(bits / 1'000'000);
