@@ -244,7 +244,7 @@ public:
          static double oldratio = newratio;
          static unsigned int adjusting = 0;
          double ratio;
-         if (newratio < oldratio && (adjusting || oldtotalmemusage > totalmemusage)) {
+         if (adjusting || oldtotalmemusage > totalmemusage) {
              if (oldtotalmemusage > totalmemusage) adjusting = 39;
              ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
              adjusting--;
