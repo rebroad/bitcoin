@@ -4589,8 +4589,9 @@ void PeerManagerImpl::MaybeSendPing(CNode& node_to, Peer& peer, std::chrono::mic
 {
     if (m_connman.ShouldRunInactivityChecks(node_to) && peer.m_ping_nonce_sent &&
         now > peer.m_ping_start.load() + std::chrono::seconds{TIMEOUT_INTERVAL}) {
-        LogPrint(BCLog::NET, "ping timeout: %fs peer=%d\n", 0.000001 * count_microseconds(now - peer.m_ping_start.load()), peer.m_id);
-        node_to.fDisconnect = true;
+        LogPrintf("ping timeout: %fs peer=%d\n", 0.000001 * count_microseconds(now - peer.m_ping_start.load()), peer.m_id);
+        //node_to.fDisconnect = true;
+        peer.m_ping_nonce_sent = 0;
         return;
     }
 
