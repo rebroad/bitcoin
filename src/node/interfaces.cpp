@@ -261,9 +261,10 @@ public:
          static double oldratio = newratio;
          static int adjusting = 0;
          double ratio;
-         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && labs((long)oldsmallest - (long)newsmallest) > labs((long)totalmemdelta - (long)oldtotalmemdelta)/2))
+         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && labs((long)oldsmallest - (long)newsmallest) > labs((long)totalmemdelta - (long)oldtotalmemdelta)/2)) {
+             LogPrintf("%s: newi=%d oldi=%d smallest %d -> %d (%d) mem %d -> %d (%d)\n", __func__, newi, oldi, oldsmallest, newsmallest, labs((long)newsmallest - (long)oldsmallest), oldtotalmemdelta, totalmemdelta, labs((long)totalmemdelta - (long)oldtotalmemdelta));
              adjusting = 0;
-         else if (oldtotalmemdelta > totalmemdelta)
+         } else if (oldtotalmemdelta > totalmemdelta)
              adjusting = 30;
          oldsmallest = newsmallest;
          oldi = newi;
@@ -275,6 +276,10 @@ public:
                  adjusting--;
          } else
              ratio = newratio;
+         if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0)
+             LogPrintf("%s: ratio: %f -> %f (newratio%s memusage: %d -> %d (%f%%)\n", __func__, oldratio, 
+                 ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
+                 oldtotalmemusage, totalmemusage, oldtotalmemusage ? 100.0 * totalmemusage / oldtotalmemusage : 0);
          oldtotalmemusage = totalmemusage;
          oldtotalmemdelta = totalmemdelta;
          oldratio = ratio;
