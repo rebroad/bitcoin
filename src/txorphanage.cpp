@@ -48,8 +48,8 @@ bool TxOrphanage::AddTx(const CTransactionRef& tx, NodeId peer)
         m_outpoint_to_orphan_it[txin.prevout].insert(ret.first);
     }
 
-    LogPrint(BCLog::MEMPOOL, "stored orphan tx %s (mapsz %u outsz %u)\n", hash.ToString(),
-             m_orphans.size(), m_outpoint_to_orphan_it.size());
+    LogPrint(BCLog::MEMPOOL, "stored orphan tx %s (mapsz %u outsz %u) peer=%d\n", hash.ToString(),
+             m_orphans.size(), m_outpoint_to_orphan_it.size(), peer);
     return true;
 }
 

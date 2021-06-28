@@ -2307,6 +2307,8 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const auto [porphanTx, from_peer] = m_orphanage.GetTx(orphanHash);
         if (porphanTx == nullptr) continue;
 
+        int64_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
+
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (from_peer)
         const TxValidationState& state = result.m_state;
 
@@ -2314,7 +2316,9 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             const CTransaction& tx = *porphanTx;
             CNodeState *nodestate = State(from_peer);
             nodestate->nMempoolBytes += tx.GetTotalSize();
-            LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
+            LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
+                orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
+		tx.GetTotalSize(), (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
             _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
             m_orphanage.EraseTx(orphanHash);
@@ -3408,11 +3412,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
             return;
         }
-
+	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (pfrom)
         const TxValidationState& state = result.m_state;
         int nRequestedTX = 3;
         int nRequestedWTX = 3;
+        bool fOrphanAdded = false;
+
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
             m_mempool.check(m_chainman.ActiveChainstate());
             // As this version of the transaction was acceptable, we can forget about any
@@ -3425,11 +3431,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             pfrom.nLastTXTime = GetTime();
             pfrom.nMempoolBytes += tx.GetTotalSize();
 
-            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: accepted %s (poolsz %u txn, %u kB) req:%d%d peer=%d\n",
+            LogPrint(BCLog::MEMPOOL, "tx accepted %s (poolsz %u, %ukB) req:%d%d size=%d delta=%d IF=%d peer=%d\n",
                 tx.GetHash().ToString(),
                 m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
-                nRequestedTX, nRequestedWTX,
-                pfrom.GetId());
+                nRequestedTX, nRequestedWTX, tx.GetTotalSize(), m_mempool.DynamicMemoryUsage() - nMemUsageBefore,
+                nodestate->nTxInFlight, pfrom.GetId());
 
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
                 AddToCompactExtraTransactions(removedTx);
@@ -3472,6 +3478,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     if (!AlreadyHaveTx(gtxid)) AddTxAnnouncement(pfrom, gtxid, current_time);
                 }
 
+                fOrphanAdded = true;
                 if (m_orphanage.AddTx(ptx, pfrom.GetId())) {
                     AddToCompactExtraTransactions(ptx); // REBTODO - what's this?
                 }
@@ -3553,9 +3560,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // regardless of false positives.
 
         if (state.IsInvalid()) {
-            LogPrint(BCLog::MEMPOOLREJ, "%s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(),
-                pfrom.GetId(),
-                state.ToString());
+            if (!fOrphanAdded)
+                LogPrint(BCLog::MEMPOOLREJ, "AcceptToMemoryPool: NOT accepted %s %s req:%d%d peer=%d\n",
+                    tx.GetHash().ToString(), state.ToString(),
+                    nRequestedTX, nRequestedWTX, pfrom.GetId());
             MaybePunishNodeForTx(pfrom.GetId(), state);
         }
         return;
