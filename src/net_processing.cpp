@@ -2292,7 +2292,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const auto [porphanTx, from_peer] = m_orphanage.GetTx(orphanHash);
         if (porphanTx == nullptr) continue;
 
-	int64_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
+        int64_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
 
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (from_peer)
         const TxValidationState& state = result.m_state;
@@ -3231,7 +3231,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         CTransactionRef ptx;
-        int nSize = vRecv.size();
         vRecv >> ptx;
         const CTransaction& tx = *ptx;
 
@@ -3289,8 +3288,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
-	// REBTODO - record m_mempool.DynamicMemoryUsage() before and after accept to get the actual memory use of the tx - store this in a way that it can be graphed - do this for accepted orphans too
-
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (pfrom)
         const TxValidationState& state = result.m_state;
         int nRequestedTX = 3;
@@ -3307,13 +3304,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
             pfrom.nLastTXTime = GetTime();
-	    pfrom.nMempoolBytes += nSize;
+            pfrom.nMempoolBytes += tx.GetTotalSize();
 
             LogPrint(BCLog::MEMPOOL, "tx accepted %s (poolsz %u, %ukB) req:%d%d size=%d delta=%d IF=%d peer=%d\n",
                 tx.GetHash().ToString(),
                 m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
                 nRequestedTX, nRequestedWTX, tx.GetTotalSize(), m_mempool.DynamicMemoryUsage() - nMemUsageBefore,
-		nodestate->nTxInFlight, pfrom.GetId());
+                nodestate->nTxInFlight, pfrom.GetId());
 
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
                 AddToCompactExtraTransactions(removedTx);
@@ -3441,8 +3438,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (!fOrphanAdded)
                 LogPrint(BCLog::MEMPOOLREJ, "AcceptToMemoryPool: NOT accepted %s %s req:%d%d peer=%d\n",
                     tx.GetHash().ToString(), state.ToString(),
-                    nRequestedTX, nRequestedWTX,
-                    pfrom.GetId());
+                    nRequestedTX, nRequestedWTX, pfrom.GetId());
             MaybePunishNodeForTx(pfrom.GetId(), state);
         }
         return;
@@ -4519,6 +4515,7 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
 
     CAmount currentFilter = m_mempool.GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK();
     static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
+
     if (m_chainman.ActiveChainstate().IsInitialBlockDownload() || pto.IsFeelerConn()) {
         // Received tx-inv messages are discarded when the active
         // chainstate is in IBD, so tell the peer to not send them.

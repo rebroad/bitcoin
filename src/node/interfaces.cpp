@@ -239,7 +239,7 @@ public:
                  }
              }
          }
-	 double newratio = 1.0 * getMempoolDynamicUsage() / totalmemusage;
+	 double newratio = totalmemusage ? 1.0 * getMempoolDynamicUsage() / totalmemusage : 0;
          static size_t oldtotalmemusage = 0;
          static double oldratio = newratio;
          static unsigned int adjusting = 0;
@@ -263,7 +263,7 @@ public:
          }
 
          return feeinfo;
-     }
+    }
 
     bool getHeaderTip(int& height, int64_t& block_time) override
     {
