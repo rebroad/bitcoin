@@ -1133,12 +1133,26 @@ void CChainState::InitCoinsCache(size_t cache_size_bytes)
 //
 bool CChainState::IsInitialBlockDownload() const
 {
+    bool fNew = false;
+    bool fPrev = m_cached_finished_ibd.load(std::memory_order_relaxed);
+    if (pindexBestHeader != nullptr && pindexBestHeader->nHeight > m_chain.Tip()->nHeight + 6)
+        fNew = true;
+    if (m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
+        fNew = true;
+    if (fNew) {
+        if (fPrev) {
+            m_cached_finished_ibd.store(false, std::memory_order_relaxed);
+            LogPrintf("%s: Latching to true\n", __func__);
+        }
+        return true;
+    }
+
     // Optimization: pre-test latch before taking the lock.
-    if (m_cached_finished_ibd.load(std::memory_order_relaxed))
+    if (fPrev)
         return false;
 
     LOCK(cs_main);
-    if (m_cached_finished_ibd.load(std::memory_order_relaxed))
+    if (fPrev)
         return false;
     if (fImporting || fReindex)
         return true;
@@ -1146,8 +1160,7 @@ bool CChainState::IsInitialBlockDownload() const
         return true;
     if (m_chain.Tip()->nChainWork < nMinimumChainWork)
         return true;
-    if (m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
-        return true;
+
     LogPrintf("Leaving InitialBlockDownload (latching to false)\n");
     m_cached_finished_ibd.store(true, std::memory_order_relaxed);
     return false;
