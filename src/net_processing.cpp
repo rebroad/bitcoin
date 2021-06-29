@@ -3245,11 +3245,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             nodestate->nMempoolBytes = 0;
         }
         if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
-        LogPrintf("TX received. nTxInFlight-- == %d\n", nodestate->nTxInFlight);
-        if (nodestate->nBlockAfterTXs > 1) {
-            nodestate->nBlockAfterTXs--;
-            LogPrintf("TX received. nBlockAfterTXs-- == %d\n", nodestate->nBlockAfterTXs);
-        }
+        if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
 
         const uint256& hash = nodestate->m_wtxid_relay ? wtxid : txid;
         pfrom.AddKnownTx(hash); // REBTODO - check what this does
@@ -3604,11 +3600,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
                     // If we get more TXs than currently in flight then we know the request has been ignored.
                     nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // Add 2 so that one more TX is requested.
-                    LogPrintf("Setting nBlockAfterTXs to %d\n", nodestate->nBlockAfterTXs);
-                    //if (nodestate->nBlockAfterTXs < 2) {
-                    //    nodestate->nBlockAfterTXs = 2;
-                    //    LogPrintf("Adjusting nBlockAfterTXs to %d\n", nodestate->nBlockAfterTXs);
-                    //}
                 }
             } else {
                 // This block is either already in flight from a different
@@ -3699,7 +3690,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         {
             LOCK(cs_main);
             CNodeState *nodestate = State(pfrom.GetId());
-            LogPrintf("nBlockAfterTXs = %d -> 0\n", nodestate->nBlockAfterTXs);
             nodestate->nBlockAfterTXs = 0;
         }
 
@@ -4099,11 +4089,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // completed in TxRequestTracker.
                     CNodeState *nodestate = State(pfrom.GetId());
                     if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
-                    LogPrintf("NOTFOUND received. nTxInFlight-- == %d\n", nodestate->nTxInFlight);
-                    if (nodestate->nBlockAfterTXs > 1) {
-                        nodestate->nBlockAfterTXs--;
-                        LogPrintf("NOTFOUND received. nBlockAfterTXs-- == %d\n", nodestate->nBlockAfterTXs);
-                    }
+                    if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
                     m_txrequest.ReceivedResponse(pfrom.GetId(), inv.hash);
                 }
             }
@@ -5049,7 +5035,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 vGetData.emplace_back(gtxid.IsWtxid() ? MSG_WTX : (MSG_TX | GetFetchFlags(*pto)), gtxid.GetHash());
                 if (vGetData.size() >= MAX_GETDATA_SZ) {
                     state.nTxInFlight += vGetData.size();
-                    LogPrintf("GETDATA send. nTxInFlight+%d == %d\n", vGetData.size(), state.nTxInFlight);
                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     vGetData.clear();
                 }
@@ -5064,7 +5049,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
         if (!vGetData.empty()) {
             state.nTxInFlight += vGetData.size();
-            LogPrintf("GETDATA send. nTxInFlight+%d == %d\n", vGetData.size(), state.nTxInFlight);
             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
         }
 
