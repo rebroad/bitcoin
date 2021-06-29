@@ -3424,7 +3424,7 @@ int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& h
             ActiveChainstate().CheckBlockIndex(chainparams.GetConsensus());
 
             if (accepted == 2) nCount++;
-            if (accepted == false) return -1;
+            if (accepted == false) return 0;
 
             if (ppindex) {
                 *ppindex = pindex;
