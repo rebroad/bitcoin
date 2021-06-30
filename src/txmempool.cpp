@@ -947,10 +947,16 @@ void CCoinsViewMemPool::PackageAddTransaction(const CTransactionRef& tx)
     }
 }
 
-size_t CTxMemPool::DynamicMemoryUsage() const {
+size_t CTxMemPool::DynamicMemoryUsage(bool fDebug/*=false*/) const {
     LOCK(cs); // REBTODO - seems quite guessy!
     // Estimate the overhead of mapTx to be 15 pointers + an allocation, as no exact formula for boost::multi_index_contained is implemented.
-    return memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 15 * sizeof(void*)) * mapTx.size() + memusage::DynamicUsage(mapNextTx) + memusage::DynamicUsage(mapDeltas) + memusage::DynamicUsage(vTxHashes) + cachedInnerUsage;
+    auto one = memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 15 * sizeof(void*)) * mapTx.size();
+    auto three = memusage::DynamicUsage(mapNextTx);
+    auto four = memusage::DynamicUsage(mapDeltas);
+    auto five = memusage::DynamicUsage(vTxHashes);
+    if (fDebug)
+        LogPrintf("%s: mapTx=%d mapNextTx=%d mapDeltas=%d vTxHashes=%d cached=%d\n", __func__, one, three, four, five, cachedInnerUsage);
+    return one + three + four + five + cachedInnerUsage;
 }
 
 void CTxMemPool::RemoveUnbroadcastTx(const uint256& txid, const bool unchecked) {

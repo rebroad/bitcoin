@@ -180,7 +180,7 @@ public:
         ExternalSigner::Enumerate(command, signers, Params().NetworkIDString());
         return signers;
 #else
-        // This result is undistinguisable from a succesful call that returns
+        // This result is indistinguishable from a successful call that returns
         // no signers. For the current GUI this doesn't matter, because the wallet
         // creation dialog disables the external signer checkbox in both
         // cases. The return type could be changed to std::optional<std::vector>
@@ -192,7 +192,7 @@ public:
     int64_t getTotalBytesRecv() override { return m_context->connman ? m_context->connman->GetTotalBytesRecv() : 0; }
     int64_t getTotalBytesSent() override { return m_context->connman ? m_context->connman->GetTotalBytesSent() : 0; }
     size_t getMempoolSize() override { return m_context->mempool ? m_context->mempool->size() : 0; }
-    size_t getMempoolDynamicUsage() override { return m_context->mempool ? m_context->mempool->DynamicMemoryUsage() : 0; }
+    size_t getMempoolDynamicUsage(bool fDebug = false) override { return m_context->mempool ? m_context->mempool->DynamicMemoryUsage(fDebug) : 0; }
     interfaces::mempool_feehistogram getMempoolFeeHistogram() override {
          /* TODO: define log scale formular for dynamically creating the
           * feelimits but with the property of not constantly changing
@@ -239,19 +239,19 @@ public:
                  }
              }
          }
-	 double newratio = totalmemusage ? 1.0 * getMempoolDynamicUsage() / totalmemusage : 0;
+	 double newratio = totalmemusage ? 1.0 * getMempoolDynamicUsage(true) / totalmemusage : 0;
          static size_t oldtotalmemusage = 0;
          static double oldratio = newratio;
          static unsigned int adjusting = 0;
          double ratio;
          if (adjusting || oldtotalmemusage > totalmemusage) {
-             if (oldtotalmemusage > totalmemusage) adjusting = 39;
+             if (oldtotalmemusage > totalmemusage) adjusting = 30;
              ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
              adjusting--;
          } else
              ratio = newratio;
          LogPrintf("%s: ratio: %f %s %f (newratio%s memusage: %f %s %f\n", __func__, oldratio, 
-             oldratio > ratio ? "↓" : "↑", ratio, newratio!=ratio ? strprintf("=%f) split=%d", newratio, adjusting+2) : ")",
+             oldratio > ratio ? "↓" : "↑", ratio, newratio!=ratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
              oldtotalmemusage, oldtotalmemusage > totalmemusage ? "↓" : "↑", totalmemusage);
          oldtotalmemusage = totalmemusage;
          oldratio = ratio;

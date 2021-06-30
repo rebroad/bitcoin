@@ -32,6 +32,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "bench_bitcoin", "bench_bitc
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "bitcoin-tx", "bitcoin-tx\bitcoin-tx.vcxproj", "{D3022AF6-AD33-4CE3-B358-87CB6A1B29CF}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "bitcoin-util", "bitcoin-util\bitcoin-util.vcxproj", "{D3022AF6-AD33-4CE3-B358-87CB6A1B29CF}"
+EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "bitcoin-wallet", "bitcoin-wallet\bitcoin-wallet.vcxproj", "{84DE8790-EDE3-4483-81AC-C32F15E861F4}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libbitcoin_wallet_tool", "libbitcoin_wallet_tool\libbitcoin_wallet_tool.vcxproj", "{F91AC55E-6F5E-4C58-9AC5-B40DB7DEEF93}"
@@ -47,6 +49,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libtest_util", "libtest_util\libtest_util.vcxproj", "{868474FD-35F6-4400-8EED-30A33E7521D4}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_bitcoin-qt", "test_bitcoin-qt\test_bitcoin-qt.vcxproj", "{51201D5E-D939-4854-AE9D-008F03FF518E}"
+EndProject
+Project("{542007E3-BE0D-4B0D-A6B0-AA8813E2558D}") = "libminisketch", "libminisketch\libminisketch.vcxproj", "{542007E3-BE0D-4B0D-A6B0-AA8813E2558D}"
 EndProject
 Global
     GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -240,13 +244,19 @@ Global
         {51201D5E-D939-4854-AE9D-008F03FF518E}.Release|x64.Build.0 = Release|x64
         {51201D5E-D939-4854-AE9D-008F03FF518E}.Release|x86.ActiveCfg = Release|Win32
         {51201D5E-D939-4854-AE9D-008F03FF518E}.Release|x86.Build.0 = Release|Win32
+        {542007E3-BE0D-4B0D-A6B0-AA8813E2558D}.Debug|x64.ActiveCfg = Debug|x64
+        {542007E3-BE0D-4B0D-A6B0-AA8813E2558D}.Debug|x64.Build.0 = Debug|x64
+        {542007E3-BE0D-4B0D-A6B0-AA8813E2558D}.Debug|x86.ActiveCfg = Debug|Win32
+        {542007E3-BE0D-4B0D-A6B0-AA8813E2558D}.Debug|x86.Build.0 = Debug|Win32
+        {542007E3-BE0D-4B0D-A6B0-AA8813E2558D}.Release|x64.ActiveCfg = Release|x64
+        {542007E3-BE0D-4B0D-A6B0-AA8813E2558D}.Release|x64.Build.0 = Release|x64
+        {542007E3-BE0D-4B0D-A6B0-AA8813E2558D}.Release|x86.ActiveCfg = Release|Win32
+        {542007E3-BE0D-4B0D-A6B0-AA8813E2558D}.Release|x86.Build.0 = Release|Win32
     EndGlobalSection
     GlobalSection(SolutionProperties) = preSolution
         HideSolutionNode = FALSE
     EndGlobalSection
     GlobalSection(ExtensibilityGlobals) = postSolution
-                        SolutionGuid = {8AA72EDA-2CD4-4564-B1E4-688B760EEEE9}
-                SolutionGuid = {8607C0F4-F33D-41B8-8D51-18E366A0F8DF}
         SolutionGuid = {58AAB032-7274-49BD-845E-5EF4DBB69B70}
     EndGlobalSection
 EndGlobal
