@@ -244,15 +244,16 @@ public:
          static double oldratio = newratio;
          static unsigned int adjusting = 0;
          double ratio;
-         if (adjusting || oldtotalmemusage > totalmemusage) {
-             if (oldtotalmemusage > totalmemusage) adjusting = 30;
+         if (oldtotalmemusage > totalmemusage)
+             adjusting = 30;
+         if (adjusting) {
              ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
              adjusting--;
          } else
              ratio = newratio;
-         LogPrintf("%s: ratio: %f %s %f (newratio%s memusage: %f %s %f\n", __func__, oldratio, 
-             oldratio > ratio ? "↓" : "↑", ratio, newratio!=ratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
-             oldtotalmemusage, oldtotalmemusage > totalmemusage ? "↓" : "↑", totalmemusage);
+         LogPrintf("%s: ratio: %f -> %f (newratio%s memusage: %d -> %d (%f%%)\n", __func__, oldratio, 
+             ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
+             oldtotalmemusage, totalmemusage, oldtotalmemusage ? 100.0 * totalmemusage / oldtotalmemusage : 0);
          oldtotalmemusage = totalmemusage;
          oldratio = ratio;
          for (size_t i = 0; i < feelimits.size(); i++)
