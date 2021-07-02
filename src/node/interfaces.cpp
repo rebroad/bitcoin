@@ -242,11 +242,11 @@ public:
              } // for (const CTxMemPoolEntry& e : m_context->mempool->mapTx)
          } // LOCK(m_context->mempool->cs)
 
-         uint64_t oldsmallest = 0; newsmallest = 0;
+         uint64_t oldsmallest = 0; uint64_t newsmallest = 0;
          for (size_t i = 0; i < feelimits.size(); i++) {
              if (oldsizes[i]) {
                  oldsmallest = oldsizes[i];
-                 newsmallewst = sizes[i];
+                 newsmallest = sizes[i];
                  break;
              }
          }
@@ -261,7 +261,7 @@ public:
              adjusting = 30;
          if (adjusting) {
              ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
-             if (ratio * totalmemusage < oldatio * oldtotalmemusage)
+             if (ratio * totalmemusage < oldratio * oldtotalmemusage)
                  ratio = oldratio;
              else
                  adjusting--;
