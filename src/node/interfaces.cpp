@@ -207,6 +207,7 @@ public:
           * ... txns (count)
           * ... cumulated fees */
          std::vector<uint64_t> sizes(feelimits.size(), 0);
+         static std::vector<int64_t> oldsizes(feelimits.size(), 0);
          std::vector<uint64_t> count(feelimits.size(), 0);
          std::vector<uint64_t> fees(feelimits.size(), 0);
          size_t totalmemusage = 0;
@@ -238,6 +239,15 @@ public:
                          break;
                      }
                  }
+             } // for (const CTxMemPoolEntry& e : m_context->mempool->mapTx)
+         } // LOCK(m_context->mempool->cs)
+
+         uint64_t oldsmallest = 0; newsmallest = 0;
+         for (size_t i = 0; i < feelimits.size(); i++) {
+             if (oldsizes[i]) {
+                 oldsmallest = oldsizes[i];
+                 newsmallewst = sizes[i];
+                 break;
              }
          }
 	 double newratio = totalmemusage ? 1.0 * getMempoolDynamicUsage(true) / totalmemusage : 0;
@@ -245,11 +255,16 @@ public:
          static double oldratio = newratio;
          static unsigned int adjusting = 0;
          double ratio;
-         if (oldtotalmemusage > totalmemusage)
+         if (oldsmallest && 1.0 * newsmallest / oldsmallest < 1.0 * totalmemusage / oldtotalmemusage)
+             adjusting = 0;
+         else if (oldtotalmemusage > totalmemusage)
              adjusting = 30;
          if (adjusting) {
              ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
-             adjusting--;
+             if (ratio * totalmemusage < oldatio * oldtotalmemusage)
+                 ratio = oldratio;
+             else
+                 adjusting--;
          } else
              ratio = newratio;
          LogPrintf("%s: ratio: %f -> %f (newratio%s memusage: %d -> %d (%f%%)\n", __func__, oldratio, 
