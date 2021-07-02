@@ -954,9 +954,27 @@ size_t CTxMemPool::DynamicMemoryUsage(bool fDebug/*=false*/) const {
     auto three = memusage::DynamicUsage(mapNextTx);
     auto four = memusage::DynamicUsage(mapDeltas);
     auto five = memusage::DynamicUsage(vTxHashes);
-    if (fDebug)
-        LogPrintf("%s: mapTx=%d mapNextTx=%d mapDeltas=%d vTxHashes=%d cached=%d\n", __func__, one, three, four, five, cachedInnerUsage);
-    return one + three + four + five + cachedInnerUsage;
+    auto six = cachedInnerUsage;
+    if (fDebug) {
+        static auto oldone = one;
+        static auto oldthree = three;
+        static auto oldfour = four;
+        static auto oldfive = five;
+        static auto oldsix = six;
+        LogPrintf("mapTx %f%%  mapNextTx %f%%  mapDeltas %f%%  vTxHashes %f%%  cached %f%%\n",
+            one ? 100.0 * one / oldone : 0,
+            three ? 100.0 * three / oldthree : 0,
+            four ? 100.0 * four / oldfour : 0,
+            five ? 100.0 * five / oldfive : 0,
+            six ? 100.0 * six / oldsix : 0);
+        oldone = one;
+        oldthree = three;
+        oldfour = four;
+        oldfive = five;
+        oldsix = six;
+    }
+
+    return one + three + four + five + six;
 }
 
 void CTxMemPool::RemoveUnbroadcastTx(const uint256& txid, const bool unchecked) {
