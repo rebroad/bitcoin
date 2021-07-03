@@ -207,7 +207,10 @@ public:
           * ... txns (count)
           * ... cumulated fees */
          std::vector<uint64_t> sizes(feelimits.size(), 0);
-         static std::vector<int64_t> oldsizes(feelimits.size(), 0);
+         static uint64_t oldsmallest = 0;
+         static int oldi = 0;
+         uint64_t newsmallest = 0;
+         int newi = 0;
          std::vector<uint64_t> count(feelimits.size(), 0);
          std::vector<uint64_t> fees(feelimits.size(), 0);
          size_t totalmemusage = 0;
@@ -215,8 +218,7 @@ public:
              LOCK(m_context->mempool->cs);
              for (const CTxMemPoolEntry& e : m_context->mempool->mapTx) {
                  int size = (int)e.GetTxSize();
-		 int memusage = size;
-		 //size_t memusage = e.DynamicMemoryUsage();
+		 size_t memusage = e.MemoryDelta();
                  totalmemusage += memusage;
                  CAmount fee = e.GetFee();
                  uint64_t asize = e.GetSizeWithAncestors();
@@ -242,11 +244,10 @@ public:
              } // for (const CTxMemPoolEntry& e : m_context->mempool->mapTx)
          } // LOCK(m_context->mempool->cs)
 
-         uint64_t oldsmallest = 0; uint64_t newsmallest = 0;
          for (size_t i = 0; i < feelimits.size(); i++) {
-             if (oldsizes[i]) {
-                 oldsmallest = oldsizes[i];
+             if (sizes[i]) {
                  newsmallest = sizes[i];
+                 newi = i;
                  break;
              }
          }
@@ -255,14 +256,16 @@ public:
          static double oldratio = newratio;
          static unsigned int adjusting = 0;
          double ratio;
-         if (oldsmallest && 1.0 * newsmallest / oldsmallest < 1.0 * totalmemusage / oldtotalmemusage)
+         if (newi != oldi || (oldsmallest && 1.0 * newsmallest / oldsmallest < 1.0 * totalmemusage / oldtotalmemusage))
              adjusting = 0;
          else if (oldtotalmemusage > totalmemusage)
              adjusting = 30;
+         oldsmallest = newsmallest;
+         oldi = newi;
          if (adjusting) {
              ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
-             if (ratio * totalmemusage < oldratio * oldtotalmemusage)
-                 ratio = oldratio;
+             if ((totalmemusage >= oldtotalmemusage) && (ratio * totalmemusage < oldratio * oldtotalmemusage))
+                 ratio = oldratio; // Don't let the graph go down unless memusage has gone down
              else
                  adjusting--;
          } else
