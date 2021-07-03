@@ -256,8 +256,8 @@ public:
          static double oldratio = newratio;
          static unsigned int adjusting = 0;
          double ratio;
-         if (newi > oldi || (newi == oldi && (oldsmallest-newsmallest > (totalmemusage-oldtotalmemusage)/2))) {
-             LogPrintf("%s: newi=%d oldi=%d oldsmallest=%d newsmallest=%s\n", __func__, newi, oldi, oldsmallest, newsmallest);
+         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && (oldsmallest-newsmallest > (totalmemusage-oldtotalmemusage)/2))) {
+             LogPrintf("%s: newi=%d oldi=%d oldsmallest=%d newsmallest=%s oldmem=%d newmem=%d\n", __func__, newi, oldi, oldsmallest, newsmallest, oldtotalmemusage, totalmemusage);
              adjusting = 0;
          } else if (oldtotalmemusage > totalmemusage)
              adjusting = 30;
