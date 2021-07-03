@@ -256,9 +256,10 @@ public:
          static double oldratio = newratio;
          static unsigned int adjusting = 0;
          double ratio;
-         if (newi != oldi || (oldsmallest && 1.0 * newsmallest / oldsmallest < 1.0 * totalmemusage / oldtotalmemusage))
+         if (newi > oldi || (newi == oldi && (oldsmallest-newsmallest > (totalmemusage-oldtotalmemusage)/2))) {
+             LogPrintf("%s: newi=%d oldi=%d oldsmallest=%d newsmallest=%s\n", __func__, newi, oldi, oldsmallest, newsmallest);
              adjusting = 0;
-         else if (oldtotalmemusage > totalmemusage)
+         } else if (oldtotalmemusage > totalmemusage)
              adjusting = 30;
          oldsmallest = newsmallest;
          oldi = newi;
