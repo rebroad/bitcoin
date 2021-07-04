@@ -262,7 +262,7 @@ public:
          double ratio;
          //if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && (oldsmallest-newsmallest > (totalmemdelta-oldtotalmemdelta)/2))) {
          if (newi > oldi || (newi == oldi && oldsmallest > newsmallest)) {
-             LogPrintf("%s: newi=%d oldi=%d smallest %d -> %d (%d %d%%) mem %d -> %d (%d %d%%)\n", __func__, newi, oldi, oldsmallest, newsmallest, newsmallest - oldsmallest, oldsmallest ? 100.0 * newsmallest / oldsmallest : 0, oldtotalmemdelta, totalmemdelta, totalmemdelta - oldtotalmemdelta, oldtotalmemdelta ? 100.0 * totalmemdelta / oldtotalmemdelta : 0);
+             LogPrintf("%s: newi=%d oldi=%d smallest %d -> %d (%d %d%%) mem %d -> %d (%d %d%%)\n", __func__, newi, oldi, oldsmallest, newsmallest, labs((long)newsmallest - (long)oldsmallest), oldsmallest ? 100.0 * newsmallest / oldsmallest : 0, oldtotalmemdelta, totalmemdelta, labs((long)totalmemdelta - (long)oldtotalmemdelta), oldtotalmemdelta ? 100.0 * totalmemdelta / oldtotalmemdelta : 0);
              adjusting = 0;
          } else if (oldtotalmemdelta > totalmemdelta)
              adjusting = 30;
