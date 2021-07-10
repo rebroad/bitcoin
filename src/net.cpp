@@ -1293,7 +1293,7 @@ void CConnman::NotifyNumConnectionsChanged()
     if(vNodesSize != nPrevNodeCount) {
         nPrevNodeCount = vNodesSize;
         if(clientInterface)
-            clientInterface->NotifyNumConnectionsChanged(vNodesSize);
+            clientInterface->NotifyNumConnectionsChanged(vNodesSize); // REBTODO - what's this?
     }
 }
 
@@ -1519,12 +1519,20 @@ void CConnman::SocketHandler()
     //
     // Service each socket
     //
+    uint64_t nBytesRecv = 0;
+    uint64_t nMempoolBytes = 0;
     std::vector<CNode*> vNodesCopy;
     {
         LOCK(cs_vNodes);
         vNodesCopy = vNodes;
-        for (CNode* pnode : vNodesCopy)
+        for (CNode* pnode : vNodesCopy) {
             pnode->AddRef();
+            {
+                LOCK(pnode->cs_vRecv);
+                nBytesRecv += pnode->nRecvBytes;
+            }
+            nMempoolBytes += pnode->nMempoolBytes;
+        }
     }
     for (CNode* pnode : vNodesCopy)
     {

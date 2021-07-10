@@ -207,15 +207,22 @@ public:
           * ... txns (count)
           * ... cumulated fees */
          std::vector<uint64_t> sizes(feelimits.size(), 0);
+         static uint64_t oldsmallest = 0;
+         static int oldi = 0;
+         uint64_t newsmallest = 0;
+         int newi = 0;
          std::vector<uint64_t> count(feelimits.size(), 0);
          std::vector<uint64_t> fees(feelimits.size(), 0);
          size_t totalmemusage = 0;
+         size_t totalmemdelta = 0;
          {
              LOCK(m_context->mempool->cs);
              for (const CTxMemPoolEntry& e : m_context->mempool->mapTx) {
                  int size = (int)e.GetTxSize();
-		 size_t memusage = e.DynamicMemoryUsage();
+                 size_t memusage = e.DynamicMemoryUsage();
+		 size_t memdelta = e.MemoryDelta();
                  totalmemusage += memusage;
+                 totalmemdelta += memdelta;
                  CAmount fee = e.GetFee();
                  uint64_t asize = e.GetSizeWithAncestors();
                  CAmount afees = e.GetModFeesWithAncestors();
@@ -231,29 +238,49 @@ public:
                  // distribute feerates into feelimits
                  for (size_t i = 0; i < feelimits.size(); i++) {
                      if (feeperbyte >= feelimits[i] && (i == feelimits.size() - 1 || feeperbyte < feelimits[i + 1])) {
-                         sizes[i] += memusage;
+                         sizes[i] += memdelta;
                          count[i]++;
                          fees[i] += fee;
                          break;
                      }
                  }
+             } // for (const CTxMemPoolEntry& e : m_context->mempool->mapTx)
+         } // LOCK(m_context->mempool->cs)
+
+         for (size_t i = 0; i < feelimits.size(); i++) {
+             if (sizes[i]) {
+                 newsmallest = sizes[i];
+                 newi = i;
+                 break;
              }
          }
-	 double newratio = totalmemusage ? 1.0 * getMempoolDynamicUsage(true) / totalmemusage : 0;
+	 double newratio = totalmemdelta ? 1.0 * getMempoolDynamicUsage(true) / totalmemdelta : 0;
          static size_t oldtotalmemusage = 0;
+         static size_t oldtotalmemdelta = 0;
          static double oldratio = newratio;
          static unsigned int adjusting = 0;
          double ratio;
-         if (adjusting || oldtotalmemusage > totalmemusage) {
-             if (oldtotalmemusage > totalmemusage) adjusting = 30;
+         //if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && (oldsmallest-newsmallest > (totalmemdelta-oldtotalmemdelta)/2))) {
+         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest)) {
+             LogPrintf("%s: newi=%d oldi=%d smallest %d -> %d (%d) mem %d -> %d (%d)\n", __func__, newi, oldi, oldsmallest, newsmallest, labs((long)newsmallest - (long)oldsmallest), oldtotalmemdelta, totalmemdelta, labs((long)totalmemdelta - (long)oldtotalmemdelta));
+             adjusting = 0;
+         } else if (oldtotalmemdelta > totalmemdelta)
+             adjusting = 30;
+         oldsmallest = newsmallest;
+         oldi = newi;
+         if (adjusting) {
              ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
-             adjusting--;
+             if ((totalmemdelta >= oldtotalmemdelta) && (ratio * totalmemdelta < oldratio * oldtotalmemdelta))
+                 ratio = oldratio; // Don't let the graph go down unless totalmemdelta has gone down
+             else
+                 adjusting--;
          } else
              ratio = newratio;
-         LogPrintf("%s: ratio: %f %s %f (newratio%s memusage: %f %s %f\n", __func__, oldratio, 
-             oldratio > ratio ? "↓" : "↑", ratio, newratio!=ratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
-             oldtotalmemusage, oldtotalmemusage > totalmemusage ? "↓" : "↑", totalmemusage);
+         LogPrintf("%s: ratio: %f -> %f (newratio%s memusage: %d -> %d (%f%%)\n", __func__, oldratio, 
+             ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
+             oldtotalmemusage, totalmemusage, oldtotalmemusage ? 100.0 * totalmemusage / oldtotalmemusage : 0);
          oldtotalmemusage = totalmemusage;
+         oldtotalmemdelta = totalmemdelta;
          oldratio = ratio;
          for (size_t i = 0; i < feelimits.size(); i++)
              sizes[i] = sizes[i] * ratio;

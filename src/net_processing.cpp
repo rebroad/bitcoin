@@ -415,6 +415,8 @@ private:
     /** Number of nodes with fSyncStarted. */
     int nSyncStarted GUARDED_BY(cs_main) = 0;
 
+    int nTXsPerMinute = 0;
+
     /**
      * Sources of received blocks, saved to be able punish them when processing
      * happens afterwards.

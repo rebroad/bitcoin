@@ -66,8 +66,8 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
             Q_EMIT mempoolFeeHistChanged();
         }
 
-        Q_EMIT mempoolSizeChanged(m_node.getMempoolSize(), m_node.getMempoolDynamicUsage());
-        Q_EMIT bytesChanged(m_node.getTotalBytesRecv(), m_node.getTotalBytesSent());
+        Q_EMIT mempoolSizeChanged(m_node.getMempoolSize(), m_node.getMempoolDynamicUsage()); // REBTODO - what does this do?
+        Q_EMIT bytesChanged(m_node.getTotalBytesRecv(), m_node.getTotalBytesSent()); // REBTODO - what does this do?
     });
     connect(m_thread, &QThread::finished, timer, &QObject::deleteLater);
     connect(m_thread, &QThread::started, [timer] { timer->start(); });

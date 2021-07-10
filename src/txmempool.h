@@ -93,6 +93,7 @@ private:
     const CAmount nFee;             //!< Cached to avoid expensive parent-transaction lookups
     const size_t nTxWeight;         //!< ... and avoid recomputing tx weight (also used for GetTxSize())
     const size_t nUsageSize;        //!< ... and total memory usage
+    size_t nMemDelta;               //!< Memory change after added
     const int64_t nTime;            //!< Local time when entering the mempool
     const unsigned int entryHeight; //!< Chain height when entering the mempool
     const bool spendsCoinbase;      //!< keep track of transactions that spend a coinbase
@@ -129,8 +130,11 @@ public:
     int64_t GetSigOpCost() const { return sigOpCost; }
     int64_t GetModifiedFee() const { return nFee + feeDelta; }
     size_t DynamicMemoryUsage() const { return nUsageSize; }
+    size_t MemoryDelta() const { return nMemDelta; }
     const LockPoints& GetLockPoints() const { return lockPoints; }
 
+    // Sets the Memory Usage
+    void UpdateMemDelta(int64_t memDelta);
     // Adjusts the descendant state.
     void UpdateDescendantState(int64_t modifySize, CAmount modifyFee, int64_t modifyCount);
     // Adjusts the ancestor state
@@ -191,6 +195,16 @@ struct update_ancestor_state
         CAmount modifyFee;
         int64_t modifyCount;
         int64_t modifySigOpsCost;
+};
+
+struct update_mem_delta
+{
+    explicit update_mem_delta(int64_t _memDelta) : memDelta(_memDelta) { }
+
+    void operator() (CTxMemPoolEntry &e) { e.UpdateMemDelta(memDelta); }
+
+private:
+    int64_t memDelta;
 };
 
 struct update_fee_delta
@@ -750,7 +764,7 @@ public:
     TxMempoolInfo info(const GenTxid& gtxid) const;
     std::vector<TxMempoolInfo> infoAll() const;
 
-    size_t DynamicMemoryUsage() const;
+    size_t DynamicMemoryUsage(bool fDebug=false) const;
 
     /** Adds a transaction to the unbroadcast set */
     void AddUnbroadcastTx(const uint256& txid)

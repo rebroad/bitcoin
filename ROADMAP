@@ -1,3 +1,7 @@
+Show blank for TxRecv if no TXs received
+
+Repurpose old mempoolstats graph to instead show Overall Mempool Bps, Overall percentage Mempool Bps, Overall TXs per minute, node prune method (alternative between lowest percentage, lowest percentage*bps, and alternation between both) changing every hour.
+
 Cache cmpctblock (for if a node disconnected before we received the blocktxn) to save from requesting it again from another peer.
 
 Request BLOCKTXNs from two peers

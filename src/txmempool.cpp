@@ -24,7 +24,7 @@
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFee,
                                  int64_t _nTime, unsigned int _entryHeight,
                                  bool _spendsCoinbase, int64_t _sigOpsCost, LockPoints lp)
-    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nTime(_nTime), entryHeight(_entryHeight),
+    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nMemDelta(1), nTime(_nTime), entryHeight(_entryHeight),
     spendsCoinbase(_spendsCoinbase), sigOpCost(_sigOpsCost), lockPoints(lp)
 {
     nCountWithDescendants = 1;
@@ -37,6 +37,11 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFe
     nSizeWithAncestors = GetTxSize();
     nModFeesWithAncestors = nFee;
     nSigOpCostWithAncestors = sigOpCost;
+}
+
+void CTxMemPoolEntry::UpdateMemDelta(int64_t memDelta)
+{
+    nMemDelta = memDelta;
 }
 
 void CTxMemPoolEntry::UpdateFeeDelta(int64_t newFeeDelta)
@@ -357,6 +362,7 @@ void CTxMemPool::AddTransactionsUpdated(unsigned int n)
 
 void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAncestors, bool validFeeEstimate)
 {
+    int nMemUsageBefore = DynamicMemoryUsage();
     // Add to memory pool without checking anything.
     // Used by AcceptToMemoryPool(), which DOES do
     // all the appropriate checks.
@@ -405,6 +411,7 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
 
     vTxHashes.emplace_back(tx.GetWitnessHash(), newit);
     newit->vTxHashesIdx = vTxHashes.size() - 1;
+    mapTx.modify(newit, update_mem_delta(DynamicMemoryUsage() - nMemUsageBefore));
 }
 
 void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
@@ -947,10 +954,34 @@ void CCoinsViewMemPool::PackageAddTransaction(const CTransactionRef& tx)
     }
 }
 
-size_t CTxMemPool::DynamicMemoryUsage() const {
+size_t CTxMemPool::DynamicMemoryUsage(bool fDebug/*=false*/) const {
     LOCK(cs); // REBTODO - seems quite guessy!
     // Estimate the overhead of mapTx to be 15 pointers + an allocation, as no exact formula for boost::multi_index_contained is implemented.
-    return memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 15 * sizeof(void*)) * mapTx.size() + memusage::DynamicUsage(mapNextTx) + memusage::DynamicUsage(mapDeltas) + memusage::DynamicUsage(vTxHashes) + cachedInnerUsage;
+    auto one = memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 15 * sizeof(void*)) * mapTx.size();
+    auto three = memusage::DynamicUsage(mapNextTx);
+    auto four = memusage::DynamicUsage(mapDeltas);
+    auto five = memusage::DynamicUsage(vTxHashes);
+    auto six = cachedInnerUsage;
+    if (fDebug) {
+        static auto oldone = one;
+        static auto oldthree = three;
+        static auto oldfour = four;
+        static auto oldfive = five;
+        static auto oldsix = six;
+        LogPrintf("mapTx %f%%  mapNextTx %f%%  mapDeltas %f%%  vTxHashes %f%%  cached %f%%\n",
+            one ? 100.0 * one / oldone : 0,
+            three ? 100.0 * three / oldthree : 0,
+            four ? 100.0 * four / oldfour : 0,
+            five ? 100.0 * five / oldfive : 0,
+            six ? 100.0 * six / oldsix : 0);
+        oldone = one;
+        oldthree = three;
+        oldfour = four;
+        oldfive = five;
+        oldsix = six;
+    }
+
+    return one + three + four + five + six;
 }
 
 void CTxMemPool::RemoveUnbroadcastTx(const uint256& txid, const bool unchecked) {
