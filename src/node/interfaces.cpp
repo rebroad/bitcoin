@@ -6,6 +6,7 @@
 #include <banman.h>
 #include <chain.h>
 #include <chainparams.h>
+#include <deploymentstatus.h>
 #include <external_signer.h>
 #include <init.h>
 #include <interfaces/chain.h>
@@ -262,7 +263,7 @@ public:
          double ratio;
          //if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && (oldsmallest-newsmallest > (totalmemdelta-oldtotalmemdelta)/2))) {
          if (newi > oldi || (newi == oldi && oldsmallest > newsmallest)) {
-             LogPrintf("%s: newi=%d oldi=%d smallest %d -> %d (%d %d%%) mem %d -> %d (%d %d%%)\n", __func__, newi, oldi, oldsmallest, newsmallest, labs((long)newsmallest - (long)oldsmallest), oldsmallest ? 100.0 * newsmallest / oldsmallest : 0, oldtotalmemdelta, totalmemdelta, labs((long)totalmemdelta - (long)oldtotalmemdelta), oldtotalmemdelta ? 100.0 * totalmemdelta / oldtotalmemdelta : 0);
+             LogPrintf("%s: newi=%d oldi=%d smallest %d -> %d (%d) mem %d -> %d (%d)\n", __func__, newi, oldi, oldsmallest, newsmallest, labs((long)newsmallest - (long)oldsmallest), oldtotalmemdelta, totalmemdelta, labs((long)totalmemdelta - (long)oldtotalmemdelta));
              adjusting = 0;
          } else if (oldtotalmemdelta > totalmemdelta)
              adjusting = 30;
@@ -791,7 +792,7 @@ public:
     {
         LOCK(::cs_main);
         const CBlockIndex* tip = Assert(m_node.chainman)->ActiveChain().Tip();
-        return VersionBitsState(tip, Params().GetConsensus(), Consensus::DEPLOYMENT_TAPROOT, versionbitscache) == ThresholdState::ACTIVE;
+        return DeploymentActiveAfter(tip, Params().GetConsensus(), Consensus::DEPLOYMENT_TAPROOT);
     }
     NodeContext& m_node;
 };

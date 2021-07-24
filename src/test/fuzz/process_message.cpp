@@ -58,19 +58,7 @@ void initialize_process_message()
 
     static const auto testing_setup = MakeNoLogFileContext<const TestingSetup>();
     g_setup = testing_setup.get();
-
-    // Temporary debug for https://bugs.chromium.org/p/oss-fuzz/issues/detail?id=35027
-    {
-        LOCK(::cs_main);
-        assert(CheckDiskSpace(gArgs.GetDataDirNet()));
-        assert(CheckDiskSpace(gArgs.GetDataDirNet(), 48 * 2 * 2 * g_setup->m_node.chainman->ActiveChainstate().CoinsTip().GetCacheSize()));
-    }
     for (int i = 0; i < 2 * COINBASE_MATURITY; i++) {
-        {
-            LOCK(::cs_main);
-            assert(CheckDiskSpace(gArgs.GetDataDirNet()));
-            assert(CheckDiskSpace(gArgs.GetDataDirNet(), 48 * 2 * 2 * g_setup->m_node.chainman->ActiveChainstate().CoinsTip().GetCacheSize()));
-        }
         MineBlock(g_setup->m_node, CScript() << OP_TRUE);
     }
     SyncWithValidationInterfaceQueue();
@@ -146,11 +134,6 @@ FUZZ_TARGET_MSG(pong);
 FUZZ_TARGET_MSG(sendaddrv2);
 FUZZ_TARGET_MSG(sendcmpct);
 FUZZ_TARGET_MSG(sendheaders);
-FUZZ_TARGET_MSG(sendrecon);
-FUZZ_TARGET_MSG(sketch);
-FUZZ_TARGET_MSG(reconcildiff);
-FUZZ_TARGET_MSG(reqrecon);
-FUZZ_TARGET_MSG(reqsketchext);
 FUZZ_TARGET_MSG(tx);
 FUZZ_TARGET_MSG(verack);
 FUZZ_TARGET_MSG(version);
