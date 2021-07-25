@@ -1544,6 +1544,7 @@ void CConnman::SocketHandler()
     int nOutboundFullRelay = 0;
     int nLowestPct = 100;
     NodeId worstNode = -1;
+    static NodeId lastWorst = -1;
     std::vector<CNode*> vNodesCopy;
     {
         LOCK(cs_vNodes);
@@ -1569,6 +1570,10 @@ void CConnman::SocketHandler()
                 }
             }
         }
+    }
+    if (lastWorst != worstNode) {
+        LogPrintf("%s: worstNode %d -> %d (%d%%)\n", __func__, lastWorst, worstNode, nLowestPct);
+        lastWorst = worstNode;
     }
     for (CNode* pnode : vNodesCopy)
     {
