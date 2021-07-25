@@ -93,7 +93,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             if (rec->nodeStats.nRecvBytes1stTx)
                 return QString::fromStdString(strprintf("%s%d %%", now-rec->nodeStats.nTimeConnected < 180 ? "~":"", nMempoolPct));
             else
-                return QString::fromStdString("");
+                return QString::fromStdString(now-rec->nodeStats.nTimeConnected < 180 ? "~":"");
             }
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
