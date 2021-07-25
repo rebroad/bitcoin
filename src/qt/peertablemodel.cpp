@@ -89,7 +89,12 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             if (nMempoolPct > 100)
                 LogPrintf("%s: MPB=%d RB=%d RB1TX=%d peer=%d\n", __func__, rec->nodeStats.nMempoolBytes, rec->nodeStats.nRecvBytes,
                     rec->nodeStats.nRecvBytes1stTx, rec->nodeStats.nodeid);
-            return QString::fromStdString(strprintf("%d %%", nMempoolPct)); }
+            int64_t now = GetTimeSeconds();
+            if (rec->nodeStats.nRecvBytes1stTx)
+                return QString::fromStdString(strprintf("%s%d %%", now-rec->nodeStats.nTimeConnected < 180 ? "~":"", nMempoolPct));
+            else
+                return QString::fromStdString("");
+            }
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
         } // no default case, so the compiler can warn about missing cases

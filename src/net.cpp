@@ -1542,10 +1542,12 @@ void CConnman::SocketHandler()
     uint64_t nTotalBytesRecv = 0;
     uint64_t nTotalMempoolBytes = 0;
     int nOutboundFullRelay = 0;
-    int nLowestPct = 100;
+    double nLowestPct = 100;
     NodeId worstNode = -1;
     static NodeId lastWorst = -1;
     std::vector<CNode*> vNodesCopy;
+    int nNewbies = 0;
+    const int64_t now = GetTimeSeconds();
     {
         LOCK(cs_vNodes);
         vNodesCopy = vNodes;
@@ -1563,8 +1565,9 @@ void CConnman::SocketHandler()
             if (pnode->IsFullOutboundConn()) {
                 nOutboundFullRelay++;
                 if (pnode->nTimeConnected > latestOutboundConn) latestOutboundConn = pnode->nTimeConnected;
-                int nMempoolPct = 100 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
-                if (nMempoolPct < nLowestPct) {
+                if (now - pnode->nTimeConnected < 180) nNewbies++;
+                double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
+                if (nMempoolPct <= nLowestPct) {
                     nLowestPct = nMempoolPct;
                     worstNode = pnode->GetId();
                 }
@@ -1581,8 +1584,8 @@ void CConnman::SocketHandler()
             return;
 
         if ((nOutboundFullRelay >= m_max_outbound_full_relay) && pnode->GetId() == worstNode) {
-            const int64_t now = GetTimeSeconds();
-            if (now - latestOutboundConn >= 60 && ((nLowestPct <= 10) || (now - pnode->nTimeConnected >= 180))) {
+            if ((now - latestOutboundConn >= 60) && nNewbies < 2 && ((nLowestPct <= 10) ||
+                    ((now - pnode->nTimeConnected >= 180) && nNewbies < 1))) {
                 pnode->fDisconnect = 1;
                 LogPrintf("%s: TxPct = %d TimeConn = %d disconnect peer=%d\n", __func__, nLowestPct, now - pnode->nTimeConnected, pnode->GetId());
             }
