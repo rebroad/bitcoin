@@ -608,6 +608,7 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
     X(nMempoolBytes);
     X(nMempoolTXs);
     X(nRecvBytes1stTx);
+    X(nTime1stTx);
     X(m_permissionFlags);
     if (m_tx_relay != nullptr) {
         stats.minFeeFilter = m_tx_relay->minFeeFilter;
@@ -654,6 +655,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
 
             if ((result->m_command == NetMsgType::TX || result->m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx) {
                 nRecvBytes1stTx = nRecvBytes - result->m_raw_message_size - msg_bytes.size();
+                nTime1stTx = GetTimeSeconds();
                 LogPrintf("%s: 1stTx size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, result->m_raw_message_size, nRecvBytes1stTx,
                     nRecvBytes, handled, msg_bytes.size(), GetId());
             }
@@ -1552,6 +1554,7 @@ void CConnman::SocketHandler()
     static NodeId lastWorstTXpm = -1;
     std::vector<CNode*> vNodesCopy;
     int nNewbies = 0;
+    int nGlobalTXpm = 0;
     const int64_t now = GetTimeSeconds();
     bool IsIBD = true;
     {
@@ -1580,7 +1583,8 @@ void CConnman::SocketHandler()
                     nLowestPct = nMempoolPct;
                     worstNode = pnode->GetId();
                 }
-                double nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTimeConnected + 1 );
+                double nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTime1stTx + 1 );
+                nGlobalTXpm += (int)nTXpm;
                 if (nTXpm <= nLowestTXpm) {
                     if (nTXpm < nLowestTXpm) {
                         nSecondLowestTXpm = nLowestTXpm;
@@ -1591,9 +1595,11 @@ void CConnman::SocketHandler()
             }
         }
     }
-    if (!IsIBD && lastWorst != worstNode) {
-        LogPrintf("%s: worstNode %d -> %d (%d%%)\n", __func__, lastWorst, worstNode, nLowestPct);
+    if (!IsIBD && (lastWorst != worstNode || lastWorstTXpm != worstNodeTXpm)) {
+        LogPrintf("%s: worstPct %d -> %d (%d%%) worstTXpm %d -> %D (%d) GlobalTXpm = %d\n", __func__, lastWorst, worstNode, nLowestPct,
+            lastWorstTXpm, worstNodeTXpm, nLowestTXpm, nGlobalTXpm);
         lastWorst = worstNode;
+        lastWorstTXpm = worstNodeTXpm;
     }
     for (CNode* pnode : vNodesCopy)
     {
