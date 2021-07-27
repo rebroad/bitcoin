@@ -260,6 +260,7 @@ public:
     uint64_t nRecvBytes;
     uint64_t nRecvBytes1stTx;
     uint64_t nMempoolBytes;
+    unsigned int nMempoolTXs;
     mapMsgCmdSize mapRecvBytesPerMsgCmd;
     NetPermissionFlags m_permissionFlags;
     std::chrono::microseconds m_last_ping_time;
@@ -424,6 +425,7 @@ public:
 
     uint64_t nRecvBytes GUARDED_BY(cs_vRecv){0};
     std::atomic<uint64_t> nMempoolBytes{0};
+    std::atomic<unsigned int> nMempoolTXs{0};
     std::atomic<uint64_t> nRecvBytes1stTx{0};
 
     std::atomic<int64_t> nLastSend{0};

@@ -421,8 +421,6 @@ private:
     /** Number of nodes with fSyncStarted. */
     int nSyncStarted GUARDED_BY(cs_main) = 0;
 
-    int nTXsPerMinute = 0;
-
     /**
      * Sources of received blocks, saved to be able punish them when processing
      * happens afterwards.
@@ -657,6 +655,8 @@ struct CNodeState {
     int nBlockAfterTXs{0};
     //! How many bytes of useful TX data received (specifically orphans)
     int nMempoolBytes{0};
+    //! How many orphan TXs accepted into the mempool from this peer
+    int nMempoolTXs{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2322,6 +2322,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             const CTransaction& tx = *porphanTx;
             CNodeState *nodestate = State(from_peer);
             nodestate->nMempoolBytes += tx.GetTotalSize();
+            nodestate->nMempoolTXs++;
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
 		tx.GetTotalSize(), (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
@@ -3297,7 +3298,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         CNodeState* nodestate = State(pfrom.GetId());
         if (nodestate->nMempoolBytes) {
             pfrom.nMempoolBytes += nodestate->nMempoolBytes;
+            pfrom.nMempoolTXs += nodestate->nMempoolTXs;
             nodestate->nMempoolBytes = 0;
+            nodestate->nMempoolTXs = 0;
         }
         if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
         if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
@@ -3360,6 +3363,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
             pfrom.nLastTXTime = GetTime();
             pfrom.nMempoolBytes += tx.GetTotalSize();
+            pfrom.nMempoolTXs++;
 
             LogPrint(BCLog::MEMPOOL, "tx accepted %s (poolsz %u, %ukB) req:%d%d size=%d delta=%d IF=%d peer=%d\n",
                 tx.GetHash().ToString(),

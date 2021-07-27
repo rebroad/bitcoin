@@ -76,8 +76,8 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             return QString::fromStdString((rec->nodeStats.fInbound ? "↓ " : "↑ ") + rec->nodeStats.addrName);
         case ConnectionType:
             return GUIUtil::ConnectionTypeToQString(rec->nodeStats.m_conn_type, /* prepend_direction */ false);
-        case Network:
-            return GUIUtil::NetworkToQString(rec->nodeStats.m_network);
+        //case Network:
+        //    return GUIUtil::NetworkToQString(rec->nodeStats.m_network);
         case Ping:
             return GUIUtil::formatPingTime(rec->nodeStats.m_min_ping_time);
         case Sent:
@@ -85,16 +85,21 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         case Recv:
             return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8 / (rec->nodeStats.nLastRecv+1 - rec->nodeStats.nTimeConnected));
         case TxRecv: {
-            int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
-            if (nMempoolPct > 100)
-                LogPrintf("%s: MPB=%d RB=%d RB1TX=%d peer=%d\n", __func__, rec->nodeStats.nMempoolBytes, rec->nodeStats.nRecvBytes,
-                    rec->nodeStats.nRecvBytes1stTx, rec->nodeStats.nodeid);
             int64_t now = GetTimeSeconds();
-            if (rec->nodeStats.nRecvBytes1stTx)
-                return QString::fromStdString(strprintf("%s%d %%", now-rec->nodeStats.nTimeConnected < 180 ? "~":"", nMempoolPct));
-            else
-                return QString::fromStdString(now-rec->nodeStats.nTimeConnected < 180 ? "~":"");
-            }
+            if (rec->nodeStats.nRecvBytes1stTx) {
+                int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
+                return QString::fromStdString(strprintf("%s%d %%", now - rec->nodeStats.nTimeConnected < 180 ? "~":"", nMempoolPct));
+            } else
+                return QString::fromStdString(now - rec->nodeStats.nTimeConnected < 180 ? "~":"");
+        }
+        case TXpm: {
+            int64_t now = GetTimeSeconds();
+            if (rec->nodeStats.nRecvBytes1stTx) {
+                int nMempoolTXpm = 60 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTimeConnected + 1);
+                return QString::fromStdString(strprintf("%s%d", now - rec->nodeStats.nTimeConnected < 180 ? "~":"", nMempoolTXpm));
+            } else
+                return QString::fromStdString(now - rec->nodeStats.nTimeConnected < 180 ? "~":"");
+        }
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
         } // no default case, so the compiler can warn about missing cases
@@ -105,11 +110,12 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             return QVariant(Qt::AlignRight | Qt::AlignVCenter);
         case Address:
         case ConnectionType:
-        case Network:
+        //case Network:
         case Ping:
         case Sent:
         case Recv:
         case TxRecv:
+        case TXpm:
             return QVariant(Qt::AlignCenter);
         case Subversion:
             return {};

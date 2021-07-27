@@ -49,11 +49,12 @@ public:
         NetNodeId = 0,
         Address,
         ConnectionType,
-        Network,
+        //Network,
         Ping,
         Sent,
         Recv,
 	TxRecv,
+        TXpm,
         Subversion
     };
 
@@ -90,7 +91,7 @@ private:
         tr("Type"),
         /*: Title of Peers Table column which states the network the peer
             connected through. */
-        tr("Network"),
+        //tr("Network"),
         /*: Title of Peers Table column which indicates the current latency
             of the connection with the peer. */
         tr("Ping"),
@@ -102,7 +103,10 @@ private:
         tr("Recv"),
         /*: Title of Peers Table column which indicates the percentage of
             useful TX traffic we're receiving from the peer. */
-        tr("TxRecv"),
+        tr("TXrecv"),
+        /*: Title of Peers Table column which indicates the number of TXs
+            being received per minute from the peer. */
+        tr("TXpm"),
         /*: Title of Peers Table column which contains the peer's
             User Agent string. */
         tr("User Agent")};

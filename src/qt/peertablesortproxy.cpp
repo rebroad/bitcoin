@@ -28,24 +28,30 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
         return left_stats.addrName.compare(right_stats.addrName) < 0;
     case PeerTableModel::ConnectionType:
         return left_stats.m_conn_type < right_stats.m_conn_type;
-    case PeerTableModel::Network:
-        return left_stats.m_network < right_stats.m_network;
+    //case PeerTableModel::Network:
+    //    return left_stats.m_network < right_stats.m_network;
     case PeerTableModel::Ping:
         return left_stats.m_min_ping_time < right_stats.m_min_ping_time;
     case PeerTableModel::Sent: {
-        int RightSendBps = right_stats.nSendBytes * 8 / (right_stats.nLastSend + 1 - right_stats.nTimeConnected);
-        int LeftSendBps = left_stats.nSendBytes * 8 / (left_stats.nLastSend + 1 - left_stats.nTimeConnected);
-        return LeftSendBps < RightSendBps;
+        int Right = right_stats.nSendBytes * 8 / (right_stats.nLastSend + 1 - right_stats.nTimeConnected);
+        int Left = left_stats.nSendBytes * 8 / (left_stats.nLastSend + 1 - left_stats.nTimeConnected);
+        return Left < Right;
     }
     case PeerTableModel::Recv: {
-        int RightRecvBps = right_stats.nRecvBytes * 8 / (right_stats.nLastRecv + 1 - right_stats.nTimeConnected);
-        int LeftRecvBps = left_stats.nRecvBytes * 8 / (left_stats.nLastRecv + 1 - left_stats.nTimeConnected);
-        return LeftRecvBps < RightRecvBps;
+        int Right = right_stats.nRecvBytes * 8 / (right_stats.nLastRecv + 1 - right_stats.nTimeConnected);
+        int Left = left_stats.nRecvBytes * 8 / (left_stats.nLastRecv + 1 - left_stats.nTimeConnected);
+        return Left < Right;
     }
     case PeerTableModel::TxRecv: {
-        int RightMempoolPct = 100 * right_stats.nMempoolBytes / (right_stats.nRecvBytes - right_stats.nRecvBytes1stTx + 1);
-        int LeftMempoolPct = 100 * left_stats.nMempoolBytes / (left_stats.nRecvBytes - left_stats.nRecvBytes1stTx + 1);
-        return LeftMempoolPct < RightMempoolPct;
+        double Right = 1.0 * right_stats.nMempoolBytes / (right_stats.nRecvBytes - right_stats.nRecvBytes1stTx + 1);
+        double Left = 1.0 * left_stats.nMempoolBytes / (left_stats.nRecvBytes - left_stats.nRecvBytes1stTx + 1);
+        return Left < Right;
+    }
+    case PeerTableModel::TXpm: {
+        int64_t now = GetTimeSeconds();
+        double Right = 1.0 * right_stats.nMempoolTXs / (now - right_stats.nTimeConnected + 1);
+        double Left = 1.0 * left_stats.nMempoolTXs / (now - left_stats.nTimeConnected + 1);
+        return Left < Right;
     }
     case PeerTableModel::Subversion:
         return left_stats.cleanSubVer.compare(right_stats.cleanSubVer) < 0;
