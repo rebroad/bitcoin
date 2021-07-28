@@ -84,7 +84,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8 / (rec->nodeStats.nLastSend+1 - rec->nodeStats.nTimeConnected));
         case Recv:
             return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8 / (rec->nodeStats.nLastRecv+1 - rec->nodeStats.nTimeConnected));
-        case TxRecv: {
+        case TxPct: {
             int64_t now = GetTimeSeconds();
             if (rec->nodeStats.nRecvBytes1stTx) {
                 int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
@@ -92,10 +92,18 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             } else
                 return QString::fromStdString(now - rec->nodeStats.nTimeConnected < 180 ? "~":"");
         }
+        case TxBps: {
+            int64_t now = GetTimeSeconds();
+            if (rec->nodeStats.nRecvBytes1stTx) {
+                int nMempoolBps = 8 * rec->nodeStats.nMempoolBytes / (now - rec->nodeStats.nTime1stTx + 1);
+                return QString::fromStdString(strprintf("%s%s", now - rec->nodeStats.nTimeConnected < 180 ? "~":"", strBps(nMempoolBps)));
+            } else
+                return QString::fromStdString(now - rec->nodeStats.nTimeConnected < 180 ? "~":"");
+        }
         case TXpm: {
             int64_t now = GetTimeSeconds();
             if (rec->nodeStats.nRecvBytes1stTx) {
-                int nMempoolTXpm = 60 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTimeConnected + 1);
+                int nMempoolTXpm = 60 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTime1stTx + 1);
                 return QString::fromStdString(strprintf("%s%d", now - rec->nodeStats.nTimeConnected < 180 ? "~":"", nMempoolTXpm));
             } else
                 return QString::fromStdString(now - rec->nodeStats.nTimeConnected < 180 ? "~":"");
@@ -114,7 +122,8 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         case Ping:
         case Sent:
         case Recv:
-        case TxRecv:
+        case TxPct:
+        case TxBps:
         case TXpm:
             return QVariant(Qt::AlignCenter);
         case Subversion:

@@ -53,7 +53,8 @@ public:
         Ping,
         Sent,
         Recv,
-	TxRecv,
+	TxBps,
+	TxPct,
         TXpm,
         Subversion
     };
@@ -95,15 +96,18 @@ private:
         /*: Title of Peers Table column which indicates the current latency
             of the connection with the peer. */
         tr("Ping"),
-        /*: Title of Peers Table column which indicates the total amount of
+        /*: Title of Peers Table column which indicates the speed of
             network information we have sent to the peer. */
         tr("Sent"),
-        /*: Title of Peers Table column which indicates the total amount of
+        /*: Title of Peers Table column which indicates the speed of
             network information we have received from the peer. */
         tr("Recv"),
+        /*: Title of Peers Table column which indicates the rate of network
+            information that has gone into our mempool. */
+        tr("TxBps"),
         /*: Title of Peers Table column which indicates the percentage of
             useful TX traffic we're receiving from the peer. */
-        tr("TXrecv"),
+        tr("TxPct"),
         /*: Title of Peers Table column which indicates the number of TXs
             being received per minute from the peer. */
         tr("TXpm"),

@@ -20,6 +20,7 @@
 #include <script/script.h>
 #include <script/standard.h>
 #include <util/system.h>
+#include <util/strencodings.h>
 
 #ifdef WIN32
 #ifndef NOMINMAX
@@ -783,18 +784,7 @@ QString formatBytes(uint64_t bytes)
 
 QString formatBps(uint64_t bits)
 {
-    if (bits < 10'000)
-        //: "Bits per second"
-        return QObject::tr("%1 bps").arg(bits);
-    if (bits < 10'000'000)
-        //: "Kilobits per second"
-        return QObject::tr("%1 kbps").arg(bits / 1'000);
-    if (bits < 10'000'000'000)
-        //: "Megabits per second"
-        return QObject::tr("%1 Mbps").arg(bits / 1'000'000);
-
-    //: "Gigabits per second"
-    return QObject::tr("%1 Gbps").arg(bits / 1'000'000'000);
+    return QString::fromStdString(strBps(bits));
 }
 
 qreal calculateIdealFontSize(int width, const QString& text, QFont font, qreal minPointSize, qreal font_size) {

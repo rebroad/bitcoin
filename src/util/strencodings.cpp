@@ -448,6 +448,21 @@ std::string strAge(const int64_t nAge) {
         return strprintf("%.1fd", nAge/86400.0);
 }
 
+std::string strBps(uint64_t bits) {
+    if (bits < 10'000)
+        //: "Bits per second"
+        return strprintf("%d bps", bits);
+    if (bits < 10'000'000)
+        //: "Kilobits per second"
+        return strprintf("%d kbps", bits / 1'000);
+    if (bits < 10'000'000'000)
+        //: "Megabits per second"
+        return strprintf("%d Mbps", bits / 1'000'000);
+
+    //: "Gigabits per second"
+    return strprintf("%f Gbps", bits / 1'000'000'000);
+}
+
 int64_t atoi64(const std::string& str)
 {
 #ifdef _MSC_VER
