@@ -1624,7 +1624,7 @@ void CConnman::SocketHandler()
             return;
 
         if ((!IsIBD && nOutboundFullRelay >= m_max_outbound_full_relay) && pnode->GetId() == worstNodeBps) {
-            if ((now - latestOutboundConn >= 60) && nNewbies < 2 && ((nLowestBps <= nSecondLowestBps / 3) ||
+            if ((now - pnode->nTimeConnected >= 60) && nNewbies < 2 && ((nLowestBps <= nSecondLowestBps / 3) ||
                     ((now - pnode->nTimeConnected >= 180) && nNewbies < 1))) {
                 pnode->fDisconnect = 1;
                 LogPrintf("%s: TxPct = %d TXpm = %d TimeConn = %d disconnect peer=%d\n", __func__, nLowestPct, nLowestTXpm, now - pnode->nTimeConnected, pnode->GetId());
