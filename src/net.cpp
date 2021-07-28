@@ -1632,7 +1632,7 @@ void CConnman::SocketHandler()
                     nRecvBytes = pnode->nRecvBytes;
                 }
                 double nMempoolPct = 100.0 * pnode->nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
-                if ((now - latestOutboundConn >= 60) && (nMempoolPct <= nSecondLowestPct/2)) {
+                if ((now - pnode->nTimeConnected >= 60) && (nMempoolPct <= nSecondLowestPct/2)) {
                     pnode->fDisconnect = 1;
                     LogPrintf("%s: Incoming TxPct = %d%% (%d%%) TimeConn = %d disconnect peer=%d\n", __func__, nMempoolPct, nLowestPct, now - pnode->nTimeConnected, pnode->GetId());
                 }
