@@ -678,11 +678,11 @@ QString ConnectionTypeToQString(ConnectionType conn_type, bool prepend_direction
     }
     switch (conn_type) {
     case ConnectionType::INBOUND: return prefix;
-    case ConnectionType::OUTBOUND_FULL_RELAY: return prefix + QObject::tr("Full Relay");
-    case ConnectionType::BLOCK_RELAY: return prefix + QObject::tr("Block Relay");
+    case ConnectionType::OUTBOUND_FULL_RELAY: return prefix + QObject::tr("Full");
+    case ConnectionType::BLOCK_RELAY: return prefix + QObject::tr("Block");
     case ConnectionType::MANUAL: return prefix + QObject::tr("Manual");
     case ConnectionType::FEELER: return prefix + QObject::tr("Feeler");
-    case ConnectionType::ADDR_FETCH: return prefix + QObject::tr("Address Fetch");
+    case ConnectionType::ADDR_FETCH: return prefix + QObject::tr("Addr");
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }

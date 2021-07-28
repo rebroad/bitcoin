@@ -96,7 +96,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             int64_t now = GetTimeSeconds();
             if (rec->nodeStats.nRecvBytes1stTx) {
                 int nMempoolBps = 8 * rec->nodeStats.nMempoolBytes / (now - rec->nodeStats.nTime1stTx + 1);
-                return QString::fromStdString(strprintf("%s%s", now - rec->nodeStats.nTimeConnected < 180 ? "~":"", strBps(nMempoolBps)));
+                return QString::fromStdString(strprintf("%s", strBps(nMempoolBps)));
             } else
                 return QString::fromStdString(now - rec->nodeStats.nTimeConnected < 180 ? "~":"");
         }
