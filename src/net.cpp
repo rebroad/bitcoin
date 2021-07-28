@@ -1586,7 +1586,8 @@ void CConnman::SocketHandler()
                         nLowestPct = nMempoolPct;
                     }
                     worstNode = pnode->GetId();
-                }
+                } else if (nMempoolPct < nSecondLowestPct)
+                    nSecondLowestPct = nMempoolPct;
                 int nMempoolBps = nMempoolBytes * 8 / (now - pnode->nTime1stTx + 1);
                 if (nMempoolBps <= nLowestBps) {
                     if (nMempoolBps < nLowestBps) {
@@ -1625,10 +1626,15 @@ void CConnman::SocketHandler()
                 pnode->fDisconnect = 1;
                 LogPrintf("%s: TxRecv = %s TimeConn = %d disconnect peer=%d\n", __func__, strBps(nLowestBps), now - pnode->nTimeConnected, pnode->GetId());
             } else if (pnode->IsInboundConn()) {
-                int nMempoolBps = pnode->nMempoolBytes * 8 / (now - pnode->nTime1stTx + 1);
-                if (((now - latestOutboundConn >= 60) && (now - pnode->nTimeConnected >= 60) && (nMempoolBps <= (nSecondLowestBps / 2))) || ((now - latestOutboundConn >= 180) && (now - pnode->nTimeConnected >= 180))) {
+                int nRecvBytes;
+                {
+                    LOCK(pnode->cs_vRecv);
+                    nRecvBytes = pnode->nRecvBytes;
+                }
+                double nMempoolPct = 100.0 * pnode->nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
+                if ((now - latestOutboundConn >= 60) && (nMempoolPct <= nSecondLowestPct/2)) {
                     pnode->fDisconnect = 1;
-                    LogPrintf("%s: Incoming TxRecv = %s (%s) TimeConn = %d disconnect peer=%d\n", __func__, strBps(nLowestBps), strBps(nSecondLowestBps), now - pnode->nTimeConnected, pnode->GetId());
+                    LogPrintf("%s: Incoming TxPct = %d%% (%d%%) TimeConn = %d disconnect peer=%d\n", __func__, nMempoolPct, nLowestPct, now - pnode->nTimeConnected, pnode->GetId());
                 }
             }
         }
