@@ -67,6 +67,7 @@ std::string EncodeBase32(const std::string& str, bool pad = true);
 
 void SplitHostPort(std::string in, uint16_t& portOut, std::string& hostOut);
 std::string strAge(const int64_t nAge);
+std::string strBps(uint64_t bits);
 int64_t atoi64(const std::string& str);
 int atoi(const std::string& str);
 
