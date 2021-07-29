@@ -115,6 +115,10 @@ T LocaleIndependentAtoi(const std::string& str)
     return result;
 }
 
+std::string strUnit(float value, std::string strUnit, int dp);
+std::string strBps(float bits);
+std::string strBytesps(float bytes);
+
 /**
  * Tests if the given character is a decimal digit.
  * @param[in] c     character to test

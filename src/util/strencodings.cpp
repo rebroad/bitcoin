@@ -369,6 +369,36 @@ std::string FormatParagraph(const std::string& in, size_t width, size_t indent)
     return out.str();
 }
 
+std::string strUnit(float value, std::string strUnit, int dp) {
+    std::string letter;
+    if (value < 1'000) {
+        ;
+    } else if (value < 1'000'000) {
+        letter = "k";
+        value /= 1'000;
+    } else if (value < 1'000'000'000) {
+        letter = "M";
+        value /= 1'000'000;
+    } else {
+        letter = "G";
+        value /= 1'000'000'000;
+    }
+    if (value < 1) return strprintf(strprintf("%%.%df%s%%s", dp, letter), value, strUnit);
+    if (value < 10) return strprintf(strprintf("%%.%df%s%%s", std::max(dp - 1, 0), letter), value, strUnit);
+    if (value < 100) return strprintf(strprintf("%%.%df%s%%s", std::max(dp - 2, 0), letter), value, strUnit);
+    if (value < 1'000) return strprintf(strprintf("%%.%df%s%%s", std::max(dp - 3, 0), letter), value, strUnit);
+
+    return strprintf(strprintf("%%.%df%s%%s", std::max(dp - 4, 0),  letter), value, strUnit);
+}
+
+std::string strBps(float bits) {
+    return strUnit(bits, "bps", 3);
+}
+
+std::string strBytesps(float bytes) {
+    return strUnit(bytes, "B/s", 3);
+}
+
 /** Upper bound for mantissa.
  * 10^18-1 is the largest arbitrary decimal that will fit in a signed 64-bit integer.
  * Larger integers cannot consist of arbitrary combinations of 0-9:
