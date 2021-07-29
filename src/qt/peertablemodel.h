@@ -49,7 +49,7 @@ public:
         NetNodeId = 0,
         Address,
         ConnectionType,
-        Network,
+        //Network,
         Ping,
         Sent,
         Recv,
@@ -91,7 +91,7 @@ private:
         tr("Type"),
         /*: Title of Peers Table column which states the network the peer
             connected through. */
-        tr("Network"),
+        //tr("Network"),
         /*: Title of Peers Table column which indicates the current latency
             of the connection with the peer. */
         tr("Ping"),

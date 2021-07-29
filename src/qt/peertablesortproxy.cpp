@@ -28,8 +28,8 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
         return left_stats.addrName.compare(right_stats.addrName) < 0;
     case PeerTableModel::ConnectionType:
         return left_stats.m_conn_type < right_stats.m_conn_type;
-    case PeerTableModel::Network:
-        return left_stats.m_network < right_stats.m_network;
+    //case PeerTableModel::Network:
+    //    return left_stats.m_network < right_stats.m_network;
     case PeerTableModel::Ping:
         return left_stats.m_min_ping_time < right_stats.m_min_ping_time;
     case PeerTableModel::Sent: {
