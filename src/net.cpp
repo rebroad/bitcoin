@@ -1559,6 +1559,7 @@ void CConnman::SocketHandler()
     static NodeId lastWorstBps = -1;
     std::vector<CNode*> vNodesCopy;
     int nGlobalTXpm = 0;
+    int nGlobalBps = 0;
     const int64_t now = GetTimeSeconds();
     bool IsIBD = true;
     {
@@ -1589,6 +1590,7 @@ void CConnman::SocketHandler()
                 } else if (nMempoolPct < nSecondLowestPct)
                     nSecondLowestPct = nMempoolPct;
                 int nMempoolBps = nMempoolBytes * 8 / (now - pnode->nTime1stTx + 1);
+                nGlobalBps += (int)nMempoolBps;
                 if (nMempoolBps <= nLowestBps) {
                     if (nMempoolBps < nLowestBps) {
                         nSecondLowestBps = nLowestBps;
@@ -1610,8 +1612,7 @@ void CConnman::SocketHandler()
         }
     }
     if (!IsIBD && (lastWorst != worstNode || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps)) {
-        LogPrintf("%s: worstPct %d -> %d (%d%%) worstTXpm %d -> %d (%d) worstBps %d -> %d (%s:%s) GlobalTXpm = %d\n", __func__, lastWorst, worstNode, nLowestPct,
-            lastWorstTXpm, worstNodeTXpm, nLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm);
+        LogPrintf("%s: worstPct %d -> %d (%d%%) worstTXpm %d -> %d (%d) worstBps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, lastWorst, worstNode, (int)nLowestPct, lastWorstTXpm, worstNodeTXpm, nLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
         lastWorst = worstNode;
         lastWorstTXpm = worstNodeTXpm;
         lastWorstBps = worstNodeBps;
