@@ -46,8 +46,8 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
     }
     case PeerTableModel::TxBps: {
         int64_t now = GetTimeSeconds();
-        int Right = 8 * right_stats.nMempoolBytes / (now - right_stats.nTime1stTx + 1);
-        int Left = 8 * left_stats.nMempoolBytes / (now - left_stats.nTime1stTx + 1);
+        double Right = 1.0 * right_stats.nMempoolBytes * right_stats.nRecvBytes / (now - right_stats.nTimeConnected + 1) / (right_stats.nRecvBytes - right_stats.nRecvBytes1stTx + 1);
+        double Left = 1.0 * left_stats.nMempoolBytes * left_stats.nRecvBytes / (now - left_stats.nTimeConnected + 1) / (left_stats.nRecvBytes - left_stats.nRecvBytes1stTx + 1);
         return Left < Right;
     }
     case PeerTableModel::TxPct: {
@@ -57,8 +57,8 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
     }
     case PeerTableModel::TXpm: {
         int64_t now = GetTimeSeconds();
-        double Right = 1.0 * right_stats.nMempoolTXs / (now - right_stats.nTime1stTx + 1);
-        double Left = 1.0 * left_stats.nMempoolTXs / (now - left_stats.nTime1stTx + 1);
+        double Right = 1.0 * right_stats.nMempoolTXs / (now - right_stats.nTimeConnected + 1);
+        double Left = 1.0 * left_stats.nMempoolTXs / (now - left_stats.nTimeConnected + 1);
         return Left < Right;
     }
     case PeerTableModel::Subversion:
