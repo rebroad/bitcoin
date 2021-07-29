@@ -81,8 +81,8 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
                                tr("Outbound"));
         case ConnectionType:
             return GUIUtil::ConnectionTypeToQString(rec->nodeStats.m_conn_type, /* prepend_direction */ false);
-        case Network:
-            return GUIUtil::NetworkToQString(rec->nodeStats.m_network);
+        //case Network:
+        //    return GUIUtil::NetworkToQString(rec->nodeStats.m_network);
         case Ping:
             return GUIUtil::formatPingTime(rec->nodeStats.m_min_ping_time);
         case Sent: {
@@ -134,7 +134,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         case Address:
         case Direction:
         case ConnectionType:
-        case Network:
+        //case Network:
         case Ping:
         case Sent:
         case Recv:
