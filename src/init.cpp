@@ -1268,7 +1268,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         if (Lookup(strAddr, addrLocal, GetListenPort(), fNameLookup) && addrLocal.IsValid())
             AddLocal(addrLocal, LOCAL_MANUAL);
         else
-            ResolveErrMsg("externalip", strAddr);
+            InitError(ResolveErrMsg("externalip", strAddr));
     }
 
     // Read asmap file if configured

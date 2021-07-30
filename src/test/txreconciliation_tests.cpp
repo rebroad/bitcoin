@@ -20,8 +20,8 @@ constexpr unsigned int RECON_FIELD_SIZE = 32;
 constexpr double RECON_Q = 0.01;
 constexpr uint16_t Q_PRECISION{(2 << 14) - 1};
 // Converted to int/seconds to be used in SetMockTime().
-constexpr int RECON_REQUEST_INTERVAL = 2;
-constexpr int RECON_RESPONSE_INTERVAL = 2;
+constexpr int RECON_REQUEST_INTERVAL = 1;
+constexpr int RECON_RESPONSE_INTERVAL = 1;
 
 class TxReconciliationTrackerTest
 {

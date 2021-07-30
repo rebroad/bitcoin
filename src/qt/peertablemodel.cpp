@@ -100,14 +100,6 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             } else
                 return QString::fromStdString(now - rec->nodeStats.nTimeConnected < 180 ? "~":"");
         }
-        case TXpm: {
-            int64_t now = GetTimeSeconds();
-            if (rec->nodeStats.nRecvBytes1stTx) {
-                int nMempoolTXpm = 60 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTimeConnected + 1);
-                return QString::fromStdString(strprintf("%s%d", now - rec->nodeStats.nTimeConnected < 180 ? "~":"", nMempoolTXpm));
-            } else
-                return QString::fromStdString(now - rec->nodeStats.nTimeConnected < 180 ? "~":"");
-        }
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
         } // no default case, so the compiler can warn about missing cases
@@ -124,7 +116,6 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         case Recv:
         case TxPct:
         case TxBps:
-        case TXpm:
             return QVariant(Qt::AlignCenter);
         case Subversion:
             return {};

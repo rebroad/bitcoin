@@ -55,7 +55,6 @@ public:
         Recv,
 	TxBps,
 	TxPct,
-        TXpm,
         Subversion
     };
 
@@ -108,9 +107,6 @@ private:
         /*: Title of Peers Table column which indicates the percentage of
             useful TX traffic we're receiving from the peer. */
         tr("TxPct"),
-        /*: Title of Peers Table column which indicates the number of TXs
-            being received per minute from the peer. */
-        tr("TXpm"),
         /*: Title of Peers Table column which contains the peer's
             User Agent string. */
         tr("User Agent")};

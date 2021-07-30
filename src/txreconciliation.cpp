@@ -47,18 +47,18 @@ constexpr double RECON_Q = 0.01;
 constexpr uint16_t Q_PRECISION{(2 << 14) - 1};
 /**
  * Interval between initiating reconciliations with peers.
- * This value allows to reconcile ~100 transactions (7 tx/s * 2s * 8 peers) during normal operation.
+ * This value allows to reconcile ~(7 tx/s * 1s * 8 peers) transactions during normal operation.
  * More frequent reconciliations would cause significant constant bandwidth overhead
  * due to reconciliation metadata (sketch sizes etc.), which would nullify the efficiency.
  * Less frequent reconciliations would introduce high transaction relay latency.
  */
-constexpr std::chrono::microseconds RECON_REQUEST_INTERVAL{2s};
+constexpr std::chrono::microseconds RECON_REQUEST_INTERVAL{1s};
 /**
  * Interval between responding to peers' reconciliation requests.
  * We don't respond to reconciliation requests right away because that would enable monitoring
  * when we receive transactions (privacy leak).
  */
-constexpr std::chrono::microseconds RECON_RESPONSE_INTERVAL{2s};
+constexpr std::chrono::microseconds RECON_RESPONSE_INTERVAL{1s};
 
 /**
  * Represents phase of the current reconciliation round with a peer.
@@ -536,10 +536,6 @@ class TxReconciliationTracker::Impl {
             // Identify locally/remotely missing transactions.
             recon_state->second.m_local_set_snapshot.GetRelevantIDsFromShortIDs(differences, txs_to_request, txs_to_announce);
 
-            // Update local reconciliation state for the peer.
-            recon_state->second.FinalizeInitByUs(true);
-            recon_state->second.m_state_init_by_us.m_phase = Phase::NONE;
-
             result = true;
             LogPrint(BCLog::NET, "Reconciliation we initiated with peer=%d has succeeded at extension step, " /* Continued */
                 "request %i txs, announce %i txs.\n", recon_state->first, txs_to_request.size(), txs_to_announce.size());
@@ -551,14 +547,14 @@ class TxReconciliationTracker::Impl {
             // failure flag.
             txs_to_announce = recon_state->second.m_local_set_snapshot.GetAllTransactions();
 
-            // Update local reconciliation state for the peer.
-            recon_state->second.FinalizeInitByUs(false);
-            recon_state->second.m_state_init_by_us.m_phase = Phase::NONE;
-
             result = false;
             LogPrint(BCLog::NET, "Reconciliation we initiated with peer=%d has failed at extension step, " /* Continued */
                 "request all txs, announce %i txs.\n", recon_state->first, txs_to_announce.size());
         }
+
+        // Update local reconciliation state for the peer.
+        recon_state->second.FinalizeInitByUs(false);
+        recon_state->second.m_state_init_by_us.m_phase = Phase::NONE;
         return true;
     }
 
