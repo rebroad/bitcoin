@@ -1626,11 +1626,11 @@ void CConnman::SocketHandler()
             return;
 
         if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
-            if (pnode->GetId() == worstNodeBps && (((now - latestOutboundConn >= 60) && (now - pnode->nTimeConnected >= 60) && (nLowestBps <= (nSecondLowestBps / 2))) || ((now - latestOutboundConn >= 180) && (now - pnode->nTimeConnected >= 180)))) {
-                pnode->fDisconnect = 1;
+            if (pnode->GetId() == worstNodeBps && ((((now - latestOutboundConn >= 60) || (nLowestBps == 0 && nSecondLowestBps > 0)) && (now - pnode->nTimeConnected >= 60) && (nLowestBps <= (nSecondLowestBps / 2))) || ((now - latestOutboundConn >= 180) && (now - pnode->nTimeConnected >= 180)))) {
+                pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: TxRecv = %s TimeConn = %d disconnect peer=%d\n", __func__, strBps(nLowestBps), now - pnode->nTimeConnected, pnode->GetId());
             } else if (pnode->GetId() == worstNodePct && (((now - latestOutboundConn >= 60) && (now - pnode->nTimeConnected >= 60) && (nLowestPct <= (nSecondLowestPct / 2))) || ((now - latestOutboundConn >= 180) && (now - pnode->nTimeConnected >= 180)))) {
-                pnode->fDisconnect = 1;
+                pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: TxPct = %d%% TimeConn = %d disconnect peer=%d\n", __func__, nLowestPct, now - pnode->nTimeConnected, pnode->GetId());
             }
         }
