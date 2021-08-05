@@ -17,10 +17,10 @@ namespace {
 // Taken verbatim from txreconciliation.cpp.
 const std::string RECON_STATIC_SALT = "Tx Relay Salting";
 constexpr unsigned int RECON_FIELD_SIZE = 32;
-constexpr double RECON_Q = 0.01;
+constexpr double RECON_Q = 0.25;
 constexpr uint16_t Q_PRECISION{(2 << 14) - 1};
 // Converted to int/seconds to be used in SetMockTime().
-constexpr int RECON_REQUEST_INTERVAL = 1;
+constexpr int RECON_REQUEST_INTERVAL = 8;
 constexpr int RECON_RESPONSE_INTERVAL = 1;
 
 class TxReconciliationTrackerTest
@@ -186,6 +186,27 @@ BOOST_AUTO_TEST_CASE(AddToReconSetTest)
     assert(tracker.GetPeerSetSize(peer_id0) == count);
 }
 
+
+BOOST_AUTO_TEST_CASE(TryRemovingFromReconSetTest)
+{
+    TxReconciliationTracker tracker;
+
+    NodeId peer_id0 = 0;
+    bool inbound = true;
+    const uint256 wtxid = GetRandHash();
+    // For non-registered peer nothing happens (no failure).
+    tracker.TryRemovingFromReconSet(peer_id0, wtxid);
+    tracker.SuggestReconciling(peer_id0, inbound);
+    assert(tracker.EnableReconciliationSupport(peer_id0, inbound, true, false, 1, 0));
+    // No such transaction, nothing happens.
+    tracker.TryRemovingFromReconSet(peer_id0, wtxid);
+
+    tracker.AddToReconSet(peer_id0, std::vector<uint256>{wtxid});
+    tracker.TryRemovingFromReconSet(peer_id0, wtxid);
+    assert(tracker.GetPeerSetSize(peer_id0) == 0);
+}
+
+
 BOOST_AUTO_TEST_CASE(MaybeRequestReconciliationTest)
 {
     TxReconciliationTracker tracker;
@@ -291,8 +312,11 @@ BOOST_AUTO_TEST_CASE(HandleReconciliationRequestTest)
     TxReconciliationTrackerTest tracker_test2(true);
     SetMockTime(start_time);
     tracker_test2.HandleReconciliationRequest();
-    // Too early, do not respond yet.
-    SetMockTime(start_time + RECON_RESPONSE_INTERVAL - 1);
+    assert(tracker_test2.RespondToReconciliationRequest(skdata));
+    auto dummy = std::vector<uint256>();
+    assert(tracker_test2.FinalizeInitByThem(false, std::vector<uint32_t>(), dummy));
+    // Too little time since last response, do not respond yet.
+    tracker_test2.HandleReconciliationRequest();
     assert(!tracker_test2.RespondToReconciliationRequest(skdata));
     SetMockTime(start_time + RECON_RESPONSE_INTERVAL);
     assert(tracker_test2.RespondToReconciliationRequest(skdata));
@@ -709,25 +733,28 @@ BOOST_AUTO_TEST_CASE(ShouldFloodToTest)
 
     NodeId peer_id0 = 0;
     uint256 wtxid = GetRandHash();
-    assert(!tracker.ShouldFloodTo(wtxid, peer_id0, true));
+    assert(!tracker.ShouldFloodTo(wtxid, peer_id0));
+
+    // Add a peer to hit flooding.
     tracker.SuggestReconciling(peer_id0, true);
     assert(tracker.EnableReconciliationSupport(peer_id0, true, true, false, 1, 1));
-    assert(tracker.ShouldFloodTo(wtxid, peer_id0, true));
-    assert(!tracker.ShouldFloodTo(wtxid, peer_id0, !true));
-    tracker.RemovePeer(peer_id0);
-    assert(!tracker.ShouldFloodTo(wtxid, peer_id0, true));
 
-    // Add 2 more inbound peers.
+    // Add 3 more inbound peers.
     tracker.SuggestReconciling(1, true);
     assert(tracker.EnableReconciliationSupport(1, true, true, false, 1, 1));
     tracker.SuggestReconciling(2, true);
     assert(tracker.EnableReconciliationSupport(2, true, true, false, 1, 1));
+    tracker.SuggestReconciling(3, true);
+    assert(tracker.EnableReconciliationSupport(3, true, true, false, 1, 1));
 
-    bool flood0 = tracker.ShouldFloodTo(wtxid, peer_id0, true);
-    bool flood1 = tracker.ShouldFloodTo(wtxid, 1, true);
-    bool flood2 = tracker.ShouldFloodTo(wtxid, 2, true);
+    int flood0 = tracker.ShouldFloodTo(wtxid, peer_id0);
+    int flood1 = tracker.ShouldFloodTo(wtxid, 1);
+    int flood2 = tracker.ShouldFloodTo(wtxid, 2);
+    int flood3 = tracker.ShouldFloodTo(wtxid, 3);
+    assert(flood0 + flood1 + flood2 + flood3 == 2);
 
-    assert(flood0 + flood1 + flood2 == 2);
+    tracker.RemovePeer(peer_id0);
+    assert(!tracker.ShouldFloodTo(wtxid, peer_id0));
 }
 
 

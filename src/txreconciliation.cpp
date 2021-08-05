@@ -7,6 +7,7 @@
 #include <minisketch/include/minisketch.h>
 
 #include <unordered_map>
+#include <util/hasher.h>
 
 namespace {
 
@@ -39,7 +40,7 @@ constexpr unsigned int RECON_FALSE_POSITIVE_COEF = 16;
 static_assert(RECON_FALSE_POSITIVE_COEF <= 256,
     "Reducing reconciliation false positives beyond 1 in 2**256 is not supported");
 /** Coefficient used to estimate reconciliation set differences. */
-constexpr double RECON_Q = 0.01;
+constexpr double RECON_Q = 0.25;
 /**
   * Used to convert a floating point reconciliation coefficient q to integer for transmission.
   * Specified by BIP-330.
@@ -47,16 +48,15 @@ constexpr double RECON_Q = 0.01;
 constexpr uint16_t Q_PRECISION{(2 << 14) - 1};
 /**
  * Interval between initiating reconciliations with peers.
- * This value allows to reconcile ~(7 tx/s * 1s * 8 peers) transactions during normal operation.
+ * This value allows to reconcile ~(7 tx/s * 8s) transactions during normal operation.
  * More frequent reconciliations would cause significant constant bandwidth overhead
  * due to reconciliation metadata (sketch sizes etc.), which would nullify the efficiency.
  * Less frequent reconciliations would introduce high transaction relay latency.
  */
-constexpr std::chrono::microseconds RECON_REQUEST_INTERVAL{1s};
+constexpr std::chrono::microseconds RECON_REQUEST_INTERVAL{8s};
 /**
- * Interval between responding to peers' reconciliation requests.
- * We don't respond to reconciliation requests right away because that would enable monitoring
- * when we receive transactions (privacy leak).
+ * We should keep an interval between responding to reconciliation requests from the same peer,
+ * to reduce potential DoS surface.
  */
 constexpr std::chrono::microseconds RECON_RESPONSE_INTERVAL{1s};
 
@@ -186,10 +186,22 @@ struct ReconciliationInitByThem {
     uint16_t m_remote_set_size;
 
     /**
-     * When a reconciliation request is received, instead of responding to it right away,
-     * we schedule a response for later, so that a spy can’t monitor our reconciliation sets.
+     * We track when was the last time we responded to a reconciliation request by the peer,
+     * so that we don't respond to them too often. This helps to reduce DoS surface.
      */
-    std::chrono::microseconds m_next_recon_respond{0};
+    std::chrono::microseconds m_last_init_recon_respond{0};
+    /**
+     * Returns whether at this time it's not too early to respond to a reconciliation request by
+     * the peer, and, if so, bumps the time we last responded to allow further checks.
+     */
+    bool ConsiderInitResponseAndTrack() {
+        auto current_time = GetTime<std::chrono::seconds>();
+        if (m_last_init_recon_respond <= current_time - RECON_RESPONSE_INTERVAL) {
+            m_last_init_recon_respond = current_time;
+            return true;
+        }
+        return false;
+    }
 
     /** Keep track of the reconciliation phase with the peer. */
     Phase m_phase{Phase::NONE};
@@ -221,17 +233,6 @@ class ReconciliationState {
      * These values are used to salt short IDs.
      */
     const uint64_t m_k0, m_k1;
-
-    /**
-     * Reconciliation sketches are computed over short transaction IDs.
-     * Short IDs are salted with a link-specific constant value.
-     */
-    uint32_t ComputeShortID(const uint256 wtxid) const
-    {
-        const uint64_t s = SipHashUint256(m_k0, m_k1, wtxid);
-        const uint32_t short_txid = 1 + (s & 0xFFFFFFFF);
-        return short_txid;
-    }
 
     public:
 
@@ -265,12 +266,32 @@ class ReconciliationState {
      */
     ReconciliationSet m_local_set_snapshot;
 
+    /**
+     * A peer could announce a transaction to us during reconciliation and after we snapshoted
+     * the initial set. We can't remove this new transaction from the snapshot, because
+     * then we won't be able to compute a valid extension (for the sketch already transmitted).
+     * Instead, we just remember those transaction, and not announce them when we announce
+     * stuff from the snapshot.
+     */
+    std::set<uint256> m_announced_during_extension;
+
     /** Keep track of reconciliations with the peer. */
     ReconciliationInitByUs m_state_init_by_us;
     ReconciliationInitByThem m_state_init_by_them;
 
     ReconciliationState(uint64_t k0, uint64_t k1, bool we_initiate) :
         m_k0(k0), m_k1(k1), m_we_initiate(we_initiate) {}
+
+    /**
+     * Reconciliation sketches are computed over short transaction IDs.
+     * Short IDs are salted with a link-specific constant value.
+     */
+    uint32_t ComputeShortID(const uint256 wtxid) const
+    {
+        const uint64_t s = SipHashUint256(m_k0, m_k1, wtxid);
+        const uint32_t short_txid = 1 + (s & 0xFFFFFFFF);
+        return short_txid;
+    }
 
     /**
      * Reconciliation involves computing a space-efficient representation of transaction identifiers
@@ -331,6 +352,7 @@ class ReconciliationState {
         assert(m_we_initiate);
         if (clear_local_set) m_local_set.Clear();
         m_local_set_snapshot.Clear();
+        m_announced_during_extension.clear();
         // This is currently belt-and-suspenders, as the code should work even without these calls.
         m_capacity_snapshot = 0;
         m_state_init_by_us.m_remote_sketch_snapshot.clear();
@@ -375,6 +397,13 @@ class TxReconciliationTracker::Impl {
     mutable Mutex m_mutex;
 
     /**
+     * We need a ReconciliationTracker-wide randomness to decide to which peers we should flood a
+     * given transaction based on a (w)txid.
+     */
+    const SaltedTxidHasher txidHasher;
+
+
+    /**
      * Per-peer salt is used to compute transaction short IDs, which will be later used to
      * construct reconciliation sketches.
      * Salt is generated randomly per-peer to prevent:
@@ -389,13 +418,6 @@ class TxReconciliationTracker::Impl {
     std::unordered_map<NodeId, ReconciliationState> m_states GUARDED_BY(m_mutex);
 
     /**
-     * A certain small number of peers from these sets will be chosen as fanout destinations
-     * for certain transactions based on wtxid.
-     */
-    std::vector<NodeId> m_inbound_fanout_destinations GUARDED_BY(m_mutex);
-    std::vector<NodeId> m_outbound_fanout_destinations GUARDED_BY(m_mutex);
-
-    /**
      * Maintains a queue of reconciliations we should initiate. To achieve higher bandwidth
      * conservation and avoid overflows, we should reconcile in the same order, because then it’s
      * easier to estimate set difference size.
@@ -403,27 +425,16 @@ class TxReconciliationTracker::Impl {
     std::deque<NodeId> m_queue GUARDED_BY(m_mutex);
 
     /**
-     * Reconciliations are requested periodically: every RECON_REQUEST_INTERVAL we pick a peer
-     * from the queue.
+     * Make reconciliation requests periodically to make reconciliations efficient.
      */
     std::chrono::microseconds m_next_recon_request GUARDED_BY(m_mutex);
     void UpdateNextReconRequest(std::chrono::microseconds now) EXCLUSIVE_LOCKS_REQUIRED(m_mutex)
     {
-        m_next_recon_request = now + RECON_REQUEST_INTERVAL;
-    }
-
-    /**
-     * Used to schedule the next initial response for any pending reconciliation request.
-     * Respond to all requests at the same time to prevent transaction possession leak.
-     */
-    std::chrono::microseconds m_next_recon_respond{0};
-    std::chrono::microseconds NextReconRespond()
-    {
-        auto current_time = GetTime<std::chrono::microseconds>();
-        if (m_next_recon_respond <= current_time) {
-            m_next_recon_respond = current_time + RECON_RESPONSE_INTERVAL;
-        }
-        return m_next_recon_respond;
+        // We have one timer for the entire queue. This is safe because we initiate reconciliations
+        // with outbound connections, which are unlikely to game this timer in a serious way.
+        size_t we_initiate_to_count = std::count_if(m_states.begin(), m_states.end(),
+            [](std::pair<NodeId, ReconciliationState> state) { return state.second.m_we_initiate; });
+        m_next_recon_request = now + (RECON_REQUEST_INTERVAL / we_initiate_to_count);
     }
 
     bool HandleInitialSketch(std::unordered_map<NodeId, ReconciliationState>::iterator& recon_state,
@@ -552,6 +563,12 @@ class TxReconciliationTracker::Impl {
                 "request all txs, announce %i txs.\n", recon_state->first, txs_to_announce.size());
         }
 
+        // Filter out transactions received from the peer during the extension phase.
+        std::set<uint256> announced_during_extension = recon_state->second.m_announced_during_extension;
+        txs_to_announce.erase(std::remove_if(txs_to_announce.begin(), txs_to_announce.end(), [announced_during_extension](const auto&x) {
+            return std::find(announced_during_extension.begin(), announced_during_extension.end(), x) != announced_during_extension.end();
+        }), txs_to_announce.end());
+
         // Update local reconciliation state for the peer.
         recon_state->second.FinalizeInitByUs(false);
         recon_state->second.m_state_init_by_us.m_phase = Phase::NONE;
@@ -629,14 +646,6 @@ class TxReconciliationTracker::Impl {
 
         assert(m_states.emplace(peer_id, ReconciliationState(full_salt.GetUint64(0),
             full_salt.GetUint64(1), we_initiate)).second);
-
-
-        if (inbound) {
-            m_inbound_fanout_destinations.push_back(peer_id);
-        } else {
-            m_outbound_fanout_destinations.push_back(peer_id);
-        }
-
         return true;
     }
 
@@ -656,6 +665,19 @@ class TxReconciliationTracker::Impl {
 
         LogPrint(BCLog::NET, "Added %i new transactions to the reconciliation set for peer=%d. " /* Continued */
             "Now the set contains %i transactions.\n", added, peer_id, recon_state->second.m_local_set.GetSize());
+    }
+
+    void TryRemovingFromReconSet(NodeId peer_id, const uint256 wtxid_to_remove)
+    {
+        LOCK(m_mutex);
+        auto recon_state = m_states.find(peer_id);
+        if (recon_state == m_states.end()) return;
+
+        recon_state->second.m_local_set.m_wtxids.erase(wtxid_to_remove);
+        if (recon_state->second.m_local_set_snapshot.m_wtxids.find(wtxid_to_remove) !=
+            recon_state->second.m_local_set_snapshot.m_wtxids.end()) {
+                recon_state->second.m_announced_during_extension.insert(wtxid_to_remove);
+            }
     }
 
     std::optional<std::pair<uint16_t, uint16_t>> MaybeRequestReconciliation(NodeId peer_id)
@@ -702,7 +724,6 @@ class TxReconciliationTracker::Impl {
         double peer_q_converted = peer_q * 1.0 / Q_PRECISION;
         recon_state->second.m_state_init_by_them.m_remote_q = peer_q_converted;
         recon_state->second.m_state_init_by_them.m_remote_set_size = peer_recon_set_size;
-        recon_state->second.m_state_init_by_them.m_next_recon_respond = NextReconRespond();
         recon_state->second.m_state_init_by_them.m_phase = Phase::INIT_REQUESTED;
 
         LogPrint(BCLog::NET, "Reconciliation initiated by peer=%d with the following params: " /* Continued */
@@ -711,6 +732,7 @@ class TxReconciliationTracker::Impl {
 
     void RespondToInitialRequest(std::unordered_map<NodeId, ReconciliationState>::iterator& recon_state, std::vector<uint8_t>& skdata)
     {
+        // Compute a sketch over the local reconciliation set.
         uint32_t sketch_capacity = 0;
 
         // We send an empty vector at initial request in the following 2 cases because
@@ -766,17 +788,16 @@ class TxReconciliationTracker::Impl {
 
         Phase incoming_phase = recon_state->second.m_state_init_by_them.m_phase;
 
-        // For initial requests, respond only periodically to a) limit CPU usage for sketch computation,
-        // and, b) limit transaction possession privacy leak.
-        auto current_time = GetTime<std::chrono::microseconds>();
-        bool timely_initial_request = incoming_phase == Phase::INIT_REQUESTED &&
-            current_time >= recon_state->second.m_state_init_by_them.m_next_recon_respond;
-        bool extension_request = incoming_phase == Phase::EXT_REQUESTED;
+        // For initial requests we have an extra check to avoid short intervals between responses
+        // to the same peer (see comments in the check function for justification).
+        bool respond_to_initial_request = incoming_phase == Phase::INIT_REQUESTED &&
+            recon_state->second.m_state_init_by_them.ConsiderInitResponseAndTrack();
+        bool respond_to_extension_request = incoming_phase == Phase::EXT_REQUESTED;
 
-        if (timely_initial_request) {
+        if (respond_to_initial_request) {
             RespondToInitialRequest(recon_state, skdata);
             return true;
-        } else if(extension_request) {
+        } else if(respond_to_extension_request) {
             RespondToExtensionRequest(recon_state, skdata);
             return true;
         } else {
@@ -848,8 +869,15 @@ class TxReconciliationTracker::Impl {
             remote_missing = recon_state->second.m_local_set_snapshot.GetAllTransactions();
         }
 
+        // Filter out transactions received from the peer during the extension phase.
+        std::set<uint256> announced_during_extension = recon_state->second.m_announced_during_extension;
+        remote_missing.erase(std::remove_if(remote_missing.begin(), remote_missing.end(), [announced_during_extension](const auto&x) {
+            return std::find(announced_during_extension.begin(), announced_during_extension.end(), x) != announced_during_extension.end();
+        }), remote_missing.end());
+
         // Update local reconciliation state for the peer.
         recon_state->second.m_local_set_snapshot.Clear();
+        recon_state->second.m_announced_during_extension.clear();
         recon_state->second.m_state_init_by_them.m_phase = Phase::NONE;
 
         LogPrint(BCLog::NET, "Finalizing reconciliation init by peer=%d with result=%i, announcing %i txs (requested by shortID).\n",
@@ -864,14 +892,6 @@ class TxReconciliationTracker::Impl {
         auto salt_erased = m_local_salts.erase(peer_id);
         auto state_erased = m_states.erase(peer_id);
         if (salt_erased || state_erased) {
-
-            m_inbound_fanout_destinations.erase(std::remove(
-                m_inbound_fanout_destinations.begin(), m_inbound_fanout_destinations.end(), peer_id),
-                m_inbound_fanout_destinations.end());
-            m_outbound_fanout_destinations.erase(std::remove(
-                m_outbound_fanout_destinations.begin(), m_outbound_fanout_destinations.end(), peer_id),
-                m_outbound_fanout_destinations.end());
-
             LogPrint(BCLog::NET, "Stop tracking reconciliation state for peer=%d.\n", peer_id);
         }
         m_queue.erase(std::remove(m_queue.begin(), m_queue.end(), peer_id), m_queue.end());
@@ -903,38 +923,49 @@ class TxReconciliationTracker::Impl {
         return recon_state->second.m_local_set.GetSize();
     }
 
-    bool ShouldFloodTo(uint256 wtxid, NodeId peer_id, bool inbound) const
+    bool ShouldFloodTo(uint256 wtxid, NodeId peer_id) const
     {
         LOCK(m_mutex);
-        const std::vector<NodeId>* working_list;
-        size_t depth;
-        if (inbound) {
-            working_list = &m_inbound_fanout_destinations;
-            depth = INBOUND_FANOUT_DESTINATIONS;
-        } else {
-            working_list = &m_outbound_fanout_destinations;
-            depth = OUTBOUND_FANOUT_DESTINATIONS;
-        }
 
-        if (working_list->size() == 0) {
+        auto recon_state = m_states.find(peer_id);
+        if (recon_state == m_states.end()) {
             return false;
         }
 
-        // If the peer has a position of [starting from the index chosen based on the wtxid; depth),
-        // flood to it.
-        int index_flood_to = wtxid.GetUint64(3) % working_list->size();
-        auto cur_candidate_id = working_list->begin() + index_flood_to;
-        while (depth > 0) {
-            if (*cur_candidate_id == peer_id) {
-                return true;
-            }
-            ++cur_candidate_id;
-            if (cur_candidate_id == working_list->end()) {
-                cur_candidate_id = working_list->begin();
-            }
-            --depth;
+        // In this function we make an assumption that reconciliation is always initiated from
+        // inbound to outbound to avoid code complexity.
+        size_t destinations;
+        std::vector<NodeId> eligible_peers;
+        if (recon_state->second.m_we_initiate) {
+            std::for_each(m_states.begin(), m_states.end(),
+                [&eligible_peers](std::pair<NodeId, ReconciliationState> state) {
+                    if (state.second.m_we_initiate) eligible_peers.push_back(state.first);
+                }
+            );
+            destinations = OUTBOUND_FANOUT_DESTINATIONS;
+        } else {
+            std::for_each(m_states.begin(), m_states.end(),
+                [&eligible_peers](std::pair<NodeId, ReconciliationState> state) {
+                    if (!state.second.m_we_initiate) eligible_peers.push_back(state.first);
+                }
+            );
+            destinations = INBOUND_FANOUT_DESTINATIONS;
         }
-        return false;
+
+        const auto it = std::find(eligible_peers.begin(), eligible_peers.end(), peer_id);
+        assert(it != eligible_peers.end());
+
+        size_t reverse_probability;
+        if (eligible_peers.size() <= destinations) {
+            // If we have fewer eligible peers than destinations, flood to each of them with 50%
+            // chance.
+            reverse_probability = 2;
+        } else {
+            reverse_probability = eligible_peers.size() / destinations;
+        }
+
+        const size_t peer_index = it - eligible_peers.begin();
+        return txidHasher(wtxid) % reverse_probability == peer_index % reverse_probability;
     }
 
 };
@@ -959,6 +990,11 @@ bool TxReconciliationTracker::EnableReconciliationSupport(NodeId peer_id, bool i
 void TxReconciliationTracker::AddToReconSet(NodeId peer_id, const std::vector<uint256>& txs_to_reconcile)
 {
     m_impl->AddToReconSet(peer_id, txs_to_reconcile);
+}
+
+void TxReconciliationTracker::TryRemovingFromReconSet(NodeId peer_id, const uint256 wtxid_to_remove)
+{
+    m_impl->TryRemovingFromReconSet(peer_id, wtxid_to_remove);
 }
 
 std::optional<std::pair<uint16_t, uint16_t>> TxReconciliationTracker::MaybeRequestReconciliation(NodeId peer_id)
@@ -1013,7 +1049,7 @@ std::optional<size_t> TxReconciliationTracker::GetPeerSetSize(NodeId peer_id) co
     return m_impl->GetPeerSetSize(peer_id);
 }
 
-bool TxReconciliationTracker::ShouldFloodTo(uint256 wtxid, NodeId peer_id, bool inbound) const
+bool TxReconciliationTracker::ShouldFloodTo(uint256 wtxid, NodeId peer_id) const
 {
-    return m_impl->ShouldFloodTo(wtxid, peer_id, inbound);
+    return m_impl->ShouldFloodTo(wtxid, peer_id);
 }

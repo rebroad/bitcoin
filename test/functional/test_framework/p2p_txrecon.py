@@ -19,7 +19,6 @@ from test_framework.key import TaggedHash
 from test_framework.p2p import P2PDataStore, P2PInterface
 from test_framework.siphash import siphash256
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import hex_str_to_bytes
 
 
 # These parameters are specified in the BIP-0330.
@@ -29,7 +28,7 @@ FIELD_MODULUS = (1 << FIELD_BITS) + 0b10001101
 BYTES_PER_SKETCH_CAPACITY = FIELD_BITS / 8
 # These parameters are suggested by the Erlay paper based on analysis and
 # simulations.
-RECON_Q = 0.01
+RECON_Q = 0.25
 
 
 def mul2(x):
@@ -82,7 +81,7 @@ def generate_transaction(node, from_txid):
     rawtx = node.createrawtransaction(inputs, outputs)
     signresult = node.signrawtransactionwithwallet(rawtx)
     tx = CTransaction()
-    tx.deserialize(BytesIO(hex_str_to_bytes(signresult['hex'])))
+    tx.deserialize(BytesIO(bytes.fromhex(signresult['hex'])))
     tx.rehash()
     return tx
 
@@ -165,18 +164,19 @@ class ReconciliationTest(BitcoinTestFramework):
         node_unique = []
         shared = []
 
-        utxos = [u for u in self.nodes[0].listunspent(1) if u['spendable']]
-
         for i in range(n_mininode_unique):
+            utxos = [u for u in self.nodes[0].listunspent(1) if u['confirmations'] > 0]
             tx = generate_transaction(self.nodes[0], utxos[i]['txid'])
             mininode_unique.append(tx)
 
         for i in range(n_mininode_unique, n_mininode_unique + n_node_unique):
+            utxos = [u for u in self.nodes[0].listunspent(1) if u['confirmations'] > 0]
             tx = generate_transaction(self.nodes[0], utxos[i]['txid'])
             node_unique.append(tx)
 
         for i in range(n_mininode_unique + n_node_unique,
                        n_mininode_unique + n_node_unique + n_shared):
+            utxos = [u for u in self.nodes[0].listunspent(1) if u['confirmations'] > 0]
             tx = generate_transaction(self.nodes[0], utxos[i]['txid'])
             shared.append(tx)
 

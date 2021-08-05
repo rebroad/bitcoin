@@ -19,8 +19,8 @@ from test_framework.p2p_txrecon import (
 )
 
 # Taken from net_processing.cpp
-RECON_RESPONSE_INTERVAL = 2
-# A called should allow a lot of extra time to handle Poisson delays.
+RECON_RESPONSE_INTERVAL = 1
+# A caller should allow a lot of extra time to handle Poisson delays.
 INVENTORY_BROADCAST_INTERVAL = 2
 
 
@@ -54,10 +54,6 @@ class TestTxReconInitiatorP2PConn(TxReconTestP2PConn):
 class ReconciliationResponderTest(ReconciliationTest):
     def set_test_params(self):
         super().set_test_params()
-
-    def make_or_reset_reconciliation_conn(self):
-        self.test_node = self.nodes[0].add_p2p_connection(TestTxReconInitiatorP2PConn())
-        self.test_node.wait_for_verack()
 
     # Check that the node announced a sketch, and return an estimate of how many transaction
     # the node had it the set, based on:
@@ -233,11 +229,13 @@ class ReconciliationResponderTest(ReconciliationTest):
         self.finalize_reconciliation(True, txs_to_request=[])
 
     def test_recon_responder(self):
-        self.make_or_reset_reconciliation_conn()
         # These node will consume some of the low-fanout announcements.
         for _ in range(4):
             fanout_consumer = self.nodes[0].add_p2p_connection(TestTxReconInitiatorP2PConn())
             fanout_consumer.wait_for_verack()
+
+        self.test_node = self.nodes[0].add_p2p_connection(TestTxReconInitiatorP2PConn())
+        self.test_node.wait_for_verack()
 
         # Early exit, expect empty sketch.
         self.reconciliation_responder_flow(0, 15, False, False)
@@ -249,8 +247,10 @@ class ReconciliationResponderTest(ReconciliationTest):
         self.reconciliation_responder_flow(3, 15, False, True)
         # # Initial reconciliation fails, extension fails
         self.reconciliation_responder_flow(3, 15, False, False)
+
         # Test disconnect on RECONCILDIFF violation
-        self.make_or_reset_reconciliation_conn()
+        self.test_node = self.nodes[0].add_p2p_connection(TestTxReconInitiatorP2PConn())
+        self.test_node.wait_for_verack()
         self.finalize_reconciliation(True, [])
         self.test_node.wait_for_disconnect()
 

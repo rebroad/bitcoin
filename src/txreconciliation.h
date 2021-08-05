@@ -79,6 +79,12 @@ class TxReconciliationTracker {
     void AddToReconSet(NodeId peer_id, const std::vector<uint256>& txs_to_reconcile);
 
     /**
+     * Before Step 2, we might want to remove a wtxid from the reconciliation set, for example if
+     * the peer just announced the transaction to us.
+     */
+    void TryRemovingFromReconSet(NodeId peer_id, const uint256 wtxid_to_remove);
+
+    /**
      * Step 2. If a it's time to request a reconciliation from the peer, this function will return
      * the details of our local state, which should be communicated to the peer so that they better
      * know what we need:
@@ -160,10 +166,8 @@ class TxReconciliationTracker {
 
     /**
      * Returns whether for the given call the peer is chosen as a low-fanout destination.
-     * Remove this peer from the destination list, and add a new peer to the list.
      */
-    bool ShouldFloodTo(uint256 wtxid, NodeId peer_id, bool inbound) const;
-
+    bool ShouldFloodTo(uint256 wtxid, NodeId peer_id) const;
 };
 
 #endif // BITCOIN_TXRECONCILIATION_H

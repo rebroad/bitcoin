@@ -19,7 +19,7 @@ from test_framework.p2p_txrecon import (
 
 # Taken from net_processing.cpp
 INVENTORY_BROADCAST_INTERVAL = 1
-RECON_REQUEST_INTERVAL = 1
+RECON_REQUEST_INTERVAL = 8
 
 EXTRA_FANOUT_CANDIDATES = 4
 
@@ -62,17 +62,13 @@ class ReconciliationInitiatorTest(ReconciliationTest):
     def set_test_params(self):
         super().set_test_params()
 
-    def make_or_reset_reconciliation_conn(self):
-        self.test_node = self.nodes[0].add_outbound_p2p_connection(
-            TestTxReconResponderP2PConn(), p2p_idx=0)
-        self.test_node.sync_with_ping()
-
     # Returns False if we received an empty sketch instead of the expected non-empty sketch, likely
     # because the transactions were added to the set after the reconciliation initiation.
     def receive_reqreconcil(self, expected_set_size):
-        for _ in range(EXTRA_FANOUT_CANDIDATES + 1):
-            time.sleep(0.1)  # give time to issue other recon requests
-            self.proceed_in_time(RECON_REQUEST_INTERVAL + 1)
+        ANY_RECON_REQUEST_INTERVAL = int(RECON_REQUEST_INTERVAL / (EXTRA_FANOUT_CANDIDATES + 1))
+        for i in range(EXTRA_FANOUT_CANDIDATES + 1):
+            time.sleep(0.1)
+            self.proceed_in_time(ANY_RECON_REQUEST_INTERVAL + 1)
 
         def received_reqreconcil():
             return (len(self.test_node.last_reqreconcil) >= 1)
@@ -171,6 +167,11 @@ class ReconciliationInitiatorTest(ReconciliationTest):
         # First, check that the node sends a reconciliation request, claiming to have some
         # transactions in their set. Sending out a request always happens after adding to the set
         # per net_processing.cpp.
+        #
+        # We need to skip the entire RECON_REQUEST_INTERVAL first because the first request
+        # will be issued as if the queue had only one peer (because it is called before other
+        # peers are added).
+        self.proceed_in_time(RECON_REQUEST_INTERVAL + 1)
         self.receive_reqreconcil(expected_set_size=len(node_txs))
 
         # We check that transactions received by the node during the reconciliation round
@@ -289,7 +290,10 @@ class ReconciliationInitiatorTest(ReconciliationTest):
                 TestTxReconResponderP2PConn(), p2p_idx=i + 1)
             fanout_destination.sync_with_ping()
 
-        self.make_or_reset_reconciliation_conn()
+        self.test_node = self.nodes[0].add_outbound_p2p_connection(
+            TestTxReconResponderP2PConn(), p2p_idx=0)
+        self.test_node.sync_with_ping()
+
         # 20 at node, 0 at mininode, 0 shared, early exit.
         self.reconciliation_initiator_flow(20, 0, 0, 0, True, False)
         # 0 at node, 20 at mininode, 0 shared, early exit.
