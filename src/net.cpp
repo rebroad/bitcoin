@@ -1315,6 +1315,10 @@ void CConnman::NotifyNumConnectionsChanged()
         nPrevNodeCount = vNodesSize;
         if(clientInterface)
             clientInterface->NotifyNumConnectionsChanged(vNodesSize); // REBTODO - what's this?
+        if (vNodesSize == 0) {
+            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+            ResetNewNodeId();
+        }
     }
 }
 
@@ -2556,6 +2560,11 @@ CConnman::CConnman(uint64_t nSeed0In, uint64_t nSeed1In, CAddrMan& addrman_in, b
     Options connOptions;
     Init(connOptions);
     SetNetworkActive(network_active);
+}
+
+void CConnman::ResetNewNodeId()
+{
+    nLastNodeId = 0;
 }
 
 NodeId CConnman::GetNewNodeId()

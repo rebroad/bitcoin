@@ -1219,6 +1219,8 @@ void CChainState::InitCoinsCache(size_t cache_size_bytes)
 //
 bool CChainState::IsInitialBlockDownload() const
 {
+    if (pindexBestHeader != nullptr && pindexBestHeader->nHeight > m_chain.Tip()->nHeight + 6)
+        return true;
     // Optimization: pre-test latch before taking the lock.
     if (m_cached_finished_ibd.load(std::memory_order_relaxed))
         return false;
@@ -1233,8 +1235,6 @@ bool CChainState::IsInitialBlockDownload() const
     if (m_chain.Tip()->nChainWork < nMinimumChainWork)
         return true;
     if (m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
-        return true;
-    if (pindexBestHeader != nullptr && pindexBestHeader->nHeight > m_chain.Tip()->nHeight + 6)
         return true;
 
     LogPrintf("Leaving InitialBlockDownload (latching to false)\n");
@@ -2221,11 +2221,10 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
-    LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n", __func__,
+    LogPrintf("%s: new best=%s (%d) ver=0x%x age=%s work=%.8g behind=%d tx=%lu%s\n", __func__,
       pindexNew->GetBlockHash().ToString(), pindexNew->nHeight, pindexNew->nVersion,
-      log(pindexNew->nChainWork.getdouble())/log(2.0), (unsigned long)pindexNew->nChainTx,
-      FormatISO8601DateTime(pindexNew->GetBlockTime()),
-      GuessVerificationProgress(m_params.TxData(), pindexNew), this->CoinsTip().DynamicMemoryUsage() * (1.0 / (1<<20)), this->CoinsTip().GetCacheSize(),
+      strAge(GetAdjustedTime()-pindexNew->GetBlockTime()), log(pindexNew->nChainWork.getdouble())/log(2.0),
+      pindexBestHeader->nHeight - pindexNew->nHeight, (unsigned long)pindexNew->nTx,
       !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages.original) : "");
 }
 
