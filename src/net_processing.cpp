@@ -909,6 +909,9 @@ void PeerManagerImpl::MaybeSetPeerAsAnnouncingHeaderAndIDs(NodeId nodeid)
         // Never ask from peers who can't provide witnesses.
         return;
     }
+    if (m_mempool.size() < 1)
+        // No point if our mempool is empty
+        return;
     if (nodestate->fProvidesHeaderAndIDs) {
         int num_outbound_hb_peers = 0;
         for (std::list<NodeId>::iterator it = lNodesAnnouncingHeaderAndIDs.begin(); it != lNodesAnnouncingHeaderAndIDs.end(); it++) {
