@@ -1315,6 +1315,10 @@ void CConnman::NotifyNumConnectionsChanged()
     }
     if(vNodesSize != nPrevNodeCount) {
         nPrevNodeCount = vNodesSize;
+        if (vNodesSize == 0) {
+            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+            ResetNewNodeId();
+        }
         if(clientInterface)
             clientInterface->NotifyNumConnectionsChanged(vNodesSize);
     }
@@ -1927,9 +1931,11 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nOutboundFullRelay = 0;
         int nOutboundBlockRelay = 0;
         std::set<std::vector<unsigned char> > setConnected;
+        int vNodesSize;
 
         {
             LOCK(cs_vNodes);
+            vNodesSize = vNodes.size();
             for (const CNode* pnode : vNodes) {
                 if (pnode->IsFullOutboundConn()) nOutboundFullRelay++;
                 if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
@@ -1949,7 +1955,12 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     case ConnectionType::FEELER:
                         setConnected.insert(pnode->addr.GetGroup(addrman.m_asmap));
                 } // no default case, so the compiler can warn about missing cases
+
             }
+        }
+        if (vNodesSize == 0 && m_anchors.empty() && GetLastNodeId() > 0)) {
+            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+            ResetNewNodeId();
         }
 
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
@@ -2473,11 +2484,20 @@ CConnman::CConnman(uint64_t nSeed0In, uint64_t nSeed1In, CAddrMan& addrman_in, b
     SetNetworkActive(network_active);
 }
 
+void CConnman::ResetNewNodeId()
+{
+    nLastNodeId = 0;
+}
+
 NodeId CConnman::GetNewNodeId()
 {
     return nLastNodeId.fetch_add(1, std::memory_order_relaxed);
 }
 
+NodeId CConnman::GetLastNodeId()
+{
+    return nLastNodeId;
+}
 
 bool CConnman::Bind(const CService &addr, unsigned int flags, NetPermissionFlags permissions) {
     if (!(flags & BF_EXPLICIT) && !IsReachable(addr)) {
