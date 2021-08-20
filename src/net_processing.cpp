@@ -2224,7 +2224,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                             pindexLast->GetBlockHash().ToString(), pindexLast->nHeight);
                 }
                 if (vGetData.size() > 0) {
-                    if (!m_ignore_incoming_txs &&
+                    if (!m_ignore_incoming_txs && m_mempool.size() > 10 &&
                         nodestate->fSupportsDesiredCmpctVersion &&
                         vGetData.size() == 1 &&
                         mapBlocksInFlight.size() == 1 &&
