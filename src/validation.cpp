@@ -2230,11 +2230,11 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
-    LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%f tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)%s\n", __func__,
+    int nBehind = pindexBestHeader->nHeight - pindexNew->nHeight;
+    LogPrintf("%s: new best=%s (%d) ver=0x%x age=%s%s work=%.8g tx=%lu%s\n", __func__,
       pindexNew->GetBlockHash().ToString(), pindexNew->nHeight, pindexNew->nVersion,
-      log(pindexNew->nChainWork.getdouble())/log(2.0), (unsigned long)pindexNew->nChainTx,
-      FormatISO8601DateTime(pindexNew->GetBlockTime()),
-      GuessVerificationProgress(m_params.TxData(), pindexNew), this->CoinsTip().DynamicMemoryUsage() * (1.0 / (1<<20)), this->CoinsTip().GetCacheSize(),
+      strAge(GetAdjustedTime()-pindexNew->GetBlockTime()), nBehind ? strprintf(" behind=%d", nBehind) : "",
+      log(pindexNew->nChainWork.getdouble())/log(2.0), (unsigned long)pindexNew->nTx,
       !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages.original) : "");
 }
 
