@@ -1298,9 +1298,9 @@ void CConnman::DisconnectNodes()
             }
         }
     }
+    std::list<CNode*> nodes_disconnected_copy = m_nodes_disconnected;
     {
         // Delete disconnected nodes
-        std::list<CNode*> nodes_disconnected_copy = m_nodes_disconnected;
         for (CNode* pnode : nodes_disconnected_copy)
         {
             // Destroy the object only after other threads have stopped using it.
@@ -1309,6 +1309,11 @@ void CConnman::DisconnectNodes()
                 DeleteNode(pnode);
             }
         }
+    }
+    LOCK(m_nodes_mutex);
+    if (m_nodes.size() == 0 && nodes_disconnected_copy.size() > 0 && m_nodes_disconnected.size() == 0) {
+        LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+        ResetNewNodeId();
     }
 }
 
@@ -1948,9 +1953,11 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nOutboundFullRelay = 0;
         int nOutboundBlockRelay = 0;
         std::set<std::vector<unsigned char> > setConnected;
+        int vNodesSize;
 
         {
             LOCK(m_nodes_mutex);
+            vNodesSize = m_nodes.size();
             for (const CNode* pnode : m_nodes) {
                 if (pnode->IsFullOutboundConn()) nOutboundFullRelay++;
                 if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
@@ -1970,6 +1977,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     case ConnectionType::FEELER:
                         setConnected.insert(pnode->addr.GetGroup(addrman.GetAsmap()));
                 } // no default case, so the compiler can warn about missing cases
+
             }
         }
 
@@ -2478,6 +2486,11 @@ CConnman::CConnman(uint64_t nSeed0In, uint64_t nSeed1In, AddrMan& addrman_in, bo
     Options connOptions;
     Init(connOptions);
     SetNetworkActive(network_active);
+}
+
+void CConnman::ResetNewNodeId()
+{
+    nLastNodeId = 0;
 }
 
 NodeId CConnman::GetNewNodeId()
