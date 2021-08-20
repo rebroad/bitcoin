@@ -16,8 +16,8 @@ constexpr uint32_t RECON_VERSION = 1;
 /** Static component of the salt used to compute short txids for inclusion in sketches. */
 const std::string RECON_STATIC_SALT = "Tx Relay Salting";
 /** Announce transactions via full wtxid to a limited number of inbound and outbound peers. */
-constexpr uint8_t INBOUND_FANOUT_DESTINATIONS = 2;
-constexpr uint8_t OUTBOUND_FANOUT_DESTINATIONS = 2;
+constexpr double INBOUND_FANOUT_DESTINATIONS_FRACTION = 0.1;
+constexpr double OUTBOUND_FANOUT_DESTINATIONS_FRACTION = 0.1;
 /** The size of the field, used to compute sketches to reconcile transactions (see BIP-330). */
 constexpr unsigned int RECON_FIELD_SIZE = 32;
 /**
@@ -934,38 +934,40 @@ class TxReconciliationTracker::Impl {
 
         // In this function we make an assumption that reconciliation is always initiated from
         // inbound to outbound to avoid code complexity.
-        size_t destinations;
         std::vector<NodeId> eligible_peers;
+        size_t flood_index_modulo;
         if (recon_state->second.m_we_initiate) {
             std::for_each(m_states.begin(), m_states.end(),
                 [&eligible_peers](std::pair<NodeId, ReconciliationState> state) {
                     if (state.second.m_we_initiate) eligible_peers.push_back(state.first);
                 }
             );
-            destinations = OUTBOUND_FANOUT_DESTINATIONS;
+            flood_index_modulo = 1.0 / OUTBOUND_FANOUT_DESTINATIONS_FRACTION;
         } else {
             std::for_each(m_states.begin(), m_states.end(),
                 [&eligible_peers](std::pair<NodeId, ReconciliationState> state) {
                     if (!state.second.m_we_initiate) eligible_peers.push_back(state.first);
                 }
             );
-            destinations = INBOUND_FANOUT_DESTINATIONS;
+            flood_index_modulo = 1.0 / INBOUND_FANOUT_DESTINATIONS_FRACTION;
         }
 
         const auto it = std::find(eligible_peers.begin(), eligible_peers.end(), peer_id);
         assert(it != eligible_peers.end());
 
-        size_t reverse_probability;
-        if (eligible_peers.size() <= destinations) {
-            // If we have fewer eligible peers than destinations, flood to each of them with 50%
-            // chance.
-            reverse_probability = 2;
-        } else {
-            reverse_probability = eligible_peers.size() / destinations;
-        }
-
         const size_t peer_index = it - eligible_peers.begin();
-        return txidHasher(wtxid) % reverse_probability == peer_index % reverse_probability;
+        return txidHasher(wtxid) % flood_index_modulo == peer_index % flood_index_modulo;
+    }
+
+    bool CurrentlyReconcilingTx(NodeId peer_id, const uint256 wtxid) const
+    {
+        LOCK(m_mutex);
+        auto recon_state = m_states.find(peer_id);
+        if (recon_state == m_states.end()) {
+            return false;
+        }
+        return recon_state->second.m_local_set.m_wtxids.count(wtxid) > 0 ||
+            recon_state->second.m_local_set_snapshot.m_wtxids.count(wtxid) > 0;
     }
 
 };
@@ -1052,4 +1054,9 @@ std::optional<size_t> TxReconciliationTracker::GetPeerSetSize(NodeId peer_id) co
 bool TxReconciliationTracker::ShouldFloodTo(uint256 wtxid, NodeId peer_id) const
 {
     return m_impl->ShouldFloodTo(wtxid, peer_id);
+}
+
+bool TxReconciliationTracker::CurrentlyReconcilingTx(NodeId peer_id, const uint256 wtxid) const
+{
+    return m_impl->CurrentlyReconcilingTx(peer_id, wtxid);
 }

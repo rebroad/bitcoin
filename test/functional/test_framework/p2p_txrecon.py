@@ -28,7 +28,7 @@ FIELD_MODULUS = (1 << FIELD_BITS) + 0b10001101
 BYTES_PER_SKETCH_CAPACITY = FIELD_BITS / 8
 # These parameters are suggested by the Erlay paper based on analysis and
 # simulations.
-RECON_Q = 0.25
+RECON_Q = 0.1
 
 
 def mul2(x):

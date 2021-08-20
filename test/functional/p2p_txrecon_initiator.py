@@ -21,9 +21,6 @@ from test_framework.p2p_txrecon import (
 INVENTORY_BROADCAST_INTERVAL = 1
 RECON_REQUEST_INTERVAL = 8
 
-EXTRA_FANOUT_CANDIDATES = 4
-
-
 class TestTxReconResponderP2PConn(TxReconTestP2PConn):
     # This object simulates a reconciliation responder, which will be queried by
     # the Bitcoin Core node being tested.
@@ -65,10 +62,8 @@ class ReconciliationInitiatorTest(ReconciliationTest):
     # Returns False if we received an empty sketch instead of the expected non-empty sketch, likely
     # because the transactions were added to the set after the reconciliation initiation.
     def receive_reqreconcil(self, expected_set_size):
-        ANY_RECON_REQUEST_INTERVAL = int(RECON_REQUEST_INTERVAL / (EXTRA_FANOUT_CANDIDATES + 1))
-        for i in range(EXTRA_FANOUT_CANDIDATES + 1):
-            time.sleep(0.1)
-            self.proceed_in_time(ANY_RECON_REQUEST_INTERVAL + 1)
+        time.sleep(0.1)
+        self.proceed_in_time(RECON_REQUEST_INTERVAL + 1)
 
         def received_reqreconcil():
             return (len(self.test_node.last_reqreconcil) >= 1)
@@ -283,13 +278,6 @@ class ReconciliationInitiatorTest(ReconciliationTest):
             self.expect_announcements(more_node_txs, [])
 
     def test_recon_initiator(self):
-        # These node will consume some of the low-fanout announcements, and add to the
-        # reconciliation peers queue.
-        for i in range(EXTRA_FANOUT_CANDIDATES):
-            fanout_destination = self.nodes[0].add_outbound_p2p_connection(
-                TestTxReconResponderP2PConn(), p2p_idx=i + 1)
-            fanout_destination.sync_with_ping()
-
         self.test_node = self.nodes[0].add_outbound_p2p_connection(
             TestTxReconResponderP2PConn(), p2p_idx=0)
         self.test_node.sync_with_ping()

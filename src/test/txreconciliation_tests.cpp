@@ -739,23 +739,29 @@ BOOST_AUTO_TEST_CASE(ShouldFloodToTest)
     tracker.SuggestReconciling(peer_id0, true);
     assert(tracker.EnableReconciliationSupport(peer_id0, true, true, false, 1, 1));
 
-    // Add 3 more inbound peers.
-    tracker.SuggestReconciling(1, true);
-    assert(tracker.EnableReconciliationSupport(1, true, true, false, 1, 1));
-    tracker.SuggestReconciling(2, true);
-    assert(tracker.EnableReconciliationSupport(2, true, true, false, 1, 1));
-    tracker.SuggestReconciling(3, true);
-    assert(tracker.EnableReconciliationSupport(3, true, true, false, 1, 1));
-
-    int flood0 = tracker.ShouldFloodTo(wtxid, peer_id0);
-    int flood1 = tracker.ShouldFloodTo(wtxid, 1);
-    int flood2 = tracker.ShouldFloodTo(wtxid, 2);
-    int flood3 = tracker.ShouldFloodTo(wtxid, 3);
-    assert(flood0 + flood1 + flood2 + flood3 == 2);
-
     tracker.RemovePeer(peer_id0);
     assert(!tracker.ShouldFloodTo(wtxid, peer_id0));
 }
 
+BOOST_AUTO_TEST_CASE(CurrentlyReconcilingTxTest)
+{
+    TxReconciliationTracker tracker;
+
+    NodeId peer_id0 = 0;
+    uint256 wtxid = GetRandHash();
+    assert(!tracker.CurrentlyReconcilingTx(peer_id0, wtxid));
+
+    // Add a peer.
+    tracker.SuggestReconciling(peer_id0, true);
+    assert(tracker.EnableReconciliationSupport(peer_id0, true, true, false, 1, 1));
+
+    assert(!tracker.CurrentlyReconcilingTx(peer_id0, wtxid));
+
+    tracker.AddToReconSet(peer_id0, std::vector<uint256>{wtxid});
+    assert(tracker.CurrentlyReconcilingTx(peer_id0, wtxid));
+
+    tracker.RemovePeer(peer_id0);
+    assert(!tracker.CurrentlyReconcilingTx(peer_id0, wtxid));
+}
 
 BOOST_AUTO_TEST_SUITE_END()

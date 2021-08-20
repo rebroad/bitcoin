@@ -594,6 +594,7 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
         X(cleanSubVer);
     }
     stats.fInbound = IsInboundConn();
+    X(fErlay);
     X(m_bip152_highbandwidth_to);
     X(m_bip152_highbandwidth_from);
     {
@@ -1619,7 +1620,7 @@ void CConnman::SocketHandler()
     } // LOCK(cs_vNodes);
     if (now != lastnow) {
         if (!IsIBD && (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps)) {
-            LogPrintf("%s: worstPct %d -> %d (%d%%:%d%%) worstTXpm %d -> %d (%d) worstBps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, nLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
+            LogPrintf("%s: worst: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d) Bps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, nLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
             lastWorstPct = worstNodePct;
             lastWorstTXpm = worstNodeTXpm;
             lastWorstBps = worstNodeBps;

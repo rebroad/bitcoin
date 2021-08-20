@@ -3035,6 +3035,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         uint64_t remote_salt;
         vRecv >> they_initiator >> they_responder >> recon_version >> remote_salt;
 
+        pfrom.fErlay = true;
+
         if (!m_reconciliation.EnableReconciliationSupport(pfrom.GetId(), pfrom.IsInboundConn(),
             they_initiator, they_responder, recon_version, remote_salt)) {
                 LogPrint(BCLog::NET, "reconciliation protocol violation from peer=%d; disconnecting\n", pfrom.GetId());
@@ -3215,6 +3217,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 if (!fAlreadyHave && !fIBD) {
                     AddTxAnnouncement(pfrom, gtxid, current_time);
                 }
+                if (gtxid.IsWtxid()) m_reconciliation.TryRemovingFromReconSet(pfrom.GetId(), gtxid.GetHash());
             } else {
                 LogPrint(BCLog::NET, "Unknown inv type \"%s\" received from peer=%d\n", inv.ToString(), pfrom.GetId());
             }
@@ -3507,8 +3510,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
             return;
         }
+
+        m_reconciliation.TryRemovingFromReconSet(pfrom.GetId(), wtxid);
+
 	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (pfrom)
+        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false /* bypass_limits */);
         const TxValidationState& state = result.m_state;
         bool fOrphanAdded = false;
 
@@ -5211,13 +5217,63 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
                         bool adding_to_recon_set = false;
                         // Check if peer supports reconciliations.
-                        // Also check that the transaction has no ancestors and descendants. In the
-                        // lack of package relay, we have to make sure transactions are announced
-                        // in the right order, which is hard to achieve with reconciliations and
-                        // flooding used at the same time.
-                        size_t ancestors, descendants;
-                        m_mempool.GetTransactionAncestry(txid, ancestors, descendants);
-                        if (supports_recon && ancestors == 1 && descendants == 1) {
+                        if (supports_recon) {
+                            bool flood_target = m_reconciliation.ShouldFloodTo(wtxid, pto->GetId());
+
+                            // Special treatment for unconfirmed transactions with unconfirmed
+                            // parents.
+                            LOCK(m_mempool.cs);
+                            auto txiter = m_mempool.GetIter(txinfo.tx->GetHash());
+                            assert(txiter);
+                            const CTxMemPoolEntry::Parents& parents = (*txiter)->GetMemPoolParentsConst();
+                            for (const CTxMemPoolEntry& parent : parents) {
+                                // Two situations are possible here:
+                                // 1. The parent was fully relayed to the peer earlier.
+                                // 2. The parent is set for reconciliation and the child is not
+                                //    in the mempool yet. The child arrives to the mempool and is
+                                //    flooded. The peer receives the child earlier than the parent.
+                                // We can differentiate between the two by looking at the recon
+                                // set: if the set (or the snapshot) contains the parent, the parent
+                                // is being reconciled (case 2). Then, we add the child to the
+                                // reconciliation set, so that it doesn't arrive earlier than the
+                                // parent.
+                                // If it's the case 1, we proceed as usual by looking at the
+                                // child's wtxid.
+                                const uint256 parent_wtxid = parent.GetTx().GetWitnessHash();
+                                if (m_reconciliation.CurrentlyReconcilingTx(pto->GetId(), parent_wtxid) ||
+                                    std::find(txs_to_reconcile.begin(), txs_to_reconcile.end(), parent_wtxid) != txs_to_reconcile.end()) {
+                                    // Currently reconciling parent tx.
+                                    // We have the following options to do:
+                                    // 1. Flood parent+child.
+                                    // 2. Reconcile parent+child.
+                                    // 3. Flood parent, reconcile child.
+                                    // We choose (2) because it has the easiest implementation.
+                                    // The latency impact is not that bad:
+                                    // 1. If the parent is in the reocnciliation set, the two
+                                    // transactions will be relayed at the same time. There is
+                                    // no point relaying the child faster anyway.
+                                    // 2. If the parent is in the snapshot, the child will
+                                    // be reconcilied within the next batch. This would
+                                    // introduce extra latency (even if by wtxid the child
+                                    // should have been flooded over this link), but this will
+                                    // be compensated later: if the delay is non-trivial,
+                                    // for the next nodes this condition won't be triggered (
+                                    // parent won't be in the reconciliation set).
+                                    //
+                                    // In case of the multiple unconfirmed parents, we will
+                                    // reconcile if at least one of the parents is being
+                                    // reconciled.
+                                    //
+                                    // Note, the transaction still could be flooded if the
+                                    // reconciliation set is full (see check below). This
+                                    // is not the general case and is likely caused by the
+                                    // issues with the peer, and then we're not responsible
+                                    // that the package can't pass mempool limitations.
+                                    flood_target = false;
+                                    break;
+                                }
+                            }
+
                             // Check if reconciliation set is not at capacity for two reasons:
                             // - limit sizes of reconciliation sets and short id mappings
                             // - limit CPU use for sketch computations
@@ -5230,8 +5286,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                             //
                             // Transactions which don't make it to the set due to the limit are announced via fan-out.
                             const size_t recon_set_size = *m_reconciliation.GetPeerSetSize(pto->GetId());
-                            // Reconcile if this reconciling peer is not selected for low fan-out.
-                            const bool flood_target = m_reconciliation.ShouldFloodTo(wtxid, pto->GetId());
                             if (!flood_target && txs_to_reconcile.size() + recon_set_size < MAX_PEER_TX_ANNOUNCEMENTS) {
                                 txs_to_reconcile.push_back(wtxid);
                                 adding_to_recon_set = true;
