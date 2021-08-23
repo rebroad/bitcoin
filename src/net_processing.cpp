@@ -1872,7 +1872,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         (((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
         !pfrom.HasPermission(NetPermissionFlags::Download) // nodes with the download permission may exceed target
     ) {
-        LogPrintf("historical block serving limit reached, disconnect peer=%d\n", pfrom.GetId());
+        LogPrintf("historical block (%d) serving limit reached, disconnect peer=%d\n", pindex->nHeight, pfrom.GetId());
         pfrom.fDisconnect = true;
         return;
     }
