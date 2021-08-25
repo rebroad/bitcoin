@@ -1636,7 +1636,7 @@ void CConnman::SocketHandler()
 
         if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
             int worstNode; int nLowest; int nSecondLowest; std::string erm; std::string erm2;
-            if ((now / 3600) % 2 == 1) {
+            if ((now / 5400) % 2 == 1) { // Change every 90 minutes
                 worstNode = worstNodeBps; nLowest = nLowestBps; nSecondLowest = nSecondLowestBps; erm = "Bps"; erm2 = strBps(nLowest);
             } else {
                 worstNode = worstNodePct; nLowest = nLowestPct; nSecondLowest = nSecondLowestPct; erm = "Pct"; erm2 = strprintf("%d%%", nLowest);
