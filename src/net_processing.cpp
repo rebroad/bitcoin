@@ -1005,7 +1005,10 @@ static bool PeerHasHeader(CNodeState *state, const CBlockIndex *pindex) EXCLUSIV
 
 void PeerManagerImpl::ProcessBlockAvailability(NodeId nodeid) {
     CNodeState *state = State(nodeid);
-    assert(state != nullptr);
+    if (state == nullptr) {
+        LogPrintf("%s: ASSERT ERROR. peer=%d\n", __func__, nodeid);
+        return;
+    }
 
     if (!state->hashLastUnknownBlock.IsNull()) {
         const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(state->hashLastUnknownBlock);
@@ -3197,7 +3200,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
             } else if (inv.IsGenTxMsg()) {
                 if (fBlocksOnly || pfrom.IsFeelerConn()) {
-                    LogPrintf("recv inv tx violation HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
+                    LogPrintf("recv inv tx violation fBO=%d, HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", fBlocksOnly, pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
                     pfrom.fDisconnect = true;
                     return;
                 }
@@ -3446,7 +3449,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // 2) This peer is a block-relay-only peer
         if ((m_ignore_incoming_txs && !pfrom.HasPermission(NetPermissionFlags::Relay)) || (pfrom.m_tx_relay == nullptr) || pfrom.IsFeelerConn())
         {
-            LogPrintf("recv tx violation HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
+            LogPrintf("recv tx violation iit=%d HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", m_ignore_incoming_txs, pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
         }
