@@ -784,12 +784,24 @@ QString formatBytes(uint64_t bytes)
 
 QString formatBps(uint64_t bits)
 {
-    if (bits < 10'000)
+    if (bits < 1'000)
         //: "Bits per second"
         return QObject::tr("%1 bps").arg(bits);
-    if (bits < 10'000'000)
+    if (bits < 10'000)
+        //: "Kilobits per second"
+        return QObject::tr("%1 kbps").arg(0.01 * (bits / 10));
+    if (bits < 100'000)
+        //: "Kilobits per second"
+        return QObject::tr("%1 kbps").arg(0.1 * (bits / 100));
+    if (bits < 1'000'000)
         //: "Kilobits per second"
         return QObject::tr("%1 kbps").arg(bits / 1'000);
+    if (bits < 10'000'000)
+        //: "Megabits per second"
+        return QObject::tr("%1 Mbps").arg(0.01 * (bits / 10'000));
+    if (bits < 100'000'000)
+        //: "Megabits per second"
+        return QObject::tr("%1 Mbps").arg(0.1 * (bits / 10'000));
     if (bits < 10'000'000'000)
         //: "Megabits per second"
         return QObject::tr("%1 Mbps").arg(bits / 1'000'000);
