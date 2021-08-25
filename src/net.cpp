@@ -610,6 +610,7 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
     X(nMempoolBytes);
     X(nMempoolTXs);
     X(nRecvBytes1stTx);
+    X(nTime1stTx);
     X(m_permissionFlags);
     if (m_tx_relay != nullptr) {
         stats.minFeeFilter = m_tx_relay->minFeeFilter;
@@ -656,6 +657,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
 
             if ((result->m_command == NetMsgType::TX || result->m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx) {
                 nRecvBytes1stTx = nRecvBytes - result->m_raw_message_size - msg_bytes.size();
+                nTime1stTx = GetTimeSeconds();
                 LogPrintf("%s: 1stTx size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, result->m_raw_message_size, nRecvBytes1stTx,
                     nRecvBytes, handled, msg_bytes.size(), GetId());
             }
@@ -1595,7 +1597,8 @@ void CConnman::SocketHandler()
                         worstNodePct = pnode->GetId();
                     } else if (nMempoolPct < nSecondLowestPct)
                         nSecondLowestPct = nMempoolPct;
-                    int nMempoolBps = nMempoolPct * .08 * nRecvBytes / (now - pnode->nTimeConnected + 1);
+                    //int nMempoolBps = nMempoolPct * .08 * nRecvBytes / (now - pnode->nTime1stTx + 1);
+                    int nMempoolBps = nMempoolBytes * 8 / (now - pnode->nTime1stTx + 1);
                     nGlobalBps += (int)nMempoolBps;
                     if (nMempoolBps <= nLowestBps) {
                         if (nMempoolBps < nLowestBps) {
@@ -1605,7 +1608,7 @@ void CConnman::SocketHandler()
                         worstNodeBps = pnode->GetId();
                     } else if (nMempoolBps < nSecondLowestBps)
                         nSecondLowestBps = nMempoolBps;
-                    double nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTimeConnected + 1);
+                    double nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTime1stTx + 1);
                     nGlobalTXpm += (int)nTXpm;
                     if (nTXpm <= nLowestTXpm) {
                         if (nTXpm < nLowestTXpm) {
@@ -1632,9 +1635,15 @@ void CConnman::SocketHandler()
             return;
 
         if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
-            if (pnode->GetId() == worstNodeBps && ((((now - latestOutboundConn >= 60) || (nLowestBps == 0 && nSecondLowestBps > 0)) && (now - pnode->nTimeConnected >= 60) && (nLowestBps <= (nSecondLowestBps / 2))) || ((now - latestOutboundConn >= 180) && (now - pnode->nTimeConnected >= 180)))) {
+            int worstNode; int nLowest; int nSecondLowest; std::string erm; std::string erm2;
+            if ((now / 3600) % 2 == 1) {
+                worstNode = worstNodeBps; nLowest = nLowestBps; nSecondLowest = nSecondLowestBps; erm = "Bps"; erm2 = strBps(nLowest);
+            } else {
+                worstNode = worstNodePct; nLowest = nLowestPct; nSecondLowest = nSecondLowestPct; erm = "Pct"; erm2 = strprintf("%d%%", nLowest);
+            }
+            if (pnode->GetId() == worstNode && ((((now - latestOutboundConn >= 60) || (nLowest == 0 && nSecondLowest > 0)) && (now - pnode->nTimeConnected >= 60) && (nLowest <= (nSecondLowest / 2))) || ((now - latestOutboundConn >= 180) && (now - pnode->nTimeConnected >= 180)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
-                LogPrintf("%s: TxRecv = %s TimeConn = %d disconnect peer=%d\n", __func__, strBps(nLowestBps), now - pnode->nTimeConnected, pnode->GetId());
+                LogPrintf("%s: Tx%s = %s TimeConn = %d disconnect peer=%d\n", __func__, erm, erm2, now - pnode->nTimeConnected, pnode->GetId());
             }
         }
 

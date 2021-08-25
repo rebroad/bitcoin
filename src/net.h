@@ -247,6 +247,7 @@ public:
     int64_t nLastTXTime;
     int64_t nLastBlockTime;
     int64_t nTimeConnected;
+    int64_t nTime1stTx;
     int64_t nTimeOffset;
     std::string addrName;
     int nVersion;
@@ -428,6 +429,7 @@ public:
     std::atomic<uint64_t> nMempoolBytes{0};
     std::atomic<unsigned int> nMempoolTXs{0};
     std::atomic<uint64_t> nRecvBytes1stTx{0};
+    std::atomic<int64_t> nTime1stTx{0};
 
     std::atomic<int64_t> nLastSend{0};
     std::atomic<int64_t> nLastRecv{0};
