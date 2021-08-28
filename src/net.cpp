@@ -1566,6 +1566,8 @@ void CConnman::SocketHandler()
     int nGlobalTXpm = 0;
     int nGlobalBps = 0;
     const int64_t now = GetTimeSeconds();
+    static int64_t tWorstPctChanged = now;
+    static int64_t tWorstBpsChanged = now;
     static int64_t lastnow = 0;
     bool IsIBD = true;
     {
@@ -1621,12 +1623,18 @@ void CConnman::SocketHandler()
         } // for (CNode* pnode : vNodesCopy)
     } // LOCK(cs_vNodes);
     int nByBps = (now / 5400) % 2;
-    if (now != lastnow) {
-        if (!IsIBD && (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps)) {
+    if (!IsIBD && now != lastnow) {
+        if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps) {
             LogPrintf("%s: worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d) Bps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, nByBps, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, nLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
-            lastWorstPct = worstNodePct;
             lastWorstTXpm = worstNodeTXpm;
-            lastWorstBps = worstNodeBps;
+            if (lastWorstPct != worstNodePct) {
+                tWorstPctChanged = now;
+                lastWorstPct = worstNodePct;
+            }
+            if (lastWorstBps != worstNodeBps) {
+                tWorstBpsChanged = now;
+                lastWorstBps = worstNodeBps;
+            }
         }
     }
     for (CNode* pnode : vNodesCopy)
@@ -1635,13 +1643,15 @@ void CConnman::SocketHandler()
             return;
 
         if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
-            int worstNode; int nLowest; int nSecondLowest; std::string erm; std::string erm2;
+            int worstNode; int nLowest; int nSecondLowest; int64_t tWorstChanged;
             if (nByBps) { // Change every 90 minutes
                 worstNode = worstNodeBps; nLowest = nLowestBps; nSecondLowest = nSecondLowestBps;
+                tWorstChanged = tWorstBpsChanged;
             } else {
                 worstNode = worstNodePct; nLowest = nLowestPct; nSecondLowest = nSecondLowestPct;
+                tWorstChanged = tWorstPctChanged;
             }
-            if (pnode->GetId() == worstNode && ((((now - latestOutboundConn >= 60) || (nLowest == 0 && nSecondLowest > 0)) && (now - pnode->nTimeConnected >= 60) && (nLowest <= (nSecondLowest / 2))) || ((now - latestOutboundConn >= 180) && (now - pnode->nTimeConnected >= 180)))) {
+            if (pnode->GetId() == worstNode && (now - tWorstChanged >= 60) && ((nLowest <= (nSecondLowest / 2)) || ((now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: Pct = %d%% Bps = %s TimeConn = %d disconnect peer=%d\n", __func__, nByBps, nLowestPct, nLowestBps, now - pnode->nTimeConnected, pnode->GetId());
             }

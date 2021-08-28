@@ -1007,6 +1007,8 @@ void PeerManagerImpl::ProcessBlockAvailability(NodeId nodeid) {
     CNodeState *state = State(nodeid);
     if (state == nullptr) {
         LogPrintf("%s: ASSERT ERROR. peer=%d\n", __func__, nodeid);
+        fprintf(stderr, "%s: ASSERT ERROR. peer=%ld\n", __func__, nodeid);
+        fflush(stderr);
         return;
     }
 
@@ -1284,6 +1286,12 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         // processing here that assumes Peer won't be changed before it's
         // destructed.
         PeerRef peer = RemovePeer(nodeid);
+        if (peer == nullptr) {
+            LogPrintf("%s: ASSERT ERROR. no peer!\n", __func__);
+            fprintf(stderr, "%s: ASSERT ERROR. no peer!\n", __func__);
+            fflush(stderr);
+            return;
+        }
         assert(peer != nullptr);
         misbehavior = WITH_LOCK(peer->m_misbehavior_mutex, return peer->m_misbehavior_score);
     }
