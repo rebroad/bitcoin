@@ -1287,8 +1287,8 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         // destructed.
         PeerRef peer = RemovePeer(nodeid);
         if (peer == nullptr) {
-            LogPrintf("%s: ASSERT ERROR. no peer!\n", __func__);
-            fprintf(stderr, "%s: ASSERT ERROR. no peer!\n", __func__);
+            LogPrintf("%s: ASSERT ERROR. peer=%d\n", __func__, nodeid);
+            fprintf(stderr, "%s: ASSERT ERROR. peer=%ld\n", __func__, nodeid);
             fflush(stderr);
             return;
         }
