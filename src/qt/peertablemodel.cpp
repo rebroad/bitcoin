@@ -80,10 +80,17 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         //    return GUIUtil::NetworkToQString(rec->nodeStats.m_network);
         case Ping:
             return GUIUtil::formatPingTime(rec->nodeStats.m_min_ping_time);
-        case Sent:
-            return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8 / (rec->nodeStats.nLastSend+1 - rec->nodeStats.nTimeConnected));
-        case Recv:
-            return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8 / (rec->nodeStats.nLastRecv+1 - rec->nodeStats.nTimeConnected));
+        case Sent: {
+            int64_t now = GetTimeSeconds();
+            return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8 / (now + 1 - rec->nodeStats.nTimeConnected));
+        }
+        case Recv: {
+            int64_t now = GetTimeSeconds();
+            if (rec->nodeStats.nRecvBytes1stTx)
+                return GUIUtil::formatBps((rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx) * 8 / (now + 1 - rec->nodeStats.nTime1stTx));
+            else
+                return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8 / (now + 1 - rec->nodeStats.nTimeConnected));
+        }
         case TxPct: {
             int64_t now = GetTimeSeconds();
             std::string dots;
@@ -91,7 +98,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             else if (now - rec->nodeStats.nTimeConnected >= 60) dots=".";
             else dots="..";
             if (rec->nodeStats.nRecvBytes1stTx) {
-                int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
+                int nMempoolPct = 100 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes + 1 - rec->nodeStats.nRecvBytes1stTx);
                 return QString::fromStdString(strprintf("%s%d %%", dots, nMempoolPct));
             } else
                 return QString::fromStdString(dots);
@@ -100,7 +107,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             int64_t now = GetTimeSeconds();
             if (rec->nodeStats.nRecvBytes1stTx) {
                 //int nMempoolBps = 8 * rec->nodeStats.nMempoolBytes * rec->nodeStats.nRecvBytes / (now - rec->nodeStats.nTimeConnected + 1) / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
-                int nMempoolBps = 8 * rec->nodeStats.nMempoolBytes / (now - rec->nodeStats.nTime1stTx + 1);
+                int nMempoolBps = 8 * rec->nodeStats.nMempoolBytes / (now + 1 - rec->nodeStats.nTime1stTx);
                 return GUIUtil::formatBps(nMempoolBps);
             } else
                 return QString::fromStdString("");

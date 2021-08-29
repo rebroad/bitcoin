@@ -1710,7 +1710,7 @@ void CConnman::SocketHandler()
             else if (nBytes == 0)
             {
                 // socket closed gracefully
-                if (!pnode->fDisconnect) {
+                if (!pnode->fDisconnect && errorSet) {
                     LogPrintf("%s: nBytes=0 recvSet=%d errorSet=%d Disconnect peer=%d\n", __func__, recvSet, errorSet,
                         pnode->GetId());
                 }
