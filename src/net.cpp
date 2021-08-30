@@ -1723,10 +1723,8 @@ void CConnman::SocketHandler()
             else if (nBytes == 0)
             {
                 // socket closed gracefully
-                if (!pnode->fDisconnect && errorSet) {
-                    LogPrintf("%s: nBytes=0 recvSet=%d errorSet=%d Disconnect peer=%d\n", __func__, recvSet, errorSet,
-                        pnode->GetId());
-                }
+                if (!pnode->fDisconnect && !pnode->IsInboundConn())
+                    LogPrintf("%s: nBytes=0 recvSet=%d errorSet=%d Disconnect peer=%d\n", __func__, recvSet, errorSet, pnode->GetId());
                 pnode->CloseSocketDisconnect();
             }
             else if (nBytes < 0)
