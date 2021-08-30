@@ -1580,21 +1580,25 @@ void CConnman::SocketHandler()
     for (CNode* pnode : vNodesCopy) {
         pnode->AddRef();
         if (now != lastnow) {
-            int nRecvBytes;
+            int nRecvBytes; int nSendBytes;
             {
                 LOCK(pnode->cs_vRecv);
                 nRecvBytes = pnode->nRecvBytes;
+            }
+            {
+                LOCK(pnode->cs_vSend);
+                nSendBytes = pnode->nSendBytes;
             }
             int nMempoolBytes = pnode->nMempoolBytes;
             int nMempoolTXs = pnode->nMempoolTXs;
             nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
             nTotalMempoolBytes += nMempoolBytes;
             if (pnode->nRecvBytes1stTx) IsIBD = false;
+            double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
             if (pnode->IsFullOutboundConn()) {
                 latestNode = pnode->GetId();
                 nOutboundFullRelay++;
                 if (pnode->nTimeConnected > latestOutboundConn) latestOutboundConn = pnode->nTimeConnected;
-                double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
                 nLatestNodePct = nMempoolPct;
                 if (nMempoolPct <= nLowestPct) {
                     if (nMempoolPct < nLowestPct) {
@@ -1625,14 +1629,22 @@ void CConnman::SocketHandler()
                     }
                     worstNodeTXpm = pnode->GetId();
                 }
-            } // if (pnode->IsFullOutboundConn())
+            } else if (pnode->IsInboundConn()) {
+                int nRecvBps = nRecvBytes / (now + 1 - pnode->nTimeConnected);
+                int nSendBps = nSendBytes / (now + 1 - pnode->nTimeConnected);
+                if ((now - pnode->nTimeConnected >= 180) && (nMempoolPct < 10) && ((nRecvBps > 100) || (nSendBps > 1000))) {
+                    LOCK(pnode->cs_SubVer);
+                    pnode->fDisconnect = 1;
+                    LogPrintf("%s: Pct=%d%% Send=%s Recv=%s TimeConn=%d %s disconnect incoming peer=%d\n", __func__, nMempoolPct, nSendBps, nRecvBps, now - pnode->nTimeConnected, pnode->cleanSubVer, pnode->GetId());
+                }
+            }
         } // if (now != lastnow)
     } // for (CNode* pnode : vNodesCopy)
 
     int nByBps = (now / 5400) % 2;
     bool fLatestNodeBpsDegrading = false;
     bool fLatestNodePctDegrading = false;
-    if (!IsIBD && now != lastnow) {
+    if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
         if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps) {
             LogPrintf("%s: worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d) Bps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, nByBps, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, nLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
             lastWorstTXpm = worstNodeTXpm;
@@ -1655,6 +1667,7 @@ void CConnman::SocketHandler()
         if (interruptNet)
             return;
 
+        // Evict worst performing outbound connection
         if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
             int worstNode; int nLowest; int nSecondLowest; int64_t tWorstChanged; bool fLatestNodeDegrading;
             if (nByBps) { // Change every 90 minutes
@@ -1664,7 +1677,7 @@ void CConnman::SocketHandler()
                 worstNode = worstNodePct; nLowest = nLowestPct; nSecondLowest = nSecondLowestPct;
                 tWorstChanged = tWorstPctChanged; fLatestNodeDegrading = fLatestNodePctDegrading;
             }
-            if ((pnode->GetId() == worstNode) && (now - tWorstChanged >= 60) && (!fLatestNodeDegrading || worstNode == latestNode) && ((nLowest <= (nSecondLowest / 2)) || ((now - latestOutboundConn >= 120)))) {
+            if ((pnode->GetId() == worstNode) && (now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && ((nLowest <= (nSecondLowest / 2)) || ((now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: Pct = %d%% Bps = %s TimeConn = %d disconnect peer=%d\n", __func__, nByBps, nLowestPct, nLowestBps, now - pnode->nTimeConnected, pnode->GetId());
             }
