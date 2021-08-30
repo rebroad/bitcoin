@@ -1188,14 +1188,16 @@ void PeerManagerImpl::PushNodeVersion(CNode& pnode, int64_t nTime)
     CAddress addrMe = CAddress(CService(), nLocalNodeServices);
 
     const bool tx_relay = !m_ignore_incoming_txs && pnode.m_tx_relay != nullptr;
-    m_connman.PushMessage(&pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
+    std::string cleanSubVer;
+    {
+        LOCK(pnode.cs_SubVer);
+        cleanSubVer = pnode.cleanSubVer;
+    }
+    bool fBitnodes = (cleanSubVer.find("bitnodes") != std::string::npos);
+    m_connman.PushMessage(&pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, fBitnodes ? 70016 : PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
             nonce, strSubVersion, nNodeStartingHeight, tx_relay));
 
-    if (fLogIPs) {
-        LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s, them=%s, txrelay=%d, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, addrMe.ToString(), addrYou.ToString(), tx_relay, nodeid);
-    } else {
-        LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, addrMe.ToString(), tx_relay, nodeid);
-    }
+    LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s%s, txrelay=%d, peer=%d\n", fBitnodes ? 70016 : PROTOCOL_VERSION, nNodeStartingHeight, addrMe.ToString(), fLogIPs ? ", them=" + addrYou.ToString() : "", tx_relay, nodeid);
 }
 
 void PeerManagerImpl::AddTxAnnouncement(const CNode& node, const GenTxid& gtxid, std::chrono::microseconds current_time)
@@ -2872,7 +2874,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (fLogIPs)
             remoteAddr = ", peeraddr=" + pfrom.addr.ToString();
 
-        LogPrint(BCLog::NET, "receive version message: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
+        bool fBitnodes = (cleanSubVer.find("bitnodes") != std::string::npos);
+        LogPrint(fBitnodes ? BCLog::ALL : BCLog::NET, "recv version message: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
                   cleanSubVer, pfrom.nVersion,
                   peer->m_starting_height, addrMe.ToString(), fRelay, pfrom.GetId(),
                   remoteAddr);
