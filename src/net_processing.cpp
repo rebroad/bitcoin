@@ -1193,11 +1193,17 @@ void PeerManagerImpl::PushNodeVersion(CNode& pnode, int64_t nTime)
         LOCK(pnode.cs_SubVer);
         cleanSubVer = pnode.cleanSubVer;
     }
-    bool fBitnodes = (cleanSubVer.find("bitnodes") != std::string::npos);
-    m_connman.PushMessage(&pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, fBitnodes ? 70016 : PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
+    int nProtVersion = PROTOCOL_VERSION;
+    if (cleanSubVer.find("bitnodes") != std::string::npos)
+        nProtVersion = gArgs.GetArg("-bitnodeprotocolversion", 70016);
+    //if (pnode->IsInboundConn() && !fBitnodes) {
+    //    pnode->fDisconnect = true;
+    //    return;
+    //}
+    m_connman.PushMessage(&pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, nProtVersion, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
             nonce, strSubVersion, nNodeStartingHeight, tx_relay));
 
-    LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s%s, txrelay=%d, peer=%d\n", fBitnodes ? 70016 : PROTOCOL_VERSION, nNodeStartingHeight, addrMe.ToString(), fLogIPs ? ", them=" + addrYou.ToString() : "", tx_relay, nodeid);
+    LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s%s, txrelay=%d, peer=%d\n", nProtVersion, nNodeStartingHeight, addrMe.ToString(), fLogIPs ? ", them=" + addrYou.ToString() : "", tx_relay, nodeid);
 }
 
 void PeerManagerImpl::AddTxAnnouncement(const CNode& node, const GenTxid& gtxid, std::chrono::microseconds current_time)
