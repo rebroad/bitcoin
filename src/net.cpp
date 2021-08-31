@@ -1312,15 +1312,15 @@ void CConnman::NotifyNumConnectionsChanged()
     {
         LOCK(cs_vNodes);
         vNodesSize = vNodes.size();
+        if (vNodesSize != nPrevNodeCount && vNodesSize == 0) {
+            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+            ResetNewNodeId();
+        }
     }
     if(vNodesSize != nPrevNodeCount) {
         nPrevNodeCount = vNodesSize;
         if(clientInterface)
             clientInterface->NotifyNumConnectionsChanged(vNodesSize); // REBTODO - what's this?
-        if (vNodesSize == 0) {
-            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
-            ResetNewNodeId();
-        }
     }
 }
 
@@ -1546,6 +1546,14 @@ void CConnman::SocketHandler()
     //
     // Service each socket
     //
+    std::vector<CNode*> vNodesCopy;
+    {
+        LOCK(cs_vNodes);
+        vNodesCopy = vNodes;
+        for (CNode* pnode : vNodesCopy)
+            pnode->AddRef();
+    }
+
     int64_t latestOutboundConn = 0;
     uint64_t nTotalBytesRecv = 0;
     uint64_t nTotalMempoolBytes = 0;
@@ -1565,7 +1573,6 @@ void CConnman::SocketHandler()
     static NodeId lastWorstPct = -1;
     static NodeId lastWorstTXpm = -1;
     static NodeId lastWorstBps = -1;
-    std::vector<CNode*> vNodesCopy;
     int nGlobalTXpm = 0;
     int nGlobalBps = 0;
     const int64_t now = GetTimeSeconds();
@@ -1573,12 +1580,7 @@ void CConnman::SocketHandler()
     static int64_t tWorstBpsChanged = now;
     static int64_t lastnow = 0;
     bool IsIBD = true;
-    {
-        LOCK(cs_vNodes);
-        vNodesCopy = vNodes;
-    }
     for (CNode* pnode : vNodesCopy) {
-        pnode->AddRef();
         if (now != lastnow) {
             int nRecvBytes; int nSendBytes;
             {
@@ -1632,7 +1634,7 @@ void CConnman::SocketHandler()
             } else if (pnode->IsInboundConn()) {
                 int nRecvBps = 8 * nRecvBytes / (now + 1 - pnode->nTimeConnected);
                 int nSendBps = 8 * nSendBytes / (now + 1 - pnode->nTimeConnected);
-                if ((now - pnode->nTimeConnected >= 180) && (nMempoolPct < 10) && ((nRecvBps > 100) || (nSendBps > 1500))) {
+                if ((now - pnode->nTimeConnected >= 120) && (nMempoolPct < 10) && ((nRecvBps > 120) || (nSendBps > 1200))) {
                     LOCK(pnode->cs_SubVer);
                     pnode->fDisconnect = 1;
                     LogPrintf("%s: Pct=%d%% Send=%s Recv=%s TimeConn=%d %s disconnect incoming peer=%d\n", __func__, nMempoolPct, nSendBps, nRecvBps, now - pnode->nTimeConnected, pnode->cleanSubVer, pnode->GetId());
