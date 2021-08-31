@@ -81,6 +81,8 @@ static constexpr std::chrono::seconds MAX_UPLOAD_TIMEFRAME{60 * 60 * 24};
 
 // We add a random period time (0 to 1 seconds) to feeler connections to prevent synchronization.
 #define FEELER_SLEEP_WINDOW 1
+/** Run the feeler connection loop once every 5 seconds. **/
+static constexpr auto FEELER_INTERVAL = 5s;
 
 /** Used to pass flags to the Bind() function */
 enum BindFlags {

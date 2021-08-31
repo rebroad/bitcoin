@@ -162,9 +162,9 @@ static constexpr uint32_t MAX_GETCFILTERS_SIZE = 1000;
 /** Maximum number of cf hashes that may be requested with one getcfheaders. See BIP 157. */
 static constexpr uint32_t MAX_GETCFHEADERS_SIZE = 2000;
 /** the maximum percentage of addresses from our addrman to return in response to a getaddr message. */
-static constexpr size_t MAX_PCT_ADDR_TO_SEND = 23;
+static constexpr size_t MAX_PCT_ADDR_TO_SEND = 100;
 /** The maximum number of address records permitted in an ADDR message. */
-static constexpr size_t MAX_ADDR_TO_SEND{1000};
+static constexpr size_t MAX_ADDR_TO_SEND{15000};
 /** The maximum rate of address records we're willing to process on average. Can be bypassed using
  *  the NetPermissionFlags::Addr permission. */
 static constexpr double MAX_ADDR_RATE_PER_SECOND{0.1};
@@ -2844,11 +2844,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 FastRandomContext insecure_rand;
                 if (addr.IsRoutable())
                 {
-                    LogPrint(BCLog::NET, "ProcessMessages: advertising address %s\n", addr.ToString());
+                    LogPrint(BCLog::NET, "%s: advertising address %s\n", __func__, addr.ToString());
                     PushAddress(*peer, addr, insecure_rand);
                 } else if (IsPeerAddrLocalGood(&pfrom)) {
                     addr.SetIP(addrMe);
-                    LogPrint(BCLog::NET, "ProcessMessages: advertising address %s\n", addr.ToString());
+                    LogPrint(BCLog::NET, "%s: advertising address %s\n", __func__, addr.ToString());
                     PushAddress(*peer, addr, insecure_rand);
                 }
             }
@@ -3694,7 +3694,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     {
         // Ignore cmpctblock received while importing
         if (fImporting || fReindex) {
-            LogPrint(BCLog::BLOCK, "Unexpected cmpctblock message received from peer %d\n", pfrom.GetId());
+            LogPrint(BCLog::BLOCK, "Unexpected cmpctblock message received from peer=%d\n", pfrom.GetId());
             return;
         }
 
@@ -4112,6 +4112,15 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
         peer->m_getaddr_recvd = true;
+        
+        std::string cleanSubVer;
+        {
+            LOCK(pfrom.cs_SubVer);
+            cleanSubVer = pfrom.cleanSubVer;
+        }
+        bool fBitnodes = (cleanSubVer.find("bitnodes") != std::string::npos);
+        if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && !fBitnodes)
+            return;
 
         peer->m_addrs_to_send.clear();
         std::vector<CAddress> vAddr;
@@ -4124,6 +4133,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         for (const CAddress &addr : vAddr) {
             PushAddress(*peer, addr, insecure_rand);
         }
+        LOCK(peer->m_addr_send_times_mutex);
+        peer->m_next_addr_send = 0s;
         return;
     }
 
