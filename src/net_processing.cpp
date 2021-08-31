@@ -1891,9 +1891,12 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         (((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
         !pfrom.HasPermission(NetPermissionFlags::Download) // nodes with the download permission may exceed target
     ) {
-        LogPrintf("historical block (%d) serving limit reached, disconnect peer=%d\n", pindex->nHeight, pfrom.GetId());
-        pfrom.fDisconnect = true;
-        return;
+        LOCK(pfrom.cs_SubVer);
+        if (pfrom.cleanSubVer.find("bitnodes") == std::string::npos) {
+            LogPrintf("historical block (%d) serving limit reached, %s disconnect peer=%d\n", pindex->nHeight, pfrom.cleanSubVer, pfrom.GetId());
+            pfrom.fDisconnect = true;
+            return;
+        }
     }
     // Avoid leaking prune-height by never sending blocks below the NODE_NETWORK_LIMITED threshold
     if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && (
