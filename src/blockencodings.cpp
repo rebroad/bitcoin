@@ -70,7 +70,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
             // have neither a prefilled txn or a shorttxid!
             return READ_STATUS_INVALID;
         }
-        txn_available[lastprefilledindex] = cmpctblock.prefilledtxn[i].tx;
+        txn_available[lastprefilledindex] = cmpctblock.prefilledtxn[i].tx; // REBTODO - where is txn_available defined?
     }
     prefilled_count = cmpctblock.prefilledtxn.size();
 
@@ -105,6 +105,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     std::vector<bool> have_txn(txn_available.size());
     {
     LOCK(pool->cs);
+    LogPrintf("%s: pool->vTxHashes.size() = %d\n", __func__, pool->vTxHashes.size()); // REBTODO where is vTxHashes created?
     for (size_t i = 0; i < pool->vTxHashes.size(); i++) {
         uint64_t shortid = cmpctblock.GetShortID(pool->vTxHashes[i].first);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);

@@ -1196,14 +1196,11 @@ void PeerManagerImpl::PushNodeVersion(CNode& pnode, int64_t nTime)
     int nProtVersion = PROTOCOL_VERSION;
     if (cleanSubVer.find("bitnodes") != std::string::npos)
         nProtVersion = gArgs.GetArg("-bitnodeprotocolversion", 70016);
-    //if (pnode->IsInboundConn() && !fBitnodes) {
-    //    pnode->fDisconnect = true;
-    //    return;
-    //}
     m_connman.PushMessage(&pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, nProtVersion, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
             nonce, strSubVersion, nNodeStartingHeight, tx_relay));
 
-    LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, us=%s%s, txrelay=%d, peer=%d\n", nProtVersion, nNodeStartingHeight, addrMe.ToString(), fLogIPs ? ", them=" + addrYou.ToString() : "", tx_relay, nodeid);
+    bool fLoggy = pnode.HasPermission(NetPermissionFlags::NoBan);
+    LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "send version: version %d, blocks=%d, us=%s%s, txrelay=%d, peer=%d\n", nProtVersion, nNodeStartingHeight, addrMe.ToString(), fLogIPs ? ", them=" + addrYou.ToString() : "", tx_relay, nodeid);
 }
 
 void PeerManagerImpl::AddTxAnnouncement(const CNode& node, const GenTxid& gtxid, std::chrono::microseconds current_time)
@@ -1334,7 +1331,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     unsigned int nMaxOrphans = (unsigned int)std::max((int64_t)0, gArgs.GetArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
     if (nBlocksInFlight || nErasedOrphans) {
         int64_t nNow = GetTime();
-        LogPrintf("%s: %s%sfDisconnect=%d LastRecv=%d LastSend=%d disconnecting peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight. ", nBlocksInFlight) : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, nNow - node.nLastRecv, nNow - node.nLastSend, nodeid);
+        LogPrintf("%s: %s%sfDisc=%d LastRecv=%d LastSend=%d disconnecting peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight. ", nBlocksInFlight) : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, nNow - node.nLastRecv, nNow - node.nLastSend, nodeid);
     }
 
     if (mapNodeState.empty()) {
@@ -2883,8 +2880,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (fLogIPs)
             remoteAddr = ", peeraddr=" + pfrom.addr.ToString();
 
-        bool fWhite = (pfrom.HasPermission(NetPermissionFlags::NoBan));
-        LogPrint(fWhite ? BCLog::ALL : BCLog::NET, "recv version message: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
+        bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsFullOutboundConn());
+        LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
                   cleanSubVer, pfrom.nVersion,
                   peer->m_starting_height, addrMe.ToString(), fRelay, pfrom.GetId(),
                   remoteAddr);
