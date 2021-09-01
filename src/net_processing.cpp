@@ -1891,8 +1891,8 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         (((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
         !pfrom.HasPermission(NetPermissionFlags::Download) // nodes with the download permission may exceed target
     ) {
-        LOCK(pfrom.cs_SubVer);
-        if (pfrom.cleanSubVer.find("bitnodes") == std::string::npos) {
+        if (!pfrom.HasPermission(NetPermissionFlags::NoBan)) {
+            LOCK(pfrom.cs_SubVer);
             LogPrintf("historical block (%d) serving limit reached, %s disconnect peer=%d\n", pindex->nHeight, pfrom.cleanSubVer, pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
@@ -2883,8 +2883,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (fLogIPs)
             remoteAddr = ", peeraddr=" + pfrom.addr.ToString();
 
-        bool fBitnodes = (cleanSubVer.find("bitnodes") != std::string::npos);
-        LogPrint(fBitnodes ? BCLog::ALL : BCLog::NET, "recv version message: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
+        bool fWhite = (pfrom.HasPermission(NetPermissionFlags::NoBan));
+        LogPrint(fWhite ? BCLog::ALL : BCLog::NET, "recv version message: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
                   cleanSubVer, pfrom.nVersion,
                   peer->m_starting_height, addrMe.ToString(), fRelay, pfrom.GetId(),
                   remoteAddr);
@@ -4118,8 +4118,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LOCK(pfrom.cs_SubVer);
             cleanSubVer = pfrom.cleanSubVer;
         }
-        bool fBitnodes = (cleanSubVer.find("bitnodes") != std::string::npos);
-        if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && !fBitnodes)
+        if (!pfrom.HasPermission(NetPermissionFlags::NoBan))
             return;
 
         peer->m_addrs_to_send.clear();
