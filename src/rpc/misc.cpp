@@ -766,6 +766,7 @@ static RPCHelpMan bitnodeprotocolversion()
     if (nNumber < 0)
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("bitnodeprotocolversion %d is invalid", nNumber));
     gArgs.ForceSetArg("-bitnodeprotocolversion", strprintf("%d", nNumber));
+    LogPrintf("Update bitnodeprotocolversion to %d\n", nNumber);
 
     return NullUniValue;
 }
