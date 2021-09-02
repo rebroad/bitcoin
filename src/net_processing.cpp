@@ -3829,7 +3829,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     if (!partialBlock.IsTxAvailable(i, nodeid, nTime, nSize))
                         req.indexes.push_back(i);
                     else {
-                        if ((nodeid >= 0) && State(nodeid) && nTime >= m_last_no_connections) {
+                        if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             State(nodeid)->nMempoolBytes += nSize;
                             State(nodeid)->nMempoolTXs++;
                         } else {
