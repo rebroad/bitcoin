@@ -965,8 +965,8 @@ size_t CTxMemPool::DynamicMemoryUsage(bool fDebug/*=false*/) const {
         static auto oldthree = 0;
         static auto oldfour = 0;
         static auto oldsix = 0;
-        LogPrintf("nextTx %d->%d, deltas %d->%d, TxHashes %d->%d, mapTx %d->%d\n",
-           oldtwo, two, oldthree, three, oldfour, four, oldsix, six);
+        //LogPrintf("nextTx %d->%d, deltas %d->%d, TxHashes %d->%d, mapTx %d->%d\n",
+        //   oldtwo, two, oldthree, three, oldfour, four, oldsix, six);
         oldtwo = two; oldthree = three; oldfour = four; oldsix = six;
     }
     return memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 15 * sizeof(void*)) * mapTx.size() + memusage::DynamicUsage(mapNextTx) + memusage::DynamicUsage(mapDeltas) + memusage::DynamicUsage(vTxHashes) + cachedInnerUsage;

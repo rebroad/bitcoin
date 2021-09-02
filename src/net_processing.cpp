@@ -3826,12 +3826,17 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 BlockTransactionsRequest req;
                 for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
-                    if (!partialBlock.IsTxAvailable(i, nodeid, nTime, nSize)) // REBTODO - here we add MempoolBytes for the ones we had.
+                    if (!partialBlock.IsTxAvailable(i, nodeid, nTime, nSize))
                         req.indexes.push_back(i);
-                    else
-                        LogPrintf("%s: %susing a tx age=% size=%ds %speer=%d\n", __func__,
-                            nTime < m_last_no_connections ? "NOT " : "",
+                    else {
+                        LogPrintf("%s: %susing tx[%d] age=%s size=%d %speer=%d\n", __func__,
+                            nTime < m_last_no_connections ? "NOT " : "", i,
                             strAge(GetTime() - nTime), nSize, nTime < m_last_no_connections ? "previous " : "", nodeid);
+                        if ((nodeid >= 0) && State(nodeid)) {
+                            State(nodeid)->nMempoolBytes += nSize;
+                            State(nodeid)->nMempoolTXs++;
+                        }
+                    }
                 }
                 if (req.indexes.empty()) {
                     LogPrintf("%s: req.index.empty() peer=%d\n", __func__, pfrom.GetId()); // REBTEMP

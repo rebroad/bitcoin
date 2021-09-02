@@ -56,6 +56,8 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     header = cmpctblock.header;
     txn_available.resize(cmpctblock.BlockTxCount());
     txn_peer.resize(cmpctblock.BlockTxCount());
+    txn_time.resize(cmpctblock.BlockTxCount());
+    txn_size.resize(cmpctblock.BlockTxCount());
 
     int32_t lastprefilledindex = -1;
     for (size_t i = 0; i < cmpctblock.prefilledtxn.size(); i++) {
@@ -118,7 +120,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                     nothavenotnull++;
                 txn_available[idit->second] = pool->vTxHashes[i].second->GetSharedTx();
                 txn_peer[idit->second] = pool->vTxHashes[i].second->GetPeer();
-                txn_time[idit->second] = pool->vTxHashes[i].second->GetTime().count();
+                txn_time[idit->second] = (pool->vTxHashes[i].second->GetTime()).count();
                 txn_size[idit->second] = pool->vTxHashes[i].second->GetTxSize();
                 have_txn[idit->second] = true;
                 mempool_count++;
