@@ -349,7 +349,7 @@ void CChainState::MaybeUpdateMempoolForReorg(
         // ignore validation errors in resurrected transactions
         if (!fAddToMempool || (*it)->IsCoinBase() ||
             AcceptToMemoryPool(
-                *this, *m_mempool, *it, -1, true /* bypass_limits */).m_result_type !=
+                *this, *m_mempool, *it, -4, true /* bypass_limits */).m_result_type !=
                     MempoolAcceptResult::ResultType::VALID) {
             // If the transaction doesn't make it in to the mempool, remove any
             // transactions that depend on it (which would now be orphans).
@@ -1152,7 +1152,7 @@ PackageMempoolAcceptResult ProcessNewPackage(CChainState& active_chainstate, CTx
 
     std::vector<COutPoint> coins_to_uncache;
     const CChainParams& chainparams = Params();
-    MemPoolAccept::ATMPArgs args { chainparams, GetTime(), -1, /* bypass_limits */ false, coins_to_uncache,
+    MemPoolAccept::ATMPArgs args { chainparams, GetTime(), -3, /* bypass_limits */ false, coins_to_uncache,
                                    test_accept, /* m_allow_bip125_replacement */ false };
     const PackageMempoolAcceptResult result = MemPoolAccept(pool, active_chainstate).AcceptMultipleTransactions(package, args);
 
@@ -4573,7 +4573,7 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
             }
             if (nTime > nNow - nExpiryTimeout) {
                 LOCK(cs_main);
-                if (AcceptToMemoryPoolWithTime(chainparams, pool, active_chainstate, tx, nTime, -1, false /* bypass_limits */,
+                if (AcceptToMemoryPoolWithTime(chainparams, pool, active_chainstate, tx, nTime, -2, false /* bypass_limits */,
                                                false /* test_accept */).m_result_type == MempoolAcceptResult::ResultType::VALID) {
                     ++count;
                 } else {

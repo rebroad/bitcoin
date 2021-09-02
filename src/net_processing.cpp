@@ -437,7 +437,7 @@ private:
     int64_t m_stale_tip_check_time{0};
 
     /** Last time we had no connections */
-    int64_t m_last_no_connections{0};
+    int64_t m_last_no_connections{GetTime()};
 
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
@@ -3829,12 +3829,21 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     if (!partialBlock.IsTxAvailable(i, nodeid, nTime, nSize))
                         req.indexes.push_back(i);
                     else {
-                        LogPrintf("%s: %susing tx[%d] age=%s size=%d %speer=%d\n", __func__,
-                            nTime < m_last_no_connections ? "NOT " : "", i,
-                            strAge(GetTime() - nTime), nSize, nTime < m_last_no_connections ? "previous " : "", nodeid);
-                        if ((nodeid >= 0) && State(nodeid)) {
+                        if ((nodeid >= 0) && State(nodeid) && nTime >= m_last_no_connections) {
                             State(nodeid)->nMempoolBytes += nSize;
                             State(nodeid)->nMempoolTXs++;
+                        } else {
+                            std::string strFrom;
+                            if (nodeid == -2)
+                                strFrom = strprintf("from mempool.dat");
+                            else if (nodeid == -3)
+                                strFrom = strprintf("from package");
+                            else if (nodeid == -4)
+                                strFrom = strprintf("from reorg");
+                            else
+                                strFrom = strprintf("from absent peer=%d\n", nodeid);
+                            LogPrintf("%s: tx[%d] age=%s%s size=%d %s\n", __func__, i,
+                                strAge(GetTime() - nTime), nTime >= m_last_no_connections ? " (current)" : "", nSize, strFrom);
                         }
                     }
                 }
