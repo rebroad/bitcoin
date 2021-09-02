@@ -992,13 +992,13 @@ bool MemPoolAccept::Finalize(const ATMPArgs& args, Workspace& ws)
     // Remove conflicting transactions from the mempool
     for (CTxMemPool::txiter it : allConflicting)
     {
-        LogPrint(BCLog::MEMPOOL, "replacing tx %s -> %s for %s more fees, %d delta bytes peer %d->%d\n",
+        LogPrintf("replacing tx %s -> %s for %s more fees, %d delta bytes peer %d->%d\n",
                 it->GetTx().GetHash().ToString(),
                 hash.ToString(),
                 FormatMoney(nModifiedFees - nConflictingFees),
                 (int)entry->GetTxSize() - (int)nConflictingSize,
                 it->GetPeer(), entry->GetPeer());
-        ws.m_replaced_transactions.push_back(it->GetSharedTx());
+        ws.m_replaced_transactions.push_back(it->GetSharedTx()); // REBTODO - could include peer in this info
     }
     m_pool.RemoveStaged(allConflicting, false, MemPoolRemovalReason::REPLACED);
 

@@ -3824,7 +3824,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
 
                 BlockTransactionsRequest req;
-                for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
+                for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, nodeid, nTime, nSize))
                         req.indexes.push_back(i);
@@ -3834,14 +3834,16 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                             State(nodeid)->nMempoolTXs++;
                         } else {
                             std::string strFrom;
-                            if (nodeid == -2)
-                                strFrom = strprintf("from mempool.dat");
+                            if (nodeid == -1)
+                                strFrom = "from extra";
+                            else if (nodeid == -2)
+                                strFrom = "from mempool.dat";
                             else if (nodeid == -3)
-                                strFrom = strprintf("from package");
+                                strFrom = "from package";
                             else if (nodeid == -4)
-                                strFrom = strprintf("from reorg");
+                                strFrom = "from reorg";
                             else
-                                strFrom = strprintf("from absent peer=%d\n", nodeid);
+                                strFrom = strprintf("from absent peer=%d", nodeid);
                             LogPrintf("%s: tx[%d] age=%s%s size=%d %s\n", __func__, i,
                                 strAge(GetTime() - nTime), nTime >= m_last_no_connections ? " (current)" : "", nSize, strFrom);
                         }

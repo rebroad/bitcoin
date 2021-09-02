@@ -120,7 +120,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                     nothavenotnull++;
                 txn_available[idit->second] = pool->vTxHashes[i].second->GetSharedTx();
                 txn_peer[idit->second] = pool->vTxHashes[i].second->GetPeer();
-                txn_time[idit->second] = (pool->vTxHashes[i].second->GetTime()).count();
+                txn_time[idit->second] = pool->vTxHashes[i].second->GetTime().count();
                 txn_size[idit->second] = pool->vTxHashes[i].second->GetTxSize();
                 have_txn[idit->second] = true;
                 mempool_count++;
@@ -152,7 +152,8 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
                 txn_available[idit->second] = extra_txn[i].second;
-                have_txn[idit->second]  = true;
+                txn_peer[idit->second] = -1;
+                have_txn[idit->second] = true;
                 mempool_count++;
                 extra_count++;
             } else {
