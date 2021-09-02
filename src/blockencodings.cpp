@@ -46,7 +46,7 @@ uint64_t CBlockHeaderAndShortTxIDs::GetShortID(const uint256& txhash) const {
 
 
 
-ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<uint256, CTransactionRef>>& extra_txn) {
+ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<uint256, std::pair<CTransactionRef, NodeId>>>& extra_txn) {
     if (cmpctblock.header.IsNull() || (cmpctblock.shorttxids.empty() && cmpctblock.prefilledtxn.empty()))
         return READ_STATUS_INVALID;
     if (cmpctblock.shorttxids.size() + cmpctblock.prefilledtxn.size() > MAX_BLOCK_WEIGHT / MIN_SERIALIZABLE_TRANSACTION_WEIGHT)
@@ -152,10 +152,10 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
-                txn_available[idit->second] = extra_txn[i].second;
-                txn_peer[idit->second] = -1; // REBTODO - change extra_txn to include nodeid
+                txn_available[idit->second] = extra_txn[i].second.first;
+                txn_peer[idit->second] = extra_txn[i].second.second;
                 txn_time[idit->second] = GetTime();
-                txn_size[idit->second] = extra_txn[i].second->GetTotalSize();
+                txn_size[idit->second] = extra_txn[i].second.first->GetTotalSize();
                 have_txn[idit->second] = true;
                 mempool_count++;
                 extra_count++;
@@ -167,7 +167,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 // Note that we don't want duplication between extra_txn and mempool to
                 // trigger this case, so we compare witness hashes first
                 if (txn_available[idit->second] &&
-                        txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second->GetWitnessHash()) {
+                        txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second.first->GetWitnessHash()) {
                     txn_available[idit->second].reset();
                     txn_peer[idit->second] = -1; // For extra RESET2
                     txn_time[idit->second] = GetTime()+20;
