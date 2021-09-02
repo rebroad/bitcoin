@@ -3843,9 +3843,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                             else if (nodeid == -4)
                                 strFrom = "from reorg";
                             else
-                                strFrom = strprintf("from absent peer=%d", nodeid);
-                            LogPrintf("%s: tx[%d] age=%s%s size=%d %s\n", __func__, i,
-                                strAge(GetTime() - nTime), nTime >= m_last_no_connections ? " (current)" : "", nSize, strFrom);
+                                strFrom = strprintf("from %s peer=%d", nTime >= m_last_no_connections ? "disconnected":"previous", nodeid);
+                            LogPrintf("%s: tx[%d] age=%s size=%d %s\n", __func__, i, strAge(GetTime() - nTime), nSize, strFrom);
                         }
                     }
                 }
