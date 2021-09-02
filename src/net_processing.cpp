@@ -436,6 +436,9 @@ private:
     /** Next time to check for stale tip */
     int64_t m_stale_tip_check_time{0};
 
+    /** Last time we had no connections */
+    int64_t m_last_no_connections{0};
+
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
 
@@ -1343,6 +1346,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         assert(m_wtxid_relay_peers == 0);
         assert(m_txrequest.Size() == 0);
         assert(m_orphanage.Size() == 0);
+        m_last_no_connections = GetTime();
     }
     } // cs_main
     if (node.fSuccessfullyConnected && misbehavior == 0 &&
@@ -2384,7 +2388,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
 
         int64_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
 
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (from_peer)
+        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, from_peer, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (from_peer)
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
@@ -2753,14 +2757,50 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             SeenLocal(addrMe);
         }
 
-        // Inbound peers send us their version message when they connect.
-        // We send our version message in response.
-        if (pfrom.IsInboundConn()) PushNodeVersion(pfrom, GetAdjustedTime());
-
         // Change version
         const int greatest_common_version = std::min(nVersion, PROTOCOL_VERSION);
         pfrom.SetCommonVersion(greatest_common_version);
         pfrom.nVersion = nVersion;
+
+        pfrom.nServices = nServices;
+        pfrom.SetAddrLocal(addrMe);
+        {
+            LOCK(pfrom.cs_SubVer);
+            pfrom.cleanSubVer = cleanSubVer;
+        }
+        peer->m_starting_height = starting_height;
+
+        // set nodes not relaying blocks and tx and not serving (parts) of the historical blockchain as "clients"
+        pfrom.fClient = (!(nServices & NODE_NETWORK) && !(nServices & NODE_NETWORK_LIMITED));
+
+        // set nodes not capable of serving the complete blockchain history as "limited nodes"
+        pfrom.m_limited_node = (!(nServices & NODE_NETWORK) && (nServices & NODE_NETWORK_LIMITED));
+
+        if (pfrom.m_tx_relay != nullptr) {
+            LOCK(pfrom.m_tx_relay->cs_filter);
+            pfrom.m_tx_relay->fRelayTxes = fRelay; // set to true after we get the first filter* message
+            pfrom.m_tx_relay->lastRecvFeeFilter = -1;
+        }
+
+        if((nServices & NODE_WITNESS))
+        {
+            LOCK(cs_main);
+            State(pfrom.GetId())->fHaveWitness = true;
+        }
+
+        std::string remoteAddr;
+        if (fLogIPs)
+            remoteAddr = ", peeraddr=" + pfrom.addr.ToString();
+
+        bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsFullOutboundConn());
+        LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
+                  cleanSubVer, pfrom.nVersion,
+                  peer->m_starting_height, addrMe.ToString(), fRelay, pfrom.GetId(),
+                  remoteAddr);
+
+        // Inbound peers send us their version message when they connect.
+        // We send our version message in response.
+        if (pfrom.IsInboundConn()) PushNodeVersion(pfrom, GetAdjustedTime());
 
         const CNetMsgMaker msg_maker(greatest_common_version);
 
@@ -2789,32 +2829,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         m_connman.PushMessage(&pfrom, msg_maker.Make(NetMsgType::VERACK));
-
-        pfrom.nServices = nServices;
-        pfrom.SetAddrLocal(addrMe);
-        {
-            LOCK(pfrom.cs_SubVer);
-            pfrom.cleanSubVer = cleanSubVer;
-        }
-        peer->m_starting_height = starting_height;
-
-        // set nodes not relaying blocks and tx and not serving (parts) of the historical blockchain as "clients"
-        pfrom.fClient = (!(nServices & NODE_NETWORK) && !(nServices & NODE_NETWORK_LIMITED));
-
-        // set nodes not capable of serving the complete blockchain history as "limited nodes"
-        pfrom.m_limited_node = (!(nServices & NODE_NETWORK) && (nServices & NODE_NETWORK_LIMITED));
-
-        if (pfrom.m_tx_relay != nullptr) {
-            LOCK(pfrom.m_tx_relay->cs_filter);
-            pfrom.m_tx_relay->fRelayTxes = fRelay; // set to true after we get the first filter* message
-            pfrom.m_tx_relay->lastRecvFeeFilter = -1;
-        }
-
-        if((nServices & NODE_WITNESS))
-        {
-            LOCK(cs_main);
-            State(pfrom.GetId())->fHaveWitness = true;
-        }
 
         // Potentially mark this peer as a preferred download peer.
         {
@@ -2876,16 +2890,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             m_addrman.Good(pfrom.addr);
         }
 
-        std::string remoteAddr;
-        if (fLogIPs)
-            remoteAddr = ", peeraddr=" + pfrom.addr.ToString();
-
-        bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsFullOutboundConn());
-        LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
-                  cleanSubVer, pfrom.nVersion,
-                  peer->m_starting_height, addrMe.ToString(), fRelay, pfrom.GetId(),
-                  remoteAddr);
-
         int64_t nTimeOffset = nTime - GetTime();
         pfrom.nTimeOffset = nTimeOffset;
         AddTimeData(pfrom.addr, nTimeOffset);
@@ -2917,13 +2921,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (pfrom.fSuccessfullyConnected) {
             LogPrint(BCLog::NET, "ignoring redundant verack message from peer=%d\n", pfrom.GetId());
             return;
-        }
-
-        if (!pfrom.IsInboundConn()) {
-            LogPrintf("New outbound peer connected: version: %d, blocks=%d, peer=%d%s (%s)\n",
-                      pfrom.nVersion.load(), peer->m_starting_height,
-                      pfrom.GetId(), (fLogIPs ? strprintf(", peeraddr=%s", pfrom.addr.ToString()) : ""),
-                      pfrom.ConnectionTypeAsString());
         }
 
         if (pfrom.GetCommonVersion() >= SENDHEADERS_VERSION) {
@@ -3189,6 +3186,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         LOCK(cs_main);
+
+        if (State(pfrom.GetId())->nMempoolBytes) {
+            pfrom.nMempoolBytes += State(pfrom.GetId())->nMempoolBytes;
+            pfrom.nMempoolTXs += State(pfrom.GetId())->nMempoolTXs;
+            State(pfrom.GetId())->nMempoolBytes = 0;
+            State(pfrom.GetId())->nMempoolTXs = 0;
+        }
 
         const auto current_time = GetTime<std::chrono::microseconds>();
         uint256* best_block{nullptr};
@@ -3481,12 +3485,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LOCK2(cs_main, g_cs_orphans);
 
         CNodeState* nodestate = State(pfrom.GetId());
-        if (nodestate->nMempoolBytes) {
-            pfrom.nMempoolBytes += nodestate->nMempoolBytes;
-            pfrom.nMempoolTXs += nodestate->nMempoolTXs;
-            nodestate->nMempoolBytes = 0;
-            nodestate->nMempoolTXs = 0;
-        }
         if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
         if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
 
@@ -3534,7 +3532,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         m_reconciliation.TryRemovingFromReconSet(pfrom.GetId(), wtxid);
 
 	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, false /* bypass_limits */);
+        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, pfrom.GetId(), false /* bypass_limits */);
         const TxValidationState& state = result.m_state;
         bool fOrphanAdded = false;
 
@@ -3827,8 +3825,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
                 BlockTransactionsRequest req;
                 for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
-                    if (!partialBlock.IsTxAvailable(i))
+                    NodeId nodeid; int64_t nTime; unsigned int nSize;
+                    if (!partialBlock.IsTxAvailable(i, nodeid, nTime, nSize)) // REBTODO - here we add MempoolBytes for the ones we had.
                         req.indexes.push_back(i);
+                    else
+                        LogPrintf("%s: %susing a tx age=% size=%ds %speer=%d\n", __func__,
+                            nTime < m_last_no_connections ? "NOT " : "",
+                            strAge(GetTime() - nTime), nSize, nTime < m_last_no_connections ? "previous " : "", nodeid);
                 }
                 if (req.indexes.empty()) {
                     LogPrintf("%s: req.index.empty() peer=%d\n", __func__, pfrom.GetId()); // REBTEMP
@@ -3881,7 +3884,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (fProcessBLOCKTXN) {
             LogPrint(BCLog::BLOCK, "Calling ProcessMessage(BLOCKTXN) peer=%d\n", pfrom.GetId());
-            pfrom.nMempoolBytes += nSize;
+            pfrom.nMempoolBytes += nSize; // REBTODO - is this right?
             return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, time_received, interruptMsgProc);
         }
 

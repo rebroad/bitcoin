@@ -55,6 +55,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     assert(header.IsNull() && txn_available.empty());
     header = cmpctblock.header;
     txn_available.resize(cmpctblock.BlockTxCount());
+    txn_peer.resize(cmpctblock.BlockTxCount());
 
     int32_t lastprefilledindex = -1;
     for (size_t i = 0; i < cmpctblock.prefilledtxn.size(); i++) {
@@ -104,24 +105,34 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
 
     std::vector<bool> have_txn(txn_available.size());
     {
+    int haveandnull = 0; int haveandnotnull = 0; int nothaveandnull = 0; int nothavenotnull = 0;
     LOCK(pool->cs);
-    LogPrintf("%s: pool->vTxHashes.size() = %d\n", __func__, pool->vTxHashes.size()); // REBTODO where is vTxHashes created?
     for (size_t i = 0; i < pool->vTxHashes.size(); i++) {
         uint64_t shortid = cmpctblock.GetShortID(pool->vTxHashes[i].first);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
+                if (txn_available[idit->second] == nullptr)
+                    nothaveandnull++;
+                else
+                    nothavenotnull++;
                 txn_available[idit->second] = pool->vTxHashes[i].second->GetSharedTx();
-                have_txn[idit->second]  = true;
+                txn_peer[idit->second] = pool->vTxHashes[i].second->GetPeer();
+                txn_time[idit->second] = pool->vTxHashes[i].second->GetTime().count();
+                txn_size[idit->second] = pool->vTxHashes[i].second->GetTxSize();
+                have_txn[idit->second] = true;
                 mempool_count++;
             } else {
                 // If we find two mempool txn that match the short id, just request it.
                 // This should be rare enough that the extra bandwidth doesn't matter,
                 // but eating a round-trip due to FillBlock failure would be annoying
                 if (txn_available[idit->second]) {
+                    haveandnotnull++;
                     txn_available[idit->second].reset();
+                    txn_peer[idit->second] = -1;
                     mempool_count--;
-                }
+                } else
+                    haveandnull++;
             }
         }
         // Though ideally we'd continue scanning for the two-txn-match-shortid case,
@@ -130,6 +141,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         if (mempool_count == shorttxids.size())
             break;
     }
+    LogPrintf("%s: pool->vTxHashes.size()=%d mempool_count=%d han=%d hnn=%d nhn=%d nhnn=%d\n", __func__, pool->vTxHashes.size(), mempool_count, haveandnull, haveandnotnull, nothaveandnull, nothavenotnull); // REBTODO where is vTxHashes created?
     }
 
     for (size_t i = 0; i < extra_txn.size(); i++) {
@@ -151,6 +163,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 if (txn_available[idit->second] &&
                         txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second->GetWitnessHash()) {
                     txn_available[idit->second].reset();
+                    txn_peer[idit->second] = -1;
                     mempool_count--;
                     extra_count--;
                 }
@@ -168,9 +181,16 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     return READ_STATUS_OK;
 }
 
-bool PartiallyDownloadedBlock::IsTxAvailable(size_t index) const {
+bool PartiallyDownloadedBlock::IsTxAvailable(size_t index, NodeId& nodeid, int64_t& nTime, unsigned int& nSize) const {
     assert(!header.IsNull());
     assert(index < txn_available.size());
+
+    if (txn_available[index]) {
+        nodeid = txn_peer[index];
+        nTime = txn_time[index];
+        nSize = txn_size[index];
+    }
+
     return txn_available[index] != nullptr;
 }
 

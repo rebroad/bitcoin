@@ -22,9 +22,9 @@
 #include <optional>
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFee,
-                                 int64_t _nTime, unsigned int _entryHeight,
+                                 int64_t _nTime, NodeId _nodeid, unsigned int _entryHeight,
                                  bool _spendsCoinbase, int64_t _sigOpsCost, LockPoints lp)
-    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nMemDelta(1), nTime(_nTime), entryHeight(_entryHeight),
+    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nMemDelta(1), nTime(_nTime), nodeid(_nodeid), entryHeight(_entryHeight),
     spendsCoinbase(_spendsCoinbase), sigOpCost(_sigOpsCost), lockPoints(lp)
 {
     nCountWithDescendants = 1;
@@ -597,7 +597,6 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigne
         removeConflicts(*tx);
         ClearPrioritisation(tx->GetHash());
     }
-    lastRollingFeeUpdate = GetTime();
 }
 
 void CTxMemPool::_clear()
@@ -954,9 +953,22 @@ void CCoinsViewMemPool::PackageAddTransaction(const CTransactionRef& tx)
     }
 }
 
-size_t CTxMemPool::DynamicMemoryUsage() const {
+size_t CTxMemPool::DynamicMemoryUsage(bool fDebug/*=false*/) const {
     LOCK(cs); // REBTODO - seems quite guessy!
     // Estimate the overhead of mapTx to be 15 pointers + an allocation, as no exact formula for boost::multi_index_contained is implemented.
+    auto two = mapNextTx.size();
+    auto three = mapDeltas.size();
+    auto four = vTxHashes.size();
+    auto six = mapTx.size();
+    if (fDebug) {
+        static auto oldtwo = 0;
+        static auto oldthree = 0;
+        static auto oldfour = 0;
+        static auto oldsix = 0;
+        LogPrintf("nextTx %d->%d, deltas %d->%d, TxHashes %d->%d, mapTx %d->%d\n",
+           oldtwo, two, oldthree, three, oldfour, four, oldsix, six);
+        oldtwo = two; oldthree = three; oldfour = four; oldsix = six;
+    }
     return memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 15 * sizeof(void*)) * mapTx.size() + memusage::DynamicUsage(mapNextTx) + memusage::DynamicUsage(mapDeltas) + memusage::DynamicUsage(vTxHashes) + cachedInnerUsage;
 }
 
@@ -1047,6 +1059,7 @@ void CTxMemPool::trackPackageRemoved(const CFeeRate& rate) {
     if (rate.GetFeePerK() > rollingMinimumFeeRate) {
         rollingMinimumFeeRate = rate.GetFeePerK();
         bumpedMinimumFeeRate = rollingMinimumFeeRate;
+        lastRollingFeeUpdate = GetTime();
     }
 }
 

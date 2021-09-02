@@ -17,6 +17,7 @@
 #include <amount.h>
 #include <coins.h>
 #include <indirectmap.h>
+#include <net.h> // For NodeId
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -95,6 +96,7 @@ private:
     const size_t nUsageSize;        //!< ... and total memory usage
     size_t nMemDelta;               //!< Memory change after added
     const int64_t nTime;            //!< Local time when entering the mempool
+    const NodeId nodeid;            //!< Peer that provided the tx
     const unsigned int entryHeight; //!< Chain height when entering the mempool
     const bool spendsCoinbase;      //!< keep track of transactions that spend a coinbase
     const int64_t sigOpCost;        //!< Total sigop cost
@@ -116,7 +118,7 @@ private:
 
 public:
     CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFee,
-                    int64_t _nTime, unsigned int _entryHeight,
+                    int64_t _nTime, NodeId _nodeid, unsigned int _entryHeight,
                     bool spendsCoinbase,
                     int64_t nSigOpsCost, LockPoints lp);
 
@@ -126,6 +128,7 @@ public:
     size_t GetTxSize() const;
     size_t GetTxWeight() const { return nTxWeight; }
     std::chrono::seconds GetTime() const { return std::chrono::seconds{nTime}; }
+    NodeId GetPeer() const { return nodeid; }
     unsigned int GetHeight() const { return entryHeight; }
     int64_t GetSigOpCost() const { return sigOpCost; }
     int64_t GetModifiedFee() const { return nFee + feeDelta; }
@@ -499,7 +502,7 @@ protected:
     CAmount m_total_fee GUARDED_BY(cs);       //!< sum of all mempool tx's fees (NOT modified fee)
     uint64_t cachedInnerUsage GUARDED_BY(cs); //!< sum of dynamic memory usage of all the map elements (NOT the maps themselves)
 
-    mutable int64_t lastRollingFeeUpdate GUARDED_BY(cs);
+    mutable int64_t lastRollingFeeUpdate GUARDED_BY(cs); //!< the last time rollingMinimumFeeRate was updated
     mutable double rollingMinimumFeeRate GUARDED_BY(cs); //!< minimum fee to get into the pool, decreases exponentially
     mutable double bumpedMinimumFeeRate GUARDED_BY(cs); //!< The highest the fee rate got to last time mempool was full
     mutable Epoch m_epoch GUARDED_BY(cs);
@@ -764,7 +767,7 @@ public:
     TxMempoolInfo info(const GenTxid& gtxid) const;
     std::vector<TxMempoolInfo> infoAll() const;
 
-    size_t DynamicMemoryUsage() const;
+    size_t DynamicMemoryUsage(bool fDebug=false) const;
 
     /** Adds a transaction to the unbroadcast set */
     void AddUnbroadcastTx(const uint256& txid)

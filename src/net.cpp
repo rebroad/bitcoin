@@ -1316,7 +1316,9 @@ void CConnman::NotifyNumConnectionsChanged()
         vNodesSize = vNodes.size();
         if (vNodesSize != nPrevNodeCount && vNodesSize == 0) {
             LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+            interruptNet.sleep_for(std::chrono::seconds{1});
             ResetNewNodeId();
+            interruptNet.sleep_for(std::chrono::seconds{1});
         }
     }
     if(vNodesSize != nPrevNodeCount) {

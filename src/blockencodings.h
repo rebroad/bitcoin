@@ -7,7 +7,6 @@
 
 #include <primitives/block.h>
 
-
 class CTxMemPool;
 
 // Transaction compression schemes for compact block relay can be introduced by writing
@@ -125,6 +124,9 @@ public:
 class PartiallyDownloadedBlock {
 protected:
     std::vector<CTransactionRef> txn_available;
+    std::vector<int64_t> txn_peer;
+    std::vector<int64_t> txn_time;
+    std::vector<unsigned int> txn_size;
     size_t prefilled_count = 0, mempool_count = 0, extra_count = 0;
     const CTxMemPool* pool;
 public:
@@ -133,7 +135,7 @@ public:
 
     // extra_txn is a list of extra transactions to look at, in <witness hash, reference> form
     ReadStatus InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<uint256, CTransactionRef>>& extra_txn);
-    bool IsTxAvailable(size_t index) const;
+    bool IsTxAvailable(size_t index, int64_t& nodeid, int64_t& nTime, unsigned int &nSize) const;
     ReadStatus FillBlock(CBlock& block, const std::vector<CTransactionRef>& vtx_missing);
 };
 
