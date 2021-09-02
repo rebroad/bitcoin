@@ -2239,7 +2239,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
     BlockValidationState state;
     int nNew = m_chainman.ProcessNewBlockHeaders(headers, state, m_chainparams, &pindexLast);
     if (nNew > 0) received_new_header = true;
-    LogRecv(nNew, pindexLast, via_compact_block ? "cmpctblock" : "header", 0, pfrom.GetId()); // REBTODO - can we deserialize to get the size?
+    if (!via_compact_block) // As it's already been logged otherwise
+        LogRecv(nNew, pindexLast, "header", 0, pfrom.GetId()); // REBTODO - can we deserialize to get the size?
     if (state.IsInvalid()) {
         MaybePunishNodeForBlock(pfrom.GetId(), state, via_compact_block, "invalid header received");
         return;
@@ -2313,16 +2314,18 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                             strBlockInfo(pindexLast), pfrom.GetId());
                 }
                 if (vGetData.size() > 0) {
-                    if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 && mapBlocksInFlight.size() == 1 && pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
+                    std::string strItem;
+                    if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 && pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
+                        strItem = "cmpct";
                     }
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     // Next line needed because now we'll use the first cmpctblock block received,
                     // not necessarily the one we're requesting here.
                     mapBlockSource.emplace(vGetData[0].hash, std::make_pair(pfrom.GetId(), false));
                     if (vGetData.size() == 1) {
-                        LogPrint(BCLog::BLOCK, "Requesting cmpctblock %s peer=%d\n",
+                        LogPrint(BCLog::BLOCK, "Requesting %sblock %s peer=%d\n", strItem,
                             strBlockInfo(vToFetch[0]), pfrom.GetId());
                     }
                 }
@@ -3785,7 +3788,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
-        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 2) {
+        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 3) {
             if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
                  (fAlreadyInFlight && !(blockInFlightIt->second.second->partialBlock))) { // allow announce cmpctblocks
                 if (fAlreadyInFlight && blockInFlightIt->second.first != pfrom.GetId()) {
@@ -3824,6 +3827,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
 
                 BlockTransactionsRequest req;
+                int nFromConPeers = 0; int nFromDisPeers = 0; int nFromExtra = 0; int nFromMemDat = 0; int nFromPack = 0;
+                int nFromReorg = 0; int nFromRecycledPeers = 0;
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, nodeid, nTime, nSize))
@@ -3832,22 +3837,32 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             State(nodeid)->nMempoolBytes += nSize;
                             State(nodeid)->nMempoolTXs++;
+                            nFromConPeers++;
                         } else {
-                            std::string strFrom;
                             if (nodeid == -1)
-                                strFrom = "from extra";
+                                nFromExtra++;
                             else if (nodeid == -2)
-                                strFrom = "from mempool.dat";
+                                nFromMemDat++;
                             else if (nodeid == -3)
-                                strFrom = "from package";
+                                nFromPack++;
                             else if (nodeid == -4)
-                                strFrom = "from reorg";
+                                nFromReorg++;
+                            else if (nTime >= m_last_no_connections)
+                                nFromDisPeers++;
                             else
-                                strFrom = strprintf("from %s peer=%d", nTime >= m_last_no_connections ? "disconnected":"previous", nodeid);
-                            LogPrintf("%s: tx[%d] age=%s size=%d %s\n", __func__, i, strAge(GetTime() - nTime), nSize, strFrom);
+                                nFromRecycledPeers++;
                         }
                     }
                 }
+                std::string strTXfrom;
+                if (nFromConPeers) strTXfrom += strprintf(" ConPeers=%d", nFromConPeers);
+                if (nFromDisPeers) strTXfrom += strprintf(" DisPeers=%d", nFromDisPeers);
+                if (nFromExtra) strTXfrom += strprintf(" Extra=%d", nFromExtra);
+                if (nFromMemDat) strTXfrom += strprintf(" MemDat=%d", nFromMemDat);
+                if (nFromPack) strTXfrom += strprintf(" Pack=%d", nFromPack);
+                if (nFromReorg) strTXfrom += strprintf(" Reorg=%d", nFromReorg);
+                if (nFromRecycledPeers) strTXfrom += strprintf(" RecycledPeers=%d", nFromRecycledPeers);
+                LogPrintf("TX have from%s\n", strTXfrom);
                 if (req.indexes.empty()) {
                     LogPrintf("%s: req.index.empty() peer=%d\n", __func__, pfrom.GetId()); // REBTEMP
                     // Dirty hack to jump to BLOCKTXN code (TODO: move message handling into their own functions)

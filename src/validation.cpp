@@ -992,7 +992,7 @@ bool MemPoolAccept::Finalize(const ATMPArgs& args, Workspace& ws)
     // Remove conflicting transactions from the mempool
     for (CTxMemPool::txiter it : allConflicting)
     {
-        LogPrintf("replacing tx %s -> %s for %s more fees, %d delta bytes peer %d->%d\n",
+        LogPrint(BCLog::MEMPOOL, "replacing tx %s -> %s for %s more fees, %d delta bytes peer %d->%d\n",
                 it->GetTx().GetHash().ToString(),
                 hash.ToString(),
                 FormatMoney(nModifiedFees - nConflictingFees),
