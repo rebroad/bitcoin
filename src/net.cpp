@@ -1291,7 +1291,7 @@ void CConnman::DisconnectNodes()
                 pnode->CloseSocketDisconnect();
 
                 // hold in disconnected pool until all refs are released
-                LogPrintf("%s: Add to vNodesDisconnected vNodes.size %d->%d GRF=%d peer=%d\n", __func__, nvNodesSizeBefore, nvNodesSizeAfter, pnode->GetRefCount(), pnode->GetId());
+                LogPrintf("%s: Add to vNodesDisconnected vNodes.size %d->%d GRC=%d %speer=%d\n", __func__, nvNodesSizeBefore, nvNodesSizeAfter, pnode->GetRefCount(), pnode->IsFeelerConn() ? "feel " : pnode->IsInboundConn() ? "incoming ":"", pnode->GetId());
                 pnode->Release(); // REB - deletion
                 vNodesDisconnected.push_back(pnode);
             }
@@ -2878,7 +2878,7 @@ void CConnman::StopNodes()
 void CConnman::DeleteNode(CNode* pnode)
 {
     assert(pnode);
-    LogPrintf("%s: About to FinalizeNode then delete peer=%d\n", __func__, pnode->GetId());
+    LogPrintf("%s: About to FinalizeNode then delete %speer=%d\n", __func__, pnode->IsInboundConn() ? "incoming " : pnode->IsFeelerConn() ? "feel ":"", pnode->GetId());
     m_msgproc->FinalizeNode(*pnode);
     delete pnode;
 }
