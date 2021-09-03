@@ -4849,10 +4849,8 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
                            peer.m_addrs_to_send.end());
 
     // No addr messages to send
-    if (peer.m_addrs_to_send.empty()) {
-        LogPrintf("%s: Hide=%d No Addresses to send to peer=%d\n", __func__, fHide, node.GetId());
+    if (peer.m_addrs_to_send.empty())
         return;
-    }
 
     const char* msg_type;
     int make_flags;
@@ -4863,9 +4861,8 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
         msg_type = NetMsgType::ADDR;
         make_flags = 0;
     }
-    LogPrintf("%s: %sSending %d (cap %d) addresses to peer=%d\n", __func__, fHide ? "NOT":"", peer.m_addrs_to_send.size(), peer.m_addrs_to_send.capacity(), node.GetId());
-    if (!fHide)
-        m_connman.PushMessage(&node, CNetMsgMaker(node.GetCommonVersion()).Make(make_flags, msg_type, peer.m_addrs_to_send));
+    LogPrintf("%s: %sSending %d (cap %d) addresses to peer=%d\n", __func__, fHide ? "HIDE ":"", peer.m_addrs_to_send.size(), peer.m_addrs_to_send.capacity(), node.GetId());
+    m_connman.PushMessage(&node, CNetMsgMaker(node.GetCommonVersion()).Make(make_flags, msg_type, peer.m_addrs_to_send));
     peer.m_addrs_to_send.clear();
 
     // we only send the big addr message once
