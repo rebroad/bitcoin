@@ -2795,7 +2795,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (fLogIPs)
             remoteAddr = ", peeraddr=" + pfrom.addr.ToString();
 
-        bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsFullOutboundConn());
+        bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsFullOutboundConn() || cleanSubVer.find("bitnodes") != std::string::npos);
         LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
                   cleanSubVer, pfrom.nVersion,
                   peer->m_starting_height, addrMe.ToString(), fRelay, pfrom.GetId(),
@@ -4145,7 +4145,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         peer->m_getaddr_recvd = true;
         
-        if (pfrom.nVersion >= gArgs.GetArg("-bitnodeprotocolversion", 70016)) {
+        if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && pfrom.nVersion >= gArgs.GetArg("-bitnodeprotocolversion", 70016)) {
             LogPrintf("Ignoring \"getaddr\" from bitnodes competitor. peer=%d\n", pfrom.GetId());
             return;
         }
@@ -4805,7 +4805,7 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
     // Nothing to do for non-address-relay peers
     if (!peer.m_addr_relay_enabled) return;
 
-    bool fHide = (node.nVersion >= gArgs.GetArg("-bitnodeprotocolversion", 70016));
+    bool fHide = (!node.HasPermission(NetPermissionFlags::NoBan) && node.nVersion >= gArgs.GetArg("-bitnodeprotocolversion", 70016));
 
     LOCK(peer.m_addr_send_times_mutex);
     // Periodically advertise our local address to the peer.
@@ -4861,8 +4861,10 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
         msg_type = NetMsgType::ADDR;
         make_flags = 0;
     }
-    LogPrintf("%s: %sSending %d (cap %d) addresses to peer=%d\n", __func__, fHide ? "HIDE ":"", peer.m_addrs_to_send.size(), peer.m_addrs_to_send.capacity(), node.GetId());
-    m_connman.PushMessage(&node, CNetMsgMaker(node.GetCommonVersion()).Make(make_flags, msg_type, peer.m_addrs_to_send));
+    if (peer.m_addrs_to_send.size() > 10)
+        LogPrintf("%s: %sSending %d (cap %d) addresses to peer=%d\n", __func__, fHide ? "NOT ":"", peer.m_addrs_to_send.size(), peer.m_addrs_to_send.capacity(), node.GetId());
+    if (!fHide)
+        m_connman.PushMessage(&node, CNetMsgMaker(node.GetCommonVersion()).Make(make_flags, msg_type, peer.m_addrs_to_send));
     peer.m_addrs_to_send.clear();
 
     // we only send the big addr message once
