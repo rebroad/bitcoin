@@ -491,7 +491,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         addr_bind = GetBindAddress(sock->Get());
     }
     CNode* pnode = new CNode(id, nLocalServices, sock->Release(), addrConnect, CalculateKeyedNetGroup(addrConnect), nonce, addr_bind, pszDest ? pszDest : "", conn_type, /* inbound_onion */ false);
-    pnode->AddRef();
+    pnode->AddRef(); // REB - Creation (out)
 
     // We're making a new connection, harvest entropy from the time (and our peer count)
     RandAddEvent((uint32_t)id);
@@ -1208,7 +1208,7 @@ void CConnman::CreateNodeFromAcceptedSocket(SOCKET hSocket,
 
     const bool inbound_onion = std::find(m_onion_binds.begin(), m_onion_binds.end(), addr_bind) != m_onion_binds.end();
     CNode* pnode = new CNode(id, nodeServices, hSocket, addr, CalculateKeyedNetGroup(addr), nonce, addr_bind, "", ConnectionType::INBOUND, inbound_onion);
-    pnode->AddRef();
+    pnode->AddRef(); // REB - Creation (in)
     pnode->m_permissionFlags = permissionFlags;
     pnode->m_prefer_evict = discouraged;
     m_msgproc->InitializeNode(pnode);
@@ -1280,7 +1280,9 @@ void CConnman::DisconnectNodes()
             if (pnode->fDisconnect)
             {
                 // remove from vNodes
+                int nvNodesSizeBefore = vNodes.size();
                 vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
+                int nvNodesSizeAfter = vNodes.size();
 
                 // release outbound grant (if any)
                 pnode->grantOutbound.Release();
@@ -1289,7 +1291,8 @@ void CConnman::DisconnectNodes()
                 pnode->CloseSocketDisconnect();
 
                 // hold in disconnected pool until all refs are released
-                pnode->Release();
+                LogPrintf("%s: Add to vNodesDisconnected vNodes.size %d->%d GRF=%d peer=%d\n", __func__, nvNodesSizeBefore, nvNodesSizeAfter, pnode->GetRefCount(), pnode->GetId());
+                pnode->Release(); // REB - deletion
                 vNodesDisconnected.push_back(pnode);
             }
         }
@@ -1506,7 +1509,7 @@ void CConnman::SocketEvents(std::set<SOCKET> &recv_set, std::set<SOCKET> &send_s
         FD_ZERO(&fdsetSend);
         FD_ZERO(&fdsetError);
         if (!interruptNet.sleep_for(std::chrono::milliseconds(SELECT_TIMEOUT_MILLISECONDS)))
-            return;
+            return; // REBTODO - no unconditional return?
     }
 
     for (SOCKET hSocket : recv_select_set) {
@@ -1555,7 +1558,7 @@ void CConnman::SocketHandler()
         LOCK(cs_vNodes);
         vNodesCopy = vNodes;
         for (CNode* pnode : vNodesCopy)
-            pnode->AddRef();
+            pnode->AddRef(); // REB - SocketHandler
     }
 
     int64_t latestOutboundConn = 0;
@@ -1754,9 +1757,7 @@ void CConnman::SocketHandler()
                 int nErr = WSAGetLastError();
                 if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                 {
-                    if (!pnode->fDisconnect) {
-                        LogPrintf("%s: socket recv error for peer=%d: %s\n", __func__, pnode->GetId(), NetworkErrorString(nErr));
-                    }
+                    LogPrintf("%s: socket recv error for peer=%d: %s\n", __func__, pnode->GetId(), NetworkErrorString(nErr));
                     pnode->CloseSocketDisconnect();
                 }
             }
@@ -1774,7 +1775,7 @@ void CConnman::SocketHandler()
     {
         LOCK(cs_vNodes);
         for (CNode* pnode : vNodesCopy)
-            pnode->Release();
+            pnode->Release(); // REB - SocketHandler
     }
 }
 
@@ -2392,7 +2393,7 @@ void CConnman::ThreadMessageHandler()
             LOCK(cs_vNodes);
             vNodesCopy = vNodes;
             for (CNode* pnode : vNodesCopy) {
-                pnode->AddRef();
+                pnode->AddRef(); // REB - ThreadMessageHandler
             }
         }
 
@@ -2426,7 +2427,7 @@ void CConnman::ThreadMessageHandler()
         {
             LOCK(cs_vNodes);
             for (CNode* pnode : vNodesCopy)
-                pnode->Release();
+                pnode->Release(); // REB - ThreadMessageHandler
         }
 
         WAIT_LOCK(mutexMsgProc, lock);
@@ -2877,6 +2878,7 @@ void CConnman::StopNodes()
 void CConnman::DeleteNode(CNode* pnode)
 {
     assert(pnode);
+    LogPrintf("%s: About to FinalizeNode then delete peer=%d\n", __func__, pnode->GetId());
     m_msgproc->FinalizeNode(*pnode);
     delete pnode;
 }

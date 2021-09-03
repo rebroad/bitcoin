@@ -3883,18 +3883,20 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // download from.
                 // Optimistically try to reconstruct anyway since we might be
                 // able to without any round trips.
-                LogPrintf("before 2nd InitData. %shave partialblock. peer=%d\n", blockInFlightIt->second.second->partialBlock ? "" : "Don't ", pfrom.GetId());
                 PartiallyDownloadedBlock tempBlock(&m_mempool);
                 ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact);
                 if (status != READ_STATUS_OK) {
+                    LogPrintf("after 2nd InitData failed. %shave partialblock. peer=%d\n", blockInFlightIt->second.second->partialBlock ? "" : "Don't ", pfrom.GetId());
                     // TODO: don't ignore failures
                     return;
                 }
                 std::vector<CTransactionRef> dummy;
                 status = tempBlock.FillBlock(*pblock, dummy);
                 if (status == READ_STATUS_OK) {
+                    LogPrintf("after 2nd InitData succeeded, FillBlock succeeded!\n");
                     fBlockReconstructed = true;
-                }
+                } else
+                    LogPrintf("after 2nd InitData succeeded, FillBlock failed\n");
             }
         } else {
             if (fAlreadyInFlight) {
@@ -4143,13 +4145,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         peer->m_getaddr_recvd = true;
         
-        std::string cleanSubVer;
-        {
-            LOCK(pfrom.cs_SubVer);
-            cleanSubVer = pfrom.cleanSubVer;
-        }
-        if (!pfrom.HasPermission(NetPermissionFlags::NoBan))
+        if (pfrom.nVersion >= gArgs.GetArg("-bitnodeprotocolversion", 70016)) {
+            LogPrintf("Ignoring \"getaddr\" from bitnodes competitor. peer=%d\n", pfrom.GetId());
             return;
+        }
 
         peer->m_addrs_to_send.clear();
         std::vector<CAddress> vAddr;
@@ -4806,6 +4805,8 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
     // Nothing to do for non-address-relay peers
     if (!peer.m_addr_relay_enabled) return;
 
+    bool fHide = (node.nVersion >= gArgs.GetArg("-bitnodeprotocolversion", 70016));
+
     LOCK(peer.m_addr_send_times_mutex);
     // Periodically advertise our local address to the peer.
     if (fListen && !m_chainman.ActiveChainstate().IsInitialBlockDownload() &&
@@ -4848,7 +4849,10 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
                            peer.m_addrs_to_send.end());
 
     // No addr messages to send
-    if (peer.m_addrs_to_send.empty()) return;
+    if (peer.m_addrs_to_send.empty()) {
+        LogPrintf("%s: Hide=%d No Addresses to send to peer=%d\n", __func__, fHide, node.GetId());
+        return;
+    }
 
     const char* msg_type;
     int make_flags;
@@ -4859,7 +4863,9 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
         msg_type = NetMsgType::ADDR;
         make_flags = 0;
     }
-    m_connman.PushMessage(&node, CNetMsgMaker(node.GetCommonVersion()).Make(make_flags, msg_type, peer.m_addrs_to_send));
+    LogPrintf("%s: %sSending %d (cap %d) addresses to peer=%d\n", __func__, fHide ? "NOT":"", peer.m_addrs_to_send.size(), peer.m_addrs_to_send.capacity(), node.GetId());
+    if (!fHide)
+        m_connman.PushMessage(&node, CNetMsgMaker(node.GetCommonVersion()).Make(make_flags, msg_type, peer.m_addrs_to_send));
     peer.m_addrs_to_send.clear();
 
     // we only send the big addr message once
