@@ -1327,7 +1327,7 @@ void CConnman::NotifyNumConnectionsChanged()
     if(vNodesSize != nPrevNodeCount) {
         nPrevNodeCount = vNodesSize;
         if(clientInterface)
-            clientInterface->NotifyNumConnectionsChanged(vNodesSize); // REBTODO - what's this?
+            clientInterface->NotifyNumConnectionsChanged(vNodesSize);
     }
 }
 
@@ -1875,10 +1875,10 @@ void CConnman::ThreadDNSAddressSeed()
             } while (!fNetworkActive);
         }
 
-        LogPrintf("Loading addresses from DNS seed %s\n", seed);
-        if (HaveNameProxy()) {
-            AddAddrFetch(seed);
-        } else {
+        LogPrintf("Loading addresses from DNS seed %s\n", seed); // REBTODO - if bitnodes make them all "good"
+        if (HaveNameProxy()) { // We're using a proxy server
+            AddAddrFetch(seed); // We'll ask the peer directly in a special "address" mode.
+        } else { // Use the DNS way
             std::vector<CNetAddr> vIPs;
             std::vector<CAddress> vAdd;
             ServiceFlags requiredServiceBits = GetDesirableServiceFlags(NODE_NONE);
@@ -1887,7 +1887,7 @@ void CConnman::ThreadDNSAddressSeed()
             if (!resolveSource.SetInternal(host)) {
                 continue;
             }
-            unsigned int nMaxIPs = 256; // Limits number of IPs learned from a DNS seed
+            unsigned int nMaxIPs = 256; // Limits number of IPs learned from a DNS seed - REBTODO - increase for bitnodes
             if (LookupHost(host, vIPs, nMaxIPs, true)) {
                 for (const CNetAddr& ip : vIPs) {
                     int nOneDay = 24*3600;
@@ -2110,7 +2110,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         if (!m_anchors.empty() && (nOutboundBlockRelay < m_max_outbound_block_relay)) {
             conn_type = ConnectionType::BLOCK_RELAY;
             anchor = true;
-        } else if (nOutboundFullRelay < m_max_outbound_full_relay) {
+        } else if (nOutboundFullRelay < m_max_outbound_full_relay) { // REBTODO - enable anchored outbound_full relays
             // OUTBOUND_FULL_RELAY
         } else if (nOutboundBlockRelay < m_max_outbound_block_relay) {
             conn_type = ConnectionType::BLOCK_RELAY;
@@ -2190,7 +2190,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     // address as Good(). We won't be able to initiate the
                     // connection anyway, so this avoids inadvertently evicting
                     // a currently-connected peer.
-                    addrman.Good(addr);
+                    addrman.Good(addr); // REBTODO - we need to do this for nodes seeded from bitnodes
                     // Select a new table address for our feeler instead.
                     addr = addrman.Select(true);
                 }

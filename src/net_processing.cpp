@@ -164,7 +164,7 @@ static constexpr uint32_t MAX_GETCFHEADERS_SIZE = 2000;
 /** the maximum percentage of addresses from our addrman to return in response to a getaddr message. */
 static constexpr size_t MAX_PCT_ADDR_TO_SEND = 100;
 /** The maximum number of address records permitted in an ADDR message. */
-static constexpr size_t MAX_ADDR_TO_SEND{15000};
+static constexpr size_t MAX_ADDR_TO_SEND{1000}; // REBTODO - maybe make this larger, but limit elsewhere how many go into an addr message
 /** The maximum rate of address records we're willing to process on average. Can be bypassed using
  *  the NetPermissionFlags::Addr permission. */
 static constexpr double MAX_ADDR_RATE_PER_SECOND{0.1};
@@ -822,7 +822,7 @@ static void PushAddress(Peer& peer, const CAddress& addr, FastRandomContext& ins
     assert(peer.m_addr_known);
     if (addr.IsValid() && !peer.m_addr_known->contains(addr.GetKey()) && IsAddrCompatible(peer, addr)) {
         if (peer.m_addrs_to_send.size() >= MAX_ADDR_TO_SEND) {
-            peer.m_addrs_to_send[insecure_rand.randrange(peer.m_addrs_to_send.size())] = addr;
+            peer.m_addrs_to_send[insecure_rand.randrange(peer.m_addrs_to_send.size())] = addr; // REBTODO - log when this happens
         } else {
             peer.m_addrs_to_send.push_back(addr);
         }
@@ -2922,7 +2922,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::VERACK) {
         if (pfrom.fSuccessfullyConnected) {
-            LogPrint(BCLog::NET, "ignoring redundant verack message from peer=%d\n", pfrom.GetId());
+            LogPrintf("ignoring redundant verack message from peer=%d\n", pfrom.GetId());
             return;
         }
 
@@ -3023,7 +3023,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     if (msg_type == NetMsgType::SENDRECON) {
         if (pfrom.fSuccessfullyConnected) {
             // Disconnect peers that send a SENDRECON message after VERACK.
-            LogPrint(BCLog::NET, "sendrecon received after verack from peer=%d; disconnecting\n", pfrom.GetId());
+            LogPrintf("sendrecon received after verack from peer=%d; disconnecting\n", pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
         }
@@ -3067,8 +3067,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (!pfrom.fSuccessfullyConnected) {
-        LogPrint(BCLog::NET, "Unsupported message \"%s\" prior to verack from peer=%d\n", SanitizeString(msg_type), pfrom.GetId());
-        return;
+        LogPrintf("Unsupported message \"%s\" prior to verack from peer=%d\n", SanitizeString(msg_type), pfrom.GetId());
+        Misbehaving(pfrom.GetId(), 20, strprintf("\"%s\" before verack", msg_type));
+        return; // REBTODO - why does it matter?!
     }
 
     if (msg_type == NetMsgType::ADDR || msg_type == NetMsgType::ADDRV2) {
@@ -3883,8 +3884,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // download from.
                 // Optimistically try to reconstruct anyway since we might be
                 // able to without any round trips.
-                PartiallyDownloadedBlock tempBlock(&m_mempool);
-                ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact);
+                PartiallyDownloadedBlock tempBlock(&m_mempool); // REBTODO - no point if not received any TXs since last InitData
+                ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact); // REBTODO - as above
                 if (status != READ_STATUS_OK) {
                     LogPrintf("after 2nd InitData failed. %shave partialblock. peer=%d\n", blockInFlightIt->second.second->partialBlock ? "" : "Don't ", pfrom.GetId());
                     // TODO: don't ignore failures
@@ -4824,7 +4825,7 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
             FastRandomContext insecure_rand;
             PushAddress(peer, *local_addr, insecure_rand);
         }
-        peer.m_next_local_addr_send = PoissonNextSend(current_time, AVG_LOCAL_ADDRESS_BROADCAST_INTERVAL);
+        peer.m_next_local_addr_send = PoissonNextSend(current_time, AVG_LOCAL_ADDRESS_BROADCAST_INTERVAL); // REBTODO - reduce interval for whitelisted bitnodes
     }
 
     // We sent an `addr` message to this peer recently. Nothing more to do.
