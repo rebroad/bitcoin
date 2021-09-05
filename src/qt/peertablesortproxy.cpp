@@ -51,15 +51,32 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
             Left = left_stats.nRecvBytes * 8 / (now + 1 - left_stats.nTimeConnected);
         return Left < Right;
     }
-    case PeerTableModel::TxBps: {
+    /*case PeerTableModel::TxBps: {
         int64_t now = GetTimeSeconds();
-        double Right = 1.0 * right_stats.nMempoolBytes / (now - right_stats.nTime1stTx + 1);
-        double Left = 1.0 * left_stats.nMempoolBytes / (now - left_stats.nTime1stTx + 1);
+        double Right = 1.0 * right_stats.nMempoolBytes / (now + 1 - right_stats.nTime1stTx);
+        double Left = 1.0 * left_stats.nMempoolBytes / (now + 1 - left_stats.nTime1stTx);
         return Left < Right;
     }
-    case PeerTableModel::TxPct: {
-        double Right = 1.0 * right_stats.nMempoolBytes / (right_stats.nRecvBytes - right_stats.nRecvBytes1stTx + 1);
-        double Left = 1.0 * left_stats.nMempoolBytes / (left_stats.nRecvBytes - left_stats.nRecvBytes1stTx + 1);
+    case PeerTableModel::TxBpsPct: {
+        double Right = 1.0 * right_stats.nMempoolBytes / (right_stats.nRecvBytes + 1 - right_stats.nRecvBytes1stTx);
+        double Left = 1.0 * left_stats.nMempoolBytes / (left_stats.nRecvBytes + 1 - left_stats.nRecvBytes1stTx);
+        return Left < Right;
+    } */
+    case PeerTableModel::TxIpm: {
+        int64_t now = GetTimeSeconds();
+        double Right = 1.0 * right_stats.nTXs / (now + 1 - right_stats.nTime1stTx);
+        double Left = 1.0 * left_stats.nTXs / (now + 1 - left_stats.nTime1stTx);
+        return Left < Right;
+    }
+    case PeerTableModel::MPpm: {
+        int64_t now = GetTimeSeconds();
+        double Right = 1.0 * right_stats.nMempoolTXs / (now + 1 - right_stats.nTime1stTx);
+        double Left = 1.0 * left_stats.nMempoolTXs / (now + 1 - left_stats.nTime1stTx);
+        return Left < Right;
+    }
+    case PeerTableModel::MPpmPct: {
+        double Right = 1.0 * right_stats.nMempoolTXs / (right_stats.nTXs + 1);
+        double Left = 1.0 * left_stats.nMempoolTXs / (left_stats.nTXs + 1);
         return Left < Right;
     }
     case PeerTableModel::Subversion:
