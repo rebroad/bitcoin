@@ -710,10 +710,16 @@ struct CNodeState {
     unsigned int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
     int nBlockAfterTXs{0};
-    //! How many bytes of useful TX data received (specifically orphans)
+    //! How many bytes of useful orphan TX data received
     int nMempoolBytes{0};
+    //! Time the orphan TX was received, which later was accepted into the mempool.
+    int nLastTXTime{0};
     //! How many orphan TXs accepted into the mempool from this peer
     int nMempoolTXs{0};
+    //! How many bytes of useful TX data received that's gone into a block
+    int nBlockBytes{0};
+    //! How many TXs accepted that's gone into a block
+    int nBlockTXs{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2386,7 +2392,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const uint256 orphanHash = *orphan_work_set.begin();
         orphan_work_set.erase(orphan_work_set.begin());
 
-        const auto [porphanTx, from_peer] = m_orphanage.GetTx(orphanHash);
+        const auto [porphanTx, from_peer, nTimeExpire, list_pos] = m_orphanage.GetTx(orphanHash);
         if (porphanTx == nullptr) continue;
 
         int64_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
@@ -2399,6 +2405,8 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             CNodeState *nodestate = State(from_peer);
             nodestate->nMempoolBytes += tx.GetTotalSize();
             nodestate->nMempoolTXs++;
+            nodestate->nLastTXTime = nTimeExpire - ORPHAN_TX_EXPIRE_TIME;
+
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
 		tx.GetTotalSize(), (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
@@ -3191,11 +3199,23 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         LOCK(cs_main);
 
-        if (State(pfrom.GetId())->nMempoolBytes) {
-            pfrom.nMempoolBytes += State(pfrom.GetId())->nMempoolBytes;
-            pfrom.nMempoolTXs += State(pfrom.GetId())->nMempoolTXs;
-            State(pfrom.GetId())->nMempoolBytes = 0;
-            State(pfrom.GetId())->nMempoolTXs = 0;
+        CNodeState* nodestate = State(pfrom.GetId());
+        if (nodestate->nLastTXTime) {
+            if (nodestate->nLastTXTime > pfrom.nLastTXTime)
+                pfrom.nLastTXTime = nodestate->nLastTXTime;
+            nodestate->nLastTXTime = 0;
+        }
+        if (nodestate->nMempoolBytes) {
+            pfrom.nMempoolBytes += nodestate->nMempoolBytes;
+            pfrom.nMempoolTXs += nodestate->nMempoolTXs;
+            nodestate->nMempoolBytes = 0;
+            nodestate->nMempoolTXs = 0;
+        }
+        if (nodestate->nBlockBytes) {
+            pfrom.nBlockBytes += nodestate->nBlockBytes;
+            pfrom.nBlockTXs += nodestate->nBlockTXs;
+            nodestate->nBlockBytes = 0;
+            nodestate->nBlockTXs = 0;
         }
 
         const auto current_time = GetTime<std::chrono::microseconds>();
@@ -3229,6 +3249,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     pfrom.fDisconnect = true;
                     return;
                 }
+                pfrom.nTXs++;
                 // Ignore INVs that don't match wtxidrelay setting.
                 // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
                 // This is fine as no INV messages are involved in that process.

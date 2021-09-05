@@ -10,6 +10,9 @@
 #include <primitives/transaction.h>
 #include <sync.h>
 
+/** Expiration time for orphan transactions in seconds */
+static constexpr int64_t ORPHAN_TX_EXPIRE_TIME = 20 * 60;
+
 /** Guards orphan transactions and extra txs for compact blocks */
 extern RecursiveMutex g_cs_orphans;
 
@@ -26,10 +29,17 @@ public:
     /** Check if we already have an orphan transaction (by txid or wtxid) */
     bool HaveTx(const GenTxid& gtxid) const LOCKS_EXCLUDED(::g_cs_orphans);
 
+    struct OrphanTx {
+        CTransactionRef tx;
+        NodeId fromPeer;
+        int64_t nTimeExpire;
+        size_t list_pos;
+    };
+
     /** Get an orphan transaction and its originating peer
      * (Transaction ref will be nullptr if not found)
      */
-    std::pair<CTransactionRef, NodeId> GetTx(const uint256& txid) const EXCLUSIVE_LOCKS_REQUIRED(g_cs_orphans);
+    OrphanTx GetTx(const uint256& txid) const EXCLUSIVE_LOCKS_REQUIRED(g_cs_orphans);
 
     /** Erase an orphan by txid */
     int EraseTx(const uint256& txid) EXCLUSIVE_LOCKS_REQUIRED(g_cs_orphans);
@@ -55,13 +65,6 @@ public:
     }
 
 protected:
-    struct OrphanTx {
-        CTransactionRef tx;
-        NodeId fromPeer;
-        int64_t nTimeExpire;
-        size_t list_pos;
-    };
-
     /** Map from txid to orphan transaction record. Limited by
      *  -maxorphantx/DEFAULT_MAX_ORPHAN_TRANSACTIONS */
     std::map<uint256, OrphanTx> m_orphans GUARDED_BY(g_cs_orphans);

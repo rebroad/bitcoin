@@ -319,8 +319,9 @@ static RPCHelpMan addnode()
 
     if (strCommand == "full")
     {
-        CAddress addr;
-        connman.OpenNetworkConnection(addr, false, nullptr, strNode.c_str(), ConnectionType::OUTBOUND_FULL_RELAY);
+        const auto conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
+        if (!connman.AddConnection(strNode, conn_type))
+            throw JSONRPCError(RPC_CLIENT_NODE_CAPACITY_REACHED, strprintf("Error: Already at capacity for %s.", ConnectionTypeAsString(conn_type)));
         return NullUniValue;
     }
 

@@ -611,6 +611,9 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
     }
     X(nMempoolBytes);
     X(nMempoolTXs);
+    X(nTXs);
+    X(nBlockBytes);
+    X(nBlockTXs);
     X(nRecvBytes1stTx);
     X(nTime1stTx);
     X(m_permissionFlags);
