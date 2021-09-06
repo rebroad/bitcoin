@@ -405,7 +405,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         LOCK(cs_vNodes);
         vNodesSize = vNodes.size();
     }
-    LogPrint(BCLog::CONN, "%s connection(%d) %s lastseen=%s\n", conn_type == ConnectionType::FEELER ? "feeler" : "trying",
+    LogPrint(BCLog::CONN, "trying %s connection(%d) %s lastseen=%s\n", ConnectionTypeAsString(conn_type),
         vNodesSize, pszDest ? pszDest : addrConnect.ToString(),
         pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
@@ -531,9 +531,9 @@ std::string ConnectionTypeAsString(ConnectionType conn_type)
     case ConnectionType::FEELER:
         return "feeler";
     case ConnectionType::OUTBOUND_FULL_RELAY:
-        return "outbound-full-relay";
+        return "full-relay";
     case ConnectionType::BLOCK_RELAY:
-        return "block-relay-only";
+        return "block-relay";
     case ConnectionType::ADDR_FETCH:
         return "addr-fetch";
     } // no default case, so the compiler can warn about missing cases
@@ -665,7 +665,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                 continue;
             }
 
-            if ((result->m_command == NetMsgType::INV) && !nRecvBytes1stTx) {
+            if ((result->m_command == NetMsgType::INV || result->m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx) {
                 nRecvBytes1stTx = nRecvBytes - result->m_raw_message_size - msg_bytes.size();
                 nTime1stTx = GetTimeSeconds();
                 LogPrintf("%s: 1stTx t=%d size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, nTime1stTx - nTimeConnected, result->m_raw_message_size, nRecvBytes1stTx, nRecvBytes, handled, msg_bytes.size(), GetId());
@@ -1325,9 +1325,12 @@ void CConnman::NotifyNumConnectionsChanged()
     {
         LOCK(cs_vNodes);
         vNodesSize = vNodes.size();
-        if (vNodesSize != nPrevNodeCount && vNodesSize == 0) {
-            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n"); // REBTODO - load anchors again
-            interruptNet.sleep_for(std::chrono::seconds{1});
+        if (vNodesSize != nPrevNodeCount && vNodesSize == 0 && m_anchors.empty()) {
+            if (nPrevNodeCount != -1) {
+                LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+                interruptNet.sleep_for(std::chrono::seconds{1});
+            } else
+                LogPrintf("Initialising NodeId and calling ReadAnchors()\n");
             ResetNewNodeId();
 
             // Load addresses from anchors.dat
@@ -1336,7 +1339,8 @@ void CConnman::NotifyNumConnectionsChanged()
                 m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1);
             }
 
-            interruptNet.sleep_for(std::chrono::seconds{1});
+            if (nPrevNodeCount != -1)
+                interruptNet.sleep_for(std::chrono::seconds{1});
         }
     }
     if(vNodesSize != nPrevNodeCount) {
@@ -1708,16 +1712,15 @@ void CConnman::SocketHandler()
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: Pct = %d%% Bps = %s TimeConn = %d disconnect peer=%d\n", __func__, nByBps, nLowestPct, nLowestBps, now - pnode->nTimeConnected, pnode->GetId());
                 if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS) {
-                    std::vector<CAddress> anchors_to_dump = GetCurrentBlockRelayOnlyConns();
-                    if (anchors_to_dump.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS) {
-                        anchors_to_dump.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
+                    std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
+                    if (anchors_to_dump.size() > (size_t)m_max_outbound_full_relay - 1) {
+                        anchors_to_dump.resize(m_max_outbound_full_relay - 1);
                     }
-                    std::vector<CAddress> anchors_fullnode = GetCurrentFullNodesOnlyConns();
-                    if (anchors_fullnode.size() > (size_t)m_max_outbound_full_relay - 1) {
-                        anchors_fullnode.resize(m_max_outbound_full_relay - 1);
+                    std::vector<CAddress> anchors_blockrelay = GetCurrentBlockRelayOnlyConns();
+                    if (anchors_blockrelay.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS) {
+                        anchors_blockrelay.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
                     }
-                    anchors_to_dump.insert(anchors_to_dump.end(), anchors_fullnode.begin(), anchors_fullnode.end());
-                    anchors_fullnode.clear();
+                    anchors_to_dump.insert(anchors_to_dump.end(), anchors_blockrelay.begin(), anchors_blockrelay.end());
                     DumpAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME, anchors_to_dump);
                 }
             }
@@ -2017,7 +2020,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
     {
         for (int64_t nLoop = 0;; nLoop++)
         {
-            ProcessAddrFetch();
+            ProcessAddrFetch(); // REBTODO - what's this?
             for (const std::string& strAddr : connect)
             {
                 CAddress addr(CService(), NODE_NONE);
@@ -2084,7 +2087,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 addrman.Add(ConvertSeeds(Params().FixedSeeds()), local);
                 add_fixed_seeds = false;
             }
-        }
+        } // No addresses
 
         //
         // Choose an address to connect to based on most recently seen
@@ -2122,7 +2125,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
         auto now = GetTime<std::chrono::microseconds>();
-        bool anchor = false;
+        static int anchor = 0;
         bool fFeeler = false;
 
         // Determine what type of connection to open. Opening
@@ -2137,8 +2140,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // timer to decide if we should open a FEELER.
 
         if (!m_anchors.empty()) {
-            anchor = true;
-            if (nOutboundBlockRelay < m_max_outbound_block_relay)
+            if (anchor < m_max_outbound_block_relay)
                 conn_type = ConnectionType::BLOCK_RELAY;
         } else if (nOutboundFullRelay < m_max_outbound_full_relay) {
             // OUTBOUND_FULL_RELAY
@@ -2185,17 +2187,19 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nTries = 0;
         while (!interruptNet)
         {
-            if (anchor && !m_anchors.empty()) {
+            if (!m_anchors.empty()) {
+                anchor++;
                 const CAddress addr = m_anchors.back();
                 m_anchors.pop_back();
                 if (!addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
                     !HasAllDesirableServiceFlags(addr.nServices) ||
                     setConnected.count(addr.GetGroup(addrman.m_asmap))) continue;
                 addrConnect = addr;
-                LogPrintf("Trying to make an %s anchor connection to %s\n",
-                    conn_type == ConnectionType::BLOCK_RELAY ? "block" : "full", addrConnect.ToString());
-                break;
-            }
+                LogPrintf("Trying to make a %s anchor(%d) connection to %s\n",
+                    conn_type == ConnectionType::BLOCK_RELAY ? "block" : "full", anchor, addrConnect.ToString());
+                break; // REB - out of the while?
+            } else
+                anchor = 0;
 
             // If we didn't find an appropriate destination after trying 100 addresses fetched from addrman,
             // stop this loop, and let the outer loop run again (which sleeps, adds seed nodes, recalculates
@@ -2267,7 +2271,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
             addrConnect = addr;
             break;
-        }
+        } // while !interruptNet (enough nTried or anchor selection finished)
 
         if (addrConnect.IsValid()) {
 

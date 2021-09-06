@@ -2796,7 +2796,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (fLogIPs)
             remoteAddr = ", peeraddr=" + pfrom.addr.ToString();
 
-        bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsFullOutboundConn() || cleanSubVer.find("bitnodes") != std::string::npos);
+        bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsOutboundOrBlockRelayConn() || cleanSubVer.find("bitnodes") != std::string::npos);
         LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
                   cleanSubVer, pfrom.nVersion,
                   peer->m_starting_height, addrMe.ToString(), fRelay, pfrom.GetId(),
@@ -2922,6 +2922,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     if (pfrom.nVersion == 0) {
         // Must have a version message before anything else
         LogPrint(BCLog::NET, "non-version message before version handshake. Message \"%s\" from peer=%d\n", SanitizeString(msg_type), pfrom.GetId());
+        Misbehaving(pfrom.GetId(), 20, strprintf("\"%s\" before version", SanitizeString(msg_type)));
         return;
     }
 
@@ -3076,7 +3077,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (!pfrom.fSuccessfullyConnected) {
         LogPrintf("Unsupported message \"%s\" prior to verack from peer=%d\n", SanitizeString(msg_type), pfrom.GetId());
-        Misbehaving(pfrom.GetId(), 20, strprintf("\"%s\" before verack", msg_type));
+        Misbehaving(pfrom.GetId(), 20, strprintf("\"%s\" before verack", SanitizeString(msg_type)));
         return; // REBTODO - why does it matter?!
     }
 
