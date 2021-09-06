@@ -3684,7 +3684,7 @@ CBlockIndex * BlockManager::InsertBlockIndex(const uint256& hash)
     static int64_t nLast = 0;
     int64_t nTime = GetTime();
     if (nTime > nLast) {
-        LogPrintf("%s: Existing=%d New=%d Null=%d\n", __func__, nExisting, nNew, nNull);
+    //    LogPrintf("%s: Existing=%d New=%d Null=%d\n", __func__, nExisting, nNew, nNull);
         nLast = nTime;
     }
     AssertLockHeld(cs_main);

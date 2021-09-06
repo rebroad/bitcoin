@@ -1069,6 +1069,11 @@ private:
      */
     std::vector<CAddress> GetCurrentBlockRelayOnlyConns() const;
 
+    /**
+     * Return vector of current FULL_OUTBOUND_RELAY peers.
+     */
+    std::vector<CAddress> GetCurrentFullNodesOnlyConns() const;
+
     // Whether the node should be passed out in ForEach* callbacks
     static bool NodeFullyConnected(const CNode* pnode);
 
@@ -1105,7 +1110,7 @@ private:
     std::list<CNode*> vNodesDisconnected;
     mutable RecursiveMutex cs_vNodes;
     std::atomic<NodeId> nLastNodeId{0};
-    unsigned int nPrevNodeCount{0};
+    int nPrevNodeCount{-1}; // REB - Set to -1 so that we load anchors at startup
 
     /**
      * Cache responses to addr requests to minimize privacy leak.

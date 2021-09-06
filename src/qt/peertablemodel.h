@@ -106,10 +106,10 @@ private:
         tr("Recv"),
         /*: Title of Peers Table column which indicates the rate of network
             information that has gone into our mempool. */
-        tr("TxBps"),
+        //tr("TxBps"),
         /*: Title of Peers Table column which indicates the percentage of
             useful TX traffic we're receiving from the peer. */
-        tr("Bps%"),
+        //tr("Bps%"),
         /*: Title of Peers Table column which indicates the number of TX invs
             received per minute on average. */
         tr("TIpm"),

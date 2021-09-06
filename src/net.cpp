@@ -1316,12 +1316,12 @@ void CConnman::DisconnectNodes()
 
 void CConnman::NotifyNumConnectionsChanged()
 {
-    size_t vNodesSize;
+    int vNodesSize;
     {
         LOCK(cs_vNodes);
         vNodesSize = vNodes.size();
         if (vNodesSize != nPrevNodeCount && vNodesSize == 0) {
-            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n"); // REBTODO - load anchors again
             interruptNet.sleep_for(std::chrono::seconds{1});
             ResetNewNodeId();
             interruptNet.sleep_for(std::chrono::seconds{1});
@@ -1568,6 +1568,7 @@ void CConnman::SocketHandler()
     uint64_t nTotalBytesRecv = 0;
     uint64_t nTotalMempoolBytes = 0;
     int nOutboundFullRelay = 0;
+    int nOutboundBlockRelay = 0;
     double nLowestPct = 100;
     double nSecondLowestPct = 0;
     double nLatestNodePct = 0;
@@ -1651,7 +1652,7 @@ void CConnman::SocketHandler()
                         LogPrintf("%s: Pct=%d%% Send=%s Recv=%s TimeConn=%d %s disconnect incoming peer=%d\n", __func__, nMempoolPct, nSendBps, nRecvBps, now - pnode->nTimeConnected, pnode->cleanSubVer, pnode->GetId());
                     }
                 }
-            }
+            } else if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
         } // if (now != lastnow)
     } // for (CNode* pnode : vNodesCopy)
 
@@ -1694,6 +1695,19 @@ void CConnman::SocketHandler()
             if ((pnode->GetId() == worstNode) && (now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && ((nLowest <= (nSecondLowest / 2)) || ((now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: Pct = %d%% Bps = %s TimeConn = %d disconnect peer=%d\n", __func__, nByBps, nLowestPct, nLowestBps, now - pnode->nTimeConnected, pnode->GetId());
+                if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= MAX_BLOCK_RELAY_ONLY_ANCHORS) {
+                    std::vector<CAddress> anchors_to_dump = GetCurrentBlockRelayOnlyConns();
+                    if (anchors_to_dump.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS) {
+                        anchors_to_dump.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
+                    }
+                    std::vector<CAddress> anchors_fullnode = GetCurrentFullNodesOnlyConns();
+                    if (anchors_fullnode.size() > m_max_outbound_full_relay - 1) {
+                        anchors_fullnode.resize(m_max_outbound_full_relay - 1);
+                    }
+                    anchors_to_dump.insert(anchors_to_dump.end(), anchors_fullnode.begin(), anchors_fullnode.end());
+                    anchors_fullnode.clear();
+                    DumpAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME, anchors_to_dump);
+                }
             }
         }
 
@@ -2269,6 +2283,19 @@ std::vector<CAddress> CConnman::GetCurrentBlockRelayOnlyConns() const
     return ret;
 }
 
+std::vector<CAddress> CConnman::GetCurrentFullNodesOnlyConns() const
+{
+    std::vector<CAddress> ret;
+    LOCK(cs_vNodes);
+    for (const CNode* pnode : vNodes) {
+        if (pnode->IsFullOutboundConn() && !pnode->fDisconnect) {
+            ret.push_back(pnode->addr);
+        }
+    }
+
+    return ret;
+}
+
 std::vector<AddedNodeInfo> CConnman::GetAddedNodeInfo() const
 {
     std::vector<AddedNodeInfo> ret;
@@ -2708,11 +2735,10 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
 
     if (m_use_addrman_outgoing) {
         // Load addresses from anchors.dat
-        m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
-        if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS) {
-            m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
+        m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME); // REBTODO - Move to after Reset NodeId
+        if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1) {
+            m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1);
         }
-        LogPrintf("%i block-relay-only anchors will be tried for connections.\n", m_anchors.size());
     }
 
     uiInterface.InitMessage(_("Starting network threads…").translated);
@@ -2841,15 +2867,6 @@ void CConnman::StopNodes()
     if (fAddressesInitialized) {
         DumpAddresses();
         fAddressesInitialized = false;
-
-        if (m_use_addrman_outgoing) {
-            // Anchor connections are only dumped during clean shutdown.
-            std::vector<CAddress> anchors_to_dump = GetCurrentBlockRelayOnlyConns();
-            if (anchors_to_dump.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS) {
-                anchors_to_dump.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
-            }
-            DumpAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME, anchors_to_dump);
-        }
     }
 
     // Delete peer connections.

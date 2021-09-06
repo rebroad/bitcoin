@@ -1664,7 +1664,7 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         if (state.fPreferHeaderAndIDs && (!fWitnessEnabled || state.fWantsCmpctWitness) &&
                 !PeerHasHeader(&state, pindex) && PeerHasHeader(&state, pindex->pprev)) {
 
-            LogPrint(BCLog::BLOCK, "send cmpctblock %s %s peer=%d\n", hashBlock.ToString(), strBlkInfo(pindex), pnode->GetId());
+            LogPrint(BCLog::BLOCKSEND, "send cmpctblock %s %s peer=%d\n", hashBlock.ToString(), strBlkInfo(pindex), pnode->GetId());
             m_connman.PushMessage(pnode, msgMaker.Make(NetMsgType::CMPCTBLOCK, *pcmpctblock));
             state.pindexBestHeaderSent = pindex;
         }
@@ -3857,8 +3857,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         req.indexes.push_back(i);
                     else {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
-                            State(nodeid)->nMempoolBytes += nSize;
-                            State(nodeid)->nMempoolTXs++;
+                            State(nodeid)->nBlockBytes += nSize;
+                            State(nodeid)->nBlockTXs++;
                             nFromConPeers++;
                         } else {
                             if (nodeid == -1)
@@ -4017,8 +4017,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (it->second.first != pfrom.GetId())
                 fWrongPeer = true;
 
-            if (resp.txn.size()) // Don't log where we were called from cmpctblock
+            if (resp.txn.size()) {// Don't run where we were called from cmpctblock
+                pfrom.nMempoolTXs += resp.txn.size();
+                pfrom.nBlockTXs += resp.txn.size();
+                pfrom.nMempoolBytes += nSize;
+                pfrom.nBlockBytes += nSize;
                 LogPrint(BCLog::BLOCK, "recv blocktxn %s indexes=%d size=%d %speer=%d\n", strBlkHeight(pindex), resp.txn.size(), nSize, fWrongPeer ? "wrong " : "", pfrom.GetId());
+            }
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
             if (status == READ_STATUS_INVALID) {
@@ -4077,7 +4082,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (fWrongPeer)
                 LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessBlock() wrong peer=%d\n", pfrom.GetId());
             ProcessBlock(pfrom, pblock, /*force_processing=*/true);
-            pfrom.nMempoolBytes += nSize;
         }
         return;
     }

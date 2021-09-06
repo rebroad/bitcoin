@@ -82,20 +82,20 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             return GUIUtil::formatPingTime(rec->nodeStats.m_min_ping_time);
         case Sent: {
             int64_t now = GetTimeSeconds();
-            return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8 / (now + 1 - rec->nodeStats.nTimeConnected));
+            return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8.0 / (now + 1 - rec->nodeStats.nTimeConnected));
         }
         case Recv: {
             int64_t now = GetTimeSeconds();
             if (rec->nodeStats.nRecvBytes1stTx)
-                return GUIUtil::formatBps((rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx) * 8 / (now + 1 - rec->nodeStats.nTime1stTx));
+                return GUIUtil::formatBps((rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx) * 8.0 / (now + 1 - rec->nodeStats.nTime1stTx));
             else
-                return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8 / (now + 1 - rec->nodeStats.nTimeConnected));
+                return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8.0 / (now + 1 - rec->nodeStats.nTimeConnected));
         }
         /*case TxBps: {
             int64_t now = GetTimeSeconds();
             if (rec->nodeStats.nRecvBytes1stTx) {
-                //int nMempoolBps = 8 * rec->nodeStats.nMempoolBytes * rec->nodeStats.nRecvBytes / (now - rec->nodeStats.nTimeConnected + 1) / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
-                int nMempoolBps = 8 * rec->nodeStats.nMempoolBytes / (now + 1 - rec->nodeStats.nTime1stTx);
+                //int nMempoolBps = 8.0 * rec->nodeStats.nMempoolBytes * rec->nodeStats.nRecvBytes / (now - rec->nodeStats.nTimeConnected + 1) / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx + 1);
+                int nMempoolBps = 8.0 * rec->nodeStats.nMempoolBytes / (now + 1 - rec->nodeStats.nTime1stTx);
                 return GUIUtil::formatBps(nMempoolBps);
             } else
                 return QString::fromStdString("");

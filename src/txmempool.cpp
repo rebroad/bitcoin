@@ -409,7 +409,7 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
         minerPolicyEstimator->processTransaction(entry, validFeeEstimate);
     }
 
-    vTxHashes.emplace_back(tx.GetWitnessHash(), newit); // REBTODO - do we need to get the nodeid into here too?
+    vTxHashes.emplace_back(tx.GetWitnessHash(), newit); // REBTODO - entry currently includes the NodeId
     newit->vTxHashesIdx = vTxHashes.size() - 1; // REBTODO - where is vTxHashesIdx used?
     mapTx.modify(newit, update_mem_delta(DynamicMemoryUsage() - nMemUsageBefore));
 }
