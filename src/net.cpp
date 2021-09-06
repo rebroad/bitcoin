@@ -400,9 +400,14 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     }
 
     /// debug print
-    LogPrint(BCLog::NET, "trying connection %s lastseen=%.1fhrs\n",
-        pszDest ? pszDest : addrConnect.ToString(),
-        pszDest ? 0.0 : (double)(GetAdjustedTime() - addrConnect.nTime)/3600.0);
+    size_t vNodesSize;
+    {
+        LOCK(cs_vNodes);
+        vNodesSize = vNodes.size();
+    }
+    LogPrint(BCLog::CONN, "%s connection(%d) %s lastseen=%s\n", conn_type == ConnectionType::FEELER ? "feeler" : "trying",
+        vNodesSize, pszDest ? pszDest : addrConnect.ToString(),
+        pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
     // Resolve
     const uint16_t default_port{pszDest != nullptr ? Params().GetDefaultPort(pszDest) :
@@ -1324,6 +1329,13 @@ void CConnman::NotifyNumConnectionsChanged()
             LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n"); // REBTODO - load anchors again
             interruptNet.sleep_for(std::chrono::seconds{1});
             ResetNewNodeId();
+
+            // Load addresses from anchors.dat
+            m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
+            if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1) {
+                m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1);
+            }
+
             interruptNet.sleep_for(std::chrono::seconds{1});
         }
     }
@@ -1695,13 +1707,13 @@ void CConnman::SocketHandler()
             if ((pnode->GetId() == worstNode) && (now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && ((nLowest <= (nSecondLowest / 2)) || ((now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: Pct = %d%% Bps = %s TimeConn = %d disconnect peer=%d\n", __func__, nByBps, nLowestPct, nLowestBps, now - pnode->nTimeConnected, pnode->GetId());
-                if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= MAX_BLOCK_RELAY_ONLY_ANCHORS) {
+                if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentBlockRelayOnlyConns();
                     if (anchors_to_dump.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS) {
                         anchors_to_dump.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
                     }
                     std::vector<CAddress> anchors_fullnode = GetCurrentFullNodesOnlyConns();
-                    if (anchors_fullnode.size() > m_max_outbound_full_relay - 1) {
+                    if (anchors_fullnode.size() > (size_t)m_max_outbound_full_relay - 1) {
                         anchors_fullnode.resize(m_max_outbound_full_relay - 1);
                     }
                     anchors_to_dump.insert(anchors_to_dump.end(), anchors_fullnode.begin(), anchors_fullnode.end());
@@ -2124,10 +2136,11 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // block-relay-only peer (to confirm our tip is current, see below) or the next_feeler
         // timer to decide if we should open a FEELER.
 
-        if (!m_anchors.empty() && (nOutboundBlockRelay < m_max_outbound_block_relay)) {
-            conn_type = ConnectionType::BLOCK_RELAY;
+        if (!m_anchors.empty()) {
             anchor = true;
-        } else if (nOutboundFullRelay < m_max_outbound_full_relay) { // REBTODO - enable anchored outbound_full relays
+            if (nOutboundBlockRelay < m_max_outbound_block_relay)
+                conn_type = ConnectionType::BLOCK_RELAY;
+        } else if (nOutboundFullRelay < m_max_outbound_full_relay) {
             // OUTBOUND_FULL_RELAY
         } else if (nOutboundBlockRelay < m_max_outbound_block_relay) {
             conn_type = ConnectionType::BLOCK_RELAY;
@@ -2179,7 +2192,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     !HasAllDesirableServiceFlags(addr.nServices) ||
                     setConnected.count(addr.GetGroup(addrman.m_asmap))) continue;
                 addrConnect = addr;
-                LogPrint(BCLog::NET, "Trying to make an anchor connection to %s\n", addrConnect.ToString());
+                LogPrintf("Trying to make an %s anchor connection to %s\n",
+                    conn_type == ConnectionType::BLOCK_RELAY ? "block" : "full", addrConnect.ToString());
                 break;
             }
 
@@ -2730,14 +2744,6 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
             addrman.Clear(); // Addrman can be in an inconsistent state after failure, reset it
             LogPrintf("Recreating peers.dat\n");
             DumpAddresses();
-        }
-    }
-
-    if (m_use_addrman_outgoing) {
-        // Load addresses from anchors.dat
-        m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME); // REBTODO - Move to after Reset NodeId
-        if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1) {
-            m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1);
         }
     }
 

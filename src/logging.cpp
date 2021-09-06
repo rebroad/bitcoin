@@ -136,6 +136,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::NONE, "0"},
     {BCLog::NONE, "none"},
     {BCLog::NET, "net"},
+    {BCLog::CONN, "conn"},
     {BCLog::TOR, "tor"},
     {BCLog::MEMPOOL, "mempool"},
     {BCLog::HTTP, "http"},

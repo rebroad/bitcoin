@@ -262,11 +262,16 @@ std::vector<CAddress> ReadAnchors(const fs::path& anchors_db_path)
 {
     std::vector<CAddress> anchors;
     if (DeserializeFileDB(anchors_db_path, anchors, CLIENT_VERSION | ADDRV2_FORMAT)) {
-        LogPrintf("Loaded %i addresses from %s\n", anchors.size(), anchors_db_path.filename());
+        LogPrintf("Loaded %i anchors from %s\n", anchors.size(), anchors_db_path.filename());
     } else {
         anchors.clear();
     }
 
-    fs::remove(anchors_db_path);
+    //fs::path backup = strprintf("%s.old", anchors_db_path.string());
+
+    //fs::remove(anchors_db_path);
+    //if (!RenameOver(anchors_db_path, backup)) {
+    //    LogPrintf("%s: Failed to rename %s to %s\n", __func__, anchors_db_path.filename(), backup.filename());
+    //}
     return anchors;
 }
