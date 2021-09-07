@@ -82,14 +82,19 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             return GUIUtil::formatPingTime(rec->nodeStats.m_min_ping_time);
         case Sent: {
             int64_t now = GetTimeSeconds();
-            return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8.0 / (now + 1 - rec->nodeStats.nTimeConnected));
+            if (now != rec->nodeStats.nTimeConnected) // Avoid division by zero
+                return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8.0 / (now - rec->nodeStats.nTimeConnected));
+            else
+                return QString::fromStdString("");
         }
         case Recv: {
             int64_t now = GetTimeSeconds();
-            if (rec->nodeStats.nRecvBytes1stTx)
-                return GUIUtil::formatBps((rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx) * 8.0 / (now + 1 - rec->nodeStats.nTime1stTx));
+            if (rec->nodeStats.nRecvBytes1stTx && rec->nodeStats.nTime1stTx != now)
+                return GUIUtil::formatBps((rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx) * 8.0 / (now - rec->nodeStats.nTime1stTx));
+            else if (rec->nodeStats.nTimeConnected != now)
+                return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8.0 / (now - rec->nodeStats.nTimeConnected));
             else
-                return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8.0 / (now + 1 - rec->nodeStats.nTimeConnected));
+                return QString::fromStdString("");
         }
         /*case TxBps: {
             int64_t now = GetTimeSeconds();
@@ -114,17 +119,17 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         } */
         case TxIpm: {
             int64_t now = GetTimeSeconds();
-            if (rec->nodeStats.nRecvBytes1stTx) {
-                int nTxIpm = 60 * rec->nodeStats.nTXs / (now + 1 - rec->nodeStats.nTime1stTx);
+            if (rec->nodeStats.nRecvBytes1stTx && now != rec->nodeStats.nTime1stTx) {
+                int nTxIpm = 60 * rec->nodeStats.nTXs / (now - rec->nodeStats.nTime1stTx);
                 return QString::fromStdString(strprintf("%d", nTxIpm));
             } else
                 return QString::fromStdString("");
         }
         case MPpm: {
             int64_t now = GetTimeSeconds();
-            if (rec->nodeStats.nRecvBytes1stTx) {
-                int nMPpm = 60 * rec->nodeStats.nMempoolTXs / (now + 1 - rec->nodeStats.nTime1stTx);
-                int nBTxpm = 60 * rec->nodeStats.nBlockTXs / (now + 1 - rec->nodeStats.nTime1stTx);
+            if (rec->nodeStats.nRecvBytes1stTx && now != rec->nodeStats.nTime1stTx) {
+                int nMPpm = 60 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTime1stTx);
+                int nBTxpm = 60 * rec->nodeStats.nBlockTXs / (now - rec->nodeStats.nTime1stTx);
                 return QString::fromStdString(strprintf("%d%s", nMPpm, (nBTxpm && nBTxpm != nMPpm) ? strprintf(" + %d", nBTxpm) : ""));
             } else
                 return QString::fromStdString("");
@@ -135,9 +140,9 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             if (now - rec->nodeStats.nTimeConnected >= 120) dots = "";
             else if (now - rec->nodeStats.nTimeConnected >= 60) dots = ".";
             else dots = "..";
-            if (rec->nodeStats.nRecvBytes1stTx && rec->nodeStats.nBlockTXs <= rec->nodeStats.nTXs) {
-                int nMPpmPct = 100 * rec->nodeStats.nMempoolTXs / (rec->nodeStats.nTXs + 1);
-                int nBTxpmPct = 100 * rec->nodeStats.nBlockTXs / (rec->nodeStats.nTXs + 1);
+            if (rec->nodeStats.nTXs) {
+                int nMPpmPct = 100 * rec->nodeStats.nMempoolTXs / (rec->nodeStats.nTXs);
+                int nBTxpmPct = 100 * rec->nodeStats.nBlockTXs / (rec->nodeStats.nTXs);
                 return QString::fromStdString(strprintf("%s%d%s", dots, nMPpmPct,
                     nBTxpmPct ? strprintf(" + %d", nBTxpmPct) : ""));
             } else
