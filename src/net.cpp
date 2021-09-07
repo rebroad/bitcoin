@@ -1586,25 +1586,27 @@ void CConnman::SocketHandler()
     int nOutboundFullRelay = 0;
     int nOutboundBlockRelay = 0;
     double nLowestPct = 100;
-    double nSecondLowestPct = 0;
-    double nLatestNodePct = 0;
+    double nLowestBps = 1000000;
     double nLowestTXpm = 10000;
+    double nSecondLowestPct = 0;
+    double nSecondLowestBps = 0;
     double nSecondLowestTXpm = 0;
-    int nLowestBps = 1000000;
-    int nSecondLowestBps = 0;
-    int nLatestNodeBps = 0;
+    double nLatestNodePct = 0;
+    double nLatestNodeBps = 0;
+    double nLatestNodeTXpm = 0;
     NodeId worstNodePct = -1;
-    NodeId worstNodeTXpm = -1;
     NodeId worstNodeBps = -1;
+    NodeId worstNodeTXpm = -1;
     NodeId latestNode = -1;
     static NodeId lastWorstPct = -1;
-    static NodeId lastWorstTXpm = -1;
     static NodeId lastWorstBps = -1;
+    static NodeId lastWorstTXpm = -1;
     int nGlobalTXpm = 0;
     int nGlobalBps = 0;
     const int64_t now = GetTimeSeconds();
     static int64_t tWorstPctChanged = now;
     static int64_t tWorstBpsChanged = now;
+    static int64_t tWorstTXpmChanged = now;
     static int64_t lastnow = 0;
     bool IsIBD = true;
     for (CNode* pnode : vNodesCopy) {
@@ -1638,7 +1640,7 @@ void CConnman::SocketHandler()
                 } else if (nMempoolPct < nSecondLowestPct)
                     nSecondLowestPct = nMempoolPct;
                 //int nMempoolBps = nMempoolPct * .08 * nRecvBytes / (now - pnode->nTime1stTx + 1);
-                int nMempoolBps = nMempoolBytes * 8 / (now - pnode->nTime1stTx + 1);
+                double nMempoolBps = nMempoolBytes * 8.0 / (now - pnode->nTime1stTx + 1);
                 nLatestNodeBps = nMempoolBps;
                 nGlobalBps += (int)nMempoolBps;
                 if (nMempoolBps <= nLowestBps) {
@@ -1650,6 +1652,7 @@ void CConnman::SocketHandler()
                 } else if (nMempoolBps < nSecondLowestBps)
                     nSecondLowestBps = nMempoolBps;
                 double nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTime1stTx + 1);
+                nLatestNodeTXpm = nTXpm;
                 nGlobalTXpm += (int)nTXpm;
                 if (nTXpm <= nLowestTXpm) {
                     if (nTXpm < nLowestTXpm) {
@@ -1657,7 +1660,8 @@ void CConnman::SocketHandler()
                         nLowestTXpm = nTXpm;
                     }
                     worstNodeTXpm = pnode->GetId();
-                }
+                } else if (nTXpm < nSecondLowestTXpm)
+                    nSecondLowestTXpm = nTXpm;
             } else if (pnode->IsInboundConn()) {
                 int nRecvBps = 8 * nRecvBytes / (now + 1 - pnode->nTimeConnected);
                 int nSendBps = 8 * nSendBytes / (now + 1 - pnode->nTimeConnected);
@@ -1672,26 +1676,33 @@ void CConnman::SocketHandler()
         } // if (now != lastnow)
     } // for (CNode* pnode : vNodesCopy)
 
-    int nByBps = (now / 5400) % 2;
+    int nTechnique = (now / 5400) % 2; // 0 = Pct, 1 = TXpm
     bool fLatestNodeBpsDegrading = false;
     bool fLatestNodePctDegrading = false;
+    bool fLatestNodeTXpmDegrading = false;
     if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
         if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps) {
-            LogPrintf("%s: worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d) Bps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, nByBps, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, nLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
-            lastWorstTXpm = worstNodeTXpm;
+            LogPrintf("%s: worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d:%d) Bps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, nTechnique, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, (int)nLowestTXpm, (int)nSecondLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
             if (lastWorstPct != worstNodePct) {
                 tWorstPctChanged = now;
                 lastWorstPct = worstNodePct;
+            }
+            if (lastWorstTXpm != worstNodeTXpm) {
+                tWorstTXpmChanged = now;
+                lastWorstTXpm = worstNodeTXpm;
             }
             if (lastWorstBps != worstNodeBps) {
                 tWorstBpsChanged = now;
                 lastWorstBps = worstNodeBps;
             }
         }
-        static int LastLatestNodeBps = 0; static int LastLatestNodePct = 0;
+        static int LastLatestNodeBps = 0; static int LastLatestNodePct = 0; static int LastLatestNodeTXpm = 0;
         if (nLatestNodeBps < LastLatestNodeBps) fLatestNodeBpsDegrading = true;
         if (nLatestNodePct < LastLatestNodePct) fLatestNodePctDegrading = true;
-        LastLatestNodeBps = nLatestNodeBps; LastLatestNodePct = nLatestNodePct;
+        if (nLatestNodeTXpm < LastLatestNodeTXpm) fLatestNodeTXpmDegrading = true;
+        LastLatestNodeBps = nLatestNodeBps;
+        LastLatestNodePct = nLatestNodePct;
+        LastLatestNodeTXpm = nLatestNodeTXpm;
     }
     for (CNode* pnode : vNodesCopy)
     {
@@ -1701,16 +1712,16 @@ void CConnman::SocketHandler()
         // Evict worst performing outbound connection
         if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
             int worstNode; int nLowest; int nSecondLowest; int64_t tWorstChanged; bool fLatestNodeDegrading;
-            if (nByBps) { // Change every 90 minutes
-                worstNode = worstNodeBps; nLowest = nLowestBps; nSecondLowest = nSecondLowestBps;
-                tWorstChanged = tWorstBpsChanged; fLatestNodeDegrading = fLatestNodeBpsDegrading;
+            if (nTechnique) { // Change every 90 minutes
+                worstNode = worstNodeTXpm; nLowest = nLowestTXpm; nSecondLowest = nSecondLowestTXpm;
+                tWorstChanged = tWorstTXpmChanged; fLatestNodeDegrading = fLatestNodeTXpmDegrading;
             } else {
                 worstNode = worstNodePct; nLowest = nLowestPct; nSecondLowest = nSecondLowestPct;
                 tWorstChanged = tWorstPctChanged; fLatestNodeDegrading = fLatestNodePctDegrading;
             }
             if ((pnode->GetId() == worstNode) && (now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && ((nLowest <= (nSecondLowest / 2)) || ((now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
-                LogPrintf("%s: Tx%d: Pct = %d%% Bps = %s TimeConn = %d disconnect peer=%d\n", __func__, nByBps, nLowestPct, nLowestBps, now - pnode->nTimeConnected, pnode->GetId());
+                LogPrintf("%s: Tx%d: %s TimeConn = %d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? strprintf("Bps=%d", nLowest) : strprintf("Pct=%d%%", nLowest), now - pnode->nTimeConnected, pnode->GetId());
                 if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
                     if (anchors_to_dump.size() > (size_t)m_max_outbound_full_relay - 1) {
@@ -2197,9 +2208,18 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 addrConnect = addr;
                 LogPrintf("Trying to make a %s anchor(%d) connection to %s\n",
                     conn_type == ConnectionType::BLOCK_RELAY ? "block" : "full", anchor, addrConnect.ToString());
-                break; // REB - out of the while?
-            } else
-                anchor = 0;
+                break; // out of while
+            } else {
+                if (anchor) {
+                    size_t vNodesSize;
+                    {
+                        LOCK(cs_vNodes);
+                        vNodesSize = vNodes.size();
+                    }
+                    LogPrintf("Finished connecting to %d anchors. Connections=%d\n", anchor, vNodesSize);
+                    anchor = 0;
+                }
+            }
 
             // If we didn't find an appropriate destination after trying 100 addresses fetched from addrman,
             // stop this loop, and let the outer loop run again (which sleeps, adds seed nodes, recalculates

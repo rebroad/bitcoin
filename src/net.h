@@ -990,6 +990,12 @@ public:
     /** Return true if we should disconnect the peer for failing an inactivity check. */
     bool ShouldRunInactivityChecks(const CNode& node, std::optional<int64_t> now=std::nullopt) const;
 
+    /**
+     * Addresses that were saved during a previous run before we lost network.
+     * attempt to make connections to them.
+     */
+    std::vector<CAddress> m_anchors;
+
 private:
     struct ListenSocket {
     public:
@@ -1172,12 +1178,6 @@ private:
     NetEventsInterface* m_msgproc;
     /** Pointer to this node's banman. May be nullptr - check existence before dereferencing. */
     BanMan* m_banman;
-
-    /**
-     * Addresses that were saved during the previous clean shutdown. We'll
-     * attempt to make block-relay-only connections to them.
-     */
-    std::vector<CAddress> m_anchors;
 
     /** SipHasher seeds for deterministic randomness */
     const uint64_t nSeed0, nSeed1;

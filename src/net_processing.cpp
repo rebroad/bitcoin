@@ -2794,19 +2794,20 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         std::string remoteAddr;
         if (fLogIPs)
-            remoteAddr = ", peeraddr=" + pfrom.addr.ToString();
+            remoteAddr = " peeraddr=" + pfrom.addr.ToString();
 
         bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsOutboundOrBlockRelayConn() || cleanSubVer.find("bitnodes") != std::string::npos);
-        LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s: version %d, blocks=%d, us=%s, txrelay=%d, peer=%d%s\n",
-                  cleanSubVer, pfrom.nVersion,
-                  peer->m_starting_height, addrMe.ToString(), fRelay, pfrom.GetId(),
-                  remoteAddr);
+        LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s v=%d s=%x relay=%d%s peer=%d\n",
+                  cleanSubVer, pfrom.nVersion, nServices, fRelay, remoteAddr, pfrom.GetId());
 
-        if (pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices))
-        {
-            LogPrintf("peer=%d does not offer the expected services (%08x offered, %08x expected); disconnecting\n", pfrom.GetId(), nServices, GetDesirableServiceFlags(nServices));
-            pfrom.fDisconnect = true;
-            return;
+        if (pfrom.IsFeelerConn() && pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices)) {
+            bool fDisconnect = (m_connman.m_anchors.empty() && !pfrom.IsInboundConn()); // Allow inbound and anchors to connect
+            LogPrintf("recv version does not offer the expected services (%x offered, %x expected) %speer=%d\n",
+                nServices, GetDesirableServiceFlags(nServices), fDisconnect ? "disconnecting " : "", pfrom.GetId());
+            if (fDisconnect) {
+                pfrom.fDisconnect = true;
+                return;
+            }
         }
 
         // Inbound peers send us their version message when they connect.
