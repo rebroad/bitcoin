@@ -710,16 +710,6 @@ struct CNodeState {
     unsigned int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
     int nBlockAfterTXs{0};
-    //! How many bytes of useful orphan TX data received
-    int nMempoolBytes{0};
-    //! Time the orphan TX was received, which later was accepted into the mempool.
-    int nLastTXTime{0};
-    //! How many orphan TXs accepted into the mempool from this peer
-    int nMempoolTXs{0};
-    //! How many bytes of useful TX data received that's gone into a block
-    int nBlockBytes{0};
-    //! How many TXs accepted that's gone into a block
-    int nBlockTXs{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2402,10 +2392,14 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
             const CTransaction& tx = *porphanTx;
-            CNodeState *nodestate = State(from_peer);
-            nodestate->nMempoolBytes += tx.GetTotalSize();
-            nodestate->nMempoolTXs++;
-            nodestate->nLastTXTime = nTimeExpire - ORPHAN_TX_EXPIRE_TIME;
+            int nSize = tx.GetTotalSize();
+            int64_t nTime = nTimeExpire - ORPHAN_TX_EXPIRE_TIME;
+            m_connman.ForNode(from_peer, [nSize, nTime](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
+                pnode->nMempoolBytes += nSize;
+                pnode->nMempoolTXs++;
+                pnode->nLastTXTime = nTime;
+                return true;
+            });
 
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
@@ -3201,25 +3195,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         LOCK(cs_main);
 
-        CNodeState* nodestate = State(pfrom.GetId());
-        if (nodestate->nLastTXTime) {
-            if (nodestate->nLastTXTime > pfrom.nLastTXTime)
-                pfrom.nLastTXTime = nodestate->nLastTXTime;
-            nodestate->nLastTXTime = 0;
-        }
-        if (nodestate->nMempoolBytes) {
-            pfrom.nMempoolBytes += nodestate->nMempoolBytes;
-            pfrom.nMempoolTXs += nodestate->nMempoolTXs;
-            nodestate->nMempoolBytes = 0;
-            nodestate->nMempoolTXs = 0;
-        }
-        if (nodestate->nBlockBytes) {
-            pfrom.nBlockBytes += nodestate->nBlockBytes;
-            pfrom.nBlockTXs += nodestate->nBlockTXs;
-            nodestate->nBlockBytes = 0;
-            nodestate->nBlockTXs = 0;
-        }
-
         const auto current_time = GetTime<std::chrono::microseconds>();
         uint256* best_block{nullptr};
         bool fIBD = m_chainman.ActiveChainstate().IsInitialBlockDownload();
@@ -3859,8 +3834,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         req.indexes.push_back(i);
                     else {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
-                            State(nodeid)->nBlockBytes += nSize;
-                            State(nodeid)->nBlockTXs++;
+                            m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
+                                pnode->nBlockBytes += nSize;
+                                pnode->nBlockTXs++;
+                                return true;
+                            });
                             nFromConPeers++;
                         } else {
                             if (nodeid == -1)
