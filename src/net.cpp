@@ -2199,50 +2199,52 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nTries = 0;
         while (!interruptNet)
         {
-            static int nNotAllAnchors = 0;
+            static int nAnchorTryAgain = 0;
 
             if (!m_anchors.empty()) {
                 anchor++;
                 const CAddress addr = m_anchors.back();
                 m_anchors.pop_back();
-                if (!addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
+                if (conn_type == ConnectionType::BLOCK_RELAY && (
+                    !addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
                     !HasAllDesirableServiceFlags(addr.nServices) ||
-                    setConnected.count(addr.GetGroup(addrman.m_asmap))) continue;
+                    setConnected.count(addr.GetGroup(addrman.m_asmap)))) continue;
                 addrConnect = addr;
                 LogPrintf("Trying to make a %s anchor(%d) connection to %s\n",
                     ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
                 break; // out of while
             } else if (anchor) {
-                size_t vNodesSize;
-                {
-                    LOCK(cs_vNodes);
-                    vNodesSize = vNodes.size();
-                }
                 std::string strComment;
-                if ((int)vNodesSize >= anchor) {
+                if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay)
                     strComment = "No further action needed!";
-                    nNotAllAnchors = 0;
-                } else {
-                    if (!nNotAllAnchors) {
-                        if (nPeersSendingTXs <= 1)
-                            strComment = "Oh dear, we'll try again shortly.";
-                        else
-                            strComment = "Oh dear, let's try once more...";
-                    } else
+                else {
+                    if (nAnchorTryAgain > 2) {
+                        nAnchorTryAgain = 0;
                         strComment = "Oh well, I guess we'll find new ones.";
-                    nNotAllAnchors++;
+                    }else {
+                        nAnchorTryAgain++;
+                        if (nPeersSendingTXs <= 1)
+                            strComment = strprintf("Oh dear, we'll retry(%d) again shortly. (%d)", nAnchorTryAgain, nPeersSendingTXs);
+                        else
+                            strComment = strprintf("Oh dear, let's retry(%d) once more...(%d)", nAnchorTryAgain, nPeersSendingTXs);
+                    }
                 }
-                LogPrintf("Finished connecting to %d anchors. Connections=%d. %s\n", anchor, vNodesSize, strComment);
+                LogPrintf("Finished connecting to %d anchors. Connections=%d+%d. %s\n", anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
                 anchor = 0;
             } // m_anchor not empty but anchor != 0
 
-            if (nNotAllAnchors == 1 && nPeersSendingTXs > 1) { // REB - greater than 1 to avoid the odd violating peer
-                LogPrintf("Trying ReadAnchors() a 2nd time.\n"); // REB - Ideally AddConnection doesn't limit max connections
+            if (nAnchorTryAgain && nPeersSendingTXs > 1) { // REB - greater than 1 to avoid the odd violating peer
+                if (!interruptNet.sleep_for(std::chrono::milliseconds(500)))
+                    return;
+                LogPrintf("Trying ReadAnchors() one more time.\n"); // REB - Ideally AddConnection doesn't limit max connections
                 // Load addresses from anchors.dat
                 m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
                 if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1) {
                     m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1);
                 }
+                if (!interruptNet.sleep_for(std::chrono::milliseconds(500)))
+                    return;
+                break;
             } // This'll get picked up the next time we hit the check for m_anchors above.
 
             // If we didn't find an appropriate destination after trying 100 addresses fetched from addrman,

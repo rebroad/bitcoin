@@ -254,7 +254,7 @@ bool CAddrDB::Read(CAddrMan& addr, CDataStream& ssPeers)
 
 void DumpAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& anchors)
 {
-    LOG_TIME_SECONDS(strprintf("Flush %d outbound peer addresses to anchors.dat", anchors.size()));
+    LogPrintf("%s: Flush %d outbound peer addresses to %s\n", __func__, anchors.size(), anchors_db_path.filename());
     SerializeFileDB("anchors", anchors_db_path, anchors, CLIENT_VERSION | ADDRV2_FORMAT);
 }
 
@@ -262,16 +262,10 @@ std::vector<CAddress> ReadAnchors(const fs::path& anchors_db_path)
 {
     std::vector<CAddress> anchors;
     if (DeserializeFileDB(anchors_db_path, anchors, CLIENT_VERSION | ADDRV2_FORMAT)) {
-        LogPrintf("Loaded %i anchors from %s\n", anchors.size(), anchors_db_path.filename());
+        LogPrintf("%s: Loaded %i anchors from %s\n", __func__, anchors.size(), anchors_db_path.filename());
     } else {
         anchors.clear();
     }
 
-    //fs::path backup = strprintf("%s.old", anchors_db_path.string());
-
-    //fs::remove(anchors_db_path);
-    //if (!RenameOver(anchors_db_path, backup)) {
-    //    LogPrintf("%s: Failed to rename %s to %s\n", __func__, anchors_db_path.filename(), backup.filename());
-    //}
     return anchors;
 }
