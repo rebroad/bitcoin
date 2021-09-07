@@ -2107,6 +2107,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // Only connect out to one peer per network group (/16 for IPv4).
         int nOutboundFullRelay = 0;
         int nOutboundBlockRelay = 0;
+        int nPeersSendingTXs = 0;
         std::set<std::vector<unsigned char> > setConnected;
 
         {
@@ -2114,6 +2115,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             for (const CNode* pnode : vNodes) {
                 if (pnode->IsFullOutboundConn()) nOutboundFullRelay++;
                 if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
+                if (pnode->nTime1stTx) nPeersSendingTXs++;
 
                 // Netgroups for inbound and manual peers are not excluded because our goal here
                 // is to not use multiple of our limited outbound slots on a single netgroup
@@ -2130,8 +2132,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     case ConnectionType::FEELER:
                         setConnected.insert(pnode->addr.GetGroup(addrman.m_asmap));
                 } // no default case, so the compiler can warn about missing cases
-            }
-        }
+            } // for loop through nodes
+        } // LOCK(cs_vNodes)
 
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
         auto now = GetTime<std::chrono::microseconds>();
@@ -2193,10 +2195,12 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
         addrman.ResolveCollisions();
 
-        int64_t nANow = GetAdjustedTime();
+        int64_t nANow = GetAdjustedTime(); // REBTODO - why the Adjusted one?
         int nTries = 0;
         while (!interruptNet)
         {
+            static int nNotAllAnchors = 0;
+
             if (!m_anchors.empty()) {
                 anchor++;
                 const CAddress addr = m_anchors.back();
@@ -2206,19 +2210,40 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     setConnected.count(addr.GetGroup(addrman.m_asmap))) continue;
                 addrConnect = addr;
                 LogPrintf("Trying to make a %s anchor(%d) connection to %s\n",
-                    conn_type == ConnectionType::BLOCK_RELAY ? "block" : "full", anchor, addrConnect.ToString());
+                    ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
                 break; // out of while
-            } else {
-                if (anchor) {
-                    size_t vNodesSize;
-                    {
-                        LOCK(cs_vNodes);
-                        vNodesSize = vNodes.size();
-                    }
-                    LogPrintf("Finished connecting to %d anchors. Connections=%d\n", anchor, vNodesSize);
-                    anchor = 0;
+            } else if (anchor) {
+                size_t vNodesSize;
+                {
+                    LOCK(cs_vNodes);
+                    vNodesSize = vNodes.size();
                 }
-            }
+                std::string strComment;
+                if ((int)vNodesSize >= anchor) {
+                    strComment = "No further action needed!";
+                    nNotAllAnchors = 0;
+                } else {
+                    if (!nNotAllAnchors) {
+                        if (nPeersSendingTXs <= 1)
+                            strComment = "Oh dear, we'll try again shortly.";
+                        else
+                            strComment = "Oh dear, let's try once more...";
+                    } else
+                        strComment = "Oh well, I guess we'll find new ones.";
+                    nNotAllAnchors++;
+                }
+                LogPrintf("Finished connecting to %d anchors. Connections=%d. %s\n", anchor, vNodesSize, strComment);
+                anchor = 0;
+            } // m_anchor not empty but anchor != 0
+
+            if (nNotAllAnchors == 1 && nPeersSendingTXs > 1) { // REB - greater than 1 to avoid the odd violating peer
+                LogPrintf("Trying ReadAnchors() a 2nd time.\n"); // REB - Ideally AddConnection doesn't limit max connections
+                // Load addresses from anchors.dat
+                m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
+                if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1) {
+                    m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1);
+                }
+            } // This'll get picked up the next time we hit the check for m_anchors above.
 
             // If we didn't find an appropriate destination after trying 100 addresses fetched from addrman,
             // stop this loop, and let the outer loop run again (which sleeps, adds seed nodes, recalculates
@@ -2290,7 +2315,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
             addrConnect = addr;
             break;
-        } // while !interruptNet (enough nTried or anchor selection finished)
+        } // while - meaning we've selected an address to try or addrConnect is invalid
 
         if (addrConnect.IsValid()) {
 
