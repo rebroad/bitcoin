@@ -2919,6 +2919,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         uint64_t remote_salt;
         vRecv >> they_initiator >> they_responder >> recon_version >> remote_salt;
 
+        pfrom.fErlay = true;
+
         if (!m_reconciliation.RegisterPeer(pfrom.GetId(), pfrom.IsInboundConn(),
             they_initiator, they_responder, recon_version, remote_salt)) {
                 LogPrint(BCLog::NET, "reconciliation protocol violation from peer=%d; disconnecting\n", pfrom.GetId());

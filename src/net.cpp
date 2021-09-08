@@ -599,6 +599,7 @@ void CNode::CopyStats(CNodeStats& stats)
         X(cleanSubVer);
     }
     stats.fInbound = IsInboundConn();
+    X(fErlay);
     X(m_bip152_highbandwidth_to);
     X(m_bip152_highbandwidth_from);
     {

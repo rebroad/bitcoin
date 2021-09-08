@@ -677,7 +677,7 @@ QString NetworkToQString(Network net)
     assert(false);
 }
 
-QString ConnectionTypeToQString(ConnectionType conn_type, bool prepend_direction)
+QString ConnectionTypeToQString(ConnectionType conn_type, bool fErlay, bool prepend_direction)
 {
     QString prefix;
     if (prepend_direction) {
@@ -689,6 +689,7 @@ QString ConnectionTypeToQString(ConnectionType conn_type, bool prepend_direction
                          is a connection initiated by us. */
                      QObject::tr("Outbound") + " ";
     }
+    if (fErlay) return prefix + QObject::tr("Erlay");
     switch (conn_type) {
     case ConnectionType::INBOUND: return prefix;
     //: Peer connection type that relays all network information.
