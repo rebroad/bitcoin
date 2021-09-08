@@ -1062,6 +1062,7 @@ private:
 
     void ResetNewNodeId();
     NodeId GetNewNodeId();
+    NodeId GetLastNodeId();
 
     size_t SocketSendData(CNode& node) const EXCLUSIVE_LOCKS_REQUIRED(node.cs_vSend);
     void DumpAddresses();
