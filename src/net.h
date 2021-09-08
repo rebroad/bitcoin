@@ -252,6 +252,7 @@ public:
     int nVersion;
     std::string cleanSubVer;
     bool fInbound;
+    bool fErlay;
     bool m_bip152_highbandwidth_to;
     bool m_bip152_highbandwidth_from;
     int m_starting_height;
@@ -457,6 +458,7 @@ public:
         return NetPermissions::HasFlag(m_permissionFlags, permission);
     }
     bool fClient{false}; // set by version message
+    bool fErlay{false};
     bool m_limited_node{false}; //after BIP159, set by version message
     /** fSuccessfullyConnected is set to true on receiving VERACK from the peer. */
     std::atomic_bool fSuccessfullyConnected{false};
