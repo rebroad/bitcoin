@@ -1183,16 +1183,21 @@ void PeerManagerImpl::PushNodeVersion(CNode& pnode, int64_t nTime)
     uint64_t your_services{addr.nServices};
 
     const bool tx_relay = !m_ignore_incoming_txs && pnode.m_tx_relay != nullptr;
-    m_connman.PushMessage(&pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, PROTOCOL_VERSION, my_services, nTime,
+    std::string cleanSubVer;
+    {
+        LOCK(pnode.cs_SubVer);
+        cleanSubVer = pnode.cleanSubVer;
+    }
+    int nProtVersion = PROTOCOL_VERSION;
+    if (cleanSubVer.find("bitnodes") != std::string::npos)
+        nProtVersion = gArgs.GetArg("-bitnodeprotocolversion", 70016);
+    m_connman.PushMessage(&pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, nProtVersion, my_services, nTime,
             your_services, addr_you, // Together the pre-version-31402 serialization of CAddress "addrYou" (without nTime)
             my_services, CService(), // Together the pre-version-31402 serialization of CAddress "addrMe" (without nTime)
             nonce, strSubVersion, nNodeStartingHeight, tx_relay));
 
-    if (fLogIPs) {
-        LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, them=%s, txrelay=%d, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, addr_you.ToString(), tx_relay, nodeid);
-    } else {
-        LogPrint(BCLog::NET, "send version message: version %d, blocks=%d, txrelay=%d, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, tx_relay, nodeid);
-    }
+    bool fLoggy = pnode.HasPermission(NetPermissionFlags::NoBan);
+    LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "send version: version %d, blocks=%d%s, txrelay=%d, peer=%d\n", nProtVersion, nNodeStartingHeight, fLogIPs ? ", them=" + addr_you.ToString() : "", tx_relay, nodeid);
 }
 
 void PeerManagerImpl::AddTxAnnouncement(const CNode& node, const GenTxid& gtxid, std::chrono::microseconds current_time)
