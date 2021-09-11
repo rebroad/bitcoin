@@ -798,6 +798,31 @@ static RPCHelpMan getindexinfo()
     };
 }
 
+static RPCHelpMan bitnodeprotocolversion()
+{
+    return RPCHelpMan{"bitnodeprotocolversion",
+                "\nSets the protocol version given to bitnodes nodes.\n",
+                {
+                    {"number", RPCArg::Type::NUM, RPCArg::Optional::NO, "The protocol version"},
+                },
+                RPCResult{
+                    RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+                    HelpExampleCli("bitnodeprotocolversion", "70016") + HelpExampleRpc("bitnodeprotocolversion", "70016")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    int nNumber = request.params[0].get_int();
+    if (nNumber < 0)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("bitnodeprotocolversion %d is invalid", nNumber));
+    gArgs.ForceSetArg("-bitnodeprotocolversion", strprintf("%d", nNumber));
+    LogPrintf("Update bitnodeprotocolversion to %d\n", nNumber);
+
+    return NullUniValue;
+}
+    };
+}
+
 void RegisterMiscRPCCommands(CRPCTable &t)
 {
 // clang-format off
@@ -823,6 +848,7 @@ static const CRPCCommand commands[] =
 #if defined(USE_SYSCALL_SANDBOX)
     { "hidden",             &invokedisallowedsyscall, },
 #endif // USE_SYSCALL_SANDBOX
+    { "hidden",             &bitnodeprotocolversion,  },
 };
 // clang-format on
     for (const auto& c : commands) {
