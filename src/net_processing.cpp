@@ -437,7 +437,7 @@ private:
     int64_t m_stale_tip_check_time{0};
 
     /** Last time we had no connections */
-    int64_t m_last_no_connections{GetTime()};
+    int64_t m_last_no_connections{GetTime()}; // REBTODO - move to net.cpp?
 
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;

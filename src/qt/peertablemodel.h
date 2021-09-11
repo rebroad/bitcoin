@@ -53,8 +53,7 @@ public:
         Ping,
         Sent,
         Recv,
-	//TxBps,
-	//TxBpsPct,
+	TxBpsPct,
         TxIpm,
         MPpm,
         MPpmPct,
@@ -104,12 +103,9 @@ private:
         /*: Title of Peers Table column which indicates the speed of
             network information we have received from the peer. */
         tr("Recv"),
-        /*: Title of Peers Table column which indicates the rate of network
-            information that has gone into our mempool. */
-        //tr("TxBps"),
         /*: Title of Peers Table column which indicates the percentage of
             useful TX traffic we're receiving from the peer. */
-        //tr("Bps%"),
+        tr("Bps%"),
         /*: Title of Peers Table column which indicates the number of TX invs
             received per minute on average. */
         tr("TIpm"),

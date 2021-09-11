@@ -56,12 +56,12 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
         double Right = 1.0 * right_stats.nMempoolBytes / (now + 1 - right_stats.nTime1stTx);
         double Left = 1.0 * left_stats.nMempoolBytes / (now + 1 - left_stats.nTime1stTx);
         return Left < Right;
-    }
+    } */
     case PeerTableModel::TxBpsPct: {
         double Right = 1.0 * right_stats.nMempoolBytes / (right_stats.nRecvBytes + 1 - right_stats.nRecvBytes1stTx);
         double Left = 1.0 * left_stats.nMempoolBytes / (left_stats.nRecvBytes + 1 - left_stats.nRecvBytes1stTx);
         return Left < Right;
-    } */
+    }
     case PeerTableModel::TxIpm: {
         int64_t now = GetTimeSeconds();
         double Right = 1.0 * right_stats.nTXs / (now + 1 - right_stats.nTime1stTx);
