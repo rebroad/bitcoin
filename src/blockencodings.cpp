@@ -46,7 +46,7 @@ uint64_t CBlockHeaderAndShortTxIDs::GetShortID(const uint256& txhash) const {
 
 
 
-ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<uint256, CTransactionRef>>& extra_txn) {
+ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<uint256, std::pair<CTransactionRef, NodeId>>>& extra_txn) {
     if (cmpctblock.header.IsNull() || (cmpctblock.shorttxids.empty() && cmpctblock.prefilledtxn.empty()))
         return READ_STATUS_INVALID;
     if (cmpctblock.shorttxids.size() + cmpctblock.prefilledtxn.size() > MAX_BLOCK_WEIGHT / MIN_SERIALIZABLE_TRANSACTION_WEIGHT)
@@ -55,6 +55,9 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     assert(header.IsNull() && txn_available.empty());
     header = cmpctblock.header;
     txn_available.resize(cmpctblock.BlockTxCount());
+    txn_peer.resize(cmpctblock.BlockTxCount());
+    txn_time.resize(cmpctblock.BlockTxCount());
+    txn_size.resize(cmpctblock.BlockTxCount());
 
     int32_t lastprefilledindex = -1;
     for (size_t i = 0; i < cmpctblock.prefilledtxn.size(); i++) {
@@ -111,7 +114,10 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
                 txn_available[idit->second] = pool->vTxHashes[i].second->GetSharedTx();
-                have_txn[idit->second]  = true;
+                txn_peer[idit->second] = pool->vTxHashes[i].second->GetPeer();
+                txn_time[idit->second] = pool->vTxHashes[i].second->GetTime().count();
+                txn_size[idit->second] = pool->vTxHashes[i].second->GetTxSize();
+                have_txn[idit->second] = true;
                 mempool_count++;
             } else {
                 // If we find two mempool txn that match the short id, just request it.
@@ -136,8 +142,11 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
-                txn_available[idit->second] = extra_txn[i].second;
-                have_txn[idit->second]  = true;
+                txn_available[idit->second] = extra_txn[i].second.first;
+                txn_peer[idit->second] = extra_txn[i].second.second;
+                txn_time[idit->second] = GetTime();
+                txn_size[idit->second] = extra_txn[i].second.first->GetTotalSize();
+                have_txn[idit->second] = true;
                 mempool_count++;
                 extra_count++;
             } else {
@@ -148,7 +157,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 // Note that we don't want duplication between extra_txn and mempool to
                 // trigger this case, so we compare witness hashes first
                 if (txn_available[idit->second] &&
-                        txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second->GetWitnessHash()) {
+                        txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second.first->GetWitnessHash()) {
                     txn_available[idit->second].reset();
                     mempool_count--;
                     extra_count--;
@@ -167,9 +176,16 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     return READ_STATUS_OK;
 }
 
-bool PartiallyDownloadedBlock::IsTxAvailable(size_t index) const {
+bool PartiallyDownloadedBlock::IsTxAvailable(size_t index, NodeId& nodeid, int64_t& nTime, unsigned int& nSize) const {
     assert(!header.IsNull());
     assert(index < txn_available.size());
+
+    if (txn_available[index]) {
+        nodeid = txn_peer[index];
+        nTime = txn_time[index];
+        nSize = txn_size[index];
+    }
+
     return txn_available[index] != nullptr;
 }
 
