@@ -123,7 +123,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             if (rec->nodeStats.nRecvBytes1stTx && now != rec->nodeStats.nTime1stTx) {
                 int nMPpm = 60 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTime1stTx);
                 int nBTxpm = 60 * rec->nodeStats.nBlockTXs / (now - rec->nodeStats.nTime1stTx);
-                return QString::fromStdString(strprintf("%d%s", nMPpm, (nBTxpm && nBTxpm != nMPpm) ? strprintf(" + %d", nBTxpm) : ""));
+                return QString::fromStdString(strprintf("%d%s", nMPpm, (nBTxpm && nBTxpm != nMPpm) ? strprintf("+%d", nBTxpm) : ""));
             } else
                 return QString::fromStdString("");
         }

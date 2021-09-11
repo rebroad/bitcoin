@@ -2120,8 +2120,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             } // for loop through nodes
         } // LOCK(cs_vNodes)
 
-        int nAnchorTryAgain = 0;
-        if (vNodesSize == 0 && m_anchors.empty() && GetLastNodeId() > 0) {
+        static int nAnchorTryAgain = -1;
+        if (vNodesSize == 0 && m_anchors.empty() && (nAnchorTryAgain < 0) || (GetLastNodeId() > 0)) {
             LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
             nAnchorTryAgain = 0;
             ResetNewNodeId();
@@ -2197,7 +2197,6 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nTries = 0;
         while (!interruptNet)
         {
-            nAnchorTryAgain = 0;
             if (!m_anchors.empty()) {
                 anchor++;
                 const CAddress addr = m_anchors.back();
@@ -2212,9 +2211,10 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 break; // out of while
             } else if (anchor) {
                 std::string strComment;
-                if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay)
+                if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay) {
                     strComment = "No further action needed!";
-                else {
+                    nAnchorTryAgain = 0;
+                } else {
                     if (nAnchorTryAgain >= 1) { // One retry is sufficient, 2nd retry rarely finds anything new.
                         nAnchorTryAgain = 0;
                         strComment = "Oh well, I guess we'll find new ones.";

@@ -1117,7 +1117,7 @@ private:
     std::list<CNode*> vNodesDisconnected;
     mutable RecursiveMutex cs_vNodes;
     std::atomic<NodeId> nLastNodeId{0};
-    int nPrevNodeCount{-1}; // REB - Set to -1 so that we load anchors at startup
+    int nPrevNodeCount{0};
 
     /**
      * Cache responses to addr requests to minimize privacy leak.
