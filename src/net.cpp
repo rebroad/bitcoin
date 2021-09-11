@@ -1293,7 +1293,9 @@ void CConnman::DisconnectNodes()
             if (pnode->fDisconnect)
             {
                 // remove from m_nodes
+                int m_nodesSizeBefore = m_nodes.size();
                 m_nodes.erase(remove(m_nodes.begin(), m_nodes.end(), pnode), m_nodes.end());
+                int m_nodesSizeAfter = m_nodes.size();
 
                 // release outbound grant (if any)
                 pnode->grantOutbound.Release();
@@ -1302,6 +1304,7 @@ void CConnman::DisconnectNodes()
                 pnode->CloseSocketDisconnect();
 
                 // hold in disconnected pool until all refs are released
+                LogPrint(BCLog::CONN, "%s: Add to m_nodes_disconnected m_nodes.size %d->%d GRC=%d %speer=%d\n", __func__, m_nodesSizeBefore, m_nodesSizeAfter, pnode->GetRefCount(), pnode->IsFeelerConn() ? "feel " : pnode->IsInboundConn() ? "incoming ":"", pnode->GetId());
                 pnode->Release(1); // REB - deletion
                 m_nodes_disconnected.push_back(pnode);
             }
@@ -1315,6 +1318,7 @@ void CConnman::DisconnectNodes()
             // Destroy the object only after other threads have stopped using it.
             if (pnode->GetRefCount() <= 0) {
                 m_nodes_disconnected.remove(pnode);
+                LogPrint(BCLog::CONN, "%s: Calling DeleteNode GRC=%d from m_nodes_disconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
                 DeleteNode(pnode);
             }
         }
@@ -2973,6 +2977,7 @@ void CConnman::StopNodes()
     WITH_LOCK(m_nodes_mutex, nodes.swap(m_nodes));
     for (CNode* pnode : nodes) {
         pnode->CloseSocketDisconnect();
+        LogPrint(BCLog::CONN, "%s: Calling DeleteNode GRC=%d from Delete peer connection. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
         DeleteNode(pnode);
     }
 
@@ -2986,6 +2991,7 @@ void CConnman::StopNodes()
     }
 
     for (CNode* pnode : m_nodes_disconnected) {
+        LogPrint(BCLog::CONN, "%s: Calling DeleteNode GRC=%d from m_nodes_disconnected. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
         DeleteNode(pnode);
     }
     m_nodes_disconnected.clear();
