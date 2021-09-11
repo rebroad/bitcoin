@@ -206,7 +206,7 @@ std::optional<bilingual_str> LoadAddrman(const std::vector<bool>& asmap, const A
 
 void DumpAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& anchors)
 {
-    LOG_TIME_SECONDS(strprintf("Flush %d outbound block-relay-only peer addresses to anchors.dat", anchors.size()));
+    LogPrintf("%s: Flush %d outbound peer addresses to %s\n", __func__, anchors.size(), anchors_db_path.filename());
     SerializeFileDB("anchors", anchors_db_path, anchors, CLIENT_VERSION | ADDRV2_FORMAT);
 }
 
@@ -215,11 +215,10 @@ std::vector<CAddress> ReadAnchors(const fs::path& anchors_db_path)
     std::vector<CAddress> anchors;
     try {
         DeserializeFileDB(anchors_db_path, anchors, CLIENT_VERSION | ADDRV2_FORMAT);
-        LogPrintf("Loaded %i addresses from %s\n", anchors.size(), anchors_db_path.filename());
+        LogPrintf("%s: Loaded %i anchors from %s\n", __func__, anchors.size(), anchors_db_path.filename());
     } catch (const std::exception&) {
         anchors.clear();
     }
 
-    fs::remove(anchors_db_path);
     return anchors;
 }

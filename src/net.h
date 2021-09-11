@@ -1059,6 +1059,11 @@ private:
      */
     std::vector<CAddress> GetCurrentBlockRelayOnlyConns() const;
 
+    /**
+     * Return vector of current FULL_OUTBOUND_RELAY peers.
+     */
+    std::vector<CAddress> GetCurrentFullNodesOnlyConns() const;
+
     // Whether the node should be passed out in ForEach* callbacks
     static bool NodeFullyConnected(const CNode* pnode);
 
