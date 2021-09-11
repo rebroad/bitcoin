@@ -168,7 +168,7 @@ static std::vector<CAddress> ConvertSeeds(const std::vector<uint8_t> &vSeedsIn)
         s >> endpoint;
         CAddress addr{endpoint, GetDesirableServiceFlags(NODE_NONE)};
         addr.nTime = GetTime() - rng.randrange(nOneWeek) - nOneWeek;
-        LogPrint(BCLog::NET, "Added hardcoded seed: %s\n", addr.ToString());
+        LogPrintf("Added hardcoded seed: %s\n", addr.ToString());
         vSeedsOut.push_back(addr);
     }
     return vSeedsOut;
@@ -401,9 +401,14 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     }
 
     /// debug print
-    LogPrint(BCLog::NET, "trying connection %s lastseen=%.1fhrs\n",
-        pszDest ? pszDest : addrConnect.ToString(),
-        pszDest ? 0.0 : (double)(GetAdjustedTime() - addrConnect.nTime)/3600.0);
+    size_t vNodesSize;
+    {
+        LOCK(cs_vNodes);
+        vNodesSize = vNodes.size();
+    }
+    LogPrint(BCLog::CONN, "trying %s connection(%d) %s lastseen=%s\n", ConnectionTypeAsString(conn_type),
+        vNodesSize, pszDest ? pszDest : addrConnect.ToString(),
+        pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
     // Resolve
     const uint16_t default_port{pszDest != nullptr ? Params().GetDefaultPort(pszDest) :
@@ -523,9 +528,9 @@ std::string ConnectionTypeAsString(ConnectionType conn_type)
     case ConnectionType::FEELER:
         return "feeler";
     case ConnectionType::OUTBOUND_FULL_RELAY:
-        return "outbound-full-relay";
+        return "full-relay";
     case ConnectionType::BLOCK_RELAY:
-        return "block-relay-only";
+        return "block-relay";
     case ConnectionType::ADDR_FETCH:
         return "addr-fetch";
     } // no default case, so the compiler can warn about missing cases
@@ -1334,12 +1339,12 @@ bool CConnman::InactivityCheck(const CNode& node) const
     }
 
     if (now > node.nLastSend + TIMEOUT_INTERVAL) {
-        LogPrintf("socket sending timeout: %is disconnect peer=%d\n", now - node.nLastSend, node.GetId());
+        LogPrintf("socket sending timeout: %s disconnect peer=%d\n", strAge(now - node.nLastSend), node.GetId());
         return true;
     }
 
     if (now > node.nLastRecv + TIMEOUT_INTERVAL) {
-        LogPrintf("socket receive timeout: %is disconnect peer=%d\n", now - node.nLastRecv, node.GetId());
+        LogPrintf("socket receive timeout: %s disconnect peer=%d\n", strAge(now - node.nLastRecv), node.GetId());
         return true;
     }
 
@@ -2002,7 +2007,7 @@ bool CConnman::GetTryNewOutboundPeer() const
 void CConnman::SetTryNewOutboundPeer(bool flag)
 {
     m_try_another_outbound_peer = flag;
-    LogPrint(BCLog::NET, "net: setting try another outbound peer=%s\n", flag ? "true" : "false");
+    LogPrint(BCLog::CONN, "net: setting try another outbound peer=%s\n", flag ? "true" : "false");
 }
 
 // Return the number of peers we have over our outbound connection limit

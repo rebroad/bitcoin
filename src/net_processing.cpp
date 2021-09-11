@@ -1607,8 +1607,7 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         if (state.fPreferHeaderAndIDs && (!fWitnessEnabled || state.fWantsCmpctWitness) &&
                 !PeerHasHeader(&state, pindex) && PeerHasHeader(&state, pindex->pprev)) {
 
-            LogPrint(BCLog::NET, "%s sending header-and-ids %s to peer=%d\n", "PeerManager::NewPoWValidBlock",
-                    hashBlock.ToString(), pnode->GetId());
+            LogPrint(BCLog::BLOCKSEND, "send cmpctblock %s %s peer=%d\n", hashBlock.ToString(), strBlkInfo(pindex), pnode->GetId());
             m_connman.PushMessage(pnode, msgMaker.Make(NetMsgType::CMPCTBLOCK, *pcmpctblock));
             state.pindexBestHeaderSent = pindex;
         }
@@ -1640,16 +1639,19 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
         }
     }
 
+    std::string strDebug = strprintf("%s: PushBlockHeaders to", __func__);
     {
         LOCK(m_peer_mutex);
         for (auto& it : m_peer_map) {
             Peer& peer = *it.second;
+            strDebug += strprintf(" %d", peer.m_id);
             LOCK(peer.m_block_inv_mutex);
             for (const uint256& hash : reverse_iterate(vHashes)) {
                 peer.m_blocks_for_headers_relay.push_back(hash);
             }
         }
     }
+    LogPrint(BCLog::BLOCKSEND, "%s\n", strDebug);
 
     m_connman.WakeMessageHandler();
 }
@@ -1839,7 +1841,8 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         (((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
         !pfrom.HasPermission(NetPermissionFlags::Download) // nodes with the download permission may exceed target
     ) {
-        LogPrintf("historical block serving limit reached, disconnect peer=%d\n", pfrom.GetId());
+        LOCK(pfrom.cs_SubVer);
+        LogPrintf("historical block (%d) serving limit reached, %s disconnect peer=%d\n", pindex->nHeight, pfrom.cleanSubVer, pfrom.GetId());
         pfrom.fDisconnect = true;
         return;
     }
@@ -2332,6 +2335,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         const auto [porphanTx, from_peer, nTimeExpire, list_pos] = m_orphanage.GetTx(orphanHash);
         if (porphanTx == nullptr) continue;
 
+        int64_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, from_peer, false /* bypass_limits */);
         const TxValidationState& state = result.m_state;
 
@@ -2345,7 +2349,9 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
                 pnode->nLastTXTime = nTime;
                 return true;
             });
-            LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
+            LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
+                orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
+		tx.GetTotalSize(), (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
             _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
             m_orphanage.EraseTx(orphanHash);
@@ -3336,7 +3342,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // might maliciously send lots of getblocktxn requests to trigger
         // expensive disk reads, because it will require the peer to
         // actually receive all the data read from disk over the network.
-        LogPrint(BCLog::NET, "Peer %d sent us a getblocktxn for a block > %i deep\n", pfrom.GetId(), MAX_BLOCKTXN_DEPTH);
+        LogPrint(BCLog::BLOCKSEND, "Peer %d sent us a getblocktxn for a block > %i deep\n", pfrom.GetId(), MAX_BLOCKTXN_DEPTH);
         CInv inv;
         WITH_LOCK(cs_main, inv.type = State(pfrom.GetId())->fWantsCmpctWitness ? MSG_WITNESS_BLOCK : MSG_BLOCK);
         inv.hash = req.blockhash;
@@ -3479,8 +3485,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         m_reconciliation.TryRemovingFromReconSet(pfrom.GetId(), wtxid);
 
+	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
         const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, pfrom.GetId(), false /* bypass_limits */);
         const TxValidationState& state = result.m_state;
+        bool fOrphanAdded = false;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
             m_mempool.check(m_chainman.ActiveChainstate());
@@ -3495,10 +3503,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             pfrom.nMempoolBytes += tx.GetTotalSize();
             pfrom.nMempoolTXs++;
 
-            LogPrint(BCLog::MEMPOOL, "AcceptToMemoryPool: peer=%d: accepted %s (poolsz %u txn, %u kB)\n",
-                pfrom.GetId(),
+            LogPrint(BCLog::MEMPOOL, "tx accepted %s (poolsz %u, %ukB) size=%d delta=%d IF=%d peer=%d\n",
                 tx.GetHash().ToString(),
-                m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000);
+                m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
+                tx.GetTotalSize(), m_mempool.DynamicMemoryUsage() - nMemUsageBefore,
+                nodestate->nTxInFlight, pfrom.GetId());
 
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
                 AddToCompactExtraTransactions(removedTx, pfrom.GetId());
@@ -3541,6 +3550,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     if (!AlreadyHaveTx(gtxid)) AddTxAnnouncement(pfrom, gtxid, current_time);
                 }
 
+                fOrphanAdded = true;
                 if (m_orphanage.AddTx(ptx, pfrom.GetId()))
                     AddToCompactExtraTransactions(ptx, pfrom.GetId());
 
@@ -3620,9 +3630,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // regardless of false positives.
 
         if (state.IsInvalid()) {
-            LogPrint(BCLog::MEMPOOLREJ, "%s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(),
-                pfrom.GetId(),
-                state.ToString());
+            if (!fOrphanAdded)
+                LogPrint(BCLog::MEMPOOLREJ, "AcceptToMemoryPool: NOT accepted %s %s peer=%d\n",
+                    tx.GetHash().ToString(), state.ToString(), pfrom.GetId());
             MaybePunishNodeForTx(pfrom.GetId(), state);
         }
         return;
