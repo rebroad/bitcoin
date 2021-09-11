@@ -131,7 +131,7 @@ std::vector<std::string> GetNetworkNames(bool append_unroutable)
     return names;
 }
 
-static bool LookupIntern(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
+static int LookupIntern(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
 {
     vIP.clear();
 
@@ -163,10 +163,10 @@ static bool LookupIntern(const std::string& name, std::vector<CNetAddr>& vIP, un
         }
     }
 
-    return (vIP.size() > 0);
+    return vIP.size();
 }
 
-bool LookupHost(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
+int LookupHost(const std::string& name, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions, bool fAllowLookup, DNSLookupFn dns_lookup_function)
 {
     if (!ValidAsCString(name)) {
         return false;
@@ -584,8 +584,7 @@ bool ConnectSocketDirectly(const CService &addrConnect, const Sock& sock, int nT
                 return false;
             }
             if (sockerr != 0) {
-                LogConnectFailure(manual_connection,
-                                  "connect() to %s failed after wait: %s",
+                LogPrint(BCLog::NET, "connect() to %s failed after wait: %s",
                                   addrConnect.ToString(),
                                   NetworkErrorString(sockerr));
                 return false;
