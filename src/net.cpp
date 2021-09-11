@@ -1238,7 +1238,6 @@ bool CConnman::AddConnection(const std::string& address, ConnectionType conn_typ
     case ConnectionType::FEELER:
         return false;
     case ConnectionType::OUTBOUND_FULL_RELAY:
-        max_connections = m_max_outbound_full_relay;
         break;
     case ConnectionType::BLOCK_RELAY:
         max_connections = m_max_outbound_block_relay;
@@ -2584,7 +2583,7 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
 
     if (semOutbound == nullptr) {
         // initialize semaphore
-        semOutbound = std::make_unique<CSemaphore>(std::min(m_max_outbound, nMaxConnections));
+        semOutbound = std::make_unique<CSemaphore>(nMaxConnections);
     }
     if (semAddnode == nullptr) {
         // initialize semaphore

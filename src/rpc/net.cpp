@@ -287,7 +287,7 @@ static RPCHelpMan addnode()
     std::string strCommand;
     if (!request.params[1].isNull())
         strCommand = request.params[1].get_str();
-    if (strCommand != "onetry" && strCommand != "add" && strCommand != "remove") {
+    if (strCommand != "onetry" && strCommand != "add" && strCommand != "remove" && strCommand != "full") {
         throw std::runtime_error(
             self.ToString());
     }
@@ -301,6 +301,14 @@ static RPCHelpMan addnode()
     {
         CAddress addr;
         connman.OpenNetworkConnection(addr, false, nullptr, strNode.c_str(), ConnectionType::MANUAL);
+        return NullUniValue;
+    }
+
+    if (strCommand == "full")
+    {
+        const auto conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
+        if (!connman.AddConnection(strNode, conn_type))
+            throw JSONRPCError(RPC_CLIENT_NODE_CAPACITY_REACHED, strprintf("Error: Already at capacity for %s.", ConnectionTypeAsString(conn_type)));
         return NullUniValue;
     }
 
