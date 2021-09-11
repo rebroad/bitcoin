@@ -1284,7 +1284,9 @@ void CConnman::DisconnectNodes()
             if (pnode->fDisconnect)
             {
                 // remove from vNodes
+                int nvNodesSizeBefore = vNodes.size();
                 vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
+                int nvNodesSizeAfter = vNodes.size();
 
                 // release outbound grant (if any)
                 pnode->grantOutbound.Release();
@@ -1293,7 +1295,8 @@ void CConnman::DisconnectNodes()
                 pnode->CloseSocketDisconnect();
 
                 // hold in disconnected pool until all refs are released
-                pnode->Release();
+                LogPrintf("%s: Add to vNodesDisconnected vNodes.size %d->%d GRC=%d %speer=%d\n", __func__, nvNodesSizeBefore, nvNodesSizeAfter, pnode->GetRefCount(), pnode->IsFeelerConn() ? "feel " : pnode->IsInboundConn() ? "incoming ":"", pnode->GetId());
+                pnode->Release(); // REB - deletion
                 vNodesDisconnected.push_back(pnode);
             }
         }
