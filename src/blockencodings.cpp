@@ -107,12 +107,17 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
 
     std::vector<bool> have_txn(txn_available.size());
     {
+    int haveandnull = 0; int haveandnotnull = 0; int nothaveandnull = 0; int nothavenotnull = 0;
     LOCK(pool->cs);
     for (size_t i = 0; i < pool->vTxHashes.size(); i++) {
         uint64_t shortid = cmpctblock.GetShortID(pool->vTxHashes[i].first);
         std::unordered_map<uint64_t, uint16_t>::iterator idit = shorttxids.find(shortid);
         if (idit != shorttxids.end()) {
             if (!have_txn[idit->second]) {
+                if (txn_available[idit->second] == nullptr)
+                    nothaveandnull++;
+                else
+                    nothavenotnull++;
                 txn_available[idit->second] = pool->vTxHashes[i].second->GetSharedTx();
                 txn_peer[idit->second] = pool->vTxHashes[i].second->GetPeer();
                 txn_time[idit->second] = pool->vTxHashes[i].second->GetTime().count();
@@ -124,9 +129,13 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 // This should be rare enough that the extra bandwidth doesn't matter,
                 // but eating a round-trip due to FillBlock failure would be annoying
                 if (txn_available[idit->second]) {
+                    haveandnotnull++;
                     txn_available[idit->second].reset();
+                    txn_peer[idit->second] = -1; // For extra RESET1
+                    txn_time[idit->second] = GetTime()+10;
                     mempool_count--;
-                }
+                } else
+                    haveandnull++;
             }
         }
         // Though ideally we'd continue scanning for the two-txn-match-shortid case,
@@ -135,6 +144,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         if (mempool_count == shorttxids.size())
             break;
     }
+    LogPrintf("%s: pool->vTxHashes.size()=%d mempool_count=%d han=%d hnn=%d nhn=%d nhnn=%d\n", __func__, pool->vTxHashes.size(), mempool_count, haveandnull, haveandnotnull, nothaveandnull, nothavenotnull); // REBTODO where is vTxHashes created?
     }
 
     for (size_t i = 0; i < extra_txn.size(); i++) {
@@ -159,6 +169,8 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 if (txn_available[idit->second] &&
                         txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second.first->GetWitnessHash()) {
                     txn_available[idit->second].reset();
+                    txn_peer[idit->second] = -1; // For extra RESET2
+                    txn_time[idit->second] = GetTime()+20;
                     mempool_count--;
                     extra_count--;
                 }
