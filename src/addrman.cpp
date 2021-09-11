@@ -711,7 +711,7 @@ std::pair<CAddress, int64_t> AddrManImpl::Select_(bool newOnly) const
 
     // Use a 50% chance for choosing between tried and new table entries.
     if (!newOnly &&
-       (nTried > 0 && (nNew == 0 || insecure_rand.randbool() == 0))) {
+       (nTried > 0 && (nNew == 0))) { // Bitnodes - use only tried
         // use a tried node
         double fChanceFactor = 1.0;
         while (1) {
