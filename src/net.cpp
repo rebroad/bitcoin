@@ -59,7 +59,7 @@
 static constexpr size_t MAX_BLOCK_RELAY_ONLY_ANCHORS = 2;
 static_assert (MAX_BLOCK_RELAY_ONLY_ANCHORS <= static_cast<size_t>(MAX_BLOCK_RELAY_ONLY_CONNECTIONS), "MAX_BLOCK_RELAY_ONLY_ANCHORS must not exceed MAX_BLOCK_RELAY_ONLY_CONNECTIONS.");
 /** Anchor IP address database file name */
-const char* const ANCHORS_DATABASE_FILENAME = "anchors.dat";
+const char* const ANCHORS_DATABASE_FILENAME = "txanchors.dat";
 
 // How often to dump addresses to peers.dat
 static constexpr std::chrono::minutes DUMP_PEERS_INTERVAL{15};
@@ -116,6 +116,7 @@ RecursiveMutex cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost GUARDED_BY(cs_mapLocalHost);
 static bool vfLimited[NET_MAX] GUARDED_BY(cs_mapLocalHost) = {};
 std::string strSubVersion;
+static int nAnchorTryAgain = -1; // -1 so that we skip the sleeps on the first ReadAnchor
 
 void CConnman::AddAddrFetch(const std::string& strDest)
 {
@@ -666,6 +667,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                 nRecvBytes1stTx = nRecvBytes - msg.m_raw_message_size - msg_bytes.size();
                 nTime1stTx = count_seconds(m_last_recv);
             }
+            if (msg.m_command == NetMsgType::BLOCK) nLastBlock = count_seconds(m_last_recv);
 
             // Store received bytes per message command
             // to prevent a memory DOS, only allow valid commands
@@ -1315,6 +1317,7 @@ void CConnman::DisconnectNodes()
     LOCK(m_nodes_mutex);
     if (m_nodes.size() == 0 && nodes_disconnected_copy.size() > 0 && m_nodes_disconnected.size() == 0) {
         LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+        nAnchorTryAgain = 0;
         ResetNewNodeId();
     }
 }
@@ -1569,9 +1572,193 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                                       const std::set<SOCKET>& send_set,
                                       const std::set<SOCKET>& error_set)
 {
+    int64_t latestOutboundConn = 0;
+    int64_t latest1stTx = 0;
+    uint64_t nTotalBytesRecv = 0;
+    uint64_t nTotalMempoolBytes = 0;
+    int nOutboundFullRelay = 0;
+    int nOutboundBlockRelay = 0;
+    float nLowestPct = 100;
+    float nLowestBPct = 100;
+    float worstNodePctBPct = 0;
+    float nLowestTXpm = 10000;
+    float nLowestBTXpm = 10000;
+    float worstNodeTXpmBTXpm = 0;
+    float nSecondLowestPct = 0;
+    float nSecondLowestBPct = 0;
+    float nSecondLowestTXpm = 0;
+    float nSecondLowestBTXpm = 0;
+    float nLatestNodePct = 0;
+    float nLatestNodeTXpm = 0;
+    NodeId worstNodePct = -1;
+    NodeId worstNodeBPct = -1;
+    NodeId worstNodeTXpm = -1;
+    NodeId worstNodeBTXpm = -1;
+    NodeId latestNode = -1;
+    static NodeId lastWorstPct = -1;
+    static NodeId lastWorstTXpm = -1;
+    float nGlobalTXpm = 0;
+    float nGlobalBps = 0;
+    int64_t now = GetTimeSeconds();
+    static int64_t tWorstPctChanged = now;
+    static int64_t tWorstTXpmChanged = now;
+    static int64_t tIBDEnded = now;
+    static int64_t nLastBlockTime = 0;
+    static int64_t lastnow = 0;
+    int nPeersIBD = 0;
+    static bool IsIBD = true;
+    if (now != lastnow) {
+        for (CNode* pnode : nodes) {
+            int nRecvBytes; int nSendBytes;
+            {
+                LOCK(pnode->cs_vRecv);
+                nRecvBytes = pnode->nRecvBytes;
+            }
+            {
+                LOCK(pnode->cs_vSend);
+                nSendBytes = pnode->nSendBytes;
+            }
+            int nMempoolBytes = pnode->nMempoolBytes;
+            int nMempoolTXs = pnode->nMempoolTXs;
+            int nBlockBytes = pnode->nBlockBytes;
+            int nBlockTXs = pnode->nBlockTXs;
+            if ((pnode->nLastBlock >= now - 60) || (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000)) nPeersIBD++;
+            if (pnode->nLastBlockTime > nLastBlockTime) nLastBlockTime = pnode->nLastBlockTime;
+            double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
+            if (pnode->IsFullOutboundConn()) {
+                nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
+                nTotalMempoolBytes += nMempoolBytes;
+                latestNode = pnode->GetId();
+                nOutboundFullRelay++;
+                if (pnode->nTime1stTx > latest1stTx) latest1stTx = pnode->nTime1stTx;
+                if (pnode->nTimeConnected > latestOutboundConn) latestOutboundConn = pnode->nTimeConnected;
+                double nBlockPct = 100.0 * nBlockBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
+                nLatestNodePct = nMempoolPct;
+                if (nMempoolPct < nLowestPct) {
+                    nSecondLowestPct = nLowestPct;
+                    nLowestPct = nMempoolPct;
+                    worstNodePct = pnode->GetId();
+                    worstNodePctBPct = nBlockPct;
+                } else if (nMempoolPct < nSecondLowestPct)
+                    nSecondLowestPct = nMempoolPct;
+                if (nBlockPct && nBlockPct < nLowestBPct) {
+                    nSecondLowestBPct = nLowestBPct;
+                    nLowestBPct = nBlockPct;
+                    worstNodeBPct = pnode->GetId();
+                } else if (nBlockPct && nBlockPct < nSecondLowestBPct)
+                    nSecondLowestBPct = nBlockPct;
+                //int nMempoolBps = nMempoolPct * .08 * nRecvBytes / (now - pnode->nTime1stTx + 1);
+                double nMempoolBps = nMempoolBytes * 8.0 / (now - pnode->nTime1stTx + 1);
+                nGlobalBps += (int)nMempoolBps;
+                float nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTime1stTx + 1);
+                float nBTXpm = 60.0 * nBlockTXs / (now - pnode->nTime1stTx + 1);
+                nLatestNodeTXpm = nTXpm;
+                nGlobalTXpm += (int)nTXpm;
+                if (nTXpm < nLowestTXpm) {
+                    nSecondLowestTXpm = nLowestTXpm;
+                    nLowestTXpm = nTXpm;
+                    worstNodeTXpm = pnode->GetId();
+                    worstNodeTXpmBTXpm = nBTXpm;
+                } else if (nTXpm < nSecondLowestTXpm)
+                    nSecondLowestTXpm = nTXpm;
+                if (nBTXpm && nBTXpm < nLowestBTXpm) {
+                    nSecondLowestBTXpm = nLowestBTXpm;
+                    nLowestBTXpm = nBTXpm;
+                    worstNodeBTXpm = pnode->GetId();
+                } else if (nBTXpm && nBTXpm < nSecondLowestBTXpm)
+                    nSecondLowestBTXpm = nBTXpm;
+            } else if (pnode->IsInboundConn()) {
+                int nRecvBps = 8 * nRecvBytes / (now + 1 - pnode->nTimeConnected);
+                int nSendBps = 8 * nSendBytes / (now + 1 - pnode->nTimeConnected);
+                if ((now - pnode->nTimeConnected >= 120) && (nMempoolPct < 10) && ((nRecvBps > 120) || (nSendBps > 1200))) {
+                    if (!pnode->HasPermission(NetPermissionFlags::NoBan)) {
+                        pnode->fDisconnect = 1;
+                    }
+                }
+            } else if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
+        } // for (CNode* pnode : nodes)
+        if (nPeersIBD == 0 && IsIBD) {
+            tIBDEnded = now;
+            latestOutboundConn = now;
+            IsIBD = false;
+        } else if (nPeersIBD) IsIBD = true;
+    } // if (now != lastnow)
+
+    int nTechnique = (now / 5400) % 2; // 0 = Pct, 1 = TXpm
+    bool fLatestNodePctDegrading = false;
+    bool fLatestNodeTXpmDegrading = false;
+    if (!IsIBD && lastnow != now) {
+        if (worstNodeTXpmBTXpm > nLowestBTXpm) {
+            worstNodeTXpm = worstNodeBTXpm;
+            nLowestTXpm = nLowestBTXpm;
+            nSecondLowestTXpm = nSecondLowestBTXpm;
+        }
+        if (worstNodePctBPct > nLowestBPct) {
+            worstNodePct = worstNodeBPct;
+            nLowestPct = nLowestBPct;
+            nSecondLowestPct = nSecondLowestBPct;
+        }
+        if (lastWorstPct != worstNodePct) {
+            tWorstPctChanged = now;
+            lastWorstPct = worstNodePct;
+        }
+        if (lastWorstTXpm != worstNodeTXpm) {
+            tWorstTXpmChanged = now;
+            lastWorstTXpm = worstNodeTXpm;
+        }
+        static int LastLatestNodePct = 0; static int LastLatestNodeTXpm = 0;
+        if (nLatestNodePct < LastLatestNodePct) fLatestNodePctDegrading = true;
+        if (nLatestNodeTXpm < LastLatestNodeTXpm) fLatestNodeTXpmDegrading = true;
+        LastLatestNodePct = nLatestNodePct;
+        LastLatestNodeTXpm = nLatestNodeTXpm;
+    }
+
     for (CNode* pnode : nodes) {
         if (interruptNet)
             return;
+
+        // Evict worst performing outbound connection
+        if (!IsIBD && lastnow != now) {
+            int worstNode; float nLowest; float nSecondLowest; int64_t tWorstChanged; bool fLatestNodeDegrading;
+            if (nTechnique) { // Change every 90 minutes
+                worstNode = worstNodeTXpm; nLowest = nLowestTXpm; nSecondLowest = nSecondLowestTXpm;
+                tWorstChanged = tWorstTXpmChanged; fLatestNodeDegrading = fLatestNodeTXpmDegrading;
+            } else {
+                worstNode = worstNodePct; nLowest = nLowestPct; nSecondLowest = nSecondLowestPct;
+                tWorstChanged = tWorstPctChanged; fLatestNodeDegrading = fLatestNodePctDegrading;
+            }
+            if (tIBDEnded > tWorstChanged) tWorstChanged = tIBDEnded;
+            bool MaxedOut = nOutboundFullRelay >= (int)m_max_outbound_full_relay;
+            bool DoIt = false;
+            if (pnode->GetId() == worstNode) {
+                int64_t nTimeConnected = std::max(pnode->nTimeConnected, tIBDEnded);
+                if (MaxedOut) {
+                    // A block came in and so the lowest will always be the lowest - disconnect it
+                    if (nLastBlockTime > latestOutboundConn && (pnode->nBlockTXs || (pnode->nBlockTXs == 0 && nLastBlockTime - nTimeConnected >= 120))) DoIt = true;
+                    // If no change for over 45 seconds and lowest either very low, or no new connections for over 2 minutes
+                    if ((now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && (nLowest <= nSecondLowest / 2 || now - latest1stTx >= 120)) DoIt = true;
+                }
+                // Disconnect any nodes where out TX input is zero and connected over 3 minutes
+                if (now - nTimeConnected >= 180 && nLowest == 0) DoIt = true;
+            }
+            if (DoIt) {
+                pnode->fDisconnect = 1; nOutboundFullRelay--;
+                if ((now - latestOutboundConn) >= 120 && MaxedOut
+                        && !nAnchorTryAgain && (now - latest1stTx) >= 120) {
+                    std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
+                    if (anchors_to_dump.size() > (size_t)m_max_outbound_full_relay - 1) {
+                        anchors_to_dump.resize(m_max_outbound_full_relay - 1);
+                    }
+                    std::vector<CAddress> anchors_blockrelay = GetCurrentBlockRelayOnlyConns();
+                    if (anchors_blockrelay.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS) {
+                        anchors_blockrelay.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
+                    }
+                    anchors_to_dump.insert(anchors_to_dump.end(), anchors_blockrelay.begin(), anchors_blockrelay.end());
+                    if (anchors_to_dump.size() == (size_t)m_max_outbound_full_relay + MAX_BLOCK_RELAY_ONLY_ANCHORS - 1)
+                        DumpAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME, anchors_to_dump);
+                }
+            }
+        }
 
         //
         // Receive
@@ -1652,6 +1839,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
 
         if (InactivityCheck(*pnode)) pnode->fDisconnect = true;
     }
+    lastnow = now;
 }
 
 void CConnman::SocketHandlerListening(const std::set<SOCKET>& recv_set)
@@ -1765,9 +1953,9 @@ void CConnman::ThreadDNSAddressSeed()
         }
 
         LogPrintf("Loading addresses from DNS seed %s\n", seed);
-        if (HaveNameProxy()) {
-            AddAddrFetch(seed);
-        } else {
+        if (HaveNameProxy()) { // We're using a proxy server
+            AddAddrFetch(seed); // We'll ask the peer directly in a special "address" mode.
+        } else { // Use the DNS way
             std::vector<CNetAddr> vIPs;
             std::vector<CAddress> vAdd;
             ServiceFlags requiredServiceBits = GetDesirableServiceFlags(NODE_NONE);
@@ -1944,7 +2132,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 addrman.Add(ConvertSeeds(Params().FixedSeeds()), local);
                 add_fixed_seeds = false;
             }
-        }
+        } // No addresses
 
         //
         // Choose an address to connect to based on most recently seen
@@ -1954,15 +2142,15 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // Only connect out to one peer per network group (/16 for IPv4).
         int nOutboundFullRelay = 0;
         int nOutboundBlockRelay = 0;
+        int nPeersIBD = 0;
         std::set<std::vector<unsigned char> > setConnected;
-        int vNodesSize;
 
         {
             LOCK(m_nodes_mutex);
-            vNodesSize = m_nodes.size();
             for (const CNode* pnode : m_nodes) {
                 if (pnode->IsFullOutboundConn()) nOutboundFullRelay++;
                 if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
+                if (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000) nPeersIBD++;
 
                 // Netgroups for inbound and manual peers are not excluded because our goal here
                 // is to not use multiple of our limited outbound slots on a single netgroup
@@ -1979,13 +2167,14 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     case ConnectionType::FEELER:
                         setConnected.insert(pnode->addr.GetGroup(addrman.GetAsmap()));
                 } // no default case, so the compiler can warn about missing cases
-
-            }
-        }
+            } // for loop through nodes
+        } // LOCK(m_nodes_mutex)
 
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
         auto now = GetTime<std::chrono::microseconds>();
-        bool anchor = false;
+        static int anchor = 0;
+        if (m_anchors.size() >= MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1)
+            anchor = 0;
         bool fFeeler = false;
 
         // Determine what type of connection to open. Opening
@@ -1999,9 +2188,9 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // block-relay-only peer (to confirm our tip is current, see below) or the next_feeler
         // timer to decide if we should open a FEELER.
 
-        if (!m_anchors.empty() && (nOutboundBlockRelay < m_max_outbound_block_relay)) {
-            conn_type = ConnectionType::BLOCK_RELAY;
-            anchor = true;
+        if (!m_anchors.empty()) {
+            if (anchor < m_max_outbound_block_relay)
+                conn_type = ConnectionType::BLOCK_RELAY;
         } else if (nOutboundFullRelay < m_max_outbound_full_relay) {
             // OUTBOUND_FULL_RELAY
         } else if (nOutboundBlockRelay < m_max_outbound_block_relay) {
@@ -2047,16 +2236,63 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nTries = 0;
         while (!interruptNet)
         {
-            if (anchor && !m_anchors.empty()) {
+            static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
+            int nOutboundCount = nOutboundFullRelay + nOutboundBlockRelay;
+            if (nOutboundCount > nLastOutboundCount)
+                nLastOutboundCount = std::min(nOutboundCount, (int)MAX_OUTBOUND_FULL_RELAY_CONNECTIONS +
+                    (int)MAX_BLOCK_RELAY_ONLY_ANCHORS);
+            if (!m_anchors.empty() && (anchor == 0 || nOutboundCount)) {
+                anchor++;
                 const CAddress addr = m_anchors.back();
                 m_anchors.pop_back();
+                if (nAnchorTryAgain < 0) nAnchorTryAgain = 0;
                 if (!addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
-                    !HasAllDesirableServiceFlags(addr.nServices) ||
-                    setConnected.count(addr.GetGroup(addrman.GetAsmap()))) continue;
+                        setConnected.count(addr.GetGroup(addrman.GetAsmap()))) break;
                 addrConnect = addr;
-                LogPrint(BCLog::NET, "Trying to make an anchor connection to %s\n", addrConnect.ToString());
+                LogPrintf("Trying(%d) to make a %s anchor(%d) connection to %s\n", nAnchorTryAgain,
+                    ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
+                break; // out of while
+            } else if (anchor && m_anchors.empty()) {
+                std::string strComment;
+                nAnchorTryAgain++;
+                if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay) {
+                    strComment = strprintf("No further action needed! (tries=%d)", nAnchorTryAgain);
+                    nAnchorTryAgain = 0;
+                } else {
+                    if (nAnchorTryAgain >= 3) { // One retry is sufficient, 2nd retry rarely finds anything new.
+                        strComment = strprintf("Oh well, I guess we'll find new ones. (tries=%d)", nAnchorTryAgain);
+                        nAnchorTryAgain = 0;
+                    } else {
+                        if ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
+                                (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2))
+                            strComment = strprintf("Oh dear, let's retry(%d) once more...nodes=%d IBD=%d", nAnchorTryAgain, nOutboundCount, nPeersIBD);
+                        else
+                            strComment = strprintf("Oh dear, we'll retry(%d) again shortly. nodes=%d IBD=%d", nAnchorTryAgain, nOutboundCount, nPeersIBD);
+                    }
+                }
+                if (nPeersIBD && !nAnchorTryAgain) {
+                    strComment += strprintf(" but let's try after IBD(%d) anyway!", nPeersIBD);
+                    nAnchorTryAgain = 2;
+                }
+                LogPrintf("Finished connecting to %d anchors. Connections=%d+%d. %s\n", anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
+                anchor = 0;
+            } // m_anchor not empty but anchor != 0
+
+            if (m_anchors.empty() && ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
+                    (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2) ||
+                    (nOutboundCount < (nLastOutboundCount+1)*2/3))) { // or a sudden drop in connections
+                nLastOutboundCount = nOutboundCount;
+                if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
+                        return;
+                // Load addresses from anchors.dat
+                m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
+                if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1) {
+                    m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1);
+                }
+                if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
+                    return;
                 break;
-            }
+            } // This'll get picked up the next time we hit the check for m_anchors above.
 
             // If we didn't find an appropriate destination after trying 100 addresses fetched from addrman,
             // stop this loop, and let the outer loop run again (which sleeps, adds seed nodes, recalculates
@@ -2125,7 +2361,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
             addrConnect = addr;
             break;
-        }
+        } // while - meaning we've selected an address to try or addrConnect is invalid
 
         if (addrConnect.IsValid()) {
 
@@ -2148,6 +2384,19 @@ std::vector<CAddress> CConnman::GetCurrentBlockRelayOnlyConns() const
     LOCK(m_nodes_mutex);
     for (const CNode* pnode : m_nodes) {
         if (pnode->IsBlockOnlyConn()) {
+            ret.push_back(pnode->addr);
+        }
+    }
+
+    return ret;
+}
+
+std::vector<CAddress> CConnman::GetCurrentFullNodesOnlyConns() const
+{
+    std::vector<CAddress> ret;
+    LOCK(m_nodes_mutex);
+    for (const CNode* pnode : m_nodes) {
+        if (pnode->IsFullOutboundConn() && !pnode->fDisconnect) {
             ret.push_back(pnode->addr);
         }
     }
@@ -2568,15 +2817,6 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
         AddAddrFetch(strDest);
     }
 
-    if (m_use_addrman_outgoing) {
-        // Load addresses from anchors.dat
-        m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
-        if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS) {
-            m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
-        }
-        LogPrintf("%i block-relay-only anchors will be tried for connections.\n", m_anchors.size());
-    }
-
     if (m_client_interface) {
         m_client_interface->InitMessage(_("Starting network threads…").translated);
     }
@@ -2705,15 +2945,6 @@ void CConnman::StopNodes()
     if (fAddressesInitialized) {
         DumpAddresses();
         fAddressesInitialized = false;
-
-        if (m_use_addrman_outgoing) {
-            // Anchor connections are only dumped during clean shutdown.
-            std::vector<CAddress> anchors_to_dump = GetCurrentBlockRelayOnlyConns();
-            if (anchors_to_dump.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS) {
-                anchors_to_dump.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
-            }
-            DumpAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME, anchors_to_dump);
-        }
     }
 
     // Delete peer connections.
