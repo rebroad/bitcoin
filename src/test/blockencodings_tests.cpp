@@ -7,12 +7,11 @@
 #include <consensus/merkle.h>
 #include <pow.h>
 #include <streams.h>
-
 #include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
 
-std::vector<std::pair<uint256, CTransactionRef>> extra_txn;
+std::vector<std::pair<uint256, std::pair<CTransactionRef, NodeId>>> extra_txn;
 
 BOOST_FIXTURE_TEST_SUITE(blockencodings_tests, RegTestingSetup)
 

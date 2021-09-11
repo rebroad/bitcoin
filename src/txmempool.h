@@ -17,6 +17,7 @@
 #include <coins.h>
 #include <consensus/amount.h>
 #include <indirectmap.h>
+#include <net.h> // For NodeId
 #include <policy/feerate.h>
 #include <policy/packages.h>
 #include <primitives/transaction.h>
@@ -100,6 +101,7 @@ private:
     size_t nMemDelta;               //!< Memory change after added
     const int64_t nTime;            //!< Local time when entering the mempool
     const unsigned int entryHeight; //!< Chain height when entering the mempool
+    const NodeId nodeid;            //!< Peer that provided the tx
     const bool spendsCoinbase;      //!< keep track of transactions that spend a coinbase
     const int64_t sigOpCost;        //!< Total sigop cost
     int64_t feeDelta{0};            //!< Used for determining the priority of the transaction for mining in a block
@@ -120,7 +122,7 @@ private:
 
 public:
     CTxMemPoolEntry(const CTransactionRef& tx, CAmount fee,
-                    int64_t time, unsigned int entry_height,
+                    int64_t time, unsigned int entry_height, NodeId nodeid,
                     bool spends_coinbase,
                     int64_t sigops_cost, LockPoints lp);
 
@@ -131,6 +133,7 @@ public:
     size_t GetTxWeight() const { return nTxWeight; }
     std::chrono::seconds GetTime() const { return std::chrono::seconds{nTime}; }
     unsigned int GetHeight() const { return entryHeight; }
+    NodeId GetPeer() const { return nodeid; }
     int64_t GetSigOpCost() const { return sigOpCost; }
     int64_t GetModifiedFee() const { return nFee + feeDelta; }
     size_t DynamicMemoryUsage() const { return nUsageSize; }

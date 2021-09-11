@@ -109,7 +109,8 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             else dots="..";
             if (rec->nodeStats.nRecvBytes1stTx) {
                 int nTxBpsPct = int((100.0 * (rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx)) + 0.5);
-                return QString::fromStdString(strprintf("%s%d", dots, nTxBpsPct));
+                int nBTxBpsPct = int((100.0 * (rec->nodeStats.nBlockBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx)) + 0.5);
+                return QString::fromStdString(strprintf("%s%d%s", dots, nTxBpsPct, (nBTxBpsPct && nBTxBpsPct != nTxBpsPct) ? strprintf("+%d", nBTxBpsPct) : ""));
             } else
                 return QString::fromStdString(dots);
         }
@@ -117,10 +118,13 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             int64_t now = GetTimeSeconds();
             if (rec->nodeStats.nRecvBytes1stTx && now != rec->nodeStats.nTime1stTx) {
                 float nMPpm = 60.0 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTime1stTx);
-                std::string strMPpm;
+                float nBTxpm = 60.0 * rec->nodeStats.nBlockTXs / (now - rec->nodeStats.nTime1stTx);
+                std::string strMPpm; std::string strBTpm;
                 if (nMPpm < 1) strMPpm = strprintf("%d", 0.1 * (int)(nMPpm * 10));
                 else strMPpm = strprintf("%d", (int)nMPpm);
-                return QString::fromStdString(strMPpm);
+                if (nBTxpm < 1) strBTpm = strprintf("%d", 0.1 * (int)(nBTxpm * 10));
+                else strBTpm = strprintf("%d", (int)nBTxpm);
+                return QString::fromStdString(strprintf("%s%s", strMPpm, (nBTxpm && nBTxpm != nMPpm) ? strprintf("+%s", strBTpm) : ""));
             } else
                 return {};
         }
