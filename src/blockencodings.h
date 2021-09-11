@@ -125,6 +125,9 @@ public:
 class PartiallyDownloadedBlock {
 protected:
     std::vector<CTransactionRef> txn_available;
+    std::vector<int64_t> txn_peer;
+    std::vector<int64_t> txn_time;
+    std::vector<unsigned int> txn_size;
     size_t prefilled_count = 0, mempool_count = 0, extra_count = 0;
     const CTxMemPool* pool;
 public:
@@ -132,8 +135,8 @@ public:
     explicit PartiallyDownloadedBlock(CTxMemPool* poolIn) : pool(poolIn) {}
 
     // extra_txn is a list of extra transactions to look at, in <witness hash, reference> form
-    ReadStatus InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<uint256, CTransactionRef>>& extra_txn);
-    bool IsTxAvailable(size_t index) const;
+    ReadStatus InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<uint256, std::pair<CTransactionRef, int64_t>>>& extra_txn);
+    bool IsTxAvailable(size_t index, int64_t *nodeid = nullptr, int64_t *nTime = nullptr, unsigned int *nSize = nullptr) const;
     ReadStatus FillBlock(CBlock& block, const std::vector<CTransactionRef>& vtx_missing);
 };
 

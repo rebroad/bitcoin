@@ -102,7 +102,7 @@ bool TestLockPointValidity(CChain& active_chain, const LockPoints& lp)
 }
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& tx, CAmount fee,
-                                 int64_t time, unsigned int entry_height,
+                                 int64_t time, unsigned int entry_height, NodeId nodeid,
                                  bool spends_coinbase, int64_t sigops_cost, LockPoints lp)
     : tx{tx},
       nFee{fee},
@@ -111,6 +111,7 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& tx, CAmount fee,
       nMemDelta{0},
       nTime{time},
       entryHeight{entry_height},
+      nodeid{nodeid},
       spendsCoinbase{spends_coinbase},
       sigOpCost{sigops_cost},
       lockPoints{lp},

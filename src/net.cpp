@@ -614,6 +614,8 @@ void CNode::CopyStats(CNodeStats& stats)
     }
     X(nMempoolBytes);
     X(nMempoolTXs);
+    X(nBlockBytes);
+    X(nBlockTXs);
     X(nRecvBytes1stTx);
     X(nTime1stTx);
     X(m_permissionFlags);
