@@ -2202,12 +2202,12 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     strComment = "No further action needed!";
                     nAnchorTryAgain = 0;
                 } else {
-                    if (nAnchorTryAgain >= 1) { // One retry is sufficient, 2nd retry rarely finds anything new.
+                    if (nAnchorTryAgain >= 2) { // One retry is sufficient, 2nd retry rarely finds anything new.
                         nAnchorTryAgain = 0;
                         strComment = "Oh well, I guess we'll find new ones.";
                     } else {
                         nAnchorTryAgain++;
-                        if (nPeersSendingTXs <= 2)
+                        if (nPeersSendingTXs <= 1)
                             strComment = strprintf("Oh dear, we'll retry(%d) again shortly. !IBD=%d", nAnchorTryAgain, nPeersSendingTXs);
                         else
                             strComment = strprintf("Oh dear, let's retry(%d) once more...!IBD=%d", nAnchorTryAgain, nPeersSendingTXs);
