@@ -657,15 +657,15 @@ public:
     //! May not be called more than once
     void SetAddrLocal(const CService& addrLocalIn);
 
-    CNode* AddRef()
+    CNode* AddRef(int num)
     {
-        nRefCount++;
+        nRefCount = nRefCount | num;
         return this;
     }
 
-    void Release()
+    void Release(int num)
     {
-        nRefCount--;
+        nRefCount = nRefCount & ~num;
     }
 
     void AddKnownTx(const uint256& hash)
