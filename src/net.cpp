@@ -406,7 +406,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         vNodesSize = vNodes.size();
     }
     LogPrint(BCLog::CONN, "trying %s connection(%d) %s lastseen=%s\n", ConnectionTypeAsString(conn_type),
-        vNodesSize, pszDest ? pszDest : addrConnect.ToString(),
+        vNodesSize, pszDest ? pszDest : addrConnect.ToString(), // REBTODO - lastseen by us? new?
         pszDest ? "now" : strAge(GetAdjustedTime() - addrConnect.nTime));
 
     // Resolve
@@ -616,7 +616,6 @@ void CNode::copyStats(CNodeStats &stats, const std::vector<bool> &m_asmap)
     }
     X(nMempoolBytes);
     X(nMempoolTXs);
-    X(nTXs);
     X(nBlockBytes);
     X(nBlockTXs);
     X(nRecvBytes1stTx);
@@ -1240,7 +1239,7 @@ bool CConnman::AddConnection(const std::string& address, ConnectionType conn_typ
     case ConnectionType::MANUAL:
     case ConnectionType::FEELER:
         return false;
-    case ConnectionType::OUTBOUND_FULL_RELAY: // REB - No need to limit what the user wants to do
+    case ConnectionType::OUTBOUND_FULL_RELAY:
         break;
     case ConnectionType::BLOCK_RELAY:
         max_connections = m_max_outbound_block_relay;
@@ -1320,7 +1319,7 @@ void CConnman::DisconnectNodes()
 
 void CConnman::NotifyNumConnectionsChanged()
 {
-    int vNodesSize;
+    size_t vNodesSize;
     {
         LOCK(cs_vNodes);
         vNodesSize = vNodes.size();
@@ -1510,7 +1509,7 @@ void CConnman::SocketEvents(std::set<SOCKET> &recv_set, std::set<SOCKET> &send_s
         FD_ZERO(&fdsetSend);
         FD_ZERO(&fdsetError);
         if (!interruptNet.sleep_for(std::chrono::milliseconds(SELECT_TIMEOUT_MILLISECONDS)))
-            return; // REBTODO - no unconditional return?
+            return;
     }
 
     for (SOCKET hSocket : recv_select_set) {
@@ -2121,7 +2120,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         } // LOCK(cs_vNodes)
 
         static int nAnchorTryAgain = -1;
-        if (vNodesSize == 0 && m_anchors.empty() && (nAnchorTryAgain < 0) || (GetLastNodeId() > 0)) {
+        if (vNodesSize == 0 && m_anchors.empty() && (nAnchorTryAgain < 0 || GetLastNodeId() > 0)) {
             LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
             nAnchorTryAgain = 0;
             ResetNewNodeId();
@@ -2204,7 +2203,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 if (conn_type == ConnectionType::BLOCK_RELAY && (
                     !addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
                     !HasAllDesirableServiceFlags(addr.nServices) ||
-                    setConnected.count(addr.GetGroup(addrman.m_asmap)))) continue;
+                    setConnected.count(addr.GetGroup(addrman.m_asmap)))) break;
                 addrConnect = addr;
                 LogPrintf("Trying to make a %s anchor(%d) connection to %s\n",
                     ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
@@ -2220,7 +2219,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                         strComment = "Oh well, I guess we'll find new ones.";
                     } else {
                         nAnchorTryAgain++;
-                        if (nPeersSendingTXs <= 1)
+                        if (nPeersSendingTXs <= 2)
                             strComment = strprintf("Oh dear, we'll retry(%d) again shortly. !IBD=%d", nAnchorTryAgain, nPeersSendingTXs);
                         else
                             strComment = strprintf("Oh dear, let's retry(%d) once more...!IBD=%d", nAnchorTryAgain, nPeersSendingTXs);

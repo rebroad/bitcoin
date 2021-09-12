@@ -54,9 +54,7 @@ public:
         Sent,
         Recv,
 	TxBpsPct,
-        TxIpm,
         MPpm,
-        MPpmPct,
         Subversion
     };
 
@@ -106,15 +104,9 @@ private:
         /*: Title of Peers Table column which indicates the percentage of
             useful TX traffic we're receiving from the peer. */
         tr("Bps%"),
-        /*: Title of Peers Table column which indicates the number of TX invs
-            received per minute on average. */
-        tr("TIpm"),
         /*: Title of Peers Table column which indicates the number of TX
             that make it into the mempool per minute on average */
         tr("MPpm"),
-        /*: Title of Peers Table column which indicates the percentage of
-            TXs we gets INVs for that end up in the mempool. */
-        tr("TX%"),
         /*: Title of Peers Table column which contains the peer's
             User Agent string. */
         tr("User Agent")};

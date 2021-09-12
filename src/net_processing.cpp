@@ -3226,7 +3226,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     pfrom.fDisconnect = true;
                     return;
                 }
-                pfrom.nTXs++;
                 // Ignore INVs that don't match wtxidrelay setting.
                 // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
                 // This is fine as no INV messages are involved in that process.
