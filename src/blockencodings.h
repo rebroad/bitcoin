@@ -7,6 +7,7 @@
 
 #include <primitives/block.h>
 
+
 class CTxMemPool;
 
 // Transaction compression schemes for compact block relay can be introduced by writing
