@@ -495,7 +495,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         addr_bind = GetBindAddress(sock->Get());
     }
     CNode* pnode = new CNode(id, nLocalServices, sock->Release(), addrConnect, CalculateKeyedNetGroup(addrConnect), nonce, addr_bind, pszDest ? pszDest : "", conn_type, /* inbound_onion */ false);
-    pnode->AddRef();
+    pnode->AddRef(); // REB - Creation (out)
 
     // We're making a new connection, harvest entropy from the time (and our peer count)
     RandAddEvent((uint32_t)id);
@@ -1213,7 +1213,7 @@ void CConnman::CreateNodeFromAcceptedSocket(SOCKET hSocket,
 
     const bool inbound_onion = std::find(m_onion_binds.begin(), m_onion_binds.end(), addr_bind) != m_onion_binds.end();
     CNode* pnode = new CNode(id, nodeServices, hSocket, addr, CalculateKeyedNetGroup(addr), nonce, addr_bind, "", ConnectionType::INBOUND, inbound_onion);
-    pnode->AddRef();
+    pnode->AddRef(); // REB - Creation (in)
     pnode->m_permissionFlags = permissionFlags;
     pnode->m_prefer_evict = discouraged;
     m_msgproc->InitializeNode(pnode);
@@ -1558,7 +1558,7 @@ void CConnman::SocketHandler()
         LOCK(cs_vNodes);
         vNodesCopy = vNodes;
         for (CNode* pnode : vNodesCopy)
-            pnode->AddRef();
+            pnode->AddRef(); // REB - SocketHandler
     }
 
     int64_t latestOutboundConn = 0;
@@ -1846,7 +1846,7 @@ void CConnman::SocketHandler()
     {
         LOCK(cs_vNodes);
         for (CNode* pnode : vNodesCopy)
-            pnode->Release();
+            pnode->Release(); // REB - SocketHandler
     }
 }
 
@@ -2530,7 +2530,7 @@ void CConnman::ThreadMessageHandler()
             LOCK(cs_vNodes);
             vNodesCopy = vNodes;
             for (CNode* pnode : vNodesCopy) {
-                pnode->AddRef();
+                pnode->AddRef(); // REB - ThreadMessageHandler
             }
         }
 
@@ -2564,7 +2564,7 @@ void CConnman::ThreadMessageHandler()
         {
             LOCK(cs_vNodes);
             for (CNode* pnode : vNodesCopy)
-                pnode->Release();
+                pnode->Release(); // REB - ThreadMessageHandler
         }
 
         WAIT_LOCK(mutexMsgProc, lock);
