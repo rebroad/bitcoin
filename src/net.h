@@ -638,15 +638,16 @@ public:
     //! May not be called more than once
     void SetAddrLocal(const CService& addrLocalIn);
 
-    CNode* AddRef()
+    CNode* AddRef(int num)
     {
-        nRefCount++;
+        nRefCount = nRefCount | num;
+
         return this;
     }
 
-    void Release()
+    void Release(int num)
     {
-        nRefCount--;
+        nRefCount = nRefCount & ~num;
     }
 
     void AddKnownTx(const uint256& hash)
@@ -1254,13 +1255,14 @@ private:
     class NodesSnapshot
     {
     public:
-        explicit NodesSnapshot(const CConnman& connman, bool shuffle)
+        explicit NodesSnapshot(const CConnman& connman, int nBit, bool shuffle)
         {
             {
                 LOCK(connman.m_nodes_mutex);
                 m_nodes_copy = connman.m_nodes;
+                nRefBit = nBit;
                 for (auto& node : m_nodes_copy) {
-                    node->AddRef();
+                    node->AddRef(nRefBit);
                 }
             }
             if (shuffle) {
@@ -1271,7 +1273,7 @@ private:
         ~NodesSnapshot()
         {
             for (auto& node : m_nodes_copy) {
-                node->Release();
+                node->Release(nRefBit);
             }
         }
 
@@ -1282,6 +1284,7 @@ private:
 
     private:
         std::vector<CNode*> m_nodes_copy;
+        int nRefBit;
     };
 
     friend struct CConnmanTest;
