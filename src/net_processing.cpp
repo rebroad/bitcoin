@@ -2285,6 +2285,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         if (CanDirectFetch() && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
+            if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
+                LogPrintf("CURIOUS: COMPETING BLOCK\n");
             std::vector<const CBlockIndex*> vToFetch;
             const CBlockIndex *pindexWalk = pindexLast;
             // Calculate all the blocks we'd need to switch to pindexLast, up to a limit.
@@ -3327,7 +3329,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
             const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(req.blockhash);
             if (!pindex || !(pindex->nStatus & BLOCK_HAVE_DATA)) {
-                LogPrint(BCLog::NET, "Peer %d sent us a getblocktxn for a block we don't have\n", pfrom.GetId());
+                LogPrintf("CURIOUS: recv getblocktxn for a block we don't have. peer=%d\n", pfrom.GetId());
                 return;
             }
 
@@ -3370,12 +3372,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         LOCK(cs_main);
+        CNodeState *nodestate = State(pfrom.GetId());
+        if (nodestate->fPreferHeaders == false)
+            LogPrintf("CURIOUS: headers requested yet prefers INVs. peer=%d\n", pfrom.GetId());
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && !pfrom.HasPermission(NetPermissionFlags::Download)) {
             LogPrint(BCLog::NET, "Ignoring getheaders from peer=%d because node is in initial block download\n", pfrom.GetId());
             return;
         }
 
-        CNodeState *nodestate = State(pfrom.GetId());
         const CBlockIndex* pindex = nullptr;
         if (locator.IsNull())
         {
