@@ -1004,7 +1004,12 @@ static bool PeerHasHeader(CNodeState *state, const CBlockIndex *pindex) EXCLUSIV
 
 void PeerManagerImpl::ProcessBlockAvailability(NodeId nodeid) {
     CNodeState *state = State(nodeid);
-    assert(state != nullptr);
+    if (state == nullptr) {
+        LogPrintf("%s: ASSERT ERROR. peer=%d\n", __func__, nodeid);
+        fprintf(stderr, "%s: ASSERT ERROR. peer=%ld\n", __func__, nodeid);
+        fflush(stderr);
+        return;
+    }
 
     if (!state->hashLastUnknownBlock.IsNull()) {
         const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(state->hashLastUnknownBlock);
@@ -1280,6 +1285,12 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         // processing here that assumes Peer won't be changed before it's
         // destructed.
         PeerRef peer = RemovePeer(nodeid);
+        if (peer == nullptr) {
+            LogPrintf("%s: ASSERT ERROR. peer=%d\n", __func__, nodeid);
+            fprintf(stderr, "%s: ASSERT ERROR. peer=%ld\n", __func__, nodeid);
+            fflush(stderr);
+            return;
+        }
         assert(peer != nullptr);
         misbehavior = WITH_LOCK(peer->m_misbehavior_mutex, return peer->m_misbehavior_score);
     }
