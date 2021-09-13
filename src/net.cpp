@@ -666,6 +666,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
             if ((result->m_command == NetMsgType::INV || result->m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx) {
                 nRecvBytes1stTx = nRecvBytes - result->m_raw_message_size - msg_bytes.size();
                 nTime1stTx = GetTimeSeconds();
+                LogPrintf("%s: 1stTx t=%d size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, nTime1stTx - nTimeConnected, result->m_raw_message_size, nRecvBytes1stTx, nRecvBytes, handled, msg_bytes.size(), GetId());
             }
 
             //store received bytes per message command
