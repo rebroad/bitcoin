@@ -2253,6 +2253,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         if (CanDirectFetch() && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
+            if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
+                LogPrintf("CURIOUS: COMPETING BLOCK\n");
             std::vector<const CBlockIndex*> vToFetch;
             const CBlockIndex *pindexWalk = pindexLast;
             // Calculate all the blocks we'd need to switch to pindexLast, up to a limit.
@@ -3802,8 +3804,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
 
                 BlockTransactionsRequest req;
-                for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
-                    if (!partialBlock.IsTxAvailable(i))
+                for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
+                    NodeId nodeid; int64_t nTime; unsigned int nSize;
+                    if (!partialBlock.IsTxAvailable(i, nodeid, nTime, nSize))
                         req.indexes.push_back(i);
                     else {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
