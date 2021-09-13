@@ -4797,8 +4797,10 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
                 filterToSend, currentFilter, pto.GetId());
             m_connman.PushMessage(&pto, CNetMsgMaker(pto.GetCommonVersion()).Make(NetMsgType::FEEFILTER, filterToSend));
             pto.m_tx_relay->lastSentFeeFilter = filterToSend;
-            if (currentFilter == MAX_MONEY && pto.nRecvBytes1stTx)
+            if (currentFilter == MAX_MONEY && pto.nRecvBytes1stTx) {
                 pto.nRecvBytes1stTx = 0;
+                LogPrintf("Setting nRecvBytes1stTx=0 peer=%d\n", pto.GetId());
+            }
         }
         pto.m_tx_relay->m_next_send_feefilter = PoissonNextSend(current_time, AVG_FEEFILTER_BROADCAST_INTERVAL);
     }
