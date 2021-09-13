@@ -2183,7 +2183,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nTries = 0;
         while (!interruptNet)
         {
-            static int nAnchorTryAgain = -1;
+            static int nAnchorTryAgain = -1; // -1 so that we skip the sleeps on the first ReachAnchor
             if (!m_anchors.empty()) {
                 anchor++;
                 const CAddress addr = m_anchors.back();
@@ -2217,30 +2217,27 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 anchor = 0;
             } // m_anchor not empty but anchor != 0
 
-            bool fJustResetNodeId = false;
-            if (vNodesSize == 0 && (nAnchorTryAgain < 0 || GetLastNodeId() > 0)) {
-                LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
-                nAnchorTryAgain = 0;
-                ResetNewNodeId();
-                fJustResetNodeId = true;
-            }
 
-            static int nLastOutboundCount = nOutboundFullRelay;
+            static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
             if (nOutboundFullRelay > nLastOutboundCount)
                 nLastOutboundCount = nOutboundFullRelay;
-            if ((nAnchorTryAgain == 1 && vNodesSize > 0) || (nAnchorTryAgain > 1 && nPeersSendingTXs > 1) || fJustResetNodeId ||
-                    nOutboundFullRelay + 2 <= nLastOutboundCount) { // or a sudden drop in connections
+            if ((nAnchorTryAgain == 1 && vNodesSize > 0) || (nAnchorTryAgain > 1 && nPeersSendingTXs > 1) ||
+                    nOutboundFullRelay <= (nLastOutboundCount+1)/2) { // or a sudden drop in connections
                 nLastOutboundCount = nOutboundFullRelay;
-                if (!fJustResetNodeId && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
+                if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                         return;
                 // Load addresses from anchors.dat
                 m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
                 if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1) {
                     m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1);
                 }
-                if (!fJustResetNodeId && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
+                if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                     return;
-                fJustResetNodeId = false;
+                if (vNodesSize == 0) {
+                    LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+                    nAnchorTryAgain = 0;
+                    ResetNewNodeId();
+                }
                 break;
             } // This'll get picked up the next time we hit the check for m_anchors above.
 
@@ -2711,11 +2708,6 @@ void CConnman::ResetNewNodeId()
 NodeId CConnman::GetNewNodeId()
 {
     return nLastNodeId.fetch_add(1, std::memory_order_relaxed);
-}
-
-NodeId CConnman::GetLastNodeId()
-{
-    return nLastNodeId;
 }
 
 bool CConnman::Bind(const CService &addr, unsigned int flags, NetPermissionFlags permissions) {
