@@ -494,6 +494,8 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     }
     CNode* pnode = new CNode(id, nLocalServices, sock->Release(), addrConnect, CalculateKeyedNetGroup(addrConnect), nonce, addr_bind, pszDest ? pszDest : "", conn_type, /* inbound_onion */ false);
     pnode->AddRef(1); // REB - Creation (out)
+    if (pnode->GetId() == 0)
+        LogPrintf("%s: Created pnode=%d GRC=%d\n", __func__, pnode->GetId(), pnode->GetRefCount());
 
     // We're making a new connection, harvest entropy from the time (and our peer count)
     RandAddEvent((uint32_t)id);
@@ -1296,6 +1298,7 @@ void CConnman::DisconnectNodes()
             // Destroy the object only after other threads have stopped using it.
             if (pnode->GetRefCount() <= 0) {
                 vNodesDisconnected.remove(pnode);
+                LogPrintf("%s: Calling DeleteNode GRC=%d from vNodesDisconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
                 DeleteNode(pnode);
             }
         }
@@ -2959,6 +2962,7 @@ void CConnman::StopNodes()
     WITH_LOCK(cs_vNodes, nodes.swap(vNodes));
     for (CNode* pnode : nodes) {
         pnode->CloseSocketDisconnect();
+        LogPrintf("%s: Calling DeleteNode(%d) GRC=%d from Delete peer connections\n", __func__, pnode->GetId(), pnode->GetRefCount());
         DeleteNode(pnode);
     }
 
@@ -2972,6 +2976,7 @@ void CConnman::StopNodes()
     }
 
     for (CNode* pnode : vNodesDisconnected) {
+        LogPrintf("%s: Calling DeleteNode(%d) GRC=%d from vNodesDisconnected\n", __func__, pnode->GetId(), pnode->GetRefCount());
         DeleteNode(pnode);
     }
     vNodesDisconnected.clear();
