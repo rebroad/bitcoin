@@ -4016,6 +4016,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 pfrom.nRecvBytes1stTx = 0;
                 pfrom.nMempoolBytes = 0;
                 pfrom.nMempoolTXs = 0;
+                LogPrintf("Setting nRecvBytes1stTx=0 BIF=%d nLBT=%s peer=%d\n", nBIF, strAge(nLBT), pfrom.GetId());
             }
         }
         ProcessBlock(pfrom, pblock, forceProcessing);
@@ -4725,8 +4726,10 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
             // Send the current filter if we sent MAX_FILTER previously
             // and made it out of IBD.
             pto.m_tx_relay->m_next_send_feefilter = 0us;
-            if (pto.nRecvBytes1stTx)
+            if (pto.nRecvBytes1stTx) {
                 pto.nRecvBytes1stTx = 0;
+                LogPrintf("Setting nRecvBytes1stTx=0 peer=%d\n", pto.GetId());
+            }
         }
     }
     if (current_time > pto.m_tx_relay->m_next_send_feefilter) {
