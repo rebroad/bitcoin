@@ -2794,8 +2794,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s v=%d s=%x relay=%d%s peer=%d\n",
                   cleanSubVer, pfrom.nVersion, nServices, fRelay, remoteAddr, pfrom.GetId());
 
-        if (pfrom.IsFeelerConn() && pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices)) {
-            bool fDisconnect = (m_connman.m_anchors.empty() && !pfrom.IsInboundConn()); // Allow inbound and anchors to connect
+        if (pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices)) {
+            bool fDisconnect = !pfrom.IsInboundConn(); // Allow inbound to connect
             LogPrintf("recv version does not offer the expected services (%x offered, %x expected) %speer=%d\n",
                 nServices, GetDesirableServiceFlags(nServices), fDisconnect ? "disconnecting " : "", pfrom.GetId());
             if (fDisconnect) {

@@ -2796,7 +2796,7 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
 
     if (semOutbound == nullptr) {
         // initialize semaphore
-        semOutbound = std::make_unique<CSemaphore>(nMaxConnections); // REB - let's allow more connections here
+        semOutbound = std::make_unique<CSemaphore>(nMaxConnections);
     }
     if (semAddnode == nullptr) {
         // initialize semaphore
