@@ -1888,12 +1888,10 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         (((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
         !pfrom.HasPermission(NetPermissionFlags::Download) // nodes with the download permission may exceed target
     ) {
-        if (!pfrom.HasPermission(NetPermissionFlags::NoBan)) {
-            LOCK(pfrom.cs_SubVer);
-            LogPrintf("historical block (%d) serving limit reached, %s disconnect peer=%d\n", pindex->nHeight, pfrom.cleanSubVer, pfrom.GetId());
-            pfrom.fDisconnect = true;
-            return;
-        }
+        LOCK(pfrom.cs_SubVer);
+        LogPrintf("historical block (%d) serving limit reached, %s disconnect peer=%d\n", pindex->nHeight, pfrom.cleanSubVer, pfrom.GetId());
+        pfrom.fDisconnect = true;
+        return;
     }
     // Avoid leaking prune-height by never sending blocks below the NODE_NETWORK_LIMITED threshold
     if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && (
@@ -2273,6 +2271,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         if (CanDirectFetch() && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
+            if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork)
+                LogPrintf("CURIOUS: COMPETING BLOCK\n");
             std::vector<const CBlockIndex*> vToFetch;
             const CBlockIndex *pindexWalk = pindexLast;
             // Calculate all the blocks we'd need to switch to pindexLast, up to a limit.
@@ -2290,9 +2290,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
             // the main chain -- this shouldn't really happen.  Bail out on the
             // direct fetch and rely on parallel download instead.
             if (!m_chainman.ActiveChain().Contains(pindexWalk)) {
-                LogPrint(BCLog::NET, "Large reorg, won't direct fetch to %s (%d)\n",
-                        pindexLast->GetBlockHash().ToString(),
-                        pindexLast->nHeight);
+                LogPrint(BCLog::BLOCK, "Large reorg, won't direct fetch to %s peer=%d\n",
+                        strBlockInfo(pindexLast), pfrom.GetId());
             } else {
                 std::vector<CInv> vGetData;
                 // Download as much as possible, from earliest to latest.
@@ -2315,7 +2314,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                         strItem = "cmpct";
-                    }
+                    } else if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1)
+                        LogPrintf("CURIOUS: Won't fetch as cmpct as block NOT VALID CHAIN\n");
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     // Next line needed because now we'll use the first cmpctblock block received,
                     // not necessarily the one we're requesting here.
@@ -2723,12 +2723,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         {
             m_addrman.SetServices(pfrom.addr, nServices);
         }
-        if (nVersion < MIN_PEER_PROTO_VERSION) {
-            // disconnect from peers older than this proto version
-            LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom.GetId(), nVersion);
-            pfrom.fDisconnect = true;
-            return;
-        }
 
         if (!vRecv.empty())
             vRecv >> addrFrom >> nNonce;
@@ -2759,7 +2753,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         const int greatest_common_version = std::min(nVersion, PROTOCOL_VERSION);
         pfrom.SetCommonVersion(greatest_common_version);
         pfrom.nVersion = nVersion;
-
         pfrom.nServices = nServices;
         pfrom.SetAddrLocal(addrMe);
         {
@@ -2802,6 +2795,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 pfrom.fDisconnect = true;
                 return;
             }
+        }
+        if (nVersion < MIN_PEER_PROTO_VERSION) {
+            // disconnect from peers older than this proto version
+            LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom.GetId(), nVersion);
+            pfrom.fDisconnect = true;
+            return;
         }
 
         // Inbound peers send us their version message when they connect.
@@ -2861,11 +2860,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 FastRandomContext insecure_rand;
                 if (addr.IsRoutable())
                 {
-                    LogPrint(BCLog::NET, "%s: advertising address %s\n", __func__, addr.ToString());
+                    LogPrint(BCLog::NET, "ProcessMessages: advertising address %s\n", addr.ToString());
                     PushAddress(*peer, addr, insecure_rand);
                 } else if (IsPeerAddrLocalGood(&pfrom)) {
                     addr.SetIP(addrMe);
-                    LogPrint(BCLog::NET, "%s: advertising address %s\n", __func__, addr.ToString());
+                    LogPrint(BCLog::NET, "ProcessMessages: advertising address %s\n", addr.ToString());
                     PushAddress(*peer, addr, insecure_rand);
                 }
             }
@@ -3786,7 +3785,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
-        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 3) {
+        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here
+            if (pindex->nHeight > m_chainman.ActiveChain().Height() + 2) // REBTODO - for now, some debug
+                {} // REBHERE - log age of activetip and pindex, and difference between them
             if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
                  (fAlreadyInFlight && !(blockInFlightIt->second.second->partialBlock))) { // allow announce cmpctblocks
                 if (fAlreadyInFlight && blockInFlightIt->second.first != pfrom.GetId()) {
@@ -3900,7 +3901,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     LogPrintf("after 2nd InitData succeeded, FillBlock failed\n");
             }
         } else {
-            if (fAlreadyInFlight) {
+            if (fAlreadyInFlight) { // REBTODO - probably don't do this
                 // We requested this block, but its far into the future, so our
                 // mempool will probably be useless - request the block normally
                 LogPrint(BCLog::BLOCK, "resend getdata block %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
@@ -5529,7 +5530,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {
                     State(staller)->m_stalling_since = current_time;
-                    LogPrint(BCLog::NET, "Stall started peer=%d\n", staller);
+                    LogPrint(BCLog::BLOCK, "Stall started peer=%d\n", staller);
                 }
             }
         }
