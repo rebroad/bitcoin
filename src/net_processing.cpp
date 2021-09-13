@@ -1028,7 +1028,12 @@ static bool PeerHasHeader(CNodeState *state, const CBlockIndex *pindex) EXCLUSIV
 
 void PeerManagerImpl::ProcessBlockAvailability(NodeId nodeid) {
     CNodeState *state = State(nodeid);
-    assert(state != nullptr);
+    if (state == nullptr) {
+        LogPrintf("%s: ASSERT ERROR. peer=%d\n", __func__, nodeid);
+        fprintf(stderr, "%s: ASSERT ERROR. peer=%d\n", __func__, (int)nodeid);
+        fflush(stderr);
+        return;
+    }
 
     if (!state->hashLastUnknownBlock.IsNull()) {
         const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(state->hashLastUnknownBlock);
@@ -1265,6 +1270,12 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
         // processing here that assumes Peer won't be changed before it's
         // destructed.
         PeerRef peer = RemovePeer(nodeid);
+        if (peer == nullptr) {
+            LogPrintf("%s: ASSERT ERROR. peer=%d\n", __func__, nodeid);
+            fprintf(stderr, "%s: ASSERT ERROR. peer=%d\n", __func__, (int)nodeid);
+            fflush(stderr);
+            return;
+        }
         assert(peer != nullptr);
         misbehavior = WITH_LOCK(peer->m_misbehavior_mutex, return peer->m_misbehavior_score);
     }
@@ -1654,6 +1665,11 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         if (pnode->GetCommonVersion() < INVALID_CB_NO_BAN_VERSION || pnode->fDisconnect)
             return;
         ProcessBlockAvailability(pnode->GetId());
+        if (State(pnode->GetId()) == nullptr) {
+            LogPrintf("%s: State(%d) MISSING!\n", __func__, pnode->GetId());
+            pnode->fDisconnect = true;
+            return;
+        }
         CNodeState &state = *State(pnode->GetId());
         // If the peer has, or we announced to them the previous block already,
         // but we don't think they have this one, go ahead and announce it

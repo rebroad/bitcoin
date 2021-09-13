@@ -518,6 +518,8 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
                              conn_type,
                              /*inbound_onion=*/false);
     pnode->AddRef(1); // REB - Creation (out)
+    if (pnode->GetId() == 0)
+        LogPrintf("%s: Created pnode=%d GRC=%d\n", __func__, pnode->GetId(), pnode->GetRefCount());
 
     // We're making a new connection, harvest entropy from the time (and our peer count)
     RandAddEvent((uint32_t)id);
