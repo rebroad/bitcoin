@@ -2225,7 +2225,7 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
-    int bBehind = pindexBestHeader->nHeight - pindexNew->nHeight;
+    int nBehind = pindexBestHeader->nHeight - pindexNew->nHeight;
     LogPrintf("%s: new best=%s (%d) ver=0x%x age=%s%s work=%.8g tx=%lu%s\n", __func__,
       pindexNew->GetBlockHash().ToString(), pindexNew->nHeight, pindexNew->nVersion,
       strAge(GetAdjustedTime()-pindexNew->GetBlockTime()), nBehind ? strprintf(" behind=%d", nBehind) : "",
