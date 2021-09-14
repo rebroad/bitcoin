@@ -2225,10 +2225,11 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
-    LogPrintf("%s: new best=%s (%d) ver=0x%x age=%s work=%.8g behind=%d tx=%lu%s\n", __func__,
+    int bBehind = pindexBestHeader->nHeight - pindexNew->nHeight;
+    LogPrintf("%s: new best=%s (%d) ver=0x%x age=%s%s work=%.8g tx=%lu%s\n", __func__,
       pindexNew->GetBlockHash().ToString(), pindexNew->nHeight, pindexNew->nVersion,
-      strAge(GetAdjustedTime()-pindexNew->GetBlockTime()), log(pindexNew->nChainWork.getdouble())/log(2.0),
-      pindexBestHeader->nHeight - pindexNew->nHeight, (unsigned long)pindexNew->nTx,
+      strAge(GetAdjustedTime()-pindexNew->GetBlockTime()), nBehind ? strprintf(" behind=%d", nBehind) : "",
+      log(pindexNew->nChainWork.getdouble())/log(2.0), (unsigned long)pindexNew->nTx,
       !warning_messages.empty() ? strprintf(" warning='%s'", warning_messages.original) : "");
 }
 

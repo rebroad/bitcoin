@@ -409,8 +409,8 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
         minerPolicyEstimator->processTransaction(entry, validFeeEstimate);
     }
 
-    vTxHashes.emplace_back(tx.GetWitnessHash(), newit); // REBTODO - entry currently includes the NodeId
-    newit->vTxHashesIdx = vTxHashes.size() - 1; // REBTODO - where is vTxHashesIdx used?
+    vTxHashes.emplace_back(tx.GetWitnessHash(), newit);
+    newit->vTxHashesIdx = vTxHashes.size() - 1;
     mapTx.modify(newit, update_mem_delta(DynamicMemoryUsage() - nMemUsageBefore));
 }
 
@@ -436,7 +436,7 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
 
     if (vTxHashes.size() > 1) {
         vTxHashes[it->vTxHashesIdx] = std::move(vTxHashes.back());
-        vTxHashes[it->vTxHashesIdx].second->vTxHashesIdx = it->vTxHashesIdx; // REBTODO where is vTxHashesIdx defined?
+        vTxHashes[it->vTxHashesIdx].second->vTxHashesIdx = it->vTxHashesIdx;
         vTxHashes.pop_back();
         if (vTxHashes.size() * 2 < vTxHashes.capacity())
             vTxHashes.shrink_to_fit();

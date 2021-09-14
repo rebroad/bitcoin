@@ -2386,8 +2386,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         if (porphanTx == nullptr) continue;
 
         int64_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
-
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, from_peer, false /* bypass_limits */); // REBTODO- check if minrelayfee used - also log how many per minute (from_peer)
+        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, from_peer, false /* bypass_limits */);
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
@@ -2400,7 +2399,6 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
                 pnode->nLastTXTime = nTime;
                 return true;
             });
-
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
 		tx.GetTotalSize(), (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
@@ -3221,7 +3219,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
             } else if (inv.IsGenTxMsg()) {
                 if (fBlocksOnly || pfrom.IsFeelerConn()) {
-                    LogPrintf("recv inv tx violation fBO=%d, HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", fBlocksOnly, pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
+                    LogPrintf("recv inv tx violation fBO=%d HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", fBlocksOnly, pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
                     pfrom.fDisconnect = true;
                     return;
                 }
@@ -3597,9 +3595,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
 
                 fOrphanAdded = true;
-                if (m_orphanage.AddTx(ptx, pfrom.GetId())) {
+                if (m_orphanage.AddTx(ptx, pfrom.GetId()))
                     AddToCompactExtraTransactions(ptx, pfrom.GetId());
-                }
 
                 // Once added to the orphan pool, a tx is considered AlreadyHave, and we shouldn't request it anymore.
                 m_txrequest.ForgetTxHash(tx.GetHash());
@@ -3787,7 +3784,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // possibilities in compact block processing...
         if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here
             if (pindex->nHeight > m_chainman.ActiveChain().Height() + 2) // REBTODO - for now, some debug
-                {} // REBHERE - log age of activetip and pindex, and difference between them
+                LogPrintf("CURIOUS: recv cmpctblk.age=%s tip.age=%s diff=%s\n", strAge(GetAdjustedTime()-pindex->GetBlockTime()),
+                    strAge(GetAdjustedTime()-m_chainman.ActiveChain().Tip()->GetBlockTime()),
+                    strAge(pindex->GetBlockTime()-m_chainman.ActiveChain().Tip()->GetBlockTime()));
             if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
                  (fAlreadyInFlight && !(blockInFlightIt->second.second->partialBlock))) { // allow announce cmpctblocks
                 if (fAlreadyInFlight && blockInFlightIt->second.first != pfrom.GetId()) {
@@ -4150,7 +4149,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
         peer->m_getaddr_recvd = true;
-        
+
         if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && pfrom.nVersion >= gArgs.GetArg("-bitnodeprotocolversion", 70016)) {
             LogPrintf("Ignoring \"getaddr\" from bitnodes competitor. peer=%d\n", pfrom.GetId());
             return;
@@ -4855,8 +4854,7 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
                            peer.m_addrs_to_send.end());
 
     // No addr messages to send
-    if (peer.m_addrs_to_send.empty())
-        return;
+    if (peer.m_addrs_to_send.empty()) return;
 
     const char* msg_type;
     int make_flags;
