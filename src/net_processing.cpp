@@ -2327,7 +2327,6 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     if (!m_ignore_incoming_txs && m_mempool.size() > 10 &&
                         nodestate->fSupportsDesiredCmpctVersion &&
                         vGetData.size() == 1 &&
-                        mapBlocksInFlight.size() == 1 &&
                         pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
@@ -3750,7 +3749,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
-        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 2) {
+        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here
+            if (pindex->nHeight > m_chainman.ActiveChain().Height() + 2) // REBTODO - for now, some debug
+                LogPrintf("CURIOUS: recv cmpctblk.age=%s tip.age=%s diff=%s\n", strAge(GetAdjustedTime()-pindex->GetBlockTime()),
+                    strAge(GetAdjustedTime()-m_chainman.ActiveChain().Tip()->GetBlockTime()),
+                    strAge(pindex->GetBlockTime()-m_chainman.ActiveChain().Tip()->GetBlockTime()));
             if ((!fAlreadyInFlight && nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) ||
                  (fAlreadyInFlight && !(blockInFlightIt->second.second->partialBlock))) { // allow announce cmpctblocks
                 if (fAlreadyInFlight && blockInFlightIt->second.first != pfrom.GetId()) {
