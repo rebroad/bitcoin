@@ -3789,6 +3789,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
 
                 BlockTransactionsRequest req;
+                int nFromConPeers = 0; int nFromDisPeers = 0; int nFromExtra = 0; int nFromMemDat = 0; int nFromPack = 0;
+                int nFromReorg = 0; int nFromRecycledPeers = 0;
                 for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize))
@@ -3800,9 +3802,32 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                                 pnode->nBlockTXs++;
                                 return true;
                             });
+                            nFromConPeers++;
+                        } else {
+                            if (nodeid == -1)
+                                nFromExtra++;
+                            else if (nodeid == -2)
+                                nFromMemDat++;
+                            else if (nodeid == -3)
+                                nFromPack++;
+                            else if (nodeid == -4)
+                                nFromReorg++;
+                            else if (nTime >= m_last_no_connections)
+                                nFromDisPeers++;
+                            else
+                                nFromRecycledPeers++;
                         }
                     }
                 }
+                std::string strTXfrom;
+                if (nFromConPeers) strTXfrom += strprintf(" ConPeers=%d", nFromConPeers);
+                if (nFromDisPeers) strTXfrom += strprintf(" DisPeers=%d", nFromDisPeers);
+                if (nFromExtra) strTXfrom += strprintf(" Extra=%d", nFromExtra);
+                if (nFromMemDat) strTXfrom += strprintf(" MemDat=%d", nFromMemDat);
+                if (nFromPack) strTXfrom += strprintf(" Pack=%d", nFromPack);
+                if (nFromReorg) strTXfrom += strprintf(" Reorg=%d", nFromReorg);
+                if (nFromRecycledPeers) strTXfrom += strprintf(" RecycledPeers=%d", nFromRecycledPeers);
+                LogPrintf("TX have from%s\n", strTXfrom);
                 if (req.indexes.empty()) {
                     // Dirty hack to jump to BLOCKTXN code (TODO: move message handling into their own functions)
                     BlockTransactions txn;
