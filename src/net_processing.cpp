@@ -156,9 +156,9 @@ static constexpr uint32_t MAX_GETCFILTERS_SIZE = 1000;
 /** Maximum number of cf hashes that may be requested with one getcfheaders. See BIP 157. */
 static constexpr uint32_t MAX_GETCFHEADERS_SIZE = 2000;
 /** the maximum percentage of addresses from our addrman to return in response to a getaddr message. */
-static constexpr size_t MAX_PCT_ADDR_TO_SEND = 23;
+static constexpr size_t MAX_PCT_ADDR_TO_SEND = 100;
 /** The maximum number of address records permitted in an ADDR message. */
-static constexpr size_t MAX_ADDR_TO_SEND{1000};
+static constexpr size_t MAX_ADDR_TO_SEND{1000}; // REBTODO - maybe make this larger, but limit elsewhere how many go into an addr message
 /** The maximum rate of address records we're willing to process on average. Can be bypassed using
  *  the NetPermissionFlags::Addr permission. */
 static constexpr double MAX_ADDR_RATE_PER_SECOND{0.1};
