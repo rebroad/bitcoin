@@ -4144,6 +4144,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         peer->m_getaddr_recvd = true;
 
+        if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && pfrom.nVersion >= gArgs.GetIntArg("-bitnodeprotocolversion", 70016)) {
+            LogPrintf("Ignoring \"getaddr\" from bitnodes competitor. peer=%d\n", pfrom.GetId());
+            return;
+        }
+
         peer->m_addrs_to_send.clear();
         std::vector<CAddress> vAddr;
         if (pfrom.HasPermission(NetPermissionFlags::Addr)) {
@@ -4155,6 +4160,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         for (const CAddress &addr : vAddr) {
             PushAddress(*peer, addr, insecure_rand);
         }
+        LOCK(peer->m_addr_send_times_mutex);
+        peer->m_next_addr_send = 0s;
         return;
     }
 
@@ -4744,6 +4751,8 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
     // Nothing to do for non-address-relay peers
     if (!peer.m_addr_relay_enabled) return;
 
+    bool fHide = (!node.HasPermission(NetPermissionFlags::NoBan) && node.nVersion >= gArgs.GetIntArg("-bitnodeprotocolversion", 70016));
+
     LOCK(peer.m_addr_send_times_mutex);
     // Periodically advertise our local address to the peer.
     if (fListen && !m_chainman.ActiveChainstate().IsInitialBlockDownload() &&
@@ -4761,7 +4770,7 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
             FastRandomContext insecure_rand;
             PushAddress(peer, *local_addr, insecure_rand);
         }
-        peer.m_next_local_addr_send = PoissonNextSend(current_time, AVG_LOCAL_ADDRESS_BROADCAST_INTERVAL);
+        peer.m_next_local_addr_send = PoissonNextSend(current_time, AVG_LOCAL_ADDRESS_BROADCAST_INTERVAL); // REBTODO - reduce interval for whitelisted bitnodes
     }
 
     // We sent an `addr` message to this peer recently. Nothing more to do.
@@ -4797,7 +4806,10 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
         msg_type = NetMsgType::ADDR;
         make_flags = 0;
     }
-    m_connman.PushMessage(&node, CNetMsgMaker(node.GetCommonVersion()).Make(make_flags, msg_type, peer.m_addrs_to_send));
+    if (peer.m_addrs_to_send.size() > 10)
+        LogPrintf("%s: %sSending %d (cap %d) addresses to peer=%d\n", __func__, fHide ? "NOT ":"", peer.m_addrs_to_send.size(), peer.m_addrs_to_send.capacity(), node.GetId());
+    if (!fHide)
+        m_connman.PushMessage(&node, CNetMsgMaker(node.GetCommonVersion()).Make(make_flags, msg_type, peer.m_addrs_to_send));
     peer.m_addrs_to_send.clear();
 
     // we only send the big addr message once
