@@ -2271,7 +2271,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         if (CanDirectFetch() && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
-            if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork)
+            if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
                 LogPrintf("CURIOUS: COMPETING BLOCK\n");
             std::vector<const CBlockIndex*> vToFetch;
             const CBlockIndex *pindexWalk = pindexLast;
