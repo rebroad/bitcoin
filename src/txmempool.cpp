@@ -63,7 +63,7 @@ size_t CTxMemPoolEntry::GetTxSize() const
 
 unsigned int CTxMemPoolEntry::GetHeight(const CChain& active_chain) const
 {
-    int64_t now = GetTimeSeconds();
+    //int64_t now = GetTimeSeconds();
     CBlockIndex* ret = active_chain.FindEarliestAtLeast(nTime, 0);
     std::string strSame;
     if ((int)entryHeight != active_chain.Height()) {
@@ -72,9 +72,9 @@ unsigned int CTxMemPoolEntry::GetHeight(const CChain& active_chain) const
                 strSame = "SAME";
             else
                 strSame = "DIFFERENT";
-            LogPrintf("%s: nTime=%s entryHeight=%d peer=%d ret->nHeight=%d %s\n", __func__, strAge(now-nTime), entryHeight, nodeid, ret->nHeight, strSame);
+            LogPrintf("%s: nTime=%s entryHeight=%d peer=%d ret->nHeight=%d %s\n", __func__, FormatISO8601DateTime(nTime), entryHeight, nodeid, ret->nHeight, strSame);
         } else
-            LogPrintf("%s: nTime=%s entryHeight=%d peer=%d !ret\n", __func__, strAge(now-nTime), entryHeight, nodeid);
+            LogPrintf("%s: nTime=%s entryHeight=%d peer=%d !ret\n", __func__, FormatISO8601DateTime(nTime), entryHeight, nodeid);
     }
 
     //return ret ? ret->nHeight : active_chain.Height();

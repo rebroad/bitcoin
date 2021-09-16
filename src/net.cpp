@@ -2214,7 +2214,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                             strComment = strprintf("Oh dear, let's retry(%d) once more...!IBD=%d", nAnchorTryAgain, nPeersSendingTXs);
                     }
                 }
-                LogPrintf("Finished connecting to %d anchors. Connections=%d+%d. %s\n", anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
+                LogPrintf("Finished(%d) connecting to %d anchors. Connections=%d+%d. %s\n", nAnchorTryAgain, anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
                 anchor = 0;
             } // m_anchor not empty but anchor != 0
 
