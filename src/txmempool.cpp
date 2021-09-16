@@ -65,9 +65,9 @@ unsigned int CTxMemPoolEntry::GetHeight(const CChain& active_chain) const
 {
     //int64_t now = GetTimeSeconds();
     CBlockIndex* ret = active_chain.FindEarliestAtLeast(nTime, 0);
-    unsigned int newEntryHeight = ret ? ret->nHeight-1 : active_chain.Height()-1;
+    unsigned int newEntryHeight = ret ? ret->nHeight-1 : active_chain.Height();
     std::string strSame;
-    if (entryHeight != newEntryHeight)
+    if ((entryHeight != newEntryHeight) && (nodeid != -2)) // Hide LoadMempool entries as we know they differ
         LogPrintf("%s: nTime=%s entryHeight=%d newEntryHeight=%d ret=%d peer=%d\n", __func__, FormatISO8601DateTime(nTime), entryHeight, newEntryHeight, ret ? 1 : 0, nodeid);
 
     //return ret ? ret->nHeight : active_chain.Height();
