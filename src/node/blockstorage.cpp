@@ -560,11 +560,6 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
             return;
         }
     } // End scope of CImportingNow
-    LogPrintf("%s: Before LoadMempool() IBD=%d height=%d\n", __func__, chainman.ActiveChainstate().IsInitialBlockDownload(),
-        chainman.ActiveChainstate().m_chain.Height());
-    fprintf(stderr, "%s: Before LoadMempool() IBD=%d height=%d\n", __func__, chainman.ActiveChainstate().IsInitialBlockDownload(),
-        chainman.ActiveChainstate().m_chain.Height());
-    fflush(stderr);
     chainman.ActiveChainstate().LoadMempool(args);
     while(!ShutdownRequested()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
