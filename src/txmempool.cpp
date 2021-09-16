@@ -66,14 +66,16 @@ unsigned int CTxMemPoolEntry::GetHeight(const CChain& active_chain) const
     int64_t now = GetTimeSeconds();
     CBlockIndex* ret = active_chain.FindEarliestAtLeast(nTime, 0);
     std::string strSame;
-    if (ret && (int)entryHeight != active_chain.Height()) {
-        if (ret->nHeight == (int)entryHeight)
-            strSame = "SAME";
-        else
-            strSame = "DIFFERENT";
-        LogPrintf("%s: nTime=%s entryHeight=%d peer=%d ret->nHeight=%d %s\n", __func__, strAge(now-nTime), entryHeight, nodeid, ret->nHeight, strSame);
-    } else if (!ret && now-nTime > 1)
-        LogPrintf("%s: nTime=%s entryHeight=%d peer=%d !ret\n", __func__, strAge(now-nTime), entryHeight, nodeid);
+    if ((int)entryHeight != active_chain.Height()) {
+        if (ret) {
+            if (ret->nHeight == (int)entryHeight)
+                strSame = "SAME";
+            else
+                strSame = "DIFFERENT";
+            LogPrintf("%s: nTime=%s entryHeight=%d peer=%d ret->nHeight=%d %s\n", __func__, strAge(now-nTime), entryHeight, nodeid, ret->nHeight, strSame);
+        } else
+            LogPrintf("%s: nTime=%s entryHeight=%d peer=%d !ret\n", __func__, strAge(now-nTime), entryHeight, nodeid);
+    }
 
     //return ret ? ret->nHeight : active_chain.Height();
     return entryHeight;
