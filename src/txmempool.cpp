@@ -22,9 +22,9 @@
 #include <optional>
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFee,
-                                 int64_t _nTime, NodeId _nodeid,
+                                 int64_t _nTime, NodeId _nodeid, unsigned int _entryHeight,
                                  bool _spendsCoinbase, int64_t _sigOpsCost, LockPoints lp)
-    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nMemDelta(1), nTime(_nTime), nodeid(_nodeid),
+    : tx(_tx), nFee(_nFee), nTxWeight(GetTransactionWeight(*tx)), nUsageSize(RecursiveDynamicUsage(tx)), nMemDelta(1), nTime(_nTime), nodeid(_nodeid), entryHeight(_entryHeight),
     spendsCoinbase(_spendsCoinbase), sigOpCost(_sigOpsCost), lockPoints(lp)
 {
     nCountWithDescendants = 1;
@@ -65,12 +65,18 @@ unsigned int CTxMemPoolEntry::GetHeight(const CChain& active_chain) const
 {
     int64_t now = GetTimeSeconds();
     CBlockIndex* ret = active_chain.FindEarliestAtLeast(nTime, 0);
-    if (ret)
-        LogPrintf("%s: nTime=%s ret->nHeight=%d\n", __func__, strAge(now-nTime), ret->nHeight);
-    else
-        LogPrintf("%s: nTime=%s !ret\n", __func__, strAge(now-nTime));
+    std::string strSame;
+    if (ret && (int)entryHeight != active_chain.Height()) {
+        if (ret->nHeight == (int)entryHeight)
+            strSame = "SAME";
+        else
+            strSame = "DIFFERENT";
+        LogPrintf("%s: nTime=%s entryHeight=%d ret->nHeight=%d %s\n", __func__, strAge(now-nTime), entryHeight, ret->nHeight, strSame);
+    } else if (!ret && now-nTime > 1)
+        LogPrintf("%s: nTime=%s entryHeight=%d !ret\n", __func__, strAge(now-nTime), entryHeight);
 
-    return ret ? ret->nHeight : active_chain.Height();
+    //return ret ? ret->nHeight : active_chain.Height();
+    return entryHeight;
 }
 
 // Update the given tx for any in-mempool descendants.
