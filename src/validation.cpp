@@ -713,8 +713,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         }
     }
 
-    entry.reset(new CTxMemPoolEntry(ptx, ws.m_base_fees, nAcceptTime, nodeid, m_active_chainstate.m_chain.Height(),
-            fSpendsCoinbase, nSigOpsCost, lp)); // REBTODO - use Earliest to get the height based on nAcceptTime
+    entry.reset(new CTxMemPoolEntry(ptx, ws.m_base_fees, nAcceptTime, nodeid,
+            fSpendsCoinbase, nSigOpsCost, lp));
     unsigned int nSize = entry->GetTxSize();
 
     if (nSigOpsCost > MAX_STANDARD_TX_SIGOPS_COST)
