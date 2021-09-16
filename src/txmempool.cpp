@@ -4,7 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <txmempool.h>
-#include <chain.h> // For FineEarliestAtLeast()
+#include <chain.h> // For FindEarliestAtLeast()
 #include <consensus/consensus.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
@@ -63,7 +63,14 @@ size_t CTxMemPoolEntry::GetTxSize() const
 
 unsigned int CTxMemPoolEntry::GetHeight(const CChain& active_chain) const
 {
-    return active_chain.FindEarliestAtLeast(nTime, 0)->nHeight;
+    int64_t now = GetTimeSeconds();
+    CBlockIndex* ret = active_chain.FindEarliestAtLeast(nTime, 0);
+    if (ret)
+        LogPrintf("%s: nTime=%s ret->nHeight=%d\n", __func__, strAge(now-nTime), ret->nHeight);
+    else
+        LogPrintf("%s: nTime=%s !ret\n", __func__, strAge(now-nTime));
+
+    return ret ? ret->nHeight : active_chain.Height();
 }
 
 // Update the given tx for any in-mempool descendants.
