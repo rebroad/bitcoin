@@ -2090,7 +2090,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // Only connect out to one peer per network group (/16 for IPv4).
         int nOutboundFullRelay = 0;
         int nOutboundBlockRelay = 0;
-        int nPeersSendingTXs = 0;
+        int nPeersIBD = 0;
         std::set<std::vector<unsigned char> > setConnected;
         int vNodesSize;
 
@@ -2100,7 +2100,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             for (const CNode* pnode : vNodes) {
                 if (pnode->IsFullOutboundConn()) nOutboundFullRelay++;
                 if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
-                if (pnode->nTime1stTx) nPeersSendingTXs++;
+                if (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000) nPeersIBD++; // REBTODO - is this number reliable?
 
                 // Netgroups for inbound and manual peers are not excluded because our goal here
                 // is to not use multiple of our limited outbound slots on a single netgroup
@@ -2208,10 +2208,10 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                         strComment = "Oh well, I guess we'll find new ones.";
                     } else {
                         nAnchorTryAgain++;
-                        if (nPeersSendingTXs <= 1)
-                            strComment = strprintf("Oh dear, we'll retry(%d) again shortly. !IBD=%d", nAnchorTryAgain, nPeersSendingTXs);
+                        if (nPeersIBD <= 1)
+                            strComment = strprintf("Oh dear, let's retry(%d) once more...IBD=%d", nAnchorTryAgain, nPeersIBD);
                         else
-                            strComment = strprintf("Oh dear, let's retry(%d) once more...!IBD=%d", nAnchorTryAgain, nPeersSendingTXs);
+                            strComment = strprintf("Oh dear, we'll retry(%d) again shortly. IBD=%d", nAnchorTryAgain, nPeersIBD);
                     }
                 }
                 LogPrintf("Finished(%d) connecting to %d anchors. Connections=%d+%d. %s\n", nAnchorTryAgain, anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
@@ -2222,7 +2222,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
             if (nOutboundFullRelay > nLastOutboundCount)
                 nLastOutboundCount = nOutboundFullRelay;
-            if ((nAnchorTryAgain == 1 && vNodesSize > 0) || (nAnchorTryAgain > 1 && nPeersSendingTXs > 1) ||
+            if ((nAnchorTryAgain == 1 && vNodesSize > 0) || (nAnchorTryAgain > 1 && nPeersIBD <= 1) ||
                     nOutboundFullRelay <= (nLastOutboundCount+1)/2) { // or a sudden drop in connections
                 nLastOutboundCount = nOutboundFullRelay;
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
