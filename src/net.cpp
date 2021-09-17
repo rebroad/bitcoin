@@ -1570,6 +1570,8 @@ void CConnman::SocketHandler()
     double nLowestPct = 100;
     double nLowestBps = 1000000;
     double nLowestTXpm = 10000;
+    double nLowestBTXpm = 10000;
+    double worstNodeTXpmBTXpm = 0;
     double nSecondLowestPct = 0;
     double nSecondLowestBps = 0;
     double nSecondLowestTXpm = 0;
@@ -1579,6 +1581,7 @@ void CConnman::SocketHandler()
     NodeId worstNodePct = -1;
     NodeId worstNodeBps = -1;
     NodeId worstNodeTXpm = -1;
+    NodeId worstNodeBTXpm = -1;
     NodeId latestNode = -1;
     static NodeId lastWorstPct = -1;
     static NodeId lastWorstBps = -1;
@@ -1604,6 +1607,7 @@ void CConnman::SocketHandler()
             }
             int nMempoolBytes = pnode->nMempoolBytes;
             int nMempoolTXs = pnode->nMempoolTXs;
+            int nBlockTXs = pnode->nBlockTXs;
             nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
             nTotalMempoolBytes += nMempoolBytes;
             if (pnode->nRecvBytes1stTx) IsIBD = false;
@@ -1634,6 +1638,7 @@ void CConnman::SocketHandler()
                 } else if (nMempoolBps < nSecondLowestBps)
                     nSecondLowestBps = nMempoolBps;
                 double nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTime1stTx + 1);
+                double nBTXpm = 60.0 * nBlockTXs / (now - pnode->nTime1stTx + 1);
                 nLatestNodeTXpm = nTXpm;
                 nGlobalTXpm += (int)nTXpm;
                 if (nTXpm <= nLowestTXpm) {
@@ -1642,8 +1647,14 @@ void CConnman::SocketHandler()
                         nLowestTXpm = nTXpm;
                     }
                     worstNodeTXpm = pnode->GetId();
+                    worstNodeTXpmBTXpm = nBTXpm;
                 } else if (nTXpm < nSecondLowestTXpm)
                     nSecondLowestTXpm = nTXpm;
+                if (nBTXpm && nBTXpm <= nLowestBTXpm) {
+                    if (nBTXpm < nLowestBTXpm)
+                        nLowestBTXpm = nBTXpm;
+                    worstNodeBTXpm = pnode->GetId();
+                }
             } else if (pnode->IsInboundConn()) {
                 int nRecvBps = 8 * nRecvBytes / (now + 1 - pnode->nTimeConnected);
                 int nSendBps = 8 * nSendBytes / (now + 1 - pnode->nTimeConnected);
@@ -1663,6 +1674,7 @@ void CConnman::SocketHandler()
     bool fLatestNodePctDegrading = false;
     bool fLatestNodeTXpmDegrading = false;
     if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
+        if (worstNodeTXpmBTXpm > nLowestBTXpm) worstNodeTXpm = worstNodeBTXpm; // REBTODO - bit kludgy?
         if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps) {
             LogPrintf("%s: worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d:%d) Bps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, nTechnique, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, (int)nLowestTXpm, (int)nSecondLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
             if (lastWorstPct != worstNodePct) {
