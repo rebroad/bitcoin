@@ -1568,17 +1568,22 @@ void CConnman::SocketHandler()
     int nOutboundFullRelay = 0;
     int nOutboundBlockRelay = 0;
     double nLowestPct = 100;
+    double nLowestBPct = 100;
+    double worstNodePctBPct = 0;
     double nLowestBps = 1000000;
     double nLowestTXpm = 10000;
     double nLowestBTXpm = 10000;
     double worstNodeTXpmBTXpm = 0;
     double nSecondLowestPct = 0;
+    double nSecondLowestBPct = 0;
     double nSecondLowestBps = 0;
     double nSecondLowestTXpm = 0;
+    double nSecondLowestBTXpm = 0;
     double nLatestNodePct = 0;
     double nLatestNodeBps = 0;
     double nLatestNodeTXpm = 0;
     NodeId worstNodePct = -1;
+    NodeId worstNodeBPct = -1;
     NodeId worstNodeBps = -1;
     NodeId worstNodeTXpm = -1;
     NodeId worstNodeBTXpm = -1;
@@ -1607,6 +1612,7 @@ void CConnman::SocketHandler()
             }
             int nMempoolBytes = pnode->nMempoolBytes;
             int nMempoolTXs = pnode->nMempoolTXs;
+            int nBlockBytes = pnode->nBlockBytes;
             int nBlockTXs = pnode->nBlockTXs;
             nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
             nTotalMempoolBytes += nMempoolBytes;
@@ -1616,6 +1622,7 @@ void CConnman::SocketHandler()
                 latestNode = pnode->GetId();
                 nOutboundFullRelay++;
                 if (pnode->nTimeConnected > latestOutboundConn) latestOutboundConn = pnode->nTimeConnected;
+                double nBlockPct = 100.0 * nBlockBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
                 nLatestNodePct = nMempoolPct;
                 if (nMempoolPct <= nLowestPct) {
                     if (nMempoolPct < nLowestPct) {
@@ -1623,8 +1630,17 @@ void CConnman::SocketHandler()
                         nLowestPct = nMempoolPct;
                     }
                     worstNodePct = pnode->GetId();
+                    worstNodePctBPct = nBlockPct;
                 } else if (nMempoolPct < nSecondLowestPct)
                     nSecondLowestPct = nMempoolPct;
+                if (nBlockPct && nBlockPct <= nLowestBPct) {
+                    if (nBlockPct < nLowestBPct) {
+                        nSecondLowestBPct = nLowestBPct;
+                        nLowestBPct = nBlockPct;
+                    }
+                    worstNodeBPct = pnode->GetId();
+                } else if (nBlockPct && nBlockPct < nSecondLowestBPct)
+                    nSecondLowestBPct = nBlockPct;
                 //int nMempoolBps = nMempoolPct * .08 * nRecvBytes / (now - pnode->nTime1stTx + 1);
                 double nMempoolBps = nMempoolBytes * 8.0 / (now - pnode->nTime1stTx + 1);
                 nLatestNodeBps = nMempoolBps;
@@ -1651,10 +1667,13 @@ void CConnman::SocketHandler()
                 } else if (nTXpm < nSecondLowestTXpm)
                     nSecondLowestTXpm = nTXpm;
                 if (nBTXpm && nBTXpm <= nLowestBTXpm) {
-                    if (nBTXpm < nLowestBTXpm)
+                    if (nBTXpm < nLowestBTXpm) {
+                        nSecondLowestBTXpm = nLowestBTXpm;
                         nLowestBTXpm = nBTXpm;
+                    }
                     worstNodeBTXpm = pnode->GetId();
-                }
+                } else if (nBTXpm && nBTXpm < nSecondLowestBTXpm)
+                    nSecondLowestBTXpm = nBTXpm;
             } else if (pnode->IsInboundConn()) {
                 int nRecvBps = 8 * nRecvBytes / (now + 1 - pnode->nTimeConnected);
                 int nSendBps = 8 * nSendBytes / (now + 1 - pnode->nTimeConnected);
@@ -1673,8 +1692,17 @@ void CConnman::SocketHandler()
     bool fLatestNodeBpsDegrading = false;
     bool fLatestNodePctDegrading = false;
     bool fLatestNodeTXpmDegrading = false;
-    if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay) {
-        if (worstNodeTXpmBTXpm > nLowestBTXpm) worstNodeTXpm = worstNodeBTXpm; // REBTODO - bit kludgy?
+    if (!IsIBD && lastnow != now && nOutboundFullRelay >= m_max_outbound_full_relay-1) {
+        if (worstNodeTXpmBTXpm > nLowestBTXpm) {
+            worstNodeTXpm = worstNodeBTXpm;
+            nLowestTXpm = nLowestBTXpm;
+            nSecondLowestTXpm = nSecondLowestBTXpm;
+        }
+        if (worstNodePctBPct > nLowestBPct) {
+            worstNodePct = worstNodeBPct;
+            nLowestPct = nLowestBPct;
+            nSecondLowestPct = nSecondLowestBPct;
+        }
         if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps) {
             LogPrintf("%s: worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d:%d) Bps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, nTechnique, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, (int)nLowestTXpm, (int)nSecondLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
             if (lastWorstPct != worstNodePct) {
@@ -2206,18 +2234,18 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     !HasAllDesirableServiceFlags(addr.nServices) ||
                     setConnected.count(addr.GetGroup(addrman.m_asmap)))) break;
                 addrConnect = addr;
-                LogPrintf("Trying to make a %s anchor(%d) connection to %s\n",
+                LogPrintf("Trying(%d) to make a %s anchor(%d) connection to %s\n", nAnchorTryAgain,
                     ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
                 break; // out of while
             } else if (anchor) {
                 std::string strComment;
                 if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay) {
-                    strComment = "No further action needed!";
+                    strComment = strprintf("No further action needed! (tries=%d)", nAnchorTryAgain+1);
                     nAnchorTryAgain = 0;
                 } else {
                     if (nAnchorTryAgain >= 2) { // One retry is sufficient, 2nd retry rarely finds anything new.
                         nAnchorTryAgain = 0;
-                        strComment = "Oh well, I guess we'll find new ones.";
+                        strComment = strprintf("Oh well, I guess we'll find new ones. (tries=%d)", nAnchorTryAgain+1);
                     } else {
                         nAnchorTryAgain++;
                         if (nPeersIBD <= 1)
@@ -2226,7 +2254,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                             strComment = strprintf("Oh dear, we'll retry(%d) again shortly. IBD=%d", nAnchorTryAgain, nPeersIBD);
                     }
                 }
-                LogPrintf("Finished(%d) connecting to %d anchors. Connections=%d+%d. %s\n", nAnchorTryAgain, anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
+                LogPrintf("Finished connecting to %d anchors. Connections=%d+%d. %s\n", anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
                 anchor = 0;
             } // m_anchor not empty but anchor != 0
 
