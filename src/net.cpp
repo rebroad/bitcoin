@@ -112,6 +112,7 @@ RecursiveMutex cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost GUARDED_BY(cs_mapLocalHost);
 static bool vfLimited[NET_MAX] GUARDED_BY(cs_mapLocalHost) = {};
 std::string strSubVersion;
+static int nAnchorTryAgain = -1; // -1 so that we skip the sleeps on the first ReachAnchor
 
 void CConnman::AddAddrFetch(const std::string& strDest)
 {
@@ -165,7 +166,7 @@ static std::vector<CAddress> ConvertSeeds(const std::vector<uint8_t> &vSeedsIn)
         s >> endpoint;
         CAddress addr{endpoint, GetDesirableServiceFlags(NODE_NONE)};
         addr.nTime = GetTime() - rng.randrange(nOneWeek) - nOneWeek;
-        LogPrint(BCLog::NET, "Added hardcoded seed: %s\n", addr.ToString());
+        LogPrintf("Added hardcoded seed: %s\n", addr.ToString());
         vSeedsOut.push_back(addr);
     }
     return vSeedsOut;
@@ -1327,6 +1328,11 @@ void CConnman::NotifyNumConnectionsChanged()
     }
     if(vNodesSize != nPrevNodeCount) {
         nPrevNodeCount = vNodesSize;
+        if (vNodesSize == 0) {
+            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+            nAnchorTryAgain = 0;
+            ResetNewNodeId();
+        }
         if(clientInterface)
             clientInterface->NotifyNumConnectionsChanged(vNodesSize);
     }
@@ -1747,7 +1753,7 @@ void CConnman::SocketHandler()
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: %s TimeConn = %d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? strprintf("Txpm=%d", nLowest) : strprintf("Pct=%d%%", nLowest), now - pnode->nTimeConnected, pnode->GetId());
                 if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS
-                        && now - latest1stTx >= 120) {
+                        && !nAnchorTryAgain &&  now - latest1stTx >= 120) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
                     if (anchors_to_dump.size() > (size_t)m_max_outbound_full_relay - 1) {
                         anchors_to_dump.resize(m_max_outbound_full_relay - 1);
@@ -2135,11 +2141,9 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nOutboundBlockRelay = 0;
         int nPeersIBD = 0;
         std::set<std::vector<unsigned char> > setConnected;
-        int vNodesSize;
 
         {
             LOCK(cs_vNodes);
-            vNodesSize = vNodes.size();
             for (const CNode* pnode : vNodes) {
                 if (pnode->IsFullOutboundConn()) nOutboundFullRelay++;
                 if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
@@ -2227,7 +2231,6 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nTries = 0;
         while (!interruptNet)
         {
-            static int nAnchorTryAgain = -1; // -1 so that we skip the sleeps on the first ReachAnchor
             if (!m_anchors.empty()) {
                 anchor++;
                 const CAddress addr = m_anchors.back();
@@ -2269,7 +2272,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
             if (nOutboundFullRelay > nLastOutboundCount)
                 nLastOutboundCount = nOutboundFullRelay;
-            if ((nAnchorTryAgain == 1 && vNodesSize > 0) || (nAnchorTryAgain > 1 && nPeersIBD <= 1) ||
+            if ((nAnchorTryAgain == 1 && nOutboundBlockRelay+nOutboundFullRelay > 0) || (nAnchorTryAgain > 1 && nPeersIBD <= 1) ||
                     nOutboundFullRelay <= (nLastOutboundCount+1)/2) { // or a sudden drop in connections
                 nLastOutboundCount = nOutboundFullRelay;
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
@@ -2281,11 +2284,6 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 }
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                     return;
-                if (vNodesSize == 0) {
-                    LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
-                    nAnchorTryAgain = 0;
-                    ResetNewNodeId();
-                }
                 break;
             } // This'll get picked up the next time we hit the check for m_anchors above.
 
