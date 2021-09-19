@@ -1563,6 +1563,7 @@ void CConnman::SocketHandler()
     }
 
     int64_t latestOutboundConn = 0;
+    int64_t latest1stTx = 0;
     uint64_t nTotalBytesRecv = 0;
     uint64_t nTotalMempoolBytes = 0;
     int nOutboundFullRelay = 0;
@@ -1621,6 +1622,7 @@ void CConnman::SocketHandler()
             if (pnode->IsFullOutboundConn()) {
                 latestNode = pnode->GetId();
                 nOutboundFullRelay++;
+                if (pnode->nTime1stTx > latest1stTx) latest1stTx = pnode->nTime1stTx;
                 if (pnode->nTimeConnected > latestOutboundConn) latestOutboundConn = pnode->nTimeConnected;
                 double nBlockPct = 100.0 * nBlockBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
                 nLatestNodePct = nMempoolPct;
@@ -1744,7 +1746,8 @@ void CConnman::SocketHandler()
             if ((pnode->GetId() == worstNode) && (now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && ((nLowest <= (nSecondLowest / 2)) || ((now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: %s TimeConn = %d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? strprintf("Txpm=%d", nLowest) : strprintf("Pct=%d%%", nLowest), now - pnode->nTimeConnected, pnode->GetId());
-                if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS) {
+                if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS
+                        && now - latest1stTx >= 120) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
                     if (anchors_to_dump.size() > (size_t)m_max_outbound_full_relay - 1) {
                         anchors_to_dump.resize(m_max_outbound_full_relay - 1);
@@ -2241,14 +2244,18 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 std::string strComment;
                 if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay) {
                     strComment = strprintf("No further action needed! (tries=%d)", nAnchorTryAgain+1);
-                    nAnchorTryAgain = 0;
+                    if (nAnchorTryAgain < 2) {
+                        nAnchorTryAgain++;
+                        strComment += " but let's try one last time anyway!";
+                    } else
+                        nAnchorTryAgain = 0;
                 } else {
                     if (nAnchorTryAgain >= 2) { // One retry is sufficient, 2nd retry rarely finds anything new.
-                        nAnchorTryAgain = 0;
                         strComment = strprintf("Oh well, I guess we'll find new ones. (tries=%d)", nAnchorTryAgain+1);
+                        nAnchorTryAgain = 0;
                     } else {
                         nAnchorTryAgain++;
-                        if (nPeersIBD <= 1)
+                        if (nPeersIBD <= 1 || nAnchorTryAgain < 2)
                             strComment = strprintf("Oh dear, let's retry(%d) once more...IBD=%d", nAnchorTryAgain, nPeersIBD);
                         else
                             strComment = strprintf("Oh dear, we'll retry(%d) again shortly. IBD=%d", nAnchorTryAgain, nPeersIBD);

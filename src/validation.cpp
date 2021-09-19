@@ -1223,22 +1223,32 @@ void CChainState::InitCoinsCache(size_t cache_size_bytes)
 //
 bool CChainState::IsInitialBlockDownload() const
 {
+    bool fNew = false;
+    bool fPrev = m_cached_finished_ibd.load(std::memory_order_relaxed);
     if (pindexBestHeader != nullptr && pindexBestHeader->nHeight > m_chain.Tip()->nHeight + 6)
+        fNew = true;
+    if (m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
+        fNew = true;
+    if (fNew) {
+        if (fPrev) {
+            m_cached_finished_ibd.store(false, std::memory_order_relaxed);
+            LogPrintf("%s: Latching to true\n", __func__);
+        }
         return true;
+    }
+
     // Optimization: pre-test latch before taking the lock.
-    if (m_cached_finished_ibd.load(std::memory_order_relaxed))
+    if (fPrev)
         return false;
 
     LOCK(cs_main);
-    if (m_cached_finished_ibd.load(std::memory_order_relaxed))
+    if (fPrev)
         return false;
     if (fImporting || fReindex)
         return true;
     if (m_chain.Tip() == nullptr)
         return true;
     if (m_chain.Tip()->nChainWork < nMinimumChainWork)
-        return true;
-    if (m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
         return true;
 
     LogPrintf("Leaving InitialBlockDownload (latching to false)\n");
@@ -1874,11 +1884,6 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
-        if (ShutdownRequested()) {
-            LogPrintf("%s: Shutdown requested. Aborting at %d%%.\n", __func__, i * 100 / block.vtx.size());
-            return true;
-        }
-
         const CTransaction &tx = *(block.vtx[i]);
 
         nInputs += tx.vin.size();
