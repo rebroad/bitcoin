@@ -112,7 +112,7 @@ RecursiveMutex cs_mapLocalHost;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost GUARDED_BY(cs_mapLocalHost);
 static bool vfLimited[NET_MAX] GUARDED_BY(cs_mapLocalHost) = {};
 std::string strSubVersion;
-static int nAnchorTryAgain = -1; // -1 so that we skip the sleeps on the first ReachAnchor
+static int nAnchorTryAgain = -1; // -1 so that we skip the sleeps on the first ReadAnchor
 
 void CConnman::AddAddrFetch(const std::string& strDest)
 {
@@ -1753,7 +1753,7 @@ void CConnman::SocketHandler()
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: %s TimeConn = %d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? strprintf("Txpm=%d", nLowest) : strprintf("Pct=%d%%", nLowest), now - pnode->nTimeConnected, pnode->GetId());
                 if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS
-                        && !nAnchorTryAgain &&  now - latest1stTx >= 120) {
+                        && !nAnchorTryAgain && now - latest1stTx >= 120) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
                     if (anchors_to_dump.size() > (size_t)m_max_outbound_full_relay - 1) {
                         anchors_to_dump.resize(m_max_outbound_full_relay - 1);
@@ -2184,7 +2184,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // timer to decide if we should open a FEELER.
 
         if (!m_anchors.empty()) {
-            if (anchor < m_max_outbound_block_relay)
+            if (!nOutboundBlockRelay || anchor < m_max_outbound_block_relay)
                 conn_type = ConnectionType::BLOCK_RELAY;
         } else if (nOutboundFullRelay < m_max_outbound_full_relay) {
             // OUTBOUND_FULL_RELAY
@@ -2231,7 +2231,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nTries = 0;
         while (!interruptNet)
         {
-            if (!m_anchors.empty()) {
+            if (!m_anchors.empty() && (anchor < m_max_outbound_block_relay || nOutboundBlockRelay)) {
                 anchor++;
                 const CAddress addr = m_anchors.back();
                 m_anchors.pop_back();
@@ -2240,28 +2240,31 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     !HasAllDesirableServiceFlags(addr.nServices) ||
                     setConnected.count(addr.GetGroup(addrman.m_asmap)))) break;
                 addrConnect = addr;
+                if (nAnchorTryAgain < 0) nAnchorTryAgain = 0;
                 LogPrintf("Trying(%d) to make a %s anchor(%d) connection to %s\n", nAnchorTryAgain,
                     ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
                 break; // out of while
-            } else if (anchor) {
+            } else if (anchor && m_anchors.empty()) {
                 std::string strComment;
+                nAnchorTryAgain++;
                 if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay) {
-                    strComment = strprintf("No further action needed! (tries=%d)", nAnchorTryAgain+1);
-                    if (nAnchorTryAgain < 2) {
-                        nAnchorTryAgain++;
+                    strComment = strprintf("No further action needed! (tries=%d)", nAnchorTryAgain);
+                    if (nAnchorTryAgain < 3) {
                         strComment += " but let's try one last time anyway!";
+                        nAnchorTryAgain = 2;
                     } else
                         nAnchorTryAgain = 0;
                 } else {
-                    if (nAnchorTryAgain >= 2) { // One retry is sufficient, 2nd retry rarely finds anything new.
-                        strComment = strprintf("Oh well, I guess we'll find new ones. (tries=%d)", nAnchorTryAgain+1);
+                    if (nAnchorTryAgain >= 3) { // One retry is sufficient, 2nd retry rarely finds anything new.
+                        strComment = strprintf("Oh well, I guess we'll find new ones. (tries=%d)", nAnchorTryAgain);
                         nAnchorTryAgain = 0;
                     } else {
-                        nAnchorTryAgain++;
-                        if (nPeersIBD <= 1 || nAnchorTryAgain < 2)
-                            strComment = strprintf("Oh dear, let's retry(%d) once more...IBD=%d", nAnchorTryAgain, nPeersIBD);
+                        int nodes = nOutboundBlockRelay + nOutboundFullRelay;
+                        if ((nAnchorTryAgain == 1 && nodes > 0) ||
+                                (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nodes >= 2))
+                            strComment = strprintf("Oh dear, let's retry(%d) once more...nodes=%d IBD=%d", nAnchorTryAgain, nodes, nPeersIBD);
                         else
-                            strComment = strprintf("Oh dear, we'll retry(%d) again shortly. IBD=%d", nAnchorTryAgain, nPeersIBD);
+                            strComment = strprintf("Oh dear, we'll retry(%d) again shortly. nodes=%d IBD=%d", nAnchorTryAgain, nodes, nPeersIBD);
                     }
                 }
                 LogPrintf("Finished connecting to %d anchors. Connections=%d+%d. %s\n", anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
@@ -2272,8 +2275,11 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
             if (nOutboundFullRelay > nLastOutboundCount)
                 nLastOutboundCount = nOutboundFullRelay;
-            if ((nAnchorTryAgain == 1 && nOutboundBlockRelay+nOutboundFullRelay > 0) || (nAnchorTryAgain > 1 && nPeersIBD <= 1) ||
-                    nOutboundFullRelay <= (nLastOutboundCount+1)/2) { // or a sudden drop in connections
+            if ((nAnchorTryAgain == 1 && nOutboundBlockRelay+nOutboundFullRelay > 0) ||
+                    (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundBlockRelay+nOutboundFullRelay >= 2) ||
+                    (nOutboundFullRelay < (nLastOutboundCount+1)/2)) { // or a sudden drop in connections
+                if (nOutboundFullRelay < (nLastOutboundCount+1)/2)
+                    LogPrintf("Outbound count dropped (%d < %d) LOC=%d\n", nOutboundFullRelay, (nLastOutboundCount+1)/2, nLastOutboundCount);
                 nLastOutboundCount = nOutboundFullRelay;
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                         return;
