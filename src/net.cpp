@@ -1592,7 +1592,6 @@ void CConnman::SocketHandler()
     static int64_t tWorstBpsChanged = now;
     static int64_t tWorstTXpmChanged = now;
     static int64_t lastnow = 0;
-    static int64_t nLastBlockTime = 0;
     bool IsIBD = true;
     if (now != lastnow) {
         for (CNode* pnode : vNodesCopy) {
@@ -1612,10 +1611,6 @@ void CConnman::SocketHandler()
             nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
             nTotalMempoolBytes += nMempoolBytes;
             if (pnode->nRecvBytes1stTx) IsIBD = false;
-            if (pnode->nLastBlockTime > nLastBlockTime) {
-                nLastBlockTime = pnode->nLastBlockTime;
-                LogPrintf("Update LastBlockTime age=%s peer=%d\n", strAge(now - nLastBlockTime), pnode->GetId());
-            }
             double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
             if (pnode->IsFullOutboundConn()) {
                 latestNode = pnode->GetId();
@@ -1654,7 +1649,7 @@ void CConnman::SocketHandler()
                 } else if (nMempoolBps < nSecondLowestBps)
                     nSecondLowestBps = nMempoolBps;
                 double nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTime1stTx + 1);
-                double nBTXpm = 60.0 * nBlockTXs / (nLastBlockTime - pnode->nTime1stTx + 1);
+                double nBTXpm = 60.0 * nBlockTXs / (now - pnode->nTime1stTx + 1);
                 nLatestNodeTXpm = nTXpm;
                 nGlobalTXpm += (int)nTXpm;
                 if (nTXpm <= nLowestTXpm) {
@@ -2227,10 +2222,9 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 anchor++;
                 const CAddress addr = m_anchors.back();
                 m_anchors.pop_back();
-                if (conn_type == ConnectionType::BLOCK_RELAY && (
-                    !addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
+                if (!addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
                     !HasAllDesirableServiceFlags(addr.nServices) ||
-                    setConnected.count(addr.GetGroup(addrman.GetAsmap())))) break;
+                    setConnected.count(addr.GetGroup(addrman.GetAsmap()))) break;
                 addrConnect = addr;
                 if (nAnchorTryAgain < 0) nAnchorTryAgain = 0;
                 LogPrintf("Trying(%d) to make a %s anchor(%d) connection to %s\n", nAnchorTryAgain,

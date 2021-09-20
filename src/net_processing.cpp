@@ -3880,26 +3880,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // If we get more TXs than currently in flight then we know the request has been ignored.
                     nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // Add 2 so that one more TX is requested.
                 }
-            } else {
-                // This block is either already in flight from a different
-                // peer, or this peer has too many blocks outstanding to
-                // download from.
-                // Optimistically try to reconstruct anyway since we might be
-                // able to without any round trips.
-                PartiallyDownloadedBlock tempBlock(&m_mempool); // REBTODO - no point if not received any TXs since last InitData
-                ReadStatus status = tempBlock.InitData(cmpctblock, vExtraTxnForCompact); // REBTODO - as above
-                if (status != READ_STATUS_OK) {
-                    LogPrintf("after 2nd InitData failed. %shave partialblock. peer=%d\n", blockInFlightIt->second.second->partialBlock ? "" : "Don't ", pfrom.GetId());
-                    // TODO: don't ignore failures
-                    return;
-                }
-                std::vector<CTransactionRef> dummy;
-                status = tempBlock.FillBlock(*pblock, dummy);
-                if (status == READ_STATUS_OK) {
-                    LogPrintf("after 2nd InitData succeeded, FillBlock succeeded!\n");
-                    fBlockReconstructed = true;
-                } else
-                    LogPrintf("after 2nd InitData succeeded, FillBlock failed\n");
             }
         } else {
             if (fAlreadyInFlight) { // REBTODO - probably don't do this
@@ -5459,7 +5439,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         if (state.nBlockAfterTXs == 1) {
             LogPrintf("getblocktxn ignored. disconnecting peer=%d\n", pto->GetId());
             pto->fDisconnect = true;
-            return true;
+            return true; // REBTODO - reuse the cmpctblock we already have.
         }
         // In case there is a block that has been in flight from this peer for block_interval * (1 + 0.5 * N)
         // (with N the number of peers from which we're downloading validated blocks), disconnect due to timeout.
