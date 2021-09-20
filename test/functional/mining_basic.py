@@ -58,17 +58,17 @@ class MiningTest(BitcoinTestFramework):
         self.log.info('Create some old blocks')
         for t in range(TIME_GENESIS_BLOCK, TIME_GENESIS_BLOCK + 200 * 600, 600):
             self.nodes[0].setmocktime(t)
-            self.nodes[0].generate(1)
+            self.generate(self.nodes[0], 1)
         mining_info = self.nodes[0].getmininginfo()
         assert_equal(mining_info['blocks'], 200)
         assert_equal(mining_info['currentblocktx'], 0)
         assert_equal(mining_info['currentblockweight'], 4000)
 
         self.log.info('test blockversion')
-        self.restart_node(0, extra_args=['-mocktime={}'.format(t), '-blockversion=1337'])
+        self.restart_node(0, extra_args=[f'-mocktime={t}', '-blockversion=1337'])
         self.connect_nodes(0, 1)
         assert_equal(1337, self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
-        self.restart_node(0, extra_args=['-mocktime={}'.format(t)])
+        self.restart_node(0, extra_args=[f'-mocktime={t}'])
         self.connect_nodes(0, 1)
         assert_equal(VERSIONBITS_TOP_BITS + (1 << VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT), self.nodes[0].getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)['version'])
         self.restart_node(0)
@@ -109,7 +109,7 @@ class MiningTest(BitcoinTestFramework):
         assert_equal(witness_commitment, script.hex())
 
         # Mine a block to leave initial block download and clear the mempool
-        node.generatetoaddress(1, node.get_deterministic_priv_key().address)
+        self.generatetoaddress(node, 1, node.get_deterministic_priv_key().address)
         tmpl = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
         self.log.info("getblocktemplate: Test capability advertised")
         assert 'proposal' in tmpl['capabilities']
@@ -271,7 +271,7 @@ class MiningTest(BitcoinTestFramework):
         assert chain_tip(block.hash, status='active', branchlen=0) in node.getchaintips()
 
         # Building a few blocks should give the same results
-        node.generatetoaddress(10, node.get_deterministic_priv_key().address)
+        self.generatetoaddress(node, 10, node.get_deterministic_priv_key().address)
         assert_raises_rpc_error(-25, 'time-too-old', lambda: node.submitheader(hexdata=CBlockHeader(bad_block_time).serialize().hex()))
         assert_raises_rpc_error(-25, 'bad-prevblk', lambda: node.submitheader(hexdata=CBlockHeader(bad_block2).serialize().hex()))
         node.submitheader(hexdata=CBlockHeader(block).serialize().hex())

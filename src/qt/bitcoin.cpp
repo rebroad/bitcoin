@@ -11,6 +11,7 @@
 #include <chainparams.h>
 #include <init.h>
 #include <interfaces/handler.h>
+#include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <node/context.h>
 #include <node/ui_interface.h>
@@ -28,6 +29,7 @@
 #include <qt/utilitydialog.h>
 #include <qt/winshutdownmonitor.h>
 #include <uint256.h>
+#include <util/string.h>
 #include <util/system.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
@@ -145,6 +147,53 @@ static void initTranslations(QTranslator &qtTranslatorBase, QTranslator &qtTrans
         QApplication::installTranslator(&translator);
 }
 
+static bool InitSettings()
+{
+    if (!gArgs.GetSettingsPath()) {
+        return true; // Do nothing if settings file disabled.
+    }
+
+    std::vector<std::string> errors;
+    if (!gArgs.ReadSettingsFile(&errors)) {
+        bilingual_str error = _("Settings file could not be read");
+        InitError(Untranslated(strprintf("%s:\n%s\n", error.original, MakeUnorderedList(errors))));
+
+        QMessageBox messagebox(QMessageBox::Critical, PACKAGE_NAME, QString::fromStdString(strprintf("%s.", error.translated)), QMessageBox::Reset | QMessageBox::Abort);
+        /*: Explanatory text shown on startup when the settings file cannot be read.
+            Prompts user to make a choice between resetting or aborting. */
+        messagebox.setInformativeText(QObject::tr("Do you want to reset settings to default values, or to abort without making changes?"));
+        messagebox.setDetailedText(QString::fromStdString(MakeUnorderedList(errors)));
+        messagebox.setTextFormat(Qt::PlainText);
+        messagebox.setDefaultButton(QMessageBox::Reset);
+        switch (messagebox.exec()) {
+        case QMessageBox::Reset:
+            break;
+        case QMessageBox::Abort:
+            return false;
+        default:
+            assert(false);
+        }
+    }
+
+    errors.clear();
+    if (!gArgs.WriteSettingsFile(&errors)) {
+        bilingual_str error = _("Settings file could not be written");
+        InitError(Untranslated(strprintf("%s:\n%s\n", error.original, MakeUnorderedList(errors))));
+
+        QMessageBox messagebox(QMessageBox::Critical, PACKAGE_NAME, QString::fromStdString(strprintf("%s.", error.translated)), QMessageBox::Ok);
+        /*: Explanatory text shown on startup when the settings file could not be written.
+            Prompts user to check that we have the ability to write to the file.
+            Explains that the user has the option of running without a settings file.*/
+        messagebox.setInformativeText(QObject::tr("A fatal error occurred. Check that settings file is writable, or try running with -nosettings."));
+        messagebox.setDetailedText(QString::fromStdString(MakeUnorderedList(errors)));
+        messagebox.setTextFormat(Qt::PlainText);
+        messagebox.setDefaultButton(QMessageBox::Ok);
+        messagebox.exec();
+        return false;
+    }
+    return true;
+}
+
 /* qDebug() message handler --> debug.log */
 void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString &msg)
 {
@@ -228,10 +277,10 @@ void BitcoinApplication::createSplashScreen(const NetworkStyle *networkStyle)
     connect(this, &BitcoinApplication::requestedShutdown, m_splash, &QWidget::close);
 }
 
-void BitcoinApplication::setNode(interfaces::Node& node)
+void BitcoinApplication::createNode(interfaces::Init& init)
 {
     assert(!m_node);
-    m_node = &node;
+    m_node = init.makeNode();
     if (optionsModel) optionsModel->setNode(*m_node);
     if (m_splash) m_splash->setNode(*m_node);
 }
@@ -295,6 +344,17 @@ void BitcoinApplication::requestShutdown()
     // to complete an operation, like wait for a RPC execution to complete.
     window->setClientModel(nullptr);
     pollShutdownTimer->stop();
+
+#ifdef ENABLE_WALLET
+    // Delete wallet controller here manually, instead of relying on Qt object
+    // tracking (https://doc.qt.io/qt-5/objecttrees.html). This makes sure
+    // walletmodel m_handle_* notification handlers are deleted before wallets
+    // are unloaded, which can simplify wallet implementations. It also avoids
+    // these notifications having to be handled while GUI objects are being
+    // destroyed, making GUI code less fragile as well.
+    delete m_wallet_controller;
+    m_wallet_controller = nullptr;
+#endif // ENABLE_WALLET
 
     delete clientModel;
     clientModel = nullptr;
@@ -402,11 +462,13 @@ int GuiMain(int argc, char* argv[])
     util::WinCmdLineArgs winArgs;
     std::tie(argc, argv) = winArgs.get();
 #endif
-    SetupEnvironment();
-    util::ThreadSetInternalName("main");
 
     NodeContext node_context;
-    std::unique_ptr<interfaces::Node> node = interfaces::MakeNode(&node_context);
+    int unused_exit_status;
+    std::unique_ptr<interfaces::Init> init = interfaces::MakeNodeInit(node_context, argc, argv, unused_exit_status);
+
+    SetupEnvironment();
+    util::ThreadSetInternalName("main");
 
     // Subscribe to global signals from core
     boost::signals2::scoped_connection handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(noui_ThreadSafeMessageBox);
@@ -434,7 +496,6 @@ int GuiMain(int argc, char* argv[])
 
     /// 2. Parse command-line options. We do this after qt in order to show an error if there are problems parsing these
     // Command-line options take precedence:
-    node_context.args = &gArgs;
     SetupServerArgs(gArgs);
     SetupUIArgs(gArgs);
     std::string error;
@@ -513,9 +574,8 @@ int GuiMain(int argc, char* argv[])
     // Parse URIs on command line -- this can affect Params()
     PaymentServer::ipcParseCommandLine(argc, argv);
 #endif
-    if (!gArgs.InitSettings(error)) {
-        InitError(Untranslated(error));
-        QMessageBox::critical(nullptr, PACKAGE_NAME, QObject::tr("Error initializing settings: %1").arg(QString::fromStdString(error)));
+
+    if (!InitSettings()) {
         return EXIT_FAILURE;
     }
 
@@ -569,7 +629,7 @@ int GuiMain(int argc, char* argv[])
     if (gArgs.GetBoolArg("-splash", DEFAULT_SPLASHSCREEN) && !gArgs.GetBoolArg("-min", false))
         app.createSplashScreen(networkStyle.data());
 
-    app.setNode(*node);
+    app.createNode(*init);
 
     int rv = EXIT_SUCCESS;
     try

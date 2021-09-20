@@ -4,7 +4,6 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Utilities for manipulating blocks and transactions."""
 
-from binascii import a2b_hex
 import struct
 import time
 import unittest
@@ -55,7 +54,8 @@ TIME_GENESIS_BLOCK = 1296688602
 COINBASE_MATURITY = 100
 
 # Soft-fork activation heights
-CLTV_HEIGHT = 1351
+DERSIG_HEIGHT = 102  # BIP 66
+CLTV_HEIGHT = 111  # BIP 65
 CSV_ACTIVATION_HEIGHT = 432
 
 # From BIP141
@@ -74,7 +74,7 @@ def create_block(hashprev=None, coinbase=None, ntime=None, *, version=None, tmpl
     block.nTime = ntime or tmpl.get('curtime') or int(time.time() + 600)
     block.hashPrevBlock = hashprev or int(tmpl['previousblockhash'], 0x10)
     if tmpl and not tmpl.get('bits') is None:
-        block.nBits = struct.unpack('>I', a2b_hex(tmpl['bits']))[0]
+        block.nBits = struct.unpack('>I', bytes.fromhex(tmpl['bits']))[0]
     else:
         block.nBits = 0x207fffff  # difficulty retargeting is disabled in REGTEST chainparams
     if coinbase is None:
