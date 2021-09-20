@@ -1625,8 +1625,10 @@ void CConnman::SocketHandler()
             nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
             nTotalMempoolBytes += nMempoolBytes;
             if (pnode->nRecvBytes1stTx) IsIBD = false;
-            if (pnode->nLastBlockTime > nLastBlockTime)
+            if (pnode->nLastBlockTime > nLastBlockTime) {
                 nLastBlockTime = pnode->nLastBlockTime;
+                LogPrintf("Update LastBlockTime age=%s peer=%d\n", strAge(now - nLastBlockTime), pnode->GetId());
+            }
             double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
             if (pnode->IsFullOutboundConn()) {
                 latestNode = pnode->GetId();
