@@ -1716,20 +1716,19 @@ void CConnman::SocketHandler()
             nLowestPct = nLowestBPct;
             nSecondLowestPct = nSecondLowestBPct;
         }
-        if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps) {
+        if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm || lastWorstBps != worstNodeBps)
             LogPrintf("%s: worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d:%d) Bps %d -> %d (%s:%s) Global: TXpm = %d Pct=%d %s\n", __func__, nTechnique, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, (int)nLowestTXpm, (int)nSecondLowestTXpm, lastWorstBps, worstNodeBps, strBps(nLowestBps), strBps(nSecondLowestBps), nGlobalTXpm, 100 * nTotalMempoolBytes / nTotalBytesRecv, strBps(nGlobalBps));
-            if (lastWorstPct != worstNodePct) {
-                tWorstPctChanged = now;
-                lastWorstPct = worstNodePct;
-            }
-            if (lastWorstTXpm != worstNodeTXpm) {
-                tWorstTXpmChanged = now;
-                lastWorstTXpm = worstNodeTXpm;
-            }
-            if (lastWorstBps != worstNodeBps) {
-                tWorstBpsChanged = now;
-                lastWorstBps = worstNodeBps;
-            }
+        if (lastWorstPct != worstNodePct) {
+            tWorstPctChanged = now;
+            lastWorstPct = worstNodePct;
+        }
+        if (lastWorstTXpm != worstNodeTXpm) {
+            tWorstTXpmChanged = now;
+            lastWorstTXpm = worstNodeTXpm;
+        }
+        if (lastWorstBps != worstNodeBps) {
+            tWorstBpsChanged = now;
+            lastWorstBps = worstNodeBps;
         }
         static int LastLatestNodeBps = 0; static int LastLatestNodePct = 0; static int LastLatestNodeTXpm = 0;
         if (nLatestNodeBps < LastLatestNodeBps) fLatestNodeBpsDegrading = true;
