@@ -1605,9 +1605,10 @@ void CConnman::SocketHandler()
     static int64_t tWorstBpsChanged = now;
     static int64_t tWorstTXpmChanged = now;
     static int64_t lastnow = 0;
+    static int64_t nLastBlockTime = 0;
     bool IsIBD = true;
-    for (CNode* pnode : vNodesCopy) {
-        if (now != lastnow) {
+    if (now != lastnow) {
+        for (CNode* pnode : vNodesCopy) {
             int nRecvBytes; int nSendBytes;
             {
                 LOCK(pnode->cs_vRecv);
@@ -1624,6 +1625,10 @@ void CConnman::SocketHandler()
             nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
             nTotalMempoolBytes += nMempoolBytes;
             if (pnode->nRecvBytes1stTx) IsIBD = false;
+            if (pnode->nLastBlockTime > nLastBlockTime) {
+                nLastBlockTime = pnode->nLastBlockTime;
+                LogPrintf("Update LastBlockTime age=%s peer=%d\n", strAge(now - nLastBlockTime), pnode->GetId());
+            }
             double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
             if (pnode->IsFullOutboundConn()) {
                 latestNode = pnode->GetId();
@@ -1662,7 +1667,7 @@ void CConnman::SocketHandler()
                 } else if (nMempoolBps < nSecondLowestBps)
                     nSecondLowestBps = nMempoolBps;
                 double nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTime1stTx + 1);
-                double nBTXpm = 60.0 * nBlockTXs / (now - pnode->nTime1stTx + 1);
+                double nBTXpm = 60.0 * nBlockTXs / (nLastBlockTime - pnode->nTime1stTx + 1);
                 nLatestNodeTXpm = nTXpm;
                 nGlobalTXpm += (int)nTXpm;
                 if (nTXpm <= nLowestTXpm) {
@@ -1693,8 +1698,8 @@ void CConnman::SocketHandler()
                     }
                 }
             } else if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
-        } // if (now != lastnow)
-    } // for (CNode* pnode : vNodesCopy)
+        } // for (CNode* pnode : vNodesCopy)
+    } // if (now != lastnow)
 
     int nTechnique = (now / 5400) % 2; // 0 = Pct, 1 = TXpm
     bool fLatestNodeBpsDegrading = false;
@@ -2249,8 +2254,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 nAnchorTryAgain++;
                 if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay) {
                     strComment = strprintf("No further action needed! (tries=%d)", nAnchorTryAgain);
-                    if (nAnchorTryAgain < 3) {
-                        strComment += " but let's try one last time anyway!";
+                    if (nAnchorTryAgain < 3 && nPeersIBD) {
+                        strComment += " but let's try after IBD anyway!";
                         nAnchorTryAgain = 2;
                     } else
                         nAnchorTryAgain = 0;

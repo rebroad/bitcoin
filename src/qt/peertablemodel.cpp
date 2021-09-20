@@ -110,10 +110,13 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
                 return QString::fromStdString(dots);
         }
         case MPpm: {
+            static int64_t nLastBlockTime = 0;
+            if (rec->nodeStats.nLastBlockTime > nLastBlockTime)
+                nLastBlockTime = rec->nodeStats.nLastBlockTime;
             int64_t now = GetTimeSeconds();
             if (rec->nodeStats.nRecvBytes1stTx && now != rec->nodeStats.nTime1stTx) {
                 double nMPpm = 60.0 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTime1stTx);
-                double nBTxpm = 60.0 * rec->nodeStats.nBlockTXs / (now - rec->nodeStats.nTime1stTx);
+                double nBTxpm = 60.0 * rec->nodeStats.nBlockTXs / (nLastBlockTime - rec->nodeStats.nTime1stTx);
                 return QString::fromStdString(strprintf("%d%s", (int)nMPpm, (nBTxpm && nBTxpm != nMPpm) ? strprintf("+%d", (int)nBTxpm) : ""));
             } else
                 return QString::fromStdString("");
