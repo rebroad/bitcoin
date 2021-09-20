@@ -3824,6 +3824,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     return;
                 }
 
+                pfrom.nLastBlockTime = GetTime(); // For the GUI stats
                 BlockTransactionsRequest req;
                 int nFromConPeers = 0; int nFromDisPeers = 0; int nFromExtra = 0; int nFromMemDat = 0; int nFromPack = 0;
                 int nFromReorg = 0; int nFromRecycledPeers = 0;
@@ -3997,6 +3998,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 fWrongPeer = true;
 
             if (resp.txn.size()) {// Don't run where we were called from cmpctblock
+                pfrom.nLastBlockTime = GetTime(); // For the GUI stats
                 pfrom.nMempoolTXs += resp.txn.size();
                 pfrom.nBlockTXs += resp.txn.size();
                 pfrom.nMempoolBytes += nSize;
