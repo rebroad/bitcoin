@@ -1757,8 +1757,9 @@ void CConnman::SocketHandler()
             if ((pnode->GetId() == worstNode) && (now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && ((nLowest <= (nSecondLowest / 2)) || ((now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: %s TimeConn = %d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? strprintf("Txpm=%d", nLowest) : strprintf("Pct=%d%%", nLowest), now - pnode->nTimeConnected, pnode->GetId());
-                if (now - latestOutboundConn >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS
-                        && !nAnchorTryAgain && now - latest1stTx >= 120) {
+                if ((now - latestOutboundConn >= 120) && (nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS)
+                        && (nOutboundFullRelay >= (int)m_max_outbound_full_relay - 1)
+                        && (!nAnchorTryAgain && now - latest1stTx >= 120)) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
                     if (anchors_to_dump.size() > (size_t)m_max_outbound_full_relay - 1) {
                         anchors_to_dump.resize(m_max_outbound_full_relay - 1);
@@ -1768,7 +1769,8 @@ void CConnman::SocketHandler()
                         anchors_blockrelay.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
                     }
                     anchors_to_dump.insert(anchors_to_dump.end(), anchors_blockrelay.begin(), anchors_blockrelay.end());
-                    DumpAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME, anchors_to_dump);
+                    if (anchors_to_dump.size() == 9)
+                        DumpAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME, anchors_to_dump);
                 }
             }
         }
