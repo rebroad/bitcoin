@@ -2792,7 +2792,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices)) {
             bool fDisconnect = !pfrom.IsInboundConn(); // Allow inbound to connect
-            LogPrintf("recv version does not offer the expected services (%x offered, %x expected) %speer=%d\n",
+            LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version does not offer the expected services (%x offered, %x expected) %speer=%d\n",
                 nServices, GetDesirableServiceFlags(nServices), fDisconnect ? "disconnecting " : "", pfrom.GetId());
             if (fDisconnect) {
                 pfrom.fDisconnect = true;
