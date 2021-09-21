@@ -1738,9 +1738,9 @@ void CConnman::SocketHandler()
             if ((pnode->GetId() == worstNode) && (now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && ((nLowest <= (nSecondLowest / 2)) || ((now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: %s TimeConn = %d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? strprintf("Txpm=%d", nLowest) : strprintf("Pct=%d%%", nLowest), now - pnode->nTimeConnected, pnode->GetId());
-                if ((now - latestOutboundConn >= 120) && (nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS)
-                        && (nOutboundFullRelay >= (int)m_max_outbound_full_relay - 1)
-                        && (!nAnchorTryAgain && now - latest1stTx >= 120)) {
+                if ((now - latestOutboundConn) >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS
+                        && nOutboundFullRelay >= (int)m_max_outbound_full_relay - 1
+                        && !nAnchorTryAgain && (now - latest1stTx) >= 120) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
                     if (anchors_to_dump.size() > (size_t)m_max_outbound_full_relay - 1) {
                         anchors_to_dump.resize(m_max_outbound_full_relay - 1);
@@ -1750,7 +1750,7 @@ void CConnman::SocketHandler()
                         anchors_blockrelay.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
                     }
                     anchors_to_dump.insert(anchors_to_dump.end(), anchors_blockrelay.begin(), anchors_blockrelay.end());
-                    if (anchors_to_dump.size() == 9)
+                    if (anchors_to_dump.size() >= (size_t)m_max_outbound_full_relay)
                         DumpAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME, anchors_to_dump);
                 }
             }
@@ -2257,16 +2257,16 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 anchor = 0;
             } // m_anchor not empty but anchor != 0
 
-
             static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
-            if (nOutboundFullRelay > nLastOutboundCount)
-                nLastOutboundCount = nOutboundFullRelay;
-            if ((nAnchorTryAgain == 1 && nOutboundBlockRelay+nOutboundFullRelay > 0) ||
-                    (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundBlockRelay+nOutboundFullRelay >= 2) ||
-                    (nOutboundFullRelay < (nLastOutboundCount+1)/2)) { // or a sudden drop in connections
-                if (nOutboundFullRelay < (nLastOutboundCount+1)/2)
-                    LogPrintf("Outbound count dropped (%d < %d) LOC=%d\n", nOutboundFullRelay, (nLastOutboundCount+1)/2, nLastOutboundCount);
-                nLastOutboundCount = nOutboundFullRelay;
+            int nOutboundCount = nOutboundFullRelay + nOutboundBlockRelay;
+            if (nOutboundCount > nLastOutboundCount)
+                nLastOutboundCount = nOutboundCount;
+            if ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
+                    (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2) ||
+                    (nOutboundCount < (nLastOutboundCount+1)*2/3)) { // or a sudden drop in connections
+                if (nOutboundCount < (nLastOutboundCount+1)*2/3)
+                    LogPrintf("Outbound count dropped (%d < %d) LOC=%d\n", nOutboundCount, (nLastOutboundCount+1)*2/3, nLastOutboundCount);
+                nLastOutboundCount = nOutboundCount;
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                         return;
                 // Load addresses from anchors.dat
