@@ -3735,7 +3735,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // Keep a CBlock for "optimistic" compactblock reconstructions (see
         // below)
         std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
-        bool fBlockReconstructed = false;
 
         {
         LOCK2(cs_main, g_cs_orphans);
@@ -3880,7 +3879,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // If we get more TXs than currently in flight then we know the request has been ignored.
                     nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // Add 2 so that one more TX is requested.
                 }
-            }
+            } // if a cmpctblock that we can process
         } else {
             if (fAlreadyInFlight) { // REBTODO - probably don't do this
                 // We requested this block, but its far into the future, so our
@@ -3913,32 +3912,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return ProcessHeadersMessage(pfrom, *peer, {cmpctblock.header}, /*via_compact_block=*/true);
         }
 
-        if (fBlockReconstructed) {
-            // If we got here, we were able to optimistically reconstruct a
-            // block that is in flight from some other peer.
-            {
-                LOCK(cs_main);
-                mapBlockSource.emplace(pblock->GetHash(), std::make_pair(pfrom.GetId(), false));
-            }
-            // Setting force_processing to true means that we bypass some of
-            // our anti-DoS protections in AcceptBlock, which filters
-            // unrequested blocks that might be trying to waste our resources
-            // (eg disk space). Because we only try to reconstruct blocks when
-            // we're close to caught up (via the CanDirectFetch() requirement
-            // above, combined with the behavior of not requesting blocks until
-            // we have a chain with at least nMinimumChainWork), and we ignore
-            // compact blocks with less work than our tip, it is safe to treat
-            // reconstructed compact blocks as having been requested.
-            ProcessBlock(pfrom, pblock, /*force_processing=*/true);
-            LOCK(cs_main); // hold cs_main for CBlockIndex::IsValid()
-            if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS)) {
-                // Clear download state for this block, which is in
-                // process from some other peer.  We do this after calling
-                // ProcessNewBlock so that a malleated cmpctblock announcement
-                // can't be used to interfere with block relay.
-                RemoveBlockRequest(pblock->GetHash());
-            }
-        }
         return;
     }
 
