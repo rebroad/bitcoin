@@ -2280,8 +2280,12 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
             static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
             int nOutboundCount = nOutboundFullRelay + nOutboundBlockRelay;
-            if (nOutboundCount > nLastOutboundCount)
+            if (nOutboundCount > nLastOutboundCount) {
+                int nLastLast = nLastOutboundCount;
                 nLastOutboundCount = std::max(nOutboundCount, MAX_OUTBOUND_FULL_RELAY_CONNECTIONS);
+                if (nLastLast != nLastOutboundCount)
+                    LogPrintf("anchor LOC %d -> %d\n", nLastLast, nLastOutboundCount);
+            }
             if ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
                     (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2) ||
                     (nOutboundCount < (nLastOutboundCount+1)*2/3)) { // or a sudden drop in connections

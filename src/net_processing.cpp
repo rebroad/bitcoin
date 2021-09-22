@@ -5428,8 +5428,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 return true;
             }
             int64_t nNow = GetTime();
-            if ((nNow - pto->nLastRecv) > 10 * nOtherPeersWithValidatedDownloads) {
-                LogPrintf("Timeout downloading block %s. nLastRecv=%ds. disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - pto->nLastRecv, pto->GetId());
+            if ((nNow - pto->nLastRecv) > 10 * (nOtherPeersWithValidatedDownloads + 1)) {
+                LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - pto->nLastRecv, nOtherPeersWithValidatedDownloads, pto->GetId());
                 pto->fDisconnect = true;
                 return true;
             }
