@@ -1345,12 +1345,12 @@ bool CConnman::InactivityCheck(const CNode& node) const
     }
 
     if (now > node.nLastSend + TIMEOUT_INTERVAL) {
-        LogPrintf("socket sending timeout: %is disconnect peer=%d\n", now - node.nLastSend, node.GetId());
+        LogPrintf("socket sending timeout: %s disconnect peer=%d\n", strAge(now - node.nLastSend), node.GetId());
         return true;
     }
 
     if (now > node.nLastRecv + TIMEOUT_INTERVAL) {
-        LogPrintf("socket receive timeout: %is disconnect peer=%d\n", now - node.nLastRecv, node.GetId());
+        LogPrintf("socket receive timeout: %s disconnect peer=%d\n", strAge(now - node.nLastRecv), node.GetId());
         return true;
     }
 
@@ -2159,6 +2159,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
         auto now = GetTime<std::chrono::microseconds>();
         static int anchor = 0;
+        if (m_anchors.size() >= MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1)
+            anchor = 0;
         bool fFeeler = false;
 
         // Determine what type of connection to open. Opening
@@ -2271,12 +2273,14 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
             int nOutboundCount = nOutboundFullRelay + nOutboundBlockRelay;
             if (nOutboundCount > nLastOutboundCount)
-                nLastOutboundCount = nOutboundCount;
+                nLastOutboundCount = std::max(nOutboundCount, MAX_OUTBOUND_FULL_RELAY_CONNECTIONS);
             if ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
                     (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2) ||
                     (nOutboundCount < (nLastOutboundCount+1)*2/3)) { // or a sudden drop in connections
                 if (nOutboundCount < (nLastOutboundCount+1)*2/3)
                     LogPrintf("Outbound count dropped (%d < %d) LOC=%d\n", nOutboundCount, (nLastOutboundCount+1)*2/3, nLastOutboundCount);
+                else
+                    LogPrintf("ATA=%D OC=%d PIBD=%d\n", nAnchorTryAgain, nOutboundCount, nPeersIBD);
                 nLastOutboundCount = nOutboundCount;
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                         return;
