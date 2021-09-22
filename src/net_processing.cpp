@@ -5423,8 +5423,13 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
             int nOtherPeersWithValidatedDownloads = m_peers_downloading_from - 1;
             if (current_time > state.m_downloading_since + std::chrono::seconds{consensusParams.nPowTargetSpacing} * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
-                LogPrintf("Timeout downloading block %s. nOPWVD=%d disconnecting peer=%d\n", queuedBlock.pindex->GetBlockHash().ToString(),
-                    nOtherPeersWithValidatedDownloads, pto->GetId());
+                LogPrintf("Timeout downloading block %s. nOPWVD=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nOtherPeersWithValidatedDownloads, pto->GetId());
+                pto->fDisconnect = true; // REBTODO - this logic really needs improving!
+                return true;
+            }
+            int64_t nNow = GetTime();
+            if ((nNow - pto->nLastRecv) > 10 * nOtherPeersWithValidatedDownloads) {
+                LogPrintf("Timeout downloading block %s. nLastRecv=%ds. disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - pto->nLastRecv, pto->GetId());
                 pto->fDisconnect = true;
                 return true;
             }

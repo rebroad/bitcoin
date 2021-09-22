@@ -2249,7 +2249,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay) {
                     strComment = strprintf("No further action needed! (tries=%d)", nAnchorTryAgain);
                     if (nAnchorTryAgain < 3 && nPeersIBD) {
-                        strComment += " but let's try after IBD anyway!";
+                        strComment += strprintf(" but let's try after IBD(%d) anyway!", nPeersIBD);
                         nAnchorTryAgain = 2;
                     } else
                         nAnchorTryAgain = 0;
