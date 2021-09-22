@@ -2222,11 +2222,20 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 anchor++;
                 const CAddress addr = m_anchors.back();
                 m_anchors.pop_back();
-                if (!addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
-                    !HasAllDesirableServiceFlags(addr.nServices) ||
-                    setConnected.count(addr.GetGroup(addrman.GetAsmap()))) break;
+                std::string strWhyNot;
+                if (!addr.IsValid()) strWhyNot = "invalid";
+                if (IsLocal(addr)) strWhyNot = "IsLocal";
+                if (!IsReachable(addr)) strWhyNot = "UnReachable";
+                if (setConnected.count(addr.GetGroup(addrman.GetAsmap()))) strWhyNot = "connected";
+                if (!HasAllDesirableServiceFlags(addr.nServices)) LogPrintf("anchor(%d) ServiceFLags\n", anchor);
                 addrConnect = addr;
                 if (nAnchorTryAgain < 0) nAnchorTryAgain = 0;
+                if (!addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
+                        setConnected.count(addr.GetGroup(addrman.GetAsmap()))) {
+                    LogPrintf("Not trying(%s) to make a %s anchor(%d) connection to %s\n", strWhyNot,
+                        ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
+                    break;
+                }
                 LogPrintf("Trying(%d) to make a %s anchor(%d) connection to %s\n", nAnchorTryAgain,
                     ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
                 break; // out of while
