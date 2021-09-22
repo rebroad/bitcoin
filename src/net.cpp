@@ -1737,7 +1737,7 @@ void CConnman::SocketHandler()
                 worstNode = worstNodePct; nLowest = nLowestPct; nSecondLowest = nSecondLowestPct;
                 tWorstChanged = tWorstPctChanged; fLatestNodeDegrading = fLatestNodePctDegrading;
             }
-            if ((pnode->GetId() == worstNode) && (nLastBlockTime > latestOutboundConn || ((now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && (nLowest <= nSecondLowest / 2 || now - latestOutboundConn >= 120)))) {
+            if ((pnode->GetId() == worstNode) && ((nLastBlockTime > latestOutboundConn && (pnode->nBlockTXs || (pnode->nBlockTXs == 0 && nLastBlockTime - pnode->nTimeConnected >= 120))) || ((now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && (nLowest <= nSecondLowest / 2 || now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: %s TimeConn = %d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? strprintf("Txpm=%d", nLowest) : strprintf("Pct=%d%%", nLowest), now - pnode->nTimeConnected, pnode->GetId());
                 if ((now - latestOutboundConn) >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS
