@@ -2230,6 +2230,15 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nTries = 0;
         while (!interruptNet)
         {
+            static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
+            int nOutboundCount = nOutboundFullRelay + nOutboundBlockRelay;
+            if (nOutboundCount > nLastOutboundCount) {
+                int nLastLast = nLastOutboundCount;
+                nLastOutboundCount = std::min(nOutboundCount, (int)MAX_OUTBOUND_FULL_RELAY_CONNECTIONS +
+                    (int)MAX_BLOCK_RELAY_ONLY_ANCHORS);
+                if (nLastLast != nLastOutboundCount)
+                    LogPrintf("anchor LOC %d -> %d\n", nLastLast, nLastOutboundCount);
+            }
             if (!m_anchors.empty() && (anchor < m_max_outbound_block_relay || nOutboundBlockRelay)) {
                 anchor++;
                 const CAddress addr = m_anchors.back();
@@ -2278,15 +2287,6 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 anchor = 0;
             } // m_anchor not empty but anchor != 0
 
-            static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
-            int nOutboundCount = nOutboundFullRelay + nOutboundBlockRelay;
-            if (nOutboundCount > nLastOutboundCount) {
-                int nLastLast = nLastOutboundCount;
-                nLastOutboundCount = std::min(nOutboundCount, (int)MAX_OUTBOUND_FULL_RELAY_CONNECTIONS +
-                    (int)MAX_BLOCK_RELAY_ONLY_ANCHORS - 1);
-                if (nLastLast != nLastOutboundCount)
-                    LogPrintf("anchor LOC %d -> %d\n", nLastLast, nLastOutboundCount);
-            }
             if ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
                     (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2) ||
                     (nOutboundCount < (nLastOutboundCount+1)*2/3)) { // or a sudden drop in connections
