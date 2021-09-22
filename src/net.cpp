@@ -1591,9 +1591,11 @@ void CConnman::SocketHandler()
     static int64_t tWorstPctChanged = now;
     static int64_t tWorstBpsChanged = now;
     static int64_t tWorstTXpmChanged = now;
+    static int64_t tIBDEnded = now;
     static int64_t nLastBlockTime = 0;
     static int64_t lastnow = 0;
-    bool IsIBD = true;
+    int nPeersIBD = 0;
+    static bool IsIBD = true;
     if (now != lastnow) {
         for (CNode* pnode : vNodesCopy) {
             int nRecvBytes; int nSendBytes;
@@ -1611,7 +1613,7 @@ void CConnman::SocketHandler()
             int nBlockTXs = pnode->nBlockTXs;
             nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
             nTotalMempoolBytes += nMempoolBytes;
-            if (pnode->nRecvBytes1stTx) IsIBD = false;
+            if (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000) nPeersIBD++;
             if (pnode->nLastBlockTime > nLastBlockTime) nLastBlockTime = pnode->nLastBlockTime;
             double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
             if (pnode->IsFullOutboundConn()) {
@@ -1683,6 +1685,11 @@ void CConnman::SocketHandler()
                 }
             } else if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
         } // for (CNode* pnode : vNodesCopy)
+        if (nPeersIBD == 0 && IsIBD) {
+            tIBDEnded = now;
+            latestOutboundConn = now;
+            IsIBD = false;
+        } else if (nPeersIBD) IsIBD = true;
     } // if (now != lastnow)
 
     int nTechnique = (now / 5400) % 2; // 0 = Pct, 1 = TXpm
@@ -1737,7 +1744,8 @@ void CConnman::SocketHandler()
                 worstNode = worstNodePct; nLowest = nLowestPct; nSecondLowest = nSecondLowestPct;
                 tWorstChanged = tWorstPctChanged; fLatestNodeDegrading = fLatestNodePctDegrading;
             }
-            if ((pnode->GetId() == worstNode) && ((nLastBlockTime > latestOutboundConn && (pnode->nBlockTXs || (pnode->nBlockTXs == 0 && nLastBlockTime - pnode->nTimeConnected >= 120))) || ((now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && (nLowest <= nSecondLowest / 2 || now - latestOutboundConn >= 120)))) {
+            if (tIBDEnded > tWorstChanged) tWorstChanged = tIBDEnded;
+            if ((pnode->GetId() == worstNode) && ((nLastBlockTime > latestOutboundConn && (pnode->nBlockTXs || (pnode->nBlockTXs == 0 && nLastBlockTime - std::max(pnode->nTimeConnected, tIBDEnded) >= 120))) || ((now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && (nLowest <= nSecondLowest / 2 || now - latestOutboundConn >= 120)))) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: %s TimeConn = %d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? strprintf("Txpm=%d", nLowest) : strprintf("Pct=%d%%", nLowest), now - pnode->nTimeConnected, pnode->GetId());
                 if ((now - latestOutboundConn) >= 120 && nOutboundBlockRelay >= (int)MAX_BLOCK_RELAY_ONLY_ANCHORS
