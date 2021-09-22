@@ -2240,14 +2240,14 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 if (!IsReachable(addr)) strWhyNot = "UnReachable";
                 if (setConnected.count(addr.GetGroup(addrman.GetAsmap()))) strWhyNot = "connected";
                 if (!HasAllDesirableServiceFlags(addr.nServices)) LogPrintf("anchor(%d) ServiceFLags\n", anchor);
-                addrConnect = addr;
                 if (nAnchorTryAgain < 0) nAnchorTryAgain = 0;
                 if (!addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
                         setConnected.count(addr.GetGroup(addrman.GetAsmap()))) {
                     LogPrintf("Not trying(%s) to make a %s anchor(%d) connection to %s\n", strWhyNot,
-                        ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
+                        ConnectionTypeAsString(conn_type), anchor, addr.ToString());
                     break;
                 }
+                addrConnect = addr;
                 LogPrintf("Trying(%d) to make a %s anchor(%d) connection to %s\n", nAnchorTryAgain,
                     ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
                 break; // out of while
@@ -2282,7 +2282,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             int nOutboundCount = nOutboundFullRelay + nOutboundBlockRelay;
             if (nOutboundCount > nLastOutboundCount) {
                 int nLastLast = nLastOutboundCount;
-                nLastOutboundCount = std::max(nOutboundCount, MAX_OUTBOUND_FULL_RELAY_CONNECTIONS);
+                nLastOutboundCount = std::min(nOutboundCount, (int)MAX_OUTBOUND_FULL_RELAY_CONNECTIONS +
+                    (int)MAX_BLOCK_RELAY_ONLY_ANCHORS - 1);
                 if (nLastLast != nLastOutboundCount)
                     LogPrintf("anchor LOC %d -> %d\n", nLastLast, nLastOutboundCount);
             }
