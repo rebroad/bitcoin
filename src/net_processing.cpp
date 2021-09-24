@@ -586,6 +586,9 @@ private:
     /** Number of peers from which we're downloading blocks. */
     int m_peers_downloading_from GUARDED_BY(cs_main) = 0;
 
+    /** Longest delay between reception when downloading a block. */
+    int m_longest_delay = 0;
+
     /** Storage for orphan information */
     TxOrphanage m_orphanage;
 
@@ -862,6 +865,8 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
     if (state->nBlocksInFlight == 0) {
         // Last validated block on the queue was received.
         m_peers_downloading_from--;
+        if (m_peers_downloading_from == 0)
+            m_longest_delay = 0;
     }
     state->m_stalling_since = 0us;
     mapBlocksInFlight.erase(it);
@@ -4578,7 +4583,7 @@ void PeerManagerImpl::ConsiderEviction(CNode& pto, int64_t time_in_seconds)
                 pto.fDisconnect = true;
             } else {
                 assert(state.m_chain_sync.m_work_header);
-                LogPrint(BCLog::BLOCK, "sending getheaders to outbound peer=%d to verify chain work (current best known block:%s, benchmark blockhash: %s)\n", pto.GetId(), state.pindexBestKnownBlock != nullptr ? state.pindexBestKnownBlock->GetBlockHash().ToString() : "<none>", state.m_chain_sync.m_work_header->GetBlockHash().ToString());
+                LogPrint(BCLog::BLOCK, "sending getheaders to outbound peer=%d to verify chain work (current best known block:%s, benchmark block: %s)\n", pto.GetId(), strBlkInfo(state.pindexBestKnownBlock), strBlkInfo(state.m_chain_sync.m_work_header));
                 m_connman.PushMessage(&pto, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(state.m_chain_sync.m_work_header->pprev), uint256()));
                 state.m_chain_sync.m_sent_getheaders = true;
                 constexpr int64_t HEADERS_RESPONSE_TIME = 120; // 2 minutes
@@ -5429,6 +5434,11 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 return true;
             }
             int64_t nNow = GetTime();
+            int nDelay = nNow - pto->nLastRecv;
+            if (nDelay > m_longest_delay) {
+                LogPrintf("Block download max delay %ds -> %ds nOPWVD=%d peer=%d\n", m_longest_delay, nDelay, nOtherPeersWithValidatedDownloads, pto->GetId());
+                m_longest_delay = nDelay;
+            }
             if ((nNow - pto->nLastRecv) > 10 * (nOtherPeersWithValidatedDownloads + 1)) {
                 LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - pto->nLastRecv, nOtherPeersWithValidatedDownloads, pto->GetId());
                 pto->fDisconnect = true;

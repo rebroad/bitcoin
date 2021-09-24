@@ -1315,7 +1315,7 @@ void CConnman::NotifyNumConnectionsChanged()
     if(vNodesSize != nPrevNodeCount) {
         nPrevNodeCount = vNodesSize;
         if (vNodesSize == 0) {
-            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n\n");
             nAnchorTryAgain = 0;
             ResetNewNodeId();
         }
@@ -2239,7 +2239,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 if (nLastLast != nLastOutboundCount)
                     LogPrintf("anchor LOC %d -> %d\n", nLastLast, nLastOutboundCount);
             }
-            if (!m_anchors.empty() && (anchor < m_max_outbound_block_relay || nOutboundBlockRelay)) {
+            if (!m_anchors.empty() && (anchor == 0 || nOutboundBlockRelay)) {
                 anchor++;
                 const CAddress addr = m_anchors.back();
                 m_anchors.pop_back();
