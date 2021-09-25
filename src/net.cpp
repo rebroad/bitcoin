@@ -493,7 +493,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         addr_bind = GetBindAddress(sock->Get());
     }
     CNode* pnode = new CNode(id, nLocalServices, sock->Release(), addrConnect, CalculateKeyedNetGroup(addrConnect), nonce, addr_bind, pszDest ? pszDest : "", conn_type, /* inbound_onion */ false);
-    pnode->AddRef(); // REB - Creation (out)
+    pnode->AddRef(1); // REB - Creation (out)
     if (pnode->GetId() == 0)
         LogPrintf("%s: Created pnode=%d GRC=%d\n", __func__, pnode->GetId(), pnode->GetRefCount());
 
@@ -1202,7 +1202,7 @@ void CConnman::CreateNodeFromAcceptedSocket(SOCKET hSocket,
 
     const bool inbound_onion = std::find(m_onion_binds.begin(), m_onion_binds.end(), addr_bind) != m_onion_binds.end();
     CNode* pnode = new CNode(id, nodeServices, hSocket, addr, CalculateKeyedNetGroup(addr), nonce, addr_bind, "", ConnectionType::INBOUND, inbound_onion);
-    pnode->AddRef(); // REB - Creation (in)
+    pnode->AddRef(1); // REB - Creation (in)
     pnode->m_permissionFlags = permissionFlags;
     pnode->m_prefer_evict = discouraged;
     m_msgproc->InitializeNode(pnode);
@@ -1285,23 +1285,29 @@ void CConnman::DisconnectNodes()
 
                 // hold in disconnected pool until all refs are released
                 LogPrintf("%s: Add to vNodesDisconnected vNodes.size %d->%d GRC=%d %speer=%d\n", __func__, nvNodesSizeBefore, nvNodesSizeAfter, pnode->GetRefCount(), pnode->IsFeelerConn() ? "feel " : pnode->IsInboundConn() ? "incoming ":"", pnode->GetId());
-                pnode->Release(); // REB - deletion
+                pnode->Release(1); // REB - deletion
                 vNodesDisconnected.push_back(pnode);
             }
         }
+    } // LOCK(cs_vNodes);
+
+    // Delete disconnected nodes
+    std::list<CNode*> vNodesDisconnectedCopy = vNodesDisconnected;
+    for (CNode* pnode : vNodesDisconnectedCopy) {
+        // Destroy the object only after other threads have stopped using it.
+        if (pnode->GetRefCount() <= 0) {
+            vNodesDisconnected.remove(pnode);
+            LogPrintf("%s: Calling DeleteNode GRC=%d from vNodesDisconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
+            DeleteNode(pnode);
+        } else
+            LogPrintf("%s: Not calling DeleteNode GRC=%d from vNodesDisconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
     }
-    {
-        // Delete disconnected nodes
-        std::list<CNode*> vNodesDisconnectedCopy = vNodesDisconnected;
-        for (CNode* pnode : vNodesDisconnectedCopy)
-        {
-            // Destroy the object only after other threads have stopped using it.
-            if (pnode->GetRefCount() <= 0) {
-                vNodesDisconnected.remove(pnode);
-                LogPrintf("%s: Calling DeleteNode(%d) GRC=%d from vNodesDisconnected loop\n", __func__, pnode->GetId(), pnode->GetRefCount());
-                DeleteNode(pnode);
-            }
-        }
+    LOCK(cs_vNodes);
+    if (vNodes.size() == 0 && vNodesDisconnectedCopy.size() > 0) {
+        LogPrintf("NO PEERS CONNECTED. Resetting NodeId. vNDC=%d vND=%d\n\n", vNodesDisconnectedCopy.size(),
+            vNodesDisconnected.size());
+        nAnchorTryAgain = 0;
+        ResetNewNodeId();
     }
 }
 
@@ -1314,11 +1320,6 @@ void CConnman::NotifyNumConnectionsChanged()
     }
     if(vNodesSize != nPrevNodeCount) {
         nPrevNodeCount = vNodesSize;
-        if (vNodesSize == 0) {
-            LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n\n");
-            nAnchorTryAgain = 0;
-            ResetNewNodeId();
-        }
         if (m_client_interface) {
             m_client_interface->NotifyNumConnectionsChanged(vNodesSize);
         }
@@ -1552,7 +1553,7 @@ void CConnman::SocketHandler()
         LOCK(cs_vNodes);
         vNodesCopy = vNodes;
         for (CNode* pnode : vNodesCopy)
-            pnode->AddRef(); // REB - SocketHandler
+            pnode->AddRef(2); // REB - SocketHandler
     }
 
     int64_t latestOutboundConn = 0;
@@ -1847,7 +1848,7 @@ void CConnman::SocketHandler()
     {
         LOCK(cs_vNodes);
         for (CNode* pnode : vNodesCopy)
-            pnode->Release(); // REB - SocketHandler
+            pnode->Release(2); // REB - SocketHandler
     }
 }
 
@@ -2015,7 +2016,7 @@ bool CConnman::GetTryNewOutboundPeer() const
 void CConnman::SetTryNewOutboundPeer(bool flag)
 {
     m_try_another_outbound_peer = flag;
-    LogPrint(BCLog::NET, "net: setting try another outbound peer=%s\n", flag ? "true" : "false");
+    LogPrint(BCLog::CONN, "net: setting try another outbound peer=%s\n", flag ? "true" : "false");
 }
 
 // Return the number of peers we have over our outbound connection limit
@@ -2547,7 +2548,7 @@ void CConnman::ThreadMessageHandler()
             LOCK(cs_vNodes);
             vNodesCopy = vNodes;
             for (CNode* pnode : vNodesCopy) {
-                pnode->AddRef(); // REB - ThreadMessageHandler
+                pnode->AddRef(4); // REB - ThreadMessageHandler
             }
         }
 
@@ -2581,7 +2582,7 @@ void CConnman::ThreadMessageHandler()
         {
             LOCK(cs_vNodes);
             for (CNode* pnode : vNodesCopy)
-                pnode->Release(); // REB - ThreadMessageHandler
+                pnode->Release(4); // REB - ThreadMessageHandler
         }
 
         WAIT_LOCK(mutexMsgProc, lock);
