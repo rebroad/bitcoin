@@ -439,6 +439,9 @@ private:
     /** Last time we had no connections */
     int64_t m_last_no_connections{GetTime()}; // REBTODO - move to net.cpp?
 
+    /** Number of times net.cpp has run a ProcessMessages() loop */
+    int64_t nNetClicks{0};
+
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
 
@@ -2241,7 +2244,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
     int nNew = m_chainman.ProcessNewBlockHeaders(headers, state, m_chainparams, &pindexLast);
     if (nNew > 0) received_new_header = true;
     if (!via_compact_block) // As it's already been logged otherwise
-        LogRecv(nNew, pindexLast, "header", 0, pfrom.GetId()); // REBTODO - can we deserialize to get the size?
+        LogRecv(nNew, pindexLast, "header", 0, pfrom.GetId());
     if (state.IsInvalid()) {
         MaybePunishNodeForBlock(pfrom.GetId(), state, via_compact_block, "invalid header received");
         return;
@@ -2317,12 +2320,14 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 }
                 if (vGetData.size() > 0) {
                     std::string strItem;
-                    if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 && pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
+                    if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1) {
+                        if (!pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) // REBTEMP - log this experimental thing
+                            LogPrintf("CURIOUS: Fetching a cmpctblock whose parent (%s) not yet in our chain!\n",
+                                strHeight(pindexLast->pprev));
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                         strItem = "cmpct";
-                    } else if (nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1)
-                        LogPrintf("CURIOUS: Won't fetch as cmpct as block NOT VALID CHAIN\n");
+                    }
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     // Next line needed because now we'll use the first cmpctblock block received,
                     // not necessarily the one we're requesting here.
@@ -3792,7 +3797,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
-        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here
+        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here relating to age
             if (pindex->nHeight > m_chainman.ActiveChain().Height() + 2) // REBTODO - for now, some debug
                 LogPrintf("CURIOUS: recv cmpctblk.age=%s tip.age=%s diff=%s\n", strAge(GetAdjustedTime()-pindex->GetBlockTime()),
                     strAge(GetAdjustedTime()-m_chainman.ActiveChain().Tip()->GetBlockTime()),
@@ -3845,7 +3850,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
                                 pnode->nBlockBytes += nSize;
-                                pnode->nBlockTXs++;
+                                pnode->nBlockTXs++; // REBTODO - move this to State and apply only when block added to Tip? i.e. can we fake headers?
                                 return true;
                             });
                             nFromConPeers++;
@@ -4465,6 +4470,11 @@ bool PeerManagerImpl::MaybeDiscourageAndDisconnect(CNode& pnode, Peer& peer)
 bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interruptMsgProc, bool fToggle)
 {
     bool fMoreWork = false;
+    static bool fLastToggle = false;
+    if (fLastToggle != fToggle) {
+        nNetClicks++;
+        fLastToggle = fToggle;
+    }
 
     PeerRef peer = GetPeerRef(pfrom->GetId());
     if (peer == nullptr) return false;
