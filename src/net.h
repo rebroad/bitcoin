@@ -754,7 +754,7 @@ public:
     * @param[in]   interrupt       Interrupt condition for processing threads
     * @return                      True if there is more work to be done
     */
-    virtual bool ProcessMessages(CNode* pnode, std::atomic<bool>& interrupt) = 0;
+    virtual bool ProcessMessages(CNode* pnode, std::atomic<bool>& interrupt, bool fToggle) = 0;
 
     /**
     * Send queued protocol messages to a given node.

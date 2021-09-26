@@ -1303,9 +1303,8 @@ void CConnman::DisconnectNodes()
             LogPrintf("%s: Not calling DeleteNode GRC=%d from vNodesDisconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
     }
     LOCK(cs_vNodes);
-    if (vNodes.size() == 0 && vNodesDisconnectedCopy.size() > 0) {
-        LogPrintf("NO PEERS CONNECTED. Resetting NodeId. vNDC=%d vND=%d\n\n", vNodesDisconnectedCopy.size(),
-            vNodesDisconnected.size());
+    if (vNodes.size() == 0 && vNodesDisconnectedCopy.size() > 0 && vNodesDisconnected.size() == 0) {
+        LogPrintf("NO PEERS CONNECTED. Resetting NodeId.\n\n");
         nAnchorTryAgain = 0;
         ResetNewNodeId();
     }
@@ -2559,13 +2558,14 @@ void CConnman::ThreadMessageHandler()
         // consecutive connections in the vNodes list.
         Shuffle(vNodesCopy.begin(), vNodesCopy.end(), rng);
 
+        static bool fToggle = false; // So that net_processing can see this loop
         for (CNode* pnode : vNodesCopy)
         {
             if (pnode->fDisconnect)
                 continue;
 
             // Receive messages
-            bool fMoreNodeWork = m_msgproc->ProcessMessages(pnode, flagInterruptMsgProc);
+            bool fMoreNodeWork = m_msgproc->ProcessMessages(pnode, flagInterruptMsgProc, fToggle);
             fMoreWork |= (fMoreNodeWork && !pnode->fPauseSend);
             if (flagInterruptMsgProc)
                 return;
@@ -2578,6 +2578,7 @@ void CConnman::ThreadMessageHandler()
             if (flagInterruptMsgProc)
                 return;
         }
+        fToggle = !fToggle;
 
         {
             LOCK(cs_vNodes);

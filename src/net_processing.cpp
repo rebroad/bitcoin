@@ -314,7 +314,7 @@ public:
     /** Implement NetEventsInterface */
     void InitializeNode(CNode* pnode) override;
     void FinalizeNode(const CNode& node) override;
-    bool ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt) override;
+    bool ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt, bool fToggle) override;
     bool SendMessages(CNode* pto) override EXCLUSIVE_LOCKS_REQUIRED(pto->cs_sendProcessing);
 
     /** Implement PeerManager */
@@ -467,6 +467,8 @@ private:
      * punished if the block is invalid.
      */
     std::map<uint256, std::pair<NodeId, bool>> mapBlockSource GUARDED_BY(cs_main);
+
+    std::map</*height*/ int, /*time*/std::chrono::milliseconds> mapBlockTimes; // REBTODO - list or deque?
 
     /** Number of peers with wtxid relay. */
     int m_wtxid_relay_peers GUARDED_BY(cs_main) = 0;
@@ -3395,7 +3397,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // might maliciously send lots of getblocktxn requests to trigger
         // expensive disk reads, because it will require the peer to
         // actually receive all the data read from disk over the network.
-        LogPrint(BCLog::NET, "Peer %d sent us a getblocktxn for a block > %i deep\n", pfrom.GetId(), MAX_BLOCKTXN_DEPTH);
+        LogPrint(BCLog::BLOCKSEND, "Peer %d sent us a getblocktxn for a block > %i deep\n", pfrom.GetId(), MAX_BLOCKTXN_DEPTH);
         CInv inv;
         WITH_LOCK(cs_main, inv.type = State(pfrom.GetId())->fWantsCmpctWitness ? MSG_WITNESS_BLOCK : MSG_BLOCK);
         inv.hash = req.blockhash;
@@ -4460,7 +4462,7 @@ bool PeerManagerImpl::MaybeDiscourageAndDisconnect(CNode& pnode, Peer& peer)
     return true;
 }
 
-bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interruptMsgProc)
+bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interruptMsgProc, bool fToggle)
 {
     bool fMoreWork = false;
 
@@ -5436,11 +5438,11 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             }
             int64_t nNow = GetTime();
             int nDelay = nNow - pto->nLastRecv;
-            if (nDelay > m_longest_delay) {
+            if (nDelay > m_longest_delay && current_time > state.m_downloading_since + std::chrono::seconds{m_longest_delay}) {
                 LogPrintf("Block download max delay %ds -> %ds nOPWVD=%d peer=%d\n", m_longest_delay, nDelay, nOtherPeersWithValidatedDownloads, pto->GetId());
                 m_longest_delay = nDelay;
             }
-            if ((nNow - pto->nLastRecv) > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
+            if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
                 current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1)) {
                 LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - pto->nLastRecv, nOtherPeersWithValidatedDownloads, pto->GetId());
                 pto->fDisconnect = true;
