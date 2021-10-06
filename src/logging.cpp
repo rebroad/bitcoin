@@ -218,7 +218,10 @@ std::string BCLog::Logger::LogTimestampStr(const std::string& str)
         if (mocktime > 0s) {
             strStamped += " (mocktime: " + FormatISO8601DateTime(count_seconds(mocktime)) + ")";
         }
-        strStamped += ' ' + str;
+        if (fActivatingChain)
+            strStamped += "  " + str;
+        else
+            strStamped += ' ' + str;
     } else
         strStamped = str;
 
