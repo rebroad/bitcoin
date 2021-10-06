@@ -36,6 +36,7 @@ BCLog::Logger& LogInstance()
 }
 
 bool fLogIPs = DEFAULT_LOGIPS;
+std::atomic<bool> fActivatingChain(false);
 
 static int FileWriteStr(const std::string &str, FILE *fp)
 {

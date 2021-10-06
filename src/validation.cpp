@@ -2530,6 +2530,12 @@ static void LimitValidationInterfaceQueue() LOCKS_EXCLUDED(cs_main) {
 
 bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
 {
+    if (fActivatingChain) {
+        fActivateChain = true;
+        return true;
+    }
+    fActivatingChain = true;
+
     // Note that while we're often called here from ProcessNewBlock, this is
     // far from a guarantee. Things in the P2P/RPC will often end up calling
     // us in the middle of ProcessNewBlock - do not assume pblock is set
@@ -2571,6 +2577,7 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
                 // Whether we have anything to do at all.
                 if (pindexMostWork == nullptr || pindexMostWork == m_chain.Tip()) {
+                    fActivatingChain = false;
                     break;
                 }
 
@@ -2578,6 +2585,7 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 std::shared_ptr<const CBlock> nullBlockPtr;
                 if (!ActivateBestChainStep(state, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connectTrace)) {
                     // A system error occurred
+                    fActivatingChain = false;
                     return false;
                 }
                 blocks_connected = true;
@@ -2616,15 +2624,20 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
         // never shutdown before connecting the genesis block during LoadChainTip(). Previously this
         // caused an assert() failure during shutdown in such cases as the UTXO DB flushing checks
         // that the best block hash is non-null.
-        if (ShutdownRequested()) break;
+        if (ShutdownRequested()) {
+            fActivatingChain = false;
+            break;
+        }
     } while (pindexNewTip != pindexMostWork);
     CheckBlockIndex();
 
     // Write changes periodically to disk, after relay.
     if (!FlushStateToDisk(state, FlushStateMode::PERIODIC)) {
+        fActivatingChain = false;
         return false;
     }
 
+    fActivatingChain = false;
     return true;
 }
 
@@ -3386,12 +3399,17 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     return true;
 }
 
+void FormBestChain() {
+    BlockValidationState state;
+    ActivateBestChain(state, nullptr);
+}
+
 bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool force_processing, bool* new_block)
 {
     AssertLockNotHeld(cs_main);
 
+    CBlockIndex *pindex = nullptr;
     { // REBTODO: Calculate the lowest Sat/B TX still in the mempool after the TXs in this block have removed the TXs
-        CBlockIndex *pindex = nullptr;
         if (new_block) *new_block = false;
         BlockValidationState state;
 
@@ -3417,9 +3435,13 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
 
     NotifyHeaderTip(ActiveChainstate());
 
-    BlockValidationState state; // Only used to report errors, not invalidity - ignore it
-    if (!ActiveChainstate().ActivateBestChain(state, block)) {
-        return error("%s: ActivateBestChain failed (%s)", __func__, state.ToString());
+    // If tip is within 6 blocks of best header, activate best chain within message handler thread to avoid the 100ms delay, and to avoid breaking the miner tests.
+    if (fActivatingChain || pindexBestHeader->nChainWork > chainActive.Tip()->nChainWork + GetBlockProof(*chainActive.Tip()) * 6) {
+        fActivateChain = true;
+    } else {
+        BlockValidationState state; // Only used to report errors, not invalidity - ignore it
+        if (!ActiveChainstate().ActivateBestChain(state, block))
+            return error("%s: ActivateBestChain failed (%s)", __func__, state.ToString());
     }
 
     return true;

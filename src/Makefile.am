@@ -387,6 +387,7 @@ libbitcoin_server_a_SOURCES = \
   txreconciliation.cpp \
   txrequest.cpp \
   validation.cpp \
+  validation_thread.cpp \
   validationinterface.cpp \
   versionbits.cpp \
   $(BITCOIN_CORE_H)

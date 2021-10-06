@@ -158,6 +158,8 @@ static fs::path GetPidFile(const ArgsManager& args)
 
 void Interrupt(NodeContext& node)
 {
+    LogPrintf("%s: Calling StartShutdown()\n", __func__);
+    StartShutdown();
     InterruptHTTPServer();
     InterruptHTTPRPC();
     InterruptRPC();

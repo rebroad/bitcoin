@@ -21,6 +21,7 @@
 
 std::atomic_bool fImporting(false);
 std::atomic_bool fReindex(false);
+std::atomic_bool fActivateChain(false);
 bool fHavePruned = false;
 bool fPruneMode = false;
 uint64_t nPruneTarget = 0;
@@ -556,7 +557,8 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
             return;
         }
     } // End scope of CImportingNow
-    chainman.ActiveChainstate().LoadMempool(args);
+    if (!ShutdownRequested())
+        chainman.ActiveChainstate().LoadMempool(args);
     while(!ShutdownRequested()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         chainman.ActiveChainstate().LoadMempoolCache(args);
