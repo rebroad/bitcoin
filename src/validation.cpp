@@ -2531,12 +2531,6 @@ static void LimitValidationInterfaceQueue() LOCKS_EXCLUDED(cs_main) {
 
 bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
 {
-    if (fActivatingChain) {
-        fActivateChain = true;
-        return true;
-    }
-    fActivatingChain = true;
-
     // Note that while we're often called here from ProcessNewBlock, this is
     // far from a guarantee. Things in the P2P/RPC will often end up calling
     // us in the middle of ProcessNewBlock - do not assume pblock is set
@@ -2577,16 +2571,13 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 }
 
                 // Whether we have anything to do at all.
-                if (pindexMostWork == nullptr || pindexMostWork == m_chain.Tip()) {
-                    fActivatingChain = false;
+                if (pindexMostWork == nullptr || pindexMostWork == m_chain.Tip())
                     break;
-                }
 
                 bool fInvalidFound = false;
                 std::shared_ptr<const CBlock> nullBlockPtr;
                 if (!ActivateBestChainStep(state, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : nullBlockPtr, fInvalidFound, connectTrace)) {
                     // A system error occurred
-                    fActivatingChain = false;
                     return false;
                 }
                 blocks_connected = true;
@@ -2625,20 +2616,15 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
         // never shutdown before connecting the genesis block during LoadChainTip(). Previously this
         // caused an assert() failure during shutdown in such cases as the UTXO DB flushing checks
         // that the best block hash is non-null.
-        if (ShutdownRequested()) {
-            fActivatingChain = false;
+        if (ShutdownRequested())
             break;
-        }
     } while (pindexNewTip != pindexMostWork);
     CheckBlockIndex();
 
     // Write changes periodically to disk, after relay.
-    if (!FlushStateToDisk(state, FlushStateMode::PERIODIC)) {
-        fActivatingChain = false;
+    if (!FlushStateToDisk(state, FlushStateMode::PERIODIC))
         return false;
-    }
 
-    fActivatingChain = false;
     return true;
 }
 
@@ -4558,7 +4544,9 @@ void FormBestChain()
 {
     if (g_chainstate) {
         BlockValidationState state;
+        fActivatingChain = true;
         g_chainstate->ActivateBestChain(state, nullptr);
+        fActivatingChain = false;
     } else
         LogPrintf("%s: no g_chainstate\n", __func__);
 }

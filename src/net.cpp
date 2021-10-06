@@ -1610,12 +1610,12 @@ void CConnman::SocketHandler()
             int nMempoolTXs = pnode->nMempoolTXs;
             int nBlockBytes = pnode->nBlockBytes;
             int nBlockTXs = pnode->nBlockTXs;
-            nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
-            nTotalMempoolBytes += nMempoolBytes;
             if (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000) nPeersIBD++;
             if (pnode->nLastBlockTime > nLastBlockTime) nLastBlockTime = pnode->nLastBlockTime;
             double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
             if (pnode->IsFullOutboundConn()) {
+                nTotalBytesRecv += nRecvBytes - pnode->nRecvBytes1stTx;
+                nTotalMempoolBytes += nMempoolBytes;
                 latestNode = pnode->GetId();
                 nOutboundFullRelay++;
                 if (pnode->nTime1stTx > latest1stTx) latest1stTx = pnode->nTime1stTx;

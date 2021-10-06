@@ -2251,7 +2251,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
     int nNew = m_chainman.ProcessNewBlockHeaders(headers, state, m_chainparams, &pindexLast);
     if (nNew > 0) received_new_header = true;
     if (!via_compact_block) { // As it's already been logged otherwise
-        DoTime(pindexLast->nHeight, pfrom.GetId());
+        if (pindexLast) DoTime(pindexLast->nHeight, pfrom.GetId());
         LogRecv(nNew, pindexLast, "header", 0, pfrom.GetId());
     }
     if (state.IsInvalid()) {
@@ -3739,7 +3739,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         BlockValidationState state;
         int nNew = m_chainman.ProcessNewBlockHeaders({cmpctblock.header}, state, m_chainparams, &pindex);
         if (nNew > 0) received_new_header = true;
-        DoTime(pindex->nHeight, pfrom.GetId());
+        if (pindex) DoTime(pindex->nHeight, pfrom.GetId());
         LogRecv(nNew, pindex, "cmpctblock", nSize, pfrom.GetId());
         if (state.IsInvalid()) {
             MaybePunishNodeForBlock(pfrom.GetId(), state, /*via_compact_block*/ true, "invalid header via cmpctblock");
