@@ -53,6 +53,7 @@
 #include <util/trace.h>
 #include <util/translation.h>
 #include <validationinterface.h>
+#include <validation_thread.h>
 #include <warnings.h>
 
 #include <numeric>
@@ -3399,11 +3400,6 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     return true;
 }
 
-void FormBestChain() {
-    BlockValidationState state;
-    ActivateBestChain(state, nullptr);
-}
-
 bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool force_processing, bool* new_block)
 {
     AssertLockNotHeld(cs_main);
@@ -3436,7 +3432,7 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
     NotifyHeaderTip(ActiveChainstate());
 
     // If tip is within 6 blocks of best header, activate best chain within message handler thread to avoid the 100ms delay, and to avoid breaking the miner tests.
-    if (fActivatingChain || pindexBestHeader->nChainWork > chainActive.Tip()->nChainWork + GetBlockProof(*chainActive.Tip()) * 6) {
+    if (fActivatingChain || pindexBestHeader->nChainWork > ActiveChainstate().m_chain.Tip()->nChainWork + GetBlockProof(*ActiveChainstate().m_chain.Tip()) * 6) {
         fActivateChain = true;
     } else {
         BlockValidationState state; // Only used to report errors, not invalidity - ignore it
@@ -4553,6 +4549,13 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
 bool LoadMempoolCache(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mockable_fopen_function)
 {
     return true; // REBTODO
+}
+
+void FormBestChain()
+{
+    BlockValidationState state;
+    ChainstateManager m_chainman;
+    m_chainman.ActiveChainstate().ActivateBestChain(state, nullptr);
 }
 
 bool DumpMempool(const CTxMemPool& pool, FopenFn mockable_fopen_function, bool skip_file_commit)

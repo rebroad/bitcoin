@@ -719,8 +719,6 @@ public:
         BlockValidationState& state,
         std::shared_ptr<const CBlock> pblock = nullptr) LOCKS_EXCLUDED(cs_main);
 
-    void FormBestChain();
-
     bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockValidationState& state, CBlockIndex** ppindex, bool fRequested, const FlatFilePos* dbp, bool* fNewBlock) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     // Block (dis)connection on a given view:
@@ -1054,6 +1052,8 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
 
 /** Load the mempool cache from disk. */
 bool LoadMempoolCache(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mockable_fopen_function = fsbridge::fopen);
+
+void FormBestChain();
 
 /**
  * Return the expected assumeutxo value for a given height, if one exists.
