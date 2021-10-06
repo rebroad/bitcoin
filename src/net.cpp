@@ -1299,8 +1299,7 @@ void CConnman::DisconnectNodes()
             vNodesDisconnected.remove(pnode);
             LogPrintf("%s: Calling DeleteNode GRC=%d from vNodesDisconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
             DeleteNode(pnode);
-        } else
-            LogPrintf("%s: Not calling DeleteNode GRC=%d from vNodesDisconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
+        }
     }
     LOCK(cs_vNodes);
     if (vNodes.size() == 0 && vNodesDisconnectedCopy.size() > 0 && vNodesDisconnected.size() == 0) {

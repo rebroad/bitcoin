@@ -3791,6 +3791,8 @@ void CChainState::LoadMempoolCache(const ArgsManager& args)
         ::LoadMempoolCache(*m_mempool, *this);
 }
 
+CChainState *g_chainstate;
+
 bool CChainState::LoadChainTip()
 {
     AssertLockHeld(cs_main);
@@ -3810,6 +3812,7 @@ bool CChainState::LoadChainTip()
     m_chain.SetTip(pindex);
     PruneBlockIndexCandidates();
 
+    g_chainstate = this;
     tip = m_chain.Tip();
     LogPrintf("Loaded best chain: hashBestChain=%s height=%d date=%s progress=%f\n",
               tip->GetBlockHash().ToString(),
@@ -4553,9 +4556,11 @@ bool LoadMempoolCache(CTxMemPool& pool, CChainState& active_chainstate, FopenFn 
 
 void FormBestChain()
 {
-    BlockValidationState state;
-    ChainstateManager m_chainman;
-    m_chainman.ActiveChainstate().ActivateBestChain(state, nullptr);
+    if (g_chainstate) {
+        BlockValidationState state;
+        g_chainstate->ActivateBestChain(state, nullptr);
+    } else
+        LogPrintf("%s: no g_chainstate\n", __func__);
 }
 
 bool DumpMempool(const CTxMemPool& pool, FopenFn mockable_fopen_function, bool skip_file_commit)
