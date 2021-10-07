@@ -3249,6 +3249,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     pfrom.fDisconnect = true;
                     return;
                 }
+                if (m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
+                    static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
+                    static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
+                    LogPrintf("recv inv tx %sduring IBD peer=%d\n", pfrom.m_tx_relay && pfrom.m_tx_relay->lastSentFeeFilter == MAX_FILTER ? "violation ":"", pfrom.GetId());
+                }
                 // Ignore INVs that don't match wtxidrelay setting.
                 // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
                 // This is fine as no INV messages are involved in that process.
@@ -3434,7 +3439,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         LOCK(cs_main);
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && !pfrom.HasPermission(NetPermissionFlags::Download)) {
-            LogPrint(BCLog::NET, "Ignoring getheaders from peer=%d because node is in initial block download\n", pfrom.GetId());
+            LogPrint(BCLog::BLOCKSEND, "Ignoring getheaders from peer=%d because node is in initial block download\n", pfrom.GetId());
             return;
         }
 
@@ -3497,6 +3502,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LogPrintf("recv tx violation iit=%d HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", m_ignore_incoming_txs, pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
+        }
+        if (m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
+            static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
+            static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
+            LogPrintf("recv tx %sduring IBD peer=%d\n", pfrom.m_tx_relay && pfrom.m_tx_relay->lastSentFeeFilter == MAX_FILTER ? "violation ":"", pfrom.GetId());
         }
 
         CTransactionRef ptx;
@@ -4896,6 +4906,10 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
                 filterToSend, currentFilter, pto.GetId());
             m_connman.PushMessage(&pto, CNetMsgMaker(pto.GetCommonVersion()).Make(NetMsgType::FEEFILTER, filterToSend));
             pto.m_tx_relay->lastSentFeeFilter = filterToSend;
+            if (currentFilter == MAX_MONEY) {
+                pto.nRecvBytes1stTx = 0;
+                LogPrintf("Setting nRecvBytes1stTx=0 peer=%d\n", pto.GetId());
+            }
         }
         pto.m_tx_relay->m_next_send_feefilter = PoissonNextSend(current_time, AVG_FEEFILTER_BROADCAST_INTERVAL);
     }
