@@ -1759,7 +1759,7 @@ void CConnman::SocketHandler()
                         anchors_blockrelay.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS);
                     }
                     anchors_to_dump.insert(anchors_to_dump.end(), anchors_blockrelay.begin(), anchors_blockrelay.end());
-                    if (anchors_to_dump.size() >= (size_t)m_max_outbound_full_relay)
+                    if (anchors_to_dump.size() == (size_t)m_max_outbound_full_relay + MAX_BLOCK_RELAY_ONLY_ANCHORS - 1)
                         DumpAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME, anchors_to_dump);
                 }
             }
@@ -2242,19 +2242,9 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 anchor++;
                 const CAddress addr = m_anchors.back();
                 m_anchors.pop_back();
-                std::string strWhyNot;
-                if (!addr.IsValid()) strWhyNot = "invalid";
-                if (IsLocal(addr)) strWhyNot = "IsLocal";
-                if (!IsReachable(addr)) strWhyNot = "UnReachable";
-                if (setConnected.count(addr.GetGroup(addrman.GetAsmap()))) strWhyNot = "connected";
-                if (!HasAllDesirableServiceFlags(addr.nServices)) LogPrintf("anchor(%d) ServiceFLags\n", anchor);
                 if (nAnchorTryAgain < 0) nAnchorTryAgain = 0;
                 if (!addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
-                        setConnected.count(addr.GetGroup(addrman.GetAsmap()))) {
-                    LogPrintf("Not trying(%s) to make a %s anchor(%d) connection to %s\n", strWhyNot,
-                        ConnectionTypeAsString(conn_type), anchor, addr.ToString());
-                    break;
-                }
+                        setConnected.count(addr.GetGroup(addrman.GetAsmap()))) break;
                 addrConnect = addr;
                 LogPrintf("Trying(%d) to make a %s anchor(%d) connection to %s\n", nAnchorTryAgain,
                     ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
