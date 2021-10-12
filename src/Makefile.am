@@ -271,6 +271,7 @@ BITCOIN_CORE_H = \
   util/url.h \
   util/vector.h \
   validation.h \
+  validation_thread.h \
   validationinterface.h \
   versionbits.h \
   wallet/bdb.h \
@@ -381,6 +382,7 @@ libbitcoin_server_a_SOURCES = \
   txreconciliation.cpp \
   txrequest.cpp \
   validation.cpp \
+  validation_thread.cpp \
   validationinterface.cpp \
   versionbits.cpp \
   $(BITCOIN_CORE_H)
