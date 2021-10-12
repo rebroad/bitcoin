@@ -2237,6 +2237,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 int nLastLast = nLastOutboundCount;
                 nLastOutboundCount = std::min(nOutboundCount, (int)MAX_OUTBOUND_FULL_RELAY_CONNECTIONS +
                     (int)MAX_BLOCK_RELAY_ONLY_ANCHORS);
+                if (nLastLast != nLastOutboundCount)
+                    LogPrintf("anchor LOC %d -> %d\n", nLastLast, nLastOutboundCount);
             }
             if (!m_anchors.empty() && (anchor == 0 || nOutboundBlockRelay)) {
                 anchor++;
@@ -2279,6 +2281,10 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             if ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
                     (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2) ||
                     (nOutboundCount < (nLastOutboundCount+1)*2/3)) { // or a sudden drop in connections
+                if (nOutboundCount < (nLastOutboundCount+1)*2/3)
+                    LogPrintf("Outbound count dropped (%d < %d) LOC=%d\n", nOutboundCount, (nLastOutboundCount+1)*2/3, nLastOutboundCount);
+                else
+                    LogPrintf("ATA=%D OC=%d PIBD=%d\n", nAnchorTryAgain, nOutboundCount, nPeersIBD);
                 nLastOutboundCount = nOutboundCount;
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                         return;
