@@ -36,6 +36,7 @@ BCLog::Logger& LogInstance()
 }
 
 bool fLogIPs = DEFAULT_LOGIPS;
+std::atomic<bool> fActivatingChain(false);
 
 static int FileWriteStr(const std::string &str, FILE *fp)
 {
@@ -217,7 +218,10 @@ std::string BCLog::Logger::LogTimestampStr(const std::string& str)
         if (mocktime > 0s) {
             strStamped += " (mocktime: " + FormatISO8601DateTime(count_seconds(mocktime)) + ")";
         }
-        strStamped += ' ' + str;
+        if (fActivatingChain)
+            strStamped += "  " + str;
+        else
+            strStamped += ' ' + str;
     } else
         strStamped = str;
 
