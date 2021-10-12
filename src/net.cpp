@@ -2571,12 +2571,13 @@ void CConnman::ThreadMessageHandler()
             // consecutive connections in the m_nodes list.
             const NodesSnapshot snap{*this, 4, /*shuffle=*/true};
 
+            static bool fToggle = false; // So that net_processing can see this loop
             for (CNode* pnode : snap.Nodes()) {
                 if (pnode->fDisconnect)
                     continue;
 
                 // Receive messages
-                bool fMoreNodeWork = m_msgproc->ProcessMessages(pnode, flagInterruptMsgProc);
+                bool fMoreNodeWork = m_msgproc->ProcessMessages(pnode, flagInterruptMsgProc, fToggle);
                 fMoreWork |= (fMoreNodeWork && !pnode->fPauseSend);
                 if (flagInterruptMsgProc)
                     return;
@@ -2589,6 +2590,7 @@ void CConnman::ThreadMessageHandler()
                 if (flagInterruptMsgProc)
                     return;
             }
+            fToggle = !fToggle;
         }
 
         WAIT_LOCK(mutexMsgProc, lock);

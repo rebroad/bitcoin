@@ -308,7 +308,7 @@ public:
     /** Implement NetEventsInterface */
     void InitializeNode(CNode* pnode) override;
     void FinalizeNode(const CNode& node) override;
-    bool ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt) override;
+    bool ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt, bool fToggle) override;
     bool SendMessages(CNode* pto) override EXCLUSIVE_LOCKS_REQUIRED(pto->cs_sendProcessing);
 
     /** Implement PeerManager */
@@ -432,6 +432,9 @@ private:
 
     /** Last time we had no connections */
     int64_t m_last_no_connections{GetTime()};
+
+    /** Number of times net.cpp has run a ProcessMessages() loop */
+    int64_t nNetClicks{0};
 
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
@@ -4365,9 +4368,14 @@ bool PeerManagerImpl::MaybeDiscourageAndDisconnect(CNode& pnode, Peer& peer)
     return true;
 }
 
-bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interruptMsgProc)
+bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interruptMsgProc, bool fToggle)
 {
     bool fMoreWork = false;
+    static bool fLastToggle = false;
+    if (fLastToggle != fToggle) {
+        nNetClicks++;
+        fLastToggle = fToggle;
+    }
 
     PeerRef peer = GetPeerRef(pfrom->GetId());
     if (peer == nullptr) return false;
