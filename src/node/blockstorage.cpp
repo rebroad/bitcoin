@@ -21,7 +21,11 @@
 #include <util/syscall_sandbox.h>
 #include <util/system.h>
 #include <validation.h>
+#include <validation_thread.h>
 
+// If true (below), hain activation starts in loadblk then gets passed to validation thread. This allows blocks to be
+// downloaded (as fImporting becomes false), and also makes the GUI more responsive.
+std::atomic_bool fActivateChain(false);
 namespace node {
 std::atomic_bool fImporting(false);
 std::atomic_bool fReindex(false);
@@ -929,15 +933,17 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
         // We can't hold cs_main during ActivateBestChain even though we're accessing
         // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
         // the relevant pointers before the ABC call.
-        LogPrintf("%s: About to ActivateBestChain()\n", __func__);
-        for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
-            BlockValidationState state;
-            if (!chainstate->ActivateBestChain(state, nullptr)) {
-                LogPrintf("Failed to connect best block (%s)\n", state.ToString());
-                StartShutdown();
-                return;
-            }
-        }
+        LogPrintf("%s: About to LoadGenesisBlock() and set fActivateChain to true\n", __func__);
+        chainman.ActiveChainstate().LoadGenesisBlock();
+        fActivateChain = true;
+        //for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
+        //    BlockValidationState state;
+        //    if (!chainstate->ActivateBestChain(state, nullptr)) { // REBTODO - Set fActivateChain instead?
+        //        LogPrintf("Failed to connect best block (%s)\n", state.ToString());
+        //        StartShutdown();
+        //        return;
+        //    }
+        //}
 
         if (args.GetBoolArg("-stopafterblockimport", DEFAULT_STOPAFTERBLOCKIMPORT)) {
             LogPrintf("Stopping after block import\n");
