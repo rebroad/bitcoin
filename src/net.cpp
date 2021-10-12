@@ -2549,13 +2549,14 @@ void CConnman::ThreadMessageHandler()
         // consecutive connections in the vNodes list.
         Shuffle(vNodesCopy.begin(), vNodesCopy.end(), rng);
 
+        static bool fToggle = false; // So that net_processing can see this loop
         for (CNode* pnode : vNodesCopy)
         {
             if (pnode->fDisconnect)
                 continue;
 
             // Receive messages
-            bool fMoreNodeWork = m_msgproc->ProcessMessages(pnode, flagInterruptMsgProc);
+            bool fMoreNodeWork = m_msgproc->ProcessMessages(pnode, flagInterruptMsgProc, fToggle);
             fMoreWork |= (fMoreNodeWork && !pnode->fPauseSend);
             if (flagInterruptMsgProc)
                 return;
@@ -2568,6 +2569,7 @@ void CConnman::ThreadMessageHandler()
             if (flagInterruptMsgProc)
                 return;
         }
+        fToggle = !fToggle;
 
         {
             LOCK(cs_vNodes);
