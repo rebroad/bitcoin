@@ -53,6 +53,7 @@
 #include <util/trace.h>
 #include <util/translation.h>
 #include <validationinterface.h>
+#include <validation_thread.h>
 #include <warnings.h>
 
 #include <numeric>
@@ -3430,9 +3431,13 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
 
     NotifyHeaderTip(ActiveChainstate());
 
-    BlockValidationState state; // Only used to report errors, not invalidity - ignore it
-    if (!ActiveChainstate().ActivateBestChain(state, block)) {
-        return error("%s: ActivateBestChain failed (%s)", __func__, state.ToString());
+    // If tip is within 2 blocks of best header, activate best chain within message handler thread to avoid the 100ms delay, and to avoid breaking the miner tests.
+    if (fActivatingChain || pindexBestHeader->nChainWork > ActiveChainstate().m_chain.Tip()->nChainWork + GetBlockProof(*ActiveChainstate().m_chain.Tip()) * 2) {
+        fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
+    } else {
+        BlockValidationState state; // Only used to report errors, not invalidity - ignore it
+        if (!ActiveChainstate().ActivateBestChain(state, block))
+            return error("%s: ActivateBestChain failed (%s)", __func__, state.ToString());
     }
 
     return true;
@@ -3786,6 +3791,8 @@ void CChainState::LoadMempoolCache(const ArgsManager& args)
         ::LoadMempoolCache(*m_mempool, *this);
 }
 
+CChainState *g_chainstate;
+
 bool CChainState::LoadChainTip()
 {
     AssertLockHeld(cs_main);
@@ -3805,6 +3812,7 @@ bool CChainState::LoadChainTip()
     m_chain.SetTip(pindex);
     PruneBlockIndexCandidates();
 
+    g_chainstate = this;
     tip = m_chain.Tip();
     LogPrintf("Loaded best chain: hashBestChain=%s height=%d date=%s progress=%f\n",
               tip->GetBlockHash().ToString(),
@@ -4544,6 +4552,17 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
 bool LoadMempoolCache(CTxMemPool& pool, CChainState& active_chainstate, FopenFn mockable_fopen_function)
 {
     return true; // REBTODO
+}
+
+void FormBestChain()
+{
+    if (g_chainstate) {
+        BlockValidationState state;
+        fActivatingChain = true;
+        g_chainstate->ActivateBestChain(state, nullptr);
+        fActivatingChain = false;
+    } else
+        LogPrintf("%s: no g_chainstate\n", __func__);
 }
 
 bool DumpMempool(const CTxMemPool& pool, FopenFn mockable_fopen_function, bool skip_file_commit)

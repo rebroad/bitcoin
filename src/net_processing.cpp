@@ -1649,6 +1649,7 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
  */
 void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlockIndex *pindexFork, bool fInitialDownload)
 {
+    // This will now often run in the validate thread rather than the message handler thread.
     SetBestHeight(pindexNew->nHeight);
     SetServiceFlagsIBDCache(!fInitialDownload);
 

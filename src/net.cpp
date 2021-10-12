@@ -2888,6 +2888,9 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
             std::thread(&util::TraceThread, "i2paccept", [this] { ThreadI2PAcceptIncoming(); });
     }
 
+    // Validate blocks
+    threadValidation = std::thread(&util::TraceThread, "validate", [this] { ThreadValidation(); });
+
     // Dump network addresses
     scheduler.scheduleEvery([this] { DumpAddresses(); }, DUMP_PEERS_INTERVAL);
 
@@ -2940,6 +2943,8 @@ void CConnman::StopThreads()
     }
     if (threadMessageHandler.joinable())
         threadMessageHandler.join();
+    if (threadValidation.joinable())
+        threadValidation.join();
     if (threadOpenConnections.joinable())
         threadOpenConnections.join();
     if (threadOpenAddedConnections.joinable())
