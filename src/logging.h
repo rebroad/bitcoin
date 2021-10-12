@@ -26,6 +26,7 @@ static const bool DEFAULT_LOGSOURCELOCATIONS = false;
 extern const char * const DEFAULT_DEBUGLOGFILE;
 
 extern bool fLogIPs;
+extern std::atomic<bool> fActivatingChain; // True while activating the best chain
 
 struct LogCategory {
     std::string category;
