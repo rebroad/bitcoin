@@ -2529,6 +2529,19 @@ static void LimitValidationInterfaceQueue() LOCKS_EXCLUDED(cs_main) {
     }
 }
 
+std::string strHeight(const CBlockIndex* pindex, bool *fFork /* = nullptr */) {
+    if (!pindex)
+        return "NULL";
+    const CBlockIndex *pindexFork = LastCommonAncestor(pindex, pindexBestHeader);
+    std::string strFork;
+    if (pindexFork->nHeight < pindex->nHeight) {
+        if (fFork) *fFork = true;
+        bool fEqualWork = (pindex->nChainWork == pindexBestHeader->nChainWork);
+        strFork = strprintf(" %sfork@%d", fEqualWork ? "=" : "", pindexFork->nHeight);
+    }
+    return strprintf("%d%s", pindex->nHeight, strFork);
+}
+
 bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
 {
     // Note that while we're often called here from ProcessNewBlock, this is
@@ -2571,8 +2584,9 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 }
 
                 // Whether we have anything to do at all.
-                if (pindexMostWork == nullptr || pindexMostWork == m_chain.Tip())
+                if (pindexMostWork == nullptr || pindexMostWork == m_chain.Tip()) {
                     break;
+                }
 
                 bool fInvalidFound = false;
                 std::shared_ptr<const CBlock> nullBlockPtr;
@@ -2602,11 +2616,13 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
             // Enqueue while holding cs_main to ensure that UpdatedBlockTip is called in the order in which blocks are connected
             if (pindexFork != pindexNewTip) {
                 // Notify ValidationInterface subscribers
+                LogPrintf("Call UpdatedBlockTip(%s, %s, IBD=%d)\n", strHeight(pindexNewTip), strHeight(pindexFork), fInitialDownload ? 1:0);
                 GetMainSignals().UpdatedBlockTip(pindexNewTip, pindexFork, fInitialDownload);
 
                 // Always notify the UI if a new block tip was connected
                 uiInterface.NotifyBlockTip(GetSynchronizationState(fInitialDownload), pindexNewTip);
-            }
+            } else
+                LogPrintf("Not calling UpdatedBlockTip(%s, %s, IBD=%d)\n", strHeight(pindexNewTip), strHeight(pindexFork), fInitialDownload ? 1:0);
         }
         // When we reach this point, we switched to a new tip (stored in pindexNewTip).
 
@@ -2616,14 +2632,14 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
         // never shutdown before connecting the genesis block during LoadChainTip(). Previously this
         // caused an assert() failure during shutdown in such cases as the UTXO DB flushing checks
         // that the best block hash is non-null.
-        if (ShutdownRequested())
-            break;
+        if (ShutdownRequested()) break;
     } while (pindexNewTip != pindexMostWork);
     CheckBlockIndex();
 
     // Write changes periodically to disk, after relay.
-    if (!FlushStateToDisk(state, FlushStateMode::PERIODIC))
+    if (!FlushStateToDisk(state, FlushStateMode::PERIODIC)) {
         return false;
+    }
 
     return true;
 }
@@ -3390,8 +3406,8 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
 {
     AssertLockNotHeld(cs_main);
 
-    CBlockIndex *pindex = nullptr;
     { // REBTODO: Calculate the lowest Sat/B TX still in the mempool after the TXs in this block have removed the TXs
+        CBlockIndex *pindex = nullptr;
         if (new_block) *new_block = false;
         BlockValidationState state;
 

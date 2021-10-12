@@ -539,6 +539,8 @@ enum class CoinsCacheSizeState
     OK = 0
 };
 
+std::string strHeight(const CBlockIndex* pindex, bool *fFork = nullptr);
+
 /**
  * CChainState stores and provides an API to update our local knowledge of the
  * current best chain.

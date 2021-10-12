@@ -1051,19 +1051,6 @@ void PeerManagerImpl::UpdateBlockAvailability(NodeId nodeid, const uint256 &hash
     }
 }
 
-std::string strHeight(const CBlockIndex* pindex, bool *fFork = nullptr) {
-    if (!pindex)
-        return "NULL";
-    const CBlockIndex *pindexFork = LastCommonAncestor(pindex, pindexBestHeader);
-    std::string strFork;
-    if (pindexFork->nHeight < pindex->nHeight) {
-        if (fFork) *fFork = true;
-        bool fEqualWork = (pindex->nChainWork == pindexBestHeader->nChainWork);
-        strFork = strprintf(" %sfork@%d", fEqualWork ? "=" : "", pindexFork->nHeight);
-    }
-    return strprintf("%d%s", pindex->nHeight, strFork);
-}
-
 std::string strBlkHeight(const CBlockIndex* pindex)
 {
     if (!pindex)
@@ -2817,7 +2804,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             bool fDisconnect = false;
             LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%x offered, %x expected) %speer=%d\n",
                 nServices, GetDesirableServiceFlags(nServices), fDisconnect ? "disconnecting " : "", pfrom.GetId());
-            if (fDisconnect) { // Allow 8 and 1024 OR 1 (witness and limited or node)
+            if (fDisconnect) { // REBTODO - Allow 8 and 1024 OR 1 (witness and limited or node)
                 pfrom.fDisconnect = true;
                 return;
             }

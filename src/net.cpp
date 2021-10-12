@@ -1289,16 +1289,18 @@ void CConnman::DisconnectNodes()
                 vNodesDisconnected.push_back(pnode);
             }
         }
-    } // LOCK(cs_vNodes);
-
-    // Delete disconnected nodes
+    }
     std::list<CNode*> vNodesDisconnectedCopy = vNodesDisconnected;
-    for (CNode* pnode : vNodesDisconnectedCopy) {
-        // Destroy the object only after other threads have stopped using it.
-        if (pnode->GetRefCount() <= 0) {
-            vNodesDisconnected.remove(pnode);
-            LogPrintf("%s: Calling DeleteNode GRC=%d from vNodesDisconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
-            DeleteNode(pnode);
+    {
+        // Delete disconnected nodes
+        for (CNode* pnode : vNodesDisconnectedCopy)
+        {
+            // Destroy the object only after other threads have stopped using it.
+            if (pnode->GetRefCount() <= 0) {
+                vNodesDisconnected.remove(pnode);
+                LogPrintf("%s: Calling DeleteNode GRC=%d from vNodesDisconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
+                DeleteNode(pnode);
+            }
         }
     }
     LOCK(cs_vNodes);

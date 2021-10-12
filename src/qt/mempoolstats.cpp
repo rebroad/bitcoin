@@ -79,10 +79,12 @@ void MempoolStats::drawChart()
     std::vector<QPainterPath> fee_paths;
     std::vector<size_t> fee_subtotal_totalsize;
     std::vector<size_t> fee_subtotal_size;
+    std::vector<size_t> fee_subtotal_txcount;
     qreal current_x = GRAPH_PADDING_LEFT;
     const qreal bottom = m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_BOTTOM;
     const qreal maxheight_g = (m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_TOP-GRAPH_PADDING_TOP_LABEL-GRAPH_PADDING_BOTTOM);
     size_t max_totalsize=0;
+    size_t max_txcount=0;
     QFont gridFont;
     gridFont.setPointSize(8);
     int display_up_to_range = 0;
@@ -113,17 +115,22 @@ void MempoolStats::drawChart()
 
         fee_subtotal_totalsize.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         fee_subtotal_size.resize(m_clientmodel->m_mempool_feehist[0].second.size());
+        fee_subtotal_txcount.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         // calculate max tx for upper bound of chart
         for (const ClientModel::mempool_feehist_sample& sample : m_clientmodel->m_mempool_feehist) {
             uint64_t totalsize = 0;
+            uint64_t txcount = 0;
             int i = 0;
             for (const interfaces::mempool_feeinfo& list_entry : sample.second) {
                 totalsize += list_entry.total_size;
+                txcount += list_entry.tx_count;
                 fee_subtotal_totalsize[i] += list_entry.total_size;
                 fee_subtotal_size[i] = list_entry.total_size;
+                fee_subtotal_txcount[i] = list_entry.tx_count;
                 i++;
             }
             if (totalsize > max_totalsize) max_totalsize = totalsize;
+            if (txcount > max_txcount) max_txcount = txcount;
         }
 
         // hide ranges we don't have txns

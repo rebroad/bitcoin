@@ -261,8 +261,7 @@ public:
          static double oldratio = newratio;
          static int adjusting = 0;
          double ratio;
-         //if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && (oldsmallest-newsmallest > (totalmemdelta-oldtotalmemdelta)/2))) {
-         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest)) {
+         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && labs((long)oldsmallest - (long)newsmallest) > labs((long)totalmemdelta - (long)oldtotalmemdelta)/2)) {
              LogPrintf("%s: newi=%d oldi=%d smallest %d -> %d (%d) mem %d -> %d (%d)\n", __func__, newi, oldi, oldsmallest, newsmallest, labs((long)newsmallest - (long)oldsmallest), oldtotalmemdelta, totalmemdelta, labs((long)totalmemdelta - (long)oldtotalmemdelta));
              adjusting = 0;
          } else if (oldtotalmemdelta > totalmemdelta)
