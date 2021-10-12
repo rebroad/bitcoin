@@ -379,6 +379,7 @@ private:
     bool MaybeDiscourageAndDisconnect(CNode& pnode, Peer& peer);
 
     void ProcessOrphanTx(std::set<uint256>& orphan_work_set) EXCLUSIVE_LOCKS_REQUIRED(cs_main, g_cs_orphans);
+    void DoTime(int nHeight, int node);
     void LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize, int node);
     /** Process a single headers message from a peer. */
     void ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
@@ -470,6 +471,8 @@ private:
      * punished if the block is invalid.
      */
     std::map<uint256, std::pair<NodeId, bool>> mapBlockSource GUARDED_BY(cs_main);
+
+    std::map</*height*/ int, /*time*/std::chrono::milliseconds> mapBlockTimes; // REBTODO - list or deque?
 
     /** Number of peers with wtxid relay. */
     int m_wtxid_relay_peers GUARDED_BY(cs_main) = 0;
@@ -2122,6 +2125,11 @@ void PeerManagerImpl::SendBlockTransactions(CNode& pfrom, const CBlock& block, c
     m_connman.PushMessage(&pfrom, msgMaker.Make(nSendFlags, NetMsgType::BLOCKTXN, resp));
 }
 
+void PeerManagerImpl::DoTime(int nHeight, int node)
+{
+    // REBTODO - if Height is more than one better than the last, then also count the blocks between that and this.
+}
+
 void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize, int node)
 {
     std::string strDesc;
@@ -2219,8 +2227,10 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
     BlockValidationState state;
     int nNew = m_chainman.ProcessNewBlockHeaders(headers, state, m_chainparams, &pindexLast);
     if (nNew > 0) received_new_header = true;
-    if (!via_compact_block) // As it's already been logged otherwise
-        LogRecv(nNew, pindexLast, "header", 0, pfrom.GetId()); // REBTODO - can we deserialize to get the size?
+    if (!via_compact_block) { // As it's already been logged otherwise
+        if (pindexLast) DoTime(pindexLast->nHeight, pfrom.GetId());
+        LogRecv(nNew, pindexLast, "header", 0, pfrom.GetId());
+    }
     if (state.IsInvalid()) {
         MaybePunishNodeForBlock(pfrom.GetId(), state, via_compact_block, "invalid header received");
         return;
@@ -3192,6 +3202,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(inv.hash);
                 if (pindex) {
                     fAlreadyHave = true; // already have the headers
+                    DoTime(pindex->nHeight, pfrom.GetId());
                     LogRecv(0, pindex, "inv block", 0, pfrom.GetId());
                 } else
                     LogPrint(BCLog::BLOCK, "recv inv %s (new) peer=%d\n", inv.ToString(), pfrom.GetId());
@@ -3701,6 +3712,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         BlockValidationState state;
         int nNew = m_chainman.ProcessNewBlockHeaders({cmpctblock.header}, state, m_chainparams, &pindex);
         if (nNew > 0) received_new_header = true;
+        if (pindex) DoTime(pindex->nHeight, pfrom.GetId());
         LogRecv(nNew, pindex, "cmpctblock", nSize, pfrom.GetId());
         if (state.IsInvalid()) {
             MaybePunishNodeForBlock(pfrom.GetId(), state, /*via_compact_block*/ true, "invalid header via cmpctblock");
