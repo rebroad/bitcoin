@@ -586,6 +586,9 @@ private:
     /** Number of peers from which we're downloading blocks. */
     int m_peers_downloading_from GUARDED_BY(cs_main) = 0;
 
+    /** Longest delay between reception when downloading a block. */
+    int m_longest_delay = 0;
+
     /** Storage for orphan information */
     TxOrphanage m_orphanage;
 
@@ -862,6 +865,8 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
     if (state->nBlocksInFlight == 0) {
         // Last validated block on the queue was received.
         m_peers_downloading_from--;
+        if (m_peers_downloading_from == 0)
+            m_longest_delay = 0;
     }
     state->m_stalling_since = 0us;
     mapBlocksInFlight.erase(it);
@@ -5243,6 +5248,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             }
             int64_t nNow = GetTime();
             int nDelay = nNow - count_seconds(pto->m_last_recv);
+            if (nDelay > m_longest_delay && current_time > state.m_downloading_since + std::chrono::seconds{m_longest_delay}) {
+                LogPrintf("Block download max delay %ds -> %ds nOPWVD=%d peer=%d\n", m_longest_delay, nDelay, nOtherPeersWithValidatedDownloads, pto->GetId());
+                m_longest_delay = nDelay;
+            }
             if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
                 current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1) && nNow - pto->nLastBlockTime > 10) {
                 LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d nLBT=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - count_seconds(pto->m_last_recv), nOtherPeersWithValidatedDownloads, nNow - pto->nLastBlockTime, pto->GetId());
