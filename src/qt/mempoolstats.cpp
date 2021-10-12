@@ -78,6 +78,7 @@ void MempoolStats::drawChart()
 
     std::vector<QPainterPath> fee_paths;
     std::vector<size_t> fee_subtotal_totalsize;
+    std::vector<size_t> fee_subtotal_size;
     qreal current_x = GRAPH_PADDING_LEFT;
     const qreal bottom = m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_BOTTOM;
     const qreal maxheight_g = (m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_TOP-GRAPH_PADDING_TOP_LABEL-GRAPH_PADDING_BOTTOM);
@@ -85,6 +86,7 @@ void MempoolStats::drawChart()
     QFont gridFont;
     gridFont.setPointSize(8);
     int display_up_to_range = 0;
+    int display_fee_up_to_range = 0;
     qreal maxwidth = m_gfx_view->scene()->sceneRect().width()-GRAPH_PADDING_LEFT-GRAPH_PADDING_RIGHT;
     {
         // we are going to access the clientmodel feehistogram directly avoding a copy
@@ -93,10 +95,14 @@ void MempoolStats::drawChart()
         /* TODO: remove
            helpful for testing/development (loading a prestored dataset)
         */
-        //FILE *filestr = fsbridge::fopen("/tmp/statsdump", "rb");
-        //CAutoFile file(filestr, SER_DISK, CLIENT_VERSION);
-        //file >> m_clientmodel->m_mempool_feehist;
-        //file.fclose();
+        if (m_clientmodel->m_mempool_feehist.size() == 0) {
+            FILE *filestr = fsbridge::fopen("/tmp/statsdump", "rb");
+            if (filestr) {
+                CAutoFile file(filestr, SER_DISK, false);
+                file >> m_clientmodel->m_mempool_feehist;
+                file.fclose();
+            }
+        }
 
         size_t max_totalsize_graph=0;
 
@@ -106,6 +112,7 @@ void MempoolStats::drawChart()
         }
 
         fee_subtotal_totalsize.resize(m_clientmodel->m_mempool_feehist[0].second.size());
+        fee_subtotal_size.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         // calculate max tx for upper bound of chart
         for (const ClientModel::mempool_feehist_sample& sample : m_clientmodel->m_mempool_feehist) {
             uint64_t totalsize = 0;
@@ -113,6 +120,7 @@ void MempoolStats::drawChart()
             for (const interfaces::mempool_feeinfo& list_entry : sample.second) {
                 totalsize += list_entry.total_size;
                 fee_subtotal_totalsize[i] += list_entry.total_size;
+                fee_subtotal_size[i] = list_entry.total_size;
                 i++;
             }
             if (totalsize > max_totalsize) max_totalsize = totalsize;
@@ -120,9 +128,10 @@ void MempoolStats::drawChart()
 
         // hide ranges we don't have txns
         for(size_t i = 0; i < fee_subtotal_totalsize.size(); i++) {
-            if (fee_subtotal_totalsize[i] > 0) {
+            if (fee_subtotal_totalsize[i] > 0)
                 display_up_to_range = i;
-            }
+            if (fee_subtotal_size[i] > 0)
+                display_fee_up_to_range = i;
         }
 
         // make a nice y-axis scale
@@ -167,7 +176,7 @@ void MempoolStats::drawChart()
         c_y-=c_margin;
         int i = 0;
         for (const interfaces::mempool_feeinfo& list_entry : m_clientmodel->m_mempool_feehist[0].second) {
-            if (i > display_up_to_range) {
+            if (i > display_fee_up_to_range) {
                 continue;
             }
             ClickableRectItem *fee_rect = new ClickableRectItem();
@@ -194,10 +203,10 @@ void MempoolStats::drawChart()
                 /*TODO remove
                   store the existing feehistory to a temporary file
                 */
-                //FILE *filestr = fsbridge::fopen("/tmp/statsdump", "wb");
-                //CAutoFile file(filestr, SER_DISK, CLIENT_VERSION);
-                //file << m_clientmodel->m_mempool_feehist;
-                //file.fclose();
+                FILE *filestr = fsbridge::fopen("/tmp/statsdump", "wb");
+                CAutoFile file(filestr, SER_DISK, false);
+                file << m_clientmodel->m_mempool_feehist;
+                file.fclose();
             });
             m_scene->addItem(fee_rect);
 
@@ -262,7 +271,7 @@ void MempoolStats::drawChart()
             brush_color.setAlpha(30);
         }
         if (m_selected_range >= 0 && m_selected_range == i) {
-            total_text = "bytes in selected fee range: "+GUIUtil::formatBytes(fee_subtotal_totalsize[i]);
+            total_text = "bytes in selected fee range: "+GUIUtil::formatBytes(fee_subtotal_size[i]);
         }
         QPen pen_blue(pen_color, 1, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         m_scene->addPath(feepath, pen_blue, QBrush(brush_color));
@@ -288,4 +297,10 @@ void MempoolStats::showEvent(QShowEvent *event)
     QWidget::showEvent(event);
     if (m_clientmodel)
         drawChart();
+}
+
+void MempoolStats::mousePressEvent(QMouseEvent *event)
+{
+    QWidget::mousePressEvent(event);
+    LogPrintf("%s: Mouse pressed!\n", __func__);
 }

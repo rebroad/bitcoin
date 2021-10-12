@@ -259,7 +259,7 @@ public:
          static size_t oldtotalmemusage = 0;
          static size_t oldtotalmemdelta = 0;
          static double oldratio = newratio;
-         static unsigned int adjusting = 0;
+         static int adjusting = 0;
          double ratio;
          //if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && (oldsmallest-newsmallest > (totalmemdelta-oldtotalmemdelta)/2))) {
          if (newi > oldi || (newi == oldi && oldsmallest > newsmallest)) {
@@ -269,15 +269,15 @@ public:
              adjusting = 30;
          oldsmallest = newsmallest;
          oldi = newi;
-         if (adjusting) {
-             ratio = (oldratio * (adjusting) + newratio) / (adjusting+1);
+         if (adjusting >= 0) {
+             ratio = (oldratio * (adjusting) + newratio) / (adjusting + 1);
              if ((totalmemdelta >= oldtotalmemdelta) && (ratio * totalmemdelta < oldratio * oldtotalmemdelta))
                  ratio = oldratio; // Don't let the graph go down unless totalmemdelta has gone down
              else
                  adjusting--;
          } else
              ratio = newratio;
-         if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage)
+         if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0)
              LogPrintf("%s: ratio: %f -> %f (newratio%s memusage: %d -> %d (%f%%)\n", __func__, oldratio, 
                  ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
                  oldtotalmemusage, totalmemusage, oldtotalmemusage ? 100.0 * totalmemusage / oldtotalmemusage : 0);
