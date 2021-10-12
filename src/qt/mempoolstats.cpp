@@ -95,10 +95,14 @@ void MempoolStats::drawChart()
         /* TODO: remove
            helpful for testing/development (loading a prestored dataset)
         */
-        //FILE *filestr = fsbridge::fopen("/tmp/statsdump", "rb");
-        //CAutoFile file(filestr, SER_DISK, CLIENT_VERSION);
-        //file >> m_clientmodel->m_mempool_feehist;
-        //file.fclose();
+        if (m_clientmodel->m_mempool_feehist.size() == 0) {
+            FILE *filestr = fsbridge::fopen("/tmp/statsdump", "rb");
+            if (filestr) {
+                CAutoFile file(filestr, SER_DISK, false);
+                file >> m_clientmodel->m_mempool_feehist;
+                file.fclose();
+            }
+        }
 
         size_t max_num_graph=0;
 
@@ -209,10 +213,10 @@ void MempoolStats::drawChart()
                 /*TODO remove
                   store the existing feehistory to a temporary file
                 */
-                //FILE *filestr = fsbridge::fopen("/tmp/statsdump", "wb");
-                //CAutoFile file(filestr, SER_DISK, CLIENT_VERSION);
-                //file << m_clientmodel->m_mempool_feehist;
-                //file.fclose();
+                FILE *filestr = fsbridge::fopen("/tmp/statsdump", "wb");
+                CAutoFile file(filestr, SER_DISK, false);
+                file << m_clientmodel->m_mempool_feehist;
+                file.fclose();
             });
             m_scene->addItem(fee_rect);
 
