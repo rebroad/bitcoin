@@ -277,9 +277,10 @@ public:
                  adjusting--;
          } else
              ratio = newratio;
-         //LogPrintf("%s: ratio: %f -> %f (newratio%s memusage: %d -> %d (%f%%)\n", __func__, oldratio, 
-         //    ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
-         //    oldtotalmemusage, totalmemusage, oldtotalmemusage ? 100.0 * totalmemusage / oldtotalmemusage : 0);
+         if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage)
+             LogPrintf("%s: ratio: %f -> %f (newratio%s memusage: %d -> %d (%f%%)\n", __func__, oldratio, 
+                 ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
+                 oldtotalmemusage, totalmemusage, oldtotalmemusage ? 100.0 * totalmemusage / oldtotalmemusage : 0);
          oldtotalmemusage = totalmemusage;
          oldtotalmemdelta = totalmemdelta;
          oldratio = ratio;
