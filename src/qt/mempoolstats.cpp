@@ -114,6 +114,7 @@ void MempoolStats::drawChart()
         fee_subtotal_totalnum.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         fee_subtotal_num.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         // calculate max tx for upper bound of chart
+        LogPrintf("%s: About to render graph\n", __func__);
         for (const ClientModel::mempool_feehist_sample& sample : m_clientmodel->m_mempool_feehist) {
             uint64_t num = 0;
             int i = 0;
