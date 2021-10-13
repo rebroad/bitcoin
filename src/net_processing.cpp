@@ -2343,9 +2343,11 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 if (vGetData.size() > 0) {
                     std::string strItem;
                     if (!m_ignore_incoming_txs && m_mempool.size() > 10 &&
-                        nodestate->fSupportsDesiredCmpctVersion &&
-                        vGetData.size() == 1 &&
-                        pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) {
+                        nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 &&
+                        pindexLast->nHeight <= m_chainman.ActiveChain().Height() + 6) {
+                        if (!pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) // REBTEMP - log this experimental thing
+                            LogPrintf("CURIOUS: Fetching a cmpctblock %d ahead of tip!\n",
+                                pindexLast->nHeight - m_chainman.ActiveChain().Height());
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                         strItem = "cmpct";
