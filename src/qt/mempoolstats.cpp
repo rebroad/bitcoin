@@ -77,14 +77,12 @@ void MempoolStats::drawChart()
     m_scene->clear();
 
     std::vector<QPainterPath> fee_paths;
-    std::vector<size_t> fee_subtotal_totalsize;
-    std::vector<size_t> fee_subtotal_size;
-    std::vector<size_t> fee_subtotal_txcount;
+    std::vector<size_t> fee_subtotal_totalnum;
+    std::vector<size_t> fee_subtotal_num;
     qreal current_x = GRAPH_PADDING_LEFT;
     const qreal bottom = m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_BOTTOM;
     const qreal maxheight_g = (m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_TOP-GRAPH_PADDING_TOP_LABEL-GRAPH_PADDING_BOTTOM);
-    size_t max_totalsize=0;
-    size_t max_txcount=0;
+    size_t max_num=0;
     QFont gridFont;
     gridFont.setPointSize(8);
     int display_up_to_range = 0;
@@ -106,48 +104,50 @@ void MempoolStats::drawChart()
             }
         }
 
-        size_t max_totalsize_graph=0;
+        size_t max_num_graph=0;
 
         if (m_clientmodel->m_mempool_feehist.size() == 0) {
             // draw nothing
             return;
         }
 
-        fee_subtotal_totalsize.resize(m_clientmodel->m_mempool_feehist[0].second.size());
-        fee_subtotal_size.resize(m_clientmodel->m_mempool_feehist[0].second.size());
-        fee_subtotal_txcount.resize(m_clientmodel->m_mempool_feehist[0].second.size());
+        fee_subtotal_totalnum.resize(m_clientmodel->m_mempool_feehist[0].second.size());
+        fee_subtotal_num.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         // calculate max tx for upper bound of chart
+        LogPrintf("%s: About to render graph\n", __func__);
         for (const ClientModel::mempool_feehist_sample& sample : m_clientmodel->m_mempool_feehist) {
-            uint64_t totalsize = 0;
-            uint64_t txcount = 0;
+            uint64_t num = 0;
             int i = 0;
             for (const interfaces::mempool_feeinfo& list_entry : sample.second) {
-                totalsize += list_entry.total_size;
-                txcount += list_entry.tx_count;
-                fee_subtotal_totalsize[i] += list_entry.total_size;
-                fee_subtotal_size[i] = list_entry.total_size;
-                fee_subtotal_txcount[i] = list_entry.tx_count;
+                if (fCount) {
+                    fee_subtotal_num[i] = list_entry.tx_count;
+                    fee_subtotal_totalnum[i] += list_entry.tx_count;
+                    num += list_entry.tx_count;
+                } else {
+                    fee_subtotal_num[i] = list_entry.total_size;
+                    fee_subtotal_totalnum[i] += list_entry.total_size;
+                    num += list_entry.total_size;
+                }
                 i++;
             }
-            if (totalsize > max_totalsize) max_totalsize = totalsize;
-            if (txcount > max_txcount) max_txcount = txcount;
+            if (num > max_num) max_num = num;
         }
 
         // hide ranges we don't have txns
-        for(size_t i = 0; i < fee_subtotal_totalsize.size(); i++) {
-            if (fee_subtotal_totalsize[i] > 0)
+        for(size_t i = 0; i < fee_subtotal_totalnum.size(); i++) {
+            if (fee_subtotal_totalnum[i] > 0)
                 display_up_to_range = i;
-            if (fee_subtotal_size[i] > 0)
+            if (fee_subtotal_num[i] > 0)
                 display_fee_up_to_range = i;
         }
 
         // make a nice y-axis scale
         const int amount_of_h_lines = 5;
-        if (max_totalsize > 0) {
-            int val = qFloor(log10(1.0*max_totalsize/amount_of_h_lines));
+        if (max_num > 0) {
+            int val = qFloor(log10(1.0*max_num/amount_of_h_lines));
             int stepbase = qPow(10.0f, val);
-            int step = qCeil((1.0*max_totalsize/amount_of_h_lines) / stepbase) * stepbase;
-            max_totalsize_graph = step*amount_of_h_lines;
+            int step = qCeil((1.0*max_num/amount_of_h_lines) / stepbase) * stepbase;
+            max_num_graph = step*amount_of_h_lines;
         }
 
         // calculate the x axis step per sample
@@ -155,21 +155,25 @@ void MempoolStats::drawChart()
         const qreal x_increment = 1.0 * (width()-GRAPH_PADDING_LEFT-GRAPH_PADDING_RIGHT) / m_clientmodel->m_mempool_max_samples; //samples.size();
 
         // draw horizontal grid
-        QPainterPath total_size_grid_path(QPointF(current_x, bottom));
-        int bottomTotalSize = 0;
+        QPainterPath grid_path(QPointF(current_x, bottom));
+        int bottomNum = 0;
         for (int i=0; i < amount_of_h_lines; i++)
         {
             qreal lY = bottom-i*(maxheight_g/(amount_of_h_lines-1));
-            total_size_grid_path.moveTo(GRAPH_PADDING_LEFT, lY);
-            total_size_grid_path.lineTo(GRAPH_PADDING_LEFT+maxwidth, lY);
+            grid_path.moveTo(GRAPH_PADDING_LEFT, lY);
+            grid_path.lineTo(GRAPH_PADDING_LEFT+maxwidth, lY);
 
-            size_t grid_total_size = (float)i*(max_totalsize_graph-bottomTotalSize)/(amount_of_h_lines-1) + bottomTotalSize;
-            QGraphicsTextItem *item_total_size = m_scene->addText(GUIUtil::formatBytes(grid_total_size), gridFont);
-            item_total_size->setPos(GRAPH_PADDING_LEFT+maxwidth, lY-(item_total_size->boundingRect().height()/2));
+            size_t grid_num = (float)i*(max_num_graph-bottomNum)/(amount_of_h_lines-1) + bottomNum;
+            QGraphicsTextItem *item_num;
+            if (fCount)
+                item_num = m_scene->addText(QString::number(grid_num), gridFont);
+            else
+                item_num = m_scene->addText(GUIUtil::formatBytes(grid_num), gridFont);
+            item_num->setPos(GRAPH_PADDING_LEFT+maxwidth, lY-(item_num->boundingRect().height()/2));
         }
 
         QPen gridPen(QColor(100,100,100, 200), 1, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-        m_scene->addPath(total_size_grid_path, gridPen);
+        m_scene->addPath(grid_path, gridPen);
 
 
         // draw fee ranges
@@ -244,7 +248,10 @@ void MempoolStats::drawChart()
                     // skip ranges without txns
                     continue;
                 }
-                y -= (maxheight_g / max_totalsize_graph * list_entry.total_size);
+                if (fCount)
+                    y -= (maxheight_g / max_num_graph * list_entry.tx_count);
+                else
+                    y -= (maxheight_g / max_num_graph * list_entry.total_size);
                 if (first) {
                     // first sample, initiate the path with first point
                     fee_paths.emplace_back(QPointF(current_x, y));
@@ -278,15 +285,18 @@ void MempoolStats::drawChart()
             brush_color.setAlpha(30);
         }
         if (m_selected_range >= 0 && m_selected_range == i) {
-            total_text = "bytes in selected fee range: "+GUIUtil::formatBytes(fee_subtotal_size[i]);
+            if (fCount)
+                total_text = "transactions in selected fee range: "+QString::number(fee_subtotal_num[i]);
+            else
+                total_text = "bytes in selected fee range: "+GUIUtil::formatBytes(fee_subtotal_num[i]);
         }
         QPen pen_blue(pen_color, 1, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         m_scene->addPath(feepath, pen_blue, QBrush(brush_color));
         i++;
     }
 
-    QGraphicsTextItem *item_total_size = m_scene->addText(total_text, gridFont);
-    item_total_size->setPos(GRAPH_PADDING_LEFT+(maxwidth/2), bottom);
+    QGraphicsTextItem *item_num = m_scene->addText(total_text, gridFont);
+    item_num->setPos(GRAPH_PADDING_LEFT+(maxwidth/2), bottom);
 }
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column
@@ -309,5 +319,6 @@ void MempoolStats::showEvent(QShowEvent *event)
 void MempoolStats::mousePressEvent(QMouseEvent *event)
 {
     QWidget::mousePressEvent(event);
+    fCount = !fCount;
     LogPrintf("%s: Mouse pressed!\n", __func__);
 }
