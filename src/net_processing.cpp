@@ -3227,6 +3227,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     pfrom.fDisconnect = true;
                     return;
                 }
+                if (m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
+                    static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
+                    static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
+                    LogPrintf("recv inv tx(%d) %sduring IBD peer=%d\n", pfrom.nRecvBytes1stTx ? 1:0, pfrom.m_tx_relay && pfrom.m_tx_relay->lastSentFeeFilter == MAX_FILTER ? "violation ":"", pfrom.GetId());
+                }
                 // Ignore INVs that don't match wtxidrelay setting.
                 // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
                 // This is fine as no INV messages are involved in that process.
@@ -3475,6 +3480,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LogPrintf("recv tx violation iit=%d HP=%d feel=%d miit=%d mtx=%d disconnecting peer=%d\n", m_ignore_incoming_txs, pfrom.HasPermission(NetPermissionFlags::Relay) ? 1:0, pfrom.IsFeelerConn() ? 1:0, m_ignore_incoming_txs ? 1:0, pfrom.m_tx_relay ? 1:0, pfrom.GetId());
             pfrom.fDisconnect = true;
             return;
+        }
+        if (m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
+            static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
+            static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
+            LogPrintf("recv tx(%d) %sduring IBD peer=%d\n", pfrom.nRecvBytes1stTx ? 1:0, pfrom.m_tx_relay && pfrom.m_tx_relay->lastSentFeeFilter == MAX_FILTER ? "violation ":"", pfrom.GetId());
         }
 
         CTransactionRef ptx;
