@@ -2616,13 +2616,11 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
             // Enqueue while holding cs_main to ensure that UpdatedBlockTip is called in the order in which blocks are connected
             if (pindexFork != pindexNewTip) {
                 // Notify ValidationInterface subscribers
-                LogPrintf("Call UpdatedBlockTip(%s, %s, IBD=%d)\n", strHeight(pindexNewTip), strHeight(pindexFork), fInitialDownload ? 1:0);
                 GetMainSignals().UpdatedBlockTip(pindexNewTip, pindexFork, fInitialDownload);
 
                 // Always notify the UI if a new block tip was connected
                 uiInterface.NotifyBlockTip(GetSynchronizationState(fInitialDownload), pindexNewTip);
-            } else
-                LogPrintf("Not calling UpdatedBlockTip(%s, %s, IBD=%d)\n", strHeight(pindexNewTip), strHeight(pindexFork), fInitialDownload ? 1:0);
+            }
         }
         // When we reach this point, we switched to a new tip (stored in pindexNewTip).
 
