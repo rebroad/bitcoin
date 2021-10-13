@@ -320,5 +320,6 @@ void MempoolStats::mousePressEvent(QMouseEvent *event)
 {
     QWidget::mousePressEvent(event);
     fCount = !fCount;
-    LogPrintf("%s: Mouse pressed!\n", __func__);
+    if (m_clientmodel)
+        drawChart();
 }
