@@ -3826,7 +3826,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 BlockTransactionsRequest req;
                 int nFromConPeers = 0; int nFromDisPeers = 0; int nFromExtra = 0; int nFromMemDat = 0; int nFromPack = 0;
                 int nFromReorg = 0; int nFromRecycledPeers = 0;
-                for (size_t i = 0; i < cmpctblock.BlockTxCount(); i++) {
+                for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize))
                         req.indexes.push_back(i);
