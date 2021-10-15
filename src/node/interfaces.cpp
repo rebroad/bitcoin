@@ -255,31 +255,32 @@ public:
                  break;
              }
          }
-	 double newratio = totalmemdelta ? 1.0 * getMempoolDynamicUsage(true) / totalmemdelta : 0;
+         size_t memusage = getMempoolDynamicUsage(true);
+         double newratio = totalmemdelta ? 1.0 * memusage / totalmemdelta : 0;
          static size_t oldtotalmemusage = 0;
          static size_t oldtotalmemdelta = 0;
          static double oldratio = newratio;
          static int adjusting = 0;
          double ratio;
-         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && labs((long)oldsmallest - (long)newsmallest) > labs((long)totalmemdelta - (long)oldtotalmemdelta)/2)) {
+         if (newi > oldi || (newi == oldi && oldsmallest > newsmallest && labs((long)oldsmallest - (long)newsmallest) > labs((long)totalmemdelta - (long)oldtotalmemdelta))) {
              LogPrintf("%s: newi=%d oldi=%d smallest %d -> %d (%d) mem %d -> %d (%d)\n", __func__, newi, oldi, oldsmallest, newsmallest, labs((long)newsmallest - (long)oldsmallest), oldtotalmemdelta, totalmemdelta, labs((long)totalmemdelta - (long)oldtotalmemdelta));
              adjusting = 0;
          } else if (oldtotalmemdelta > totalmemdelta)
              adjusting = 30;
          oldsmallest = newsmallest;
          oldi = newi;
-         if (adjusting >= 0) {
-             ratio = (oldratio * (adjusting) + newratio) / (adjusting + 1);
+         ratio = (oldratio * (adjusting) + newratio) / (adjusting + 1);
+         size_t maxmempool = gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
+         if (adjusting >= 0 && ratio * totalmemdelta <= maxmempool) {
              if ((totalmemdelta >= oldtotalmemdelta) && (ratio * totalmemdelta < oldratio * oldtotalmemdelta))
                  ratio = oldratio; // Don't let the graph go down unless totalmemdelta has gone down
-             else
-                 adjusting--;
+             adjusting--;
          } else
              ratio = newratio;
          if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0)
-             LogPrintf("%s: ratio: %f -> %f (newratio%s memusage: %d -> %d (%f%%)\n", __func__, oldratio, 
+             LogPrintf("%s: ratio: %f -> %f (newratio%s mem: %d -> %d (%f%%)\n", __func__, oldratio, 
                  ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
-                 oldtotalmemusage, totalmemusage, oldtotalmemusage ? 100.0 * totalmemusage / oldtotalmemusage : 0);
+                 oldtotalmemdelta, totalmemdelta, oldtotalmemdelta ? 100.0 * totalmemdelta / oldtotalmemdelta : 0);
          oldtotalmemusage = totalmemusage;
          oldtotalmemdelta = totalmemdelta;
          oldratio = ratio;
@@ -674,16 +675,16 @@ public:
         // that Chain clients do not need to know about.
         return TransactionError::OK == err;
     }
-    void getTransactionAncestry(const uint256& txid, size_t& ancestors, size_t& descendants) override
+    void getTransactionAncestry(const uint256& txid, size_t& ancestors, size_t& descendants, size_t* ancestorsize, CAmount* ancestorfees) override
     {
         ancestors = descendants = 0;
         if (!m_node.mempool) return;
-        m_node.mempool->GetTransactionAncestry(txid, ancestors, descendants);
+        m_node.mempool->GetTransactionAncestry(txid, ancestors, descendants, ancestorsize, ancestorfees);
     }
     void getPackageLimits(unsigned int& limit_ancestor_count, unsigned int& limit_descendant_count) override
     {
-        limit_ancestor_count = gArgs.GetArg("-limitancestorcount", DEFAULT_ANCESTOR_LIMIT);
-        limit_descendant_count = gArgs.GetArg("-limitdescendantcount", DEFAULT_DESCENDANT_LIMIT);
+        limit_ancestor_count = gArgs.GetIntArg("-limitancestorcount", DEFAULT_ANCESTOR_LIMIT);
+        limit_descendant_count = gArgs.GetIntArg("-limitdescendantcount", DEFAULT_DESCENDANT_LIMIT);
     }
     bool checkChainLimits(const CTransactionRef& tx) override
     {
@@ -691,10 +692,10 @@ public:
         LockPoints lp;
         CTxMemPoolEntry entry(tx, 0 /*fee*/, 0 /*time*/, -1 /*node*/, false /*coinbase*/, 0 /*SigOpsCost*/, lp);
         CTxMemPool::setEntries ancestors;
-        auto limit_ancestor_count = gArgs.GetArg("-limitancestorcount", DEFAULT_ANCESTOR_LIMIT);
-        auto limit_ancestor_size = gArgs.GetArg("-limitancestorsize", DEFAULT_ANCESTOR_SIZE_LIMIT) * 1000;
-        auto limit_descendant_count = gArgs.GetArg("-limitdescendantcount", DEFAULT_DESCENDANT_LIMIT);
-        auto limit_descendant_size = gArgs.GetArg("-limitdescendantsize", DEFAULT_DESCENDANT_SIZE_LIMIT) * 1000;
+        auto limit_ancestor_count = gArgs.GetIntArg("-limitancestorcount", DEFAULT_ANCESTOR_LIMIT);
+        auto limit_ancestor_size = gArgs.GetIntArg("-limitancestorsize", DEFAULT_ANCESTOR_SIZE_LIMIT) * 1000;
+        auto limit_descendant_count = gArgs.GetIntArg("-limitdescendantcount", DEFAULT_DESCENDANT_LIMIT);
+        auto limit_descendant_size = gArgs.GetIntArg("-limitdescendantsize", DEFAULT_DESCENDANT_SIZE_LIMIT) * 1000;
         std::string unused_error_string;
         LOCK(m_node.mempool->cs);
         return m_node.mempool->CalculateMemPoolAncestors(
@@ -714,7 +715,7 @@ public:
     CFeeRate mempoolMinFee() override
     {
         if (!m_node.mempool) return {};
-        return m_node.mempool->GetMinFee(gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
+        return m_node.mempool->GetMinFee(gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
     }
     CFeeRate relayMinFee() override { return ::minRelayTxFee; }
     CFeeRate relayIncrementalFee() override { return ::incrementalRelayFee; }
@@ -797,7 +798,7 @@ public:
             notifications.transactionAddedToMempool(entry.GetSharedTx(), 0 /* mempool_sequence */);
         }
     }
-    bool isTaprootActive() const override
+    bool isTaprootActive() override
     {
         LOCK(::cs_main);
         const CBlockIndex* tip = Assert(m_node.chainman)->ActiveChain().Tip();

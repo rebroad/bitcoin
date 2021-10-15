@@ -7,10 +7,10 @@
 #define BITCOIN_NET_H
 
 #include <addrman.h>
-#include <amount.h>
 #include <bloom.h>
 #include <chainparams.h>
 #include <compat.h>
+#include <consensus/amount.h>
 #include <crypto/siphash.h>
 #include <hash.h>
 #include <i2p.h>
@@ -433,7 +433,6 @@ public:
     std::atomic<unsigned int> nBlockTXs{0};
     std::atomic<uint64_t> nRecvBytes1stTx{0};
     std::atomic<int64_t> nTime1stTx{0};
-
     std::atomic<int64_t> nLastSend{0};
     std::atomic<int64_t> nLastRecv{0};
     //! Unix epoch time at peer connection, in seconds.
@@ -833,7 +832,7 @@ public:
         m_onion_binds = connOptions.onion_binds;
     }
 
-    CConnman(uint64_t seed0, uint64_t seed1, CAddrMan& addrman, bool network_active = true);
+    CConnman(uint64_t seed0, uint64_t seed1, AddrMan& addrman, bool network_active = true);
     ~CConnman();
     bool Start(CScheduler& scheduler, const Options& options);
 
@@ -1092,7 +1091,7 @@ private:
     std::vector<ListenSocket> vhListenSocket;
     std::atomic<bool> fNetworkActive{true};
     bool fAddressesInitialized{false};
-    CAddrMan& addrman;
+    AddrMan& addrman;
     std::deque<std::string> m_addr_fetches GUARDED_BY(m_addr_fetches_mutex);
     RecursiveMutex m_addr_fetches_mutex;
     std::vector<std::string> vAddedNodes GUARDED_BY(cs_vAddedNodes);

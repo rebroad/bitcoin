@@ -54,7 +54,7 @@ public:
         Ping,
         Sent,
         Recv,
-	TxBpsPct,
+        TxBpsPct,
         MPpm,
         Subversion
     };

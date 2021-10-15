@@ -8,6 +8,10 @@ RUN apt-get update
 RUN apt-get install --no-install-recommends --no-upgrade -y \
         git ca-certificates \
         make automake libtool pkg-config dpkg-dev valgrind qemu-user \
-        gcc clang libc6-dbg \
-        gcc-i686-linux-gnu libc6-dev-i386-cross libc6-dbg:i386 \
-        gcc-s390x-linux-gnu libc6-dev-s390x-cross libc6-dbg:s390x
+        gcc g++ clang libc6-dbg \
+        gcc-i686-linux-gnu g++-i686-linux-gnu libc6-dev-i386-cross libc6-dbg:i386 \
+        g++-s390x-linux-gnu gcc-s390x-linux-gnu libc6-dev-s390x-cross libc6-dbg:s390x \
+        wine g++-mingw-w64-x86-64
+
+# Run a dummy command in wine to make it set up configuration
+RUN wine true || true

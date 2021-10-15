@@ -136,7 +136,7 @@ void CStats::AddStatsOptions()
 bool CStats::parameterInteraction()
 {
     if (gArgs.GetBoolArg("-statsenable", DEFAULT_STATISTICS_ENABLED))
-        DefaultStats()->setMaxMemoryUsageTarget(gArgs.GetArg("-statsmaxmemorytarget", DEFAULT_MAX_STATS_MEMORY));
+        DefaultStats()->setMaxMemoryUsageTarget(gArgs.GetIntArg("-statsmaxmemorytarget", DEFAULT_MAX_STATS_MEMORY));
 
     return true;
 }

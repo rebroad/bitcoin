@@ -1,4 +1,3 @@
-//#include "chainparams.h"
 #include "validation_thread.h"
 #include "validation.h"
 #include "net.h"
@@ -27,4 +26,3 @@ void CConnman::ThreadValidation()
     }
     LogPrintf("%s: Exiting\n", __func__);
 }
-

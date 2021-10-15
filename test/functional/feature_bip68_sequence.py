@@ -24,7 +24,6 @@ from test_framework.util import (
     assert_equal,
     assert_greater_than,
     assert_raises_rpc_error,
-    satoshi_round,
     softfork_active,
 )
 from test_framework.script_util import DUMMY_P2WPKH_SCRIPT
@@ -41,8 +40,14 @@ class BIP68Test(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.extra_args = [
-            ["-acceptnonstdtxn=1"],
-            ["-acceptnonstdtxn=0"],
+            [
+                '-testactivationheight=csv@432',
+                "-acceptnonstdtxn=1",
+            ],
+            [
+                '-testactivationheight=csv@432',
+                "-acceptnonstdtxn=0",
+            ],
         ]
 
     def skip_test_if_missing_module(self):
@@ -88,7 +93,7 @@ class BIP68Test(BitcoinTestFramework):
         utxo = utxos[0]
 
         tx1 = CTransaction()
-        value = int(satoshi_round(utxo["amount"] - self.relayfee)*COIN)
+        value = int((utxo["amount"] - self.relayfee) * COIN)
 
         # Check that the disable flag disables relative locktime.
         # If sequence locks were used, this would require 1 block for the
