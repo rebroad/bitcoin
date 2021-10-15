@@ -2821,9 +2821,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         m_connman.PushMessage(&pfrom, msg_maker.Make(NetMsgType::VERACK));
 
-        // Potentially mark this peer as a preferred download peer.
         {
         LOCK(cs_main);
+        // Get this in ASAP to reduce chances of TXs being sent to us.
+        const auto current_time = GetTime<std::chrono::microseconds>();
+        MaybeSendFeefilter(pfrom, current_time);
+        // Potentially mark this peer as a preferred download peer.
         UpdatePreferredDownload(pfrom, State(pfrom.GetId()));
         }
 
@@ -4786,6 +4789,7 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
 
     if (m_ignore_incoming_txs) return;
     if (!pto.m_tx_relay) return;
+    if (pto.IsFeelerConn()) return;
     if (pto.GetCommonVersion() < FEEFILTER_VERSION) return;
     // peers with the forcerelay permission should not filter txs to us
     if (pto.HasPermission(NetPermissionFlags::ForceRelay)) return;
@@ -4793,12 +4797,14 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
     CAmount currentFilter = m_mempool.GetMinFee(gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK();
     static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
 
+    static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
     if (m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
         // Received tx-inv messages are discarded when the active
         // chainstate is in IBD, so tell the peer to not send them.
         currentFilter = MAX_MONEY;
+        if (pto.m_tx_relay->lastSentFeeFilter != MAX_FILTER)
+            pto.m_tx_relay->m_next_send_feefilter = 0us;
     } else {
-        static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
         if (pto.m_tx_relay->lastSentFeeFilter == MAX_FILTER) {
             // Send the current filter if we sent MAX_FILTER previously
             // and made it out of IBD.
