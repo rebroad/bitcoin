@@ -11,6 +11,8 @@ void CConnman::ThreadValidation()
     while (!flagInterruptMsgProc) {
         if (fActivateChain) {
             if (!fActivatingChain) {
+	        if (nSleep != 100)
+                    LogPrintf("%s: Slept %dms. Calling FormBestChain()\n", __func__, nSleep);
                 fActivateChain = false;
                 FormBestChain();
             }
