@@ -5236,10 +5236,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     pto->m_tx_relay->m_last_mempool_req = std::chrono::duration_cast<std::chrono::seconds>(current_time);
                 }
 
-                // Determine transactions to relay REBHERE
+                // Determine transactions to relay
                 if (fSendTrickle) {
                     // Produce a vector with all candidates for sending
-                    std::vector<uint256> vInvTx;
+                    std::vector<uint256> vInvTx; // REBTODO - why need a vector when we have a set?
                     vInvTx.reserve(pto->m_tx_relay->setInventoryTxToSend.size());
                     for (std::set<uint256>::iterator it = pto->m_tx_relay->setInventoryTxToSend.begin(); it != pto->m_tx_relay->setInventoryTxToSend.end(); it++) {
                         vInvTx.push_back(*it);
