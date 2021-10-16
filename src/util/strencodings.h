@@ -97,8 +97,8 @@ T LocaleIndependentAtoi(const std::string& str)
     return result;
 }
 
-std::string strAge(const int64_t nAge);
 std::string strBps(uint64_t bits);
+std::string strAge(const int64_t nAge);
 
 /**
  * Tests if the given character is a decimal digit.

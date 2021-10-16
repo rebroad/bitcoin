@@ -3930,8 +3930,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         } // cs_main
 
         if (fProcessBLOCKTXN) {
-            LogPrint(BCLog::BLOCK, "Calling ProcessMessage(BLOCKTXN) peer=%d\n", pfrom.GetId());
             pfrom.nMempoolBytes += nSize; // REBTODO - is this right?
+            LogPrint(BCLog::BLOCK, "Calling ProcessMessage(BLOCKTXN) peer=%d\n", pfrom.GetId());
             return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, time_received, interruptMsgProc);
         }
 
@@ -3984,12 +3984,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (it->second.first != pfrom.GetId())
                 fWrongPeer = true;
 
-            if (resp.txn.size()) {// Don't run where we were called from cmpctblock
+            if (resp.txn.size()) {
+                // Don't log where we were called from cmpctblock
+                LogPrint(BCLog::BLOCK, "recv blocktxn %s indexes=%d size=%d %speer=%d\n", strBlkHeight(pindex), resp.txn.size(), nSize, fWrongPeer ? "wrong " : "", pfrom.GetId());
                 pfrom.nMempoolTXs += resp.txn.size();
                 pfrom.nBlockTXs += resp.txn.size();
                 pfrom.nMempoolBytes += nSize;
                 pfrom.nBlockBytes += nSize;
-                LogPrint(BCLog::BLOCK, "recv blocktxn %s indexes=%d size=%d %speer=%d\n", strBlkHeight(pindex), resp.txn.size(), nSize, fWrongPeer ? "wrong " : "", pfrom.GetId());
             }
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
