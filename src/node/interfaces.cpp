@@ -270,14 +270,15 @@ public:
          oldsmallest = newsmallest;
          oldi = newi;
          ratio = (oldratio * (adjusting) + newratio) / (adjusting + 1);
+         if (totalmemdelta >= oldtotalmemdelta && ratio * totalmemdelta < oldratio * oldtotalmemdelta)
+             ratio = oldratio; // Don't let the graph go down unless totalmemdelta has gone down
          size_t maxmempool = gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
          int utilized = 100 * ratio * totalmemdelta / maxmempool;
-         if (adjusting >= 0 && utilized < 100) { // REBTODO - set adjusting based on how fast approaching maxmempool
-             if ((totalmemdelta >= oldtotalmemdelta) && (ratio * totalmemdelta < oldratio * oldtotalmemdelta))
-                 ratio = oldratio; // Don't let the graph go down unless totalmemdelta has gone down
+         if (adjusting > 0) {
              adjusting--;
-         } else
-             ratio = newratio;
+             // REBTODO - set adjusting based on how fast approaching maxmempool
+             if (utilized >= 100) ratio = newratio;
+         }
          if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0
                  || utilized > 95)
              LogPrintf("%s: ratio: %f -> %f (newratio%s mem: %d -> %d (%f%%) (%f%% of max)\n", __func__, oldratio, 

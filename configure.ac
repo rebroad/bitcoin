@@ -71,6 +71,12 @@ case $host in
   ;;
 esac
 
+AC_ARG_WITH([seccomp],
+  [AS_HELP_STRING([--with-seccomp],
+  [enable experimental syscall sandbox feature (-sandbox), default is yes if seccomp-bpf is detected under Linux x86_64])],
+  [seccomp_found=$withval],
+  [seccomp_found=auto])
+
 dnl Require C++17 compiler (no GNU extensions)
 AX_CXX_COMPILE_STDCXX([17], [noext], [mandatory])
 
@@ -101,13 +107,12 @@ AC_PATH_TOOL(GCOV, gcov)
 AC_PATH_TOOL(LLVM_COV, llvm-cov)
 AC_PATH_PROG(LCOV, lcov)
 dnl Python 3.6 is specified in .python-version and should be used if available, see doc/dependencies.md
-AC_PATH_PROGS([PYTHON], [python3.6 python3.7 python3.8 python3.9 python3 python])
+AC_PATH_PROGS([PYTHON], [python3.6 python3.7 python3.8 python3.9, python3.10, python3 python])
 AC_PATH_PROG(GENHTML, genhtml)
 AC_PATH_PROG([GIT], [git])
 AC_PATH_PROG(CCACHE,ccache)
 AC_PATH_PROG(XGETTEXT,xgettext)
 AC_PATH_PROG(HEXDUMP,hexdump)
-AC_PATH_TOOL(CPPFILT, c++filt)
 AC_PATH_TOOL(OBJCOPY, objcopy)
 AC_PATH_PROG(DOXYGEN, doxygen)
 AM_CONDITIONAL([HAVE_DOXYGEN], [test -n "$DOXYGEN"])
@@ -315,7 +320,7 @@ AC_ARG_ENABLE([gprof],
 dnl Turn warnings into errors
 AC_ARG_ENABLE([werror],
     [AS_HELP_STRING([--enable-werror],
-                    [Treat certain compiler warnings as errors (default is no)])],
+                    [Treat compiler warnings as errors (default is no)])],
     [enable_werror=$enableval],
     [enable_werror=no])
 
@@ -403,34 +408,13 @@ if test "x$enable_werror" = "xyes"; then
   if test "x$CXXFLAG_WERROR" = "x"; then
     AC_MSG_ERROR("enable-werror set but -Werror is not usable")
   fi
-  AX_CHECK_COMPILE_FLAG([-Werror=gnu],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=gnu"],,[[$CXXFLAG_WERROR]])
-  AX_CHECK_COMPILE_FLAG([-Werror=vla],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=vla"],,[[$CXXFLAG_WERROR]])
-  AX_CHECK_COMPILE_FLAG([-Werror=shadow-field],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=shadow-field"],,[[$CXXFLAG_WERROR]])
-  AX_CHECK_COMPILE_FLAG([-Werror=switch],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=switch"],,[[$CXXFLAG_WERROR]])
-  AX_CHECK_COMPILE_FLAG([-Werror=thread-safety],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=thread-safety"],,[[$CXXFLAG_WERROR]])
-  AX_CHECK_COMPILE_FLAG([-Werror=range-loop-analysis],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=range-loop-analysis"],,[[$CXXFLAG_WERROR]])
-  AX_CHECK_COMPILE_FLAG([-Werror=unused-variable],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=unused-variable"],,[[$CXXFLAG_WERROR]])
-  AX_CHECK_COMPILE_FLAG([-Werror=date-time],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=date-time"],,[[$CXXFLAG_WERROR]])
+  ERROR_CXXFLAGS=$CXXFLAG_WERROR
 
   dnl -Wreturn-type is broken in GCC for MinGW-w64.
   dnl https://sourceforge.net/p/mingw-w64/bugs/306/
-  AX_CHECK_COMPILE_FLAG([-Werror=return-type], [ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=return-type"], [], [$CXXFLAG_WERROR],
+  AX_CHECK_COMPILE_FLAG([-Werror=return-type], [], [ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Wno-error=return-type"], [$CXXFLAG_WERROR],
                         [AC_LANG_SOURCE([[#include <cassert>
                                           int f(){ assert(false); }]])])
-
-  AX_CHECK_COMPILE_FLAG([-Werror=conditional-uninitialized],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=conditional-uninitialized"],,[[$CXXFLAG_WERROR]])
-  AX_CHECK_COMPILE_FLAG([-Werror=sign-compare],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=sign-compare"],,[[$CXXFLAG_WERROR]])
-  dnl -Wsuggest-override is broken with GCC before 9.2
-  dnl https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78010
-  AX_CHECK_COMPILE_FLAG([-Werror=suggest-override],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=suggest-override"],,[[$CXXFLAG_WERROR]],
-                        [AC_LANG_SOURCE([[struct A { virtual void f(); }; struct B : A { void f() final; };]])])
-  AX_CHECK_COMPILE_FLAG([-Werror=unreachable-code-loop-increment],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=unreachable-code-loop-increment"],,[[$CXXFLAG_WERROR]])
-  AX_CHECK_COMPILE_FLAG([-Werror=mismatched-tags], [ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=mismatched-tags"], [], [$CXXFLAG_WERROR])
-  AX_CHECK_COMPILE_FLAG([-Werror=implicit-fallthrough], [ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=implicit-fallthrough"], [], [$CXXFLAG_WERROR])
-
-  if test x$suppress_external_warnings != xno ; then
-    AX_CHECK_COMPILE_FLAG([-Werror=documentation],[ERROR_CXXFLAGS="$ERROR_CXXFLAGS -Werror=documentation"],,[[$CXXFLAG_WERROR]])
-  fi
 fi
 
 if test "x$CXXFLAGS_overridden" = "xno"; then
@@ -454,6 +438,8 @@ if test "x$CXXFLAGS_overridden" = "xno"; then
   AX_CHECK_COMPILE_FLAG([-Wduplicated-cond],[WARN_CXXFLAGS="$WARN_CXXFLAGS -Wduplicated-cond"],,[[$CXXFLAG_WERROR]])
   AX_CHECK_COMPILE_FLAG([-Wlogical-op],[WARN_CXXFLAGS="$WARN_CXXFLAGS -Wlogical-op"],,[[$CXXFLAG_WERROR]])
   AX_CHECK_COMPILE_FLAG([-Woverloaded-virtual],[WARN_CXXFLAGS="$WARN_CXXFLAGS -Woverloaded-virtual"],,[[$CXXFLAG_WERROR]])
+  dnl -Wsuggest-override is broken with GCC before 9.2
+  dnl https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78010
   AX_CHECK_COMPILE_FLAG([-Wsuggest-override],[WARN_CXXFLAGS="$WARN_CXXFLAGS -Wsuggest-override"],,[[$CXXFLAG_WERROR]],
                         [AC_LANG_SOURCE([[struct A { virtual void f(); }; struct B : A { void f() final; };]])])
   AX_CHECK_COMPILE_FLAG([-Wunreachable-code-loop-increment],[WARN_CXXFLAGS="$WARN_CXXFLAGS -Wunreachable-code-loop-increment"],,[[$CXXFLAG_WERROR]])
@@ -568,13 +554,17 @@ AX_CHECK_COMPILE_FLAG([-march=armv8-a+crc+crypto],[[ARM_CRC_CXXFLAGS="-march=arm
 
 TEMP_CXXFLAGS="$CXXFLAGS"
 CXXFLAGS="$CXXFLAGS $ARM_CRC_CXXFLAGS"
-AC_MSG_CHECKING(for ARM CRC32 intrinsics)
+AC_MSG_CHECKING(for AArch64 CRC32 intrinsics)
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     #include <arm_acle.h>
     #include <arm_neon.h>
   ]],[[
+#ifdef __aarch64__
     __crc32cb(0, 0); __crc32ch(0, 0); __crc32cw(0, 0); __crc32cd(0, 0);
     vmull_p64(0, 0);
+#else
+#error "crc32c library does not support hardware acceleration on 32-bit ARM"
+#endif
   ]])],
  [ AC_MSG_RESULT(yes); enable_arm_crc=yes; ],
  [ AC_MSG_RESULT(no)]
@@ -1206,27 +1196,12 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <xmmintrin.h>]], [[
 
 AC_MSG_CHECKING(for strong getauxval support in the system headers)
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-    #include <arm_acle.h>
-    #include <arm_neon.h>
     #include <sys/auxv.h>
   ]], [[
     getauxval(AT_HWCAP);
   ]])],
  [ AC_MSG_RESULT(yes); HAVE_STRONG_GETAUXVAL=1; AC_DEFINE(HAVE_STRONG_GETAUXVAL, 1, [Define this symbol to build code that uses getauxval)]) ],
  [ AC_MSG_RESULT(no); HAVE_STRONG_GETAUXVAL=0 ]
-)
-
-AC_MSG_CHECKING(for weak getauxval support in the compiler)
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-    #ifdef __linux__
-    unsigned long getauxval(unsigned long type) __attribute__((weak));
-    #define AT_HWCAP 16
-    #endif
-  ]], [[
-    getauxval(AT_HWCAP);
-  ]])],
- [ AC_MSG_RESULT(yes); HAVE_WEAK_GETAUXVAL=1; AC_DEFINE(HAVE_WEAK_GETAUXVAL, 1, [Define this symbol to build code that uses getauxval (weak linking)]) ],
- [ AC_MSG_RESULT(no); HAVE_WEAK_GETAUXVAL=0 ]
 )
 
 have_any_system=no
@@ -1443,6 +1418,36 @@ if test "x$use_external_signer" != xno; then
 fi
 AM_CONDITIONAL([ENABLE_EXTERNAL_SIGNER], [test "x$use_external_signer" = "xyes"])
 
+dnl Do not compile with syscall sandbox support when compiling under the sanitizers.
+dnl The sanitizers introduce use of syscalls that are not typically used in bitcoind
+dnl (such as execve when the sanitizers execute llvm-symbolizer).
+if test x$use_sanitizers != x; then
+  AC_MSG_WARN(Specifying --with-sanitizers forces --without-seccomp since the sanitizers introduce use of syscalls not allowed by the bitcoind syscall sandbox (-sandbox=<mode>).)
+  seccomp_found=no
+fi
+if test "x$seccomp_found" != "xno"; then
+  AC_MSG_CHECKING([for seccomp-bpf (Linux x86-64)])
+  AC_PREPROC_IFELSE([AC_LANG_PROGRAM([[
+      @%:@include <linux/seccomp.h>
+    ]], [[
+      #if !defined(__x86_64__)
+      #  error Syscall sandbox is an experimental feature currently available only under Linux x86-64.
+      #endif
+    ]])],[
+      AC_MSG_RESULT(yes)
+      seccomp_found="yes"
+      AC_DEFINE(USE_SYSCALL_SANDBOX, 1, [Define this symbol to build with syscall sandbox support.])
+    ],[
+      AC_MSG_RESULT(no)
+      seccomp_found="no"
+  ])
+fi
+dnl Currently only enable -sandbox=<mode> feature if seccomp is found.
+dnl In the future, sandboxing could be also be supported with other
+dnl sandboxing mechanisms besides seccomp.
+use_syscall_sandbox=$seccomp_found
+AM_CONDITIONAL([ENABLE_SYSCALL_SANDBOX], [test "x$use_syscall_sandbox" != "xno"])
+
 dnl Check for reduced exports
 if test x$use_reduce_exports = xyes; then
   AX_CHECK_COMPILE_FLAG([-fvisibility=hidden],[CXXFLAGS="$CXXFLAGS -fvisibility=hidden"],
@@ -1636,8 +1641,8 @@ if test "x$use_ccache" != "xno"; then
   fi
   AC_MSG_RESULT($use_ccache)
   if test "x$use_ccache" = "xyes"; then
-    AX_CHECK_COMPILE_FLAG([-fdebug-prefix-map=A=B],[DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -fdebug-prefix-map=\$(abs_srcdir)=."],,[[$CXXFLAG_WERROR]])
-    AX_CHECK_PREPROC_FLAG([-fmacro-prefix-map=A=B],[DEBUG_CPPFLAGS="$DEBUG_CPPFLAGS -fmacro-prefix-map=\$(abs_srcdir)=."],,[[$CXXFLAG_WERROR]])
+    AX_CHECK_COMPILE_FLAG([-fdebug-prefix-map=A=B],[DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -fdebug-prefix-map=\$(abs_top_srcdir)=."],,[[$CXXFLAG_WERROR]])
+    AX_CHECK_PREPROC_FLAG([-fmacro-prefix-map=A=B],[DEBUG_CPPFLAGS="$DEBUG_CPPFLAGS -fmacro-prefix-map=\$(abs_top_srcdir)=."],,[[$CXXFLAG_WERROR]])
   fi
 fi
 
@@ -1874,7 +1879,6 @@ AC_SUBST(HAVE_O_CLOEXEC)
 AC_SUBST(HAVE_BUILTIN_PREFETCH)
 AC_SUBST(HAVE_MM_PREFETCH)
 AC_SUBST(HAVE_STRONG_GETAUXVAL)
-AC_SUBST(HAVE_WEAK_GETAUXVAL)
 AC_SUBST(ANDROID_ARCH)
 AC_CONFIG_FILES([Makefile src/Makefile doc/man/Makefile share/setup.nsi share/qt/Info.plist test/config.ini])
 AC_CONFIG_FILES([contrib/devtools/split-debug.sh],[chmod +x contrib/devtools/split-debug.sh])
@@ -1933,6 +1937,7 @@ echo
 echo "Options used to compile and link:"
 echo "  external signer = $use_external_signer"
 echo "  multiprocess    = $build_multiprocess"
+echo "  with experimental syscall sandbox support = $use_syscall_sandbox"
 echo "  with libs       = $build_bitcoin_libs"
 echo "  with wallet     = $enable_wallet"
 if test "x$enable_wallet" != "xno"; then

@@ -1852,7 +1852,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
     {
         LOCK(cs_most_recent_block);
         a_recent_block = most_recent_block;
-        a_recent_compact_block = most_recent_compact_block;
+        a_recent_compact_block = most_recent_compact_block; // REBTODO - use similar cache for requesting
         fWitnessesPresentInARecentCompactBlock = fWitnessesPresentInMostRecentCompactBlock;
     }
 
@@ -1875,7 +1875,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
     if (need_activate_chain) {
         BlockValidationState state;
         if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block)) {
-            LogPrint(BCLog::NET, "failed to activate chain (%s)\n", state.ToString());
+            LogPrint(BCLog::BLOCKSEND, "failed to activate chain (%s). peer=%d\n", state.ToString(), pfrom.GetId());
         }
     }
 
@@ -1885,7 +1885,8 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         return;
     }
     if (!BlockRequestAllowed(pindex)) {
-        LogPrint(BCLog::NET, "%s: ignoring request from peer=%i for old block that isn't in the main chain\n", __func__, pfrom.GetId());
+        LogPrint(BCLog::BLOCKSEND, "ignoring request for old block (%s) that isn't in the main chain. peer=%d\n",
+            strHeight(pindex), pfrom.GetId());
         return;
     }
     const CNetMsgMaker msgMaker(pfrom.GetCommonVersion());
@@ -2325,7 +2326,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     std::string strItem;
                     if (!m_ignore_incoming_txs &&
                         nodestate->fSupportsDesiredCmpctVersion &&
-                        vGetData.size() == 1) {
+                        vGetData.size() == 1) { // REBTODO - 5 (MAX_CMPCTBLOCK_DEPTH) within best_height, use cmpct
                         if (!pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) // REBTEMP - log this experimental thing
                             LogPrintf("CURIOUS: Fetching a cmpctblock whose parent (%s) not yet in our chain!\n",
                                 strHeight(pindexLast->pprev));
@@ -2372,7 +2373,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // See ChainSyncTimeoutState.
         if (!pfrom.fDisconnect && pfrom.IsFullOutboundConn() && nodestate->pindexBestKnownBlock != nullptr) {
             if (m_outbound_peers_with_protect_from_disconnect < MAX_OUTBOUND_PEERS_TO_PROTECT_FROM_DISCONNECT && nodestate->pindexBestKnownBlock->nChainWork >= m_chainman.ActiveChain().Tip()->nChainWork && !nodestate->m_chain_sync.m_protect) {
-                LogPrint(BCLog::NET, "Protecting outbound peer=%d from eviction\n", pfrom.GetId());
+                LogPrint(BCLog::BLOCK, "Protecting outbound peer=%d from eviction\n", pfrom.GetId());
                 nodestate->m_chain_sync.m_protect = true;
                 ++m_outbound_peers_with_protect_from_disconnect;
             }
@@ -4714,7 +4715,7 @@ void PeerManagerImpl::EvictExtraOutboundPeers(int64_t time_in_seconds)
                     //pnode->fDisconnect = true;
                     return true;
                 } else {
-                    LogPrint(BCLog::NET, "keeping outbound peer=%d chosen for eviction (connect time: %d, blocks_in_flight: %d)\n", pnode->GetId(), pnode->nTimeConnected, state.nBlocksInFlight);
+                    LogPrint(BCLog::CONN, "keeping outbound peer=%d chosen for eviction (connect time: %d, blocks_in_flight: %d)\n", pnode->GetId(), pnode->nTimeConnected, state.nBlocksInFlight);
                     return false;
                 }
             });
