@@ -255,7 +255,7 @@ public:
                  break;
              }
          }
-         size_t memusage = getMempoolDynamicUsage(true);
+         size_t memusage = getMempoolDynamicUsage();
          double newratio = totalmemdelta ? 1.0 * memusage / totalmemdelta : 0;
          static size_t oldtotalmemusage = 0;
          static size_t oldtotalmemdelta = 0;
@@ -280,11 +280,13 @@ public:
              if (utilized >= 100) ratio = newratio;
          }
          if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0
-                 || utilized > 95)
+                 || utilized > 95) {
+             getMempoolDynamicUsage(true);
              LogPrintf("%s: ratio: %f -> %f (newratio%s mem: %d -> %d (%f%%) (%f%% of max)\n", __func__, oldratio, 
                  ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
                  oldtotalmemdelta, totalmemdelta, oldtotalmemdelta ? 100.0 * totalmemdelta / oldtotalmemdelta : 0,
                  utilized);
+         }
          oldtotalmemusage = totalmemusage;
          oldtotalmemdelta = totalmemdelta;
          oldratio = ratio;
