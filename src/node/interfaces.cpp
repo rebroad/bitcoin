@@ -271,16 +271,19 @@ public:
          oldi = newi;
          ratio = (oldratio * (adjusting) + newratio) / (adjusting + 1);
          size_t maxmempool = gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
-         if (adjusting >= 0 && ratio * totalmemdelta <= maxmempool) {
+         int utilized = 100 * ratio * totalmemdelta / maxmempool;
+         if (adjusting >= 0 && utilized < 100) { // REBTODO - set adjusting based on how fast approaching maxmempool
              if ((totalmemdelta >= oldtotalmemdelta) && (ratio * totalmemdelta < oldratio * oldtotalmemdelta))
                  ratio = oldratio; // Don't let the graph go down unless totalmemdelta has gone down
              adjusting--;
          } else
              ratio = newratio;
-         if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0)
-             LogPrintf("%s: ratio: %f -> %f (newratio%s mem: %d -> %d (%f%%)\n", __func__, oldratio, 
+         if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0
+                 || utilized > 95)
+             LogPrintf("%s: ratio: %f -> %f (newratio%s mem: %d -> %d (%f%%) (%f%% of max)\n", __func__, oldratio, 
                  ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
-                 oldtotalmemdelta, totalmemdelta, oldtotalmemdelta ? 100.0 * totalmemdelta / oldtotalmemdelta : 0);
+                 oldtotalmemdelta, totalmemdelta, oldtotalmemdelta ? 100.0 * totalmemdelta / oldtotalmemdelta : 0,
+                 utilized);
          oldtotalmemusage = totalmemusage;
          oldtotalmemdelta = totalmemdelta;
          oldratio = ratio;
