@@ -2258,7 +2258,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         LOCK(cs_main);
         CNodeState *nodestate = State(pfrom.GetId());
         if (nodestate->nUnconnectingHeaders > 0) {
-            LogPrint(BCLog::NET, "peer=%d: resetting nUnconnectingHeaders (%d -> 0)\n", pfrom.GetId(), nodestate->nUnconnectingHeaders);
+            LogPrint(BCLog::BLOCK, "peer=%d: resetting nUnconnectingHeaders (%d -> 0)\n", pfrom.GetId(), nodestate->nUnconnectingHeaders);
         }
         nodestate->nUnconnectingHeaders = 0;
 
@@ -2284,7 +2284,10 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
 
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
-        if (CanDirectFetch() && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
+        bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
+        if ((!fUpdateChain || (CanDirectFetch() && pindexLast->IsValid(BLOCK_VALID_TREE))) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
+            if (!fUpdateChain && received_new_header == true)
+                LogPrint(BCLog::BLOCK, "CDF()=%d IsValid=%d\n", CanDirectFetch() ? 1:0, pindexLast->IsValid(BLOCK_VALID_TREE) ? 1:0);
             if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
                 LogPrintf("CURIOUS: COMPETING BLOCK\n");
             std::vector<const CBlockIndex*> vToFetch;
@@ -5534,7 +5537,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 uint32_t nFetchFlags = GetFetchFlags(*pto);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                 BlockRequested(pto->GetId(), *pindex);
-                LogPrint(BCLog::BLOCK, "Requesting block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
+                LogPrint(BCLog::BLOCK, "Requestng block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {

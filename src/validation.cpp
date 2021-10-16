@@ -1140,11 +1140,12 @@ void CChainState::InitCoinsCache(size_t cache_size_bytes)
 //
 bool CChainState::IsInitialBlockDownload() const
 {
+    bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
     bool fNew = false;
     bool fPrev = m_cached_finished_ibd.load(std::memory_order_relaxed);
-    if (pindexBestHeader != nullptr && pindexBestHeader->nHeight > m_chain.Tip()->nHeight + 6)
+    if (fUpdateChain && pindexBestHeader != nullptr && pindexBestHeader->nHeight > m_chain.Tip()->nHeight + 6)
         fNew = true;
-    if (m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
+    if (fUpdateChain && m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
         fNew = true;
     if (fNew) {
         if (fPrev) {
@@ -2573,6 +2574,9 @@ std::string strHeight(const CBlockIndex* pindex, bool *fFork /* = nullptr */) {
 
 bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
 {
+    if (!gArgs.GetBoolArg("-updatechain", true))
+        return true;
+
     // Note that while we're often called here from ProcessNewBlock, this is
     // far from a guarantee. Things in the P2P/RPC will often end up calling
     // us in the middle of ProcessNewBlock - do not assume pblock is set
