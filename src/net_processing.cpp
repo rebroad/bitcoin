@@ -2285,9 +2285,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
-        if ((!fUpdateChain || (CanDirectFetch() && pindexLast->IsValid(BLOCK_VALID_TREE))) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
-            if (!fUpdateChain && received_new_header == true)
-                LogPrint(BCLog::BLOCK, "CDF()=%d IsValid=%d\n", CanDirectFetch() ? 1:0, pindexLast->IsValid(BLOCK_VALID_TREE) ? 1:0);
+        if ((CanDirectFetch() || !fUpdateChain) && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
             if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
                 LogPrintf("CURIOUS: COMPETING BLOCK\n");
             std::vector<const CBlockIndex*> vToFetch;
@@ -2376,7 +2374,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // See ChainSyncTimeoutState.
         if (!pfrom.fDisconnect && pfrom.IsFullOutboundConn() && nodestate->pindexBestKnownBlock != nullptr) {
             if (m_outbound_peers_with_protect_from_disconnect < MAX_OUTBOUND_PEERS_TO_PROTECT_FROM_DISCONNECT && nodestate->pindexBestKnownBlock->nChainWork >= m_chainman.ActiveChain().Tip()->nChainWork && !nodestate->m_chain_sync.m_protect) {
-                LogPrint(BCLog::BLOCK, "Protecting outbound peer=%d from eviction\n", pfrom.GetId());
+                LogPrint(BCLog::NET, "Protecting outbound peer=%d from eviction\n", pfrom.GetId());
                 nodestate->m_chain_sync.m_protect = true;
                 ++m_outbound_peers_with_protect_from_disconnect;
             }
@@ -3800,7 +3798,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 std::vector<CInv> vInv(1);
                 vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom), cmpctblock.header.GetHash());
                 m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
-                LogPrint(BCLog::BLOCK, "resend getdata %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
+                LogPrint(BCLog::BLOCK, "resend(1) getdata %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
             } else
                 LogPrint(BCLog::BLOCK, "Ignoring cmpctblock as not enough work. peer=%d\n", pfrom.GetId());
             return;
@@ -3819,7 +3817,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
-        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here relating to age
+        bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
+        if (!fUpdateChain || pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here relating to age
             if (pindex->nHeight > m_chainman.ActiveChain().Height() + 2) // REBTODO - for now, some debug
                 LogPrintf("CURIOUS: recv cmpctblk.age=%s tip.age=%s diff=%s\n", strAge(GetAdjustedTime()-pindex->GetBlockTime()),
                     strAge(GetAdjustedTime()-m_chainman.ActiveChain().Tip()->GetBlockTime()),
