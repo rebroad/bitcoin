@@ -144,7 +144,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         if (mempool_count == shorttxids.size())
             break;
     }
-    LogPrintf("%s: pool->vTxHashes.size()=%d mempool_count=%d han=%d hnn=%d nhn=%d nhnn=%d\n", __func__, pool->vTxHashes.size(), mempool_count, haveandnull, haveandnotnull, nothaveandnull, nothavenotnull); // REBTODO where is vTxHashes created?
+    LogPrintf("%s: pool->vTxHashes.size()=%d mempool_count=%d short=%d han=%d hnn=%d nhn=%d nhnn=%d\n", __func__, pool->vTxHashes.size(), mempool_count, shorttxids.size(), haveandnull, haveandnotnull, nothaveandnull, nothavenotnull); // REBTODO where is vTxHashes created?
     }
 
     for (size_t i = 0; i < extra_txn.size(); i++) {

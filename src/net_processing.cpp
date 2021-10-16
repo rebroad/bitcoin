@@ -3901,7 +3901,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 if (nFromRecycledPeers) strTXfrom += strprintf(" RecycledPeers=%d", nFromRecycledPeers);
                 LogPrintf("TX have from%s\n", strTXfrom);
                 if (req.indexes.empty()) {
-                    LogPrintf("%s: req.index.empty() peer=%d\n", __func__, pfrom.GetId()); // REBTEMP
                     // Dirty hack to jump to BLOCKTXN code (TODO: move message handling into their own functions)
                     BlockTransactions txn;
                     txn.blockhash = cmpctblock.header.GetHash();
@@ -3989,9 +3988,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (resp.txn.size()) {
                 // Don't log where we were called from cmpctblock
                 LogPrint(BCLog::BLOCK, "recv blocktxn %s indexes=%d size=%d %speer=%d\n", strBlkHeight(pindex), resp.txn.size(), nSize, fWrongPeer ? "wrong " : "", pfrom.GetId());
-                pfrom.nMempoolTXs += resp.txn.size();
                 pfrom.nBlockTXs += resp.txn.size();
-                pfrom.nMempoolBytes += nSize;
                 pfrom.nBlockBytes += nSize;
             }
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
@@ -5223,15 +5220,15 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         if (txinfo.fee < filterrate.GetFee(txinfo.vsize)) {
                             continue;
                         }
+                        // REBTODO - also don't send if it's inputs are newer than the height of the receiving peer
                         if (pto->m_tx_relay->pfilter) {
-                            if (!pto->m_tx_relay->pfilter->IsRelevantAndUpdate(*txinfo.tx)) continue;
+                            if (!pto->m_tx_relay->pfilter->IsRelevantAndUpdate(*txinfo.tx)) continue; // REBTODO - ?
                         }
                         pto->m_tx_relay->filterInventoryKnown.insert(hash);
                         // Responses to MEMPOOL requests bypass the m_recently_announced_invs filter.
                         vInv.push_back(inv);
                         if (vInv.size() == MAX_INV_SZ) {
-                            if (m_chainman.ActiveChainstate().IsInitialBlockDownload())
-                                LogPrintf("Send %d tx invs to peer=%d\n", MAX_INV_SZ, pto->GetId());
+                            LogPrintf("send %d mempool tx invs peer=%d\n", MAX_INV_SZ, pto->GetId());
                             m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
                             vInv.clear();
                         }
@@ -5239,7 +5236,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     pto->m_tx_relay->m_last_mempool_req = std::chrono::duration_cast<std::chrono::seconds>(current_time);
                 }
 
-                // Determine transactions to relay
+                // Determine transactions to relay REBHERE
                 if (fSendTrickle) {
                     // Produce a vector with all candidates for sending
                     std::vector<uint256> vInvTx;
