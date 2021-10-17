@@ -380,6 +380,8 @@ private:
     bool MaybeDiscourageAndDisconnect(CNode& pnode, Peer& peer);
 
     void ProcessOrphanTx(std::set<uint256>& orphan_work_set) EXCLUSIVE_LOCKS_REQUIRED(cs_main, g_cs_orphans);
+    std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = nullptr);
+    std::string strBlockInfo(const CBlockIndex* pindex, bool* fFork = nullptr);
     void DoTime(int nHeight, int node);
     void LogRecv(int nNew, const CBlockIndex *pindex, std::string strType, int nSize, int node);
     /** Process a single headers message from a peer. */
@@ -1065,16 +1067,17 @@ std::string strBlkHeight(const CBlockIndex* pindex)
     return strprintf("%s (%s)", pindex->GetBlockHash().ToString(), strHeight(pindex));
 }
 
-std::string strBlkInfo(const CBlockIndex* pindex, bool* fFork = nullptr)
+std::string PeerManagerImpl::strBlkInfo(const CBlockIndex* pindex, bool* fFork /*=nullptr*/)
 {
     if (!pindex)
         return "NULL";
     int nBehind = pindexBestHeader->nHeight - pindex->nHeight;
+    int nAhead = pindex->nHeight - m_chainman.ActiveChain().Tip()->nHeight;
     return strprintf("(%s) age=%s%s", strHeight(pindex, fFork), strAge(GetAdjustedTime()-pindex->GetBlockTime()),
-            nBehind ? strprintf(" behind=%d", nBehind) : "");
+            nBehind ? strprintf(" behind=%d", nBehind) : nAhead ? strprintf(" ahead=%d", nAhead) : "");
 }
 
-std::string strBlockInfo(const CBlockIndex* pindex, bool* fFork = nullptr)
+std::string PeerManagerImpl::strBlockInfo(const CBlockIndex* pindex, bool* fFork /*=nullptr*/)
 {
     if (!pindex)
         return "NULL";
@@ -2345,7 +2348,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     }
                 }
             }
-        }
+        } else if (received_new_header)
+            LogPrint(BCLog::BLOCK, "%s%s\n", CanDirectFetch() ? "" : "!CanDirectFetch() ", pindexLast->IsValid(BLOCK_VALID_TREE) ? "" : "!IsValid(BLOCK_VALID_TREE)");
         // If we're in IBD, we want outbound peers that will serve us a useful
         // chain. Disconnect peers that are on chains with insufficient work.
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && nCount != MAX_HEADERS_RESULTS) {
@@ -2648,6 +2652,10 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
     m_chainman.ProcessNewBlock(m_chainparams, block, force_processing, &new_block);
     if (new_block) {
         node.nLastBlockTime = GetTime();
+        if (!gArgs.GetBoolArg("-updatechain", true)) {
+            LOCK(cs_main);
+            MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
+        }
     } else {
         LOCK(cs_main);
         mapBlockSource.erase(block->GetHash());
@@ -5239,7 +5247,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 // Determine transactions to relay
                 if (fSendTrickle) {
                     // Produce a vector with all candidates for sending
-                    std::vector<uint256> vInvTx; // REBTODO - why need a vector when we have a set?
+                    std::vector<uint256> vInvTx;
                     vInvTx.reserve(pto->m_tx_relay->setInventoryTxToSend.size());
                     for (std::set<uint256>::iterator it = pto->m_tx_relay->setInventoryTxToSend.begin(); it != pto->m_tx_relay->setInventoryTxToSend.end(); it++) {
                         vInvTx.push_back(*it);
@@ -5533,7 +5541,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 uint32_t nFetchFlags = GetFetchFlags(*pto);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                 BlockRequested(pto->GetId(), *pindex);
-                LogPrint(BCLog::BLOCK, "Requestng block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
+                LogPrint(BCLog::BLOCK, "Requesting block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {
