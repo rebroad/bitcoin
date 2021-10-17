@@ -2352,7 +2352,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                         strItem = "cmpct";
-                    }
+                    } else if (vGetData.size() == 1)
+                        LogPrintf("miit=%d mempool=%d Supports=%d\n", m_ignore_incoming_txs ? 1:0, m_mempool.size(), nodestate->fSupportsDesiredCmpctVersion ? 1:0);
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     // Next line needed because now we'll use the first cmpctblock block received,
                     // not necessarily the one we're requesting here.
@@ -2363,7 +2364,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     }
                 }
             }
-        }
+        } else if (received_new_header)
+            LogPrint(BCLog::BLOCK, "%s%s\n", CanDirectFetch() ? "" : "!CanDirectFetch() ", pindexLast->IsValid(BLOCK_VALID_TREE) ? "" : "!IsValid(BLOCK_VALID_TREE)");
         // If we're in IBD, we want outbound peers that will serve us a useful
         // chain. Disconnect peers that are on chains with insufficient work.
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && nCount != MAX_HEADERS_RESULTS) {
@@ -5330,7 +5332,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 uint32_t nFetchFlags = GetFetchFlags(*pto);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                 BlockRequested(pto->GetId(), *pindex);
-                LogPrint(BCLog::BLOCK, "Requesting block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
+                LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {
