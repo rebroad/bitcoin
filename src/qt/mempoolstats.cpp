@@ -262,7 +262,7 @@ void MempoolStats::drawChart()
             }
             first = false;
         }
-    } // release lock for the acctual drawing
+    } // release lock for the actual drawing
 
     int i = 0;
     QString total_text = tr("Last %1 hours").arg(QString::number(m_clientmodel->m_mempool_max_samples*m_clientmodel->m_mempool_collect_intervall/3600));
