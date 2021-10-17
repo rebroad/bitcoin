@@ -589,6 +589,28 @@ static RPCHelpMan maxmempool()
     };
 }
 
+static RPCHelpMan updatechain()
+{
+    return RPCHelpMan{"updatechain",
+                "\nEnables/disables chain updating.\n",
+                {
+                    {"enabled", RPCArg::Type::BOOL, RPCArg::Optional::NO, "whether to keep the chain updated"},
+                },
+                RPCResult{
+                    RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+                    HelpExampleCli("updatechain", "1") + HelpExampleRpc("updatechain", "1")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::string strEnabled = request.params[0].get_str();
+    gArgs.ForceSetArg("-updatechain", strEnabled);
+
+    return NullUniValue;
+}
+    };
+}
+
 static RPCHelpMan getrawmempool()
 {
     return RPCHelpMan{"getrawmempool",
@@ -2752,6 +2774,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         &pruneblockchain,                    },
     { "blockchain",         &savemempool,                        },
     { "blockchain",         &maxmempool,                         },
+    { "blockchain",         &updatechain,                        },
     { "blockchain",         &verifychain,                        },
 
     { "blockchain",         &preciousblock,                      },

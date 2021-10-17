@@ -1218,14 +1218,15 @@ bool CChainState::IsInitialBlockDownload() const
 {
     static bool fPrev = true;
 
+    bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
     bool fNew = false;
     if (fImporting || fReindex)
         fNew = true;
     else if (m_chain.Tip() == nullptr)
         fNew = true;
-    else if (m_chain.Tip()->nChainWork < nMinimumChainWork)
+    else if (fUpdateChain && m_chain.Tip()->nChainWork < nMinimumChainWork)
         fNew = true;
-    else if (m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
+    else if (fUpdateChain && m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
         fNew = true;
 
     if (fNew != fPrev) {
@@ -2627,6 +2628,9 @@ std::string strHeight(const CBlockIndex* pindex, bool *fFork /* = nullptr */) {
 
 bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
 {
+    if (!gArgs.GetBoolArg("-updatechain", true))
+        return true;
+
     // Note that while we're often called here from ProcessNewBlock, this is
     // far from a guarantee. Things in the P2P/RPC will often end up calling
     // us in the middle of ProcessNewBlock - do not assume pblock is set

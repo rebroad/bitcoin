@@ -2302,7 +2302,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
 
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
-        if (CanDirectFetch() && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
+        bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
+        if ((CanDirectFetch() || !fUpdateChain) && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
             if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
                 LogPrintf("CURIOUS: COMPETING BLOCK\n");
             std::vector<const CBlockIndex*> vToFetch;
@@ -2344,7 +2345,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     std::string strItem;
                     if (!m_ignore_incoming_txs && m_mempool.size() > 10 &&
                         nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 &&
-                        pindexLast->nHeight <= m_chainman.ActiveChain().Height() + 6) {
+                        (!fUpdateChain || pindexLast->nHeight <= m_chainman.ActiveChain().Height() + 6)) {
                         if (!pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) // REBTEMP - log this experimental thing
                             LogPrintf("CURIOUS: Fetching a cmpctblock %d ahead of tip!\n",
                                 pindexLast->nHeight - m_chainman.ActiveChain().Height());
@@ -3785,7 +3786,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
-        if (pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here relating to age
+        bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
+        if (!fUpdateChain || pindex->nHeight <= m_chainman.ActiveChain().Height() + 6) { // REBTODO - do extra checks here relating to age
             if (pindex->nHeight > m_chainman.ActiveChain().Height() + 2) // REBTODO - for now, some debug
                 LogPrintf("CURIOUS: recv cmpctblk.age=%s tip.age=%s diff=%s\n", strAge(GetAdjustedTime()-pindex->GetBlockTime()),
                     strAge(GetAdjustedTime()-m_chainman.ActiveChain().Tip()->GetBlockTime()),
