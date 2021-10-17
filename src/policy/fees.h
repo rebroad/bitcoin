@@ -18,7 +18,6 @@
 #include <vector>
 
 class CAutoFile;
-class CChain;
 class CFeeRate;
 class CTxMemPoolEntry;
 class CTxMemPool;
@@ -186,11 +185,11 @@ public:
     ~CBlockPolicyEstimator();
 
     /** Process all the transactions that have been included in a block */
-    void processBlock(const CChain& active_chain, unsigned int nBlockHeight,
+    void processBlock(unsigned int nBlockHeight,
                       std::vector<const CTxMemPoolEntry*>& entries);
 
     /** Process a transaction accepted to the mempool*/
-    void processTransaction(const CChain& active_chain, const CTxMemPoolEntry& entry, bool validFeeEstimate);
+    void processTransaction(const CTxMemPoolEntry& entry, bool validFeeEstimate);
 
     /** Remove a transaction from the mempool tracking stats*/
     bool removeTx(uint256 hash, bool inBlock);
@@ -256,7 +255,7 @@ private:
     std::map<double, unsigned int> bucketMap GUARDED_BY(m_cs_fee_estimator); // Map of bucket upper-bound to index into all vectors by bucket
 
     /** Process a transaction confirmed in a block*/
-    bool processBlockTx(const CChain& active_chain, unsigned int nBlockHeight, const CTxMemPoolEntry* entry) EXCLUSIVE_LOCKS_REQUIRED(m_cs_fee_estimator);
+    bool processBlockTx(unsigned int nBlockHeight, const CTxMemPoolEntry* entry) EXCLUSIVE_LOCKS_REQUIRED(m_cs_fee_estimator);
 
     /** Helper for estimateSmartFee */
     double estimateCombinedFee(unsigned int confTarget, double successThreshold, bool checkShorterHorizon, EstimationResult *result) const EXCLUSIVE_LOCKS_REQUIRED(m_cs_fee_estimator);

@@ -18,7 +18,6 @@ extern RecursiveMutex cs_main;
 class CBlock;
 class CBlockIndex;
 class CBlockPolicyEstimator;
-class CChain;
 class CChainState;
 class CTxMemPool;
 class ChainstateManager;
@@ -45,7 +44,7 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* tip, const CBlockIn
 UniValue MempoolInfoToJSON(const CTxMemPool& pool);
 
 /** Mempool to JSON */
-UniValue MempoolToJSON(const CChain& active_chain, const CTxMemPool& pool, bool verbose = false, bool include_mempool_sequence = false);
+UniValue MempoolToJSON(const CTxMemPool& pool, bool verbose = false, bool include_mempool_sequence = false);
 
 /** Block header to JSON */
 UniValue blockheaderToJSON(const CBlockIndex* tip, const CBlockIndex* blockindex) LOCKS_EXCLUDED(cs_main);

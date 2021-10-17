@@ -3806,7 +3806,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 std::vector<CInv> vInv(1);
                 vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom), cmpctblock.header.GetHash());
                 m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
-                LogPrint(BCLog::BLOCK, "resend(1) getdata %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
+                LogPrint(BCLog::BLOCK, "resend getdata %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
             } else
                 LogPrint(BCLog::BLOCK, "Ignoring cmpctblock as not enough work. peer=%d\n", pfrom.GetId());
             return;
@@ -3873,7 +3873,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 int nFromReorg = 0; int nFromRecycledPeers = 0;
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
-                    if (!partialBlock.IsTxAvailable(i, nodeid, nTime, nSize))
+                    if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize))
                         req.indexes.push_back(i);
                     else {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {

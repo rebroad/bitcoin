@@ -62,10 +62,17 @@ size_t CTxMemPoolEntry::GetTxSize() const
     return GetVirtualTransactionSize(nTxWeight, sigOpCost);
 }
 
-unsigned int CTxMemPoolEntry::GetHeight(const CChain& active_chain) const
+CChain *g_active_chain;
+
+unsigned int CTxMemPoolEntry::GetHeight() const
 {
-    CBlockIndex* ret = active_chain.FindEarliestAtLeast(nTime, 0);
-    return ret ? ret->nHeight - 1 : active_chain.Height();
+    if (!g_active_chain) {
+        LogPrintf("%s: g_active_chain NULL\n", __func__);
+        return 0;
+    }
+
+    CBlockIndex* ret = g_active_chain->FindEarliestAtLeast(nTime, 0);
+    return ret ? ret->nHeight - 1 : g_active_chain->Height();
 }
 
 // Update the given tx for any in-mempool descendants.
@@ -425,7 +432,7 @@ void CTxMemPool::AddTransactionsUpdated(unsigned int n)
     nTransactionsUpdated += n;
 }
 
-void CTxMemPool::addUnchecked(const CChain& active_chain, const CTxMemPoolEntry &entry, setEntries &setAncestors, bool validFeeEstimate)
+void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAncestors, bool validFeeEstimate)
 {
     int nMemUsageBefore = DynamicMemoryUsage();
     // Add to memory pool without checking anything.
@@ -471,7 +478,7 @@ void CTxMemPool::addUnchecked(const CChain& active_chain, const CTxMemPoolEntry 
     totalTxSize += entry.GetTxSize();
     m_total_fee += entry.GetFee();
     if (minerPolicyEstimator) {
-        minerPolicyEstimator->processTransaction(active_chain, entry, validFeeEstimate);
+        minerPolicyEstimator->processTransaction(entry, validFeeEstimate);
     }
 
     vTxHashes.emplace_back(tx.GetWitnessHash(), newit);
@@ -637,7 +644,7 @@ void CTxMemPool::removeConflicts(const CTransaction &tx)
 /**
  * Called when a block is connected. Removes from mempool and updates the miner fee estimator.
  */
-void CTxMemPool::removeForBlock(const CChain& active_chain, const std::vector<CTransactionRef>& vtx, unsigned int nBlockHeight)
+void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigned int nBlockHeight)
 {
     AssertLockHeld(cs);
     std::vector<const CTxMemPoolEntry*> entries;
@@ -650,7 +657,7 @@ void CTxMemPool::removeForBlock(const CChain& active_chain, const std::vector<CT
             entries.push_back(&*i);
     }
     // Before the txs in the new block have been removed from the mempool, update policy estimates
-    if (minerPolicyEstimator) {minerPolicyEstimator->processBlock(active_chain, nBlockHeight, entries);}
+    if (minerPolicyEstimator) {minerPolicyEstimator->processBlock(nBlockHeight, entries);}
     for (const auto& tx : vtx)
     {
         txiter it = mapTx.find(tx->GetHash());
@@ -694,6 +701,10 @@ static void CheckInputsAndUpdateCoins(const CTransaction& tx, CCoinsViewCache& m
 
 void CTxMemPool::check(CChainState& active_chainstate) const
 {
+    if (g_active_chain != &active_chainstate.m_chain)
+        LogPrintf("%s: Setting g_active_chain\n", __func__);
+    g_active_chain = &active_chainstate.m_chain;
+
     if (m_check_ratio == 0) return;
 
     if (GetRand(m_check_ratio) >= 1) return;
@@ -1075,13 +1086,13 @@ int CTxMemPool::Expire(std::chrono::seconds time)
     return stage.size();
 }
 
-void CTxMemPool::addUnchecked(const CChain& active_chain, const CTxMemPoolEntry &entry, bool validFeeEstimate)
+void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, bool validFeeEstimate)
 {
     setEntries setAncestors;
     uint64_t nNoLimit = std::numeric_limits<uint64_t>::max();
     std::string dummy;
     CalculateMemPoolAncestors(entry, setAncestors, nNoLimit, nNoLimit, nNoLimit, nNoLimit, dummy);
-    return addUnchecked(active_chain, entry, setAncestors, validFeeEstimate);
+    return addUnchecked(entry, setAncestors, validFeeEstimate);
 }
 
 void CTxMemPool::UpdateChild(txiter entry, txiter child, bool add)

@@ -188,14 +188,14 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     return READ_STATUS_OK;
 }
 
-bool PartiallyDownloadedBlock::IsTxAvailable(size_t index, NodeId& nodeid, int64_t& nTime, unsigned int& nSize) const {
+bool PartiallyDownloadedBlock::IsTxAvailable(size_t index, NodeId *nodeid/*=nullptr*/, int64_t *nTime/*=nullptr*/, unsigned int *nSize/*=nullptr*/) const {
     assert(!header.IsNull());
     assert(index < txn_available.size());
 
     if (txn_available[index]) {
-        nodeid = txn_peer[index];
-        nTime = txn_time[index];
-        nSize = txn_size[index];
+        if (nodeid) *nodeid = txn_peer[index];
+        if (nTime) *nTime = txn_time[index];
+        if (nSize) *nSize = txn_size[index];
     }
 
     return txn_available[index] != nullptr;

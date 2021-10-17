@@ -656,15 +656,21 @@ public:
     //! May not be called more than once
     void SetAddrLocal(const CService& addrLocalIn);
 
-    CNode* AddRef(int num)
+    CNode* AddRef(int num = 0)
     {
-        nRefCount = nRefCount | num;
+        if (num)
+            nRefCount = nRefCount | num;
+        else
+            nRefCount++;
         return this;
     }
 
-    void Release(int num)
+    void Release(int num = 0)
     {
-        nRefCount = nRefCount & ~num;
+        if (num)
+            nRefCount = nRefCount & ~num;
+        else
+            nRefCount--;
     }
 
     void AddKnownTx(const uint256& hash)
@@ -753,7 +759,7 @@ public:
     * @param[in]   interrupt       Interrupt condition for processing threads
     * @return                      True if there is more work to be done
     */
-    virtual bool ProcessMessages(CNode* pnode, std::atomic<bool>& interrupt, bool fToggle) = 0;
+    virtual bool ProcessMessages(CNode* pnode, std::atomic<bool>& interrupt, bool fToggle = false) = 0;
 
     /**
     * Send queued protocol messages to a given node.

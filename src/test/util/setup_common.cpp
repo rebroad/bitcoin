@@ -315,7 +315,7 @@ CMutableTransaction TestChain100Setup::CreateValidMempoolTransaction(CTransactio
     // If submit=true, add transaction to the mempool.
     if (submit) {
         LOCK(cs_main);
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_node.chainman->ActiveChainstate(), *m_node.mempool.get(), MakeTransactionRef(mempool_txn), /* bypass_limits */ false);
+        const MempoolAcceptResult result = AcceptToMemoryPool(m_node.chainman->ActiveChainstate(), *m_node.mempool.get(), MakeTransactionRef(mempool_txn), -2, /* bypass_limits */ false);
         assert(result.m_result_type == MempoolAcceptResult::ResultType::VALID);
     }
 
