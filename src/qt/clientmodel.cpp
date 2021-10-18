@@ -249,23 +249,6 @@ void ClientModel::updateBanlist()
     banTableModel->refresh();
 }
 
-void ClientModel::updateMempoolStats()
-{
-    Q_EMIT mempoolStatsDidUpdate();
-}
-
-mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime &to)
-{
-    // get stats from the core stats model
-    uint64_t timeFrom = from.toTime_t();
-    uint64_t timeTo = to.toTime_t();
-
-    mempoolSamples_t samples = CStats::DefaultStats()->mempoolGetValuesInRange(timeFrom,timeTo);
-    from.setTime_t(timeFrom);
-    to.setTime_t(timeTo);
-    return samples;
-}
-
 // Handlers for core signals
 static void ShowProgress(ClientModel *clientmodel, const std::string &title, int nProgress)
 {
@@ -334,11 +317,6 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
     nLastUpdateNotification = now;
 }
 
-static void MempoolStatsDidChange(ClientModel *clientmodel)
-{
-    QMetaObject::invokeMethod(clientmodel, "updateMempoolStats", Qt::QueuedConnection);
-}
-
 void ClientModel::subscribeToCoreSignals()
 {
     // Connect signals to client
@@ -349,8 +327,6 @@ void ClientModel::subscribeToCoreSignals()
     m_handler_banned_list_changed = m_node.handleBannedListChanged(std::bind(BannedListChanged, this));
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, false));
     m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, true));
-
-    m_connection_mempool_stats_did_change = CStats::DefaultStats()->MempoolStatsDidChange.connect(std::bind(MempoolStatsDidChange, this));
 }
 
 void ClientModel::unsubscribeFromCoreSignals()
@@ -363,8 +339,6 @@ void ClientModel::unsubscribeFromCoreSignals()
     m_handler_banned_list_changed->disconnect();
     m_handler_notify_block_tip->disconnect();
     m_handler_notify_header_tip->disconnect();
-
-    m_connection_mempool_stats_did_change.disconnect();
 }
 
 bool ClientModel::getProxyInfo(std::string& ip_port) const

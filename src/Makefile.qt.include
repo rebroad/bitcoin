@@ -20,7 +20,6 @@ QT_FORMS_UI = \
   qt/forms/createwalletdialog.ui \
   qt/forms/editaddressdialog.ui \
   qt/forms/helpmessagedialog.ui \
-  qt/forms/mempoolstatsold.ui \
   qt/forms/intro.ui \
   qt/forms/modaloverlay.ui \
   qt/forms/mempoolstats.ui \
@@ -59,7 +58,6 @@ QT_MOC_CPP = \
   qt/moc_macnotificationhandler.cpp \
   qt/moc_mempoolstats.cpp \
   qt/moc_modaloverlay.cpp \
-  qt/moc_mempoolstatsold.cpp \
   qt/moc_notificator.cpp \
   qt/moc_openuridialog.cpp \
   qt/moc_optionsdialog.cpp \
@@ -134,7 +132,6 @@ BITCOIN_QT_H = \
   qt/macos_appnap.h \
   qt/mempoolstats.h \
   qt/modaloverlay.h \
-  qt/mempoolstatsold.h \
   qt/networkstyle.h \
   qt/notificator.h \
   qt/openuridialog.h \
@@ -239,7 +236,6 @@ BITCOIN_QT_BASE_CPP = \
   qt/intro.cpp \
   qt/mempoolstats.cpp \
   qt/modaloverlay.cpp \
-  qt/mempoolstatsold.cpp \
   qt/networkstyle.cpp \
   qt/notificator.cpp \
   qt/optionsdialog.cpp \
