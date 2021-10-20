@@ -39,6 +39,7 @@
 #include <script/sigcache.h>
 #include <shutdown.h>
 #include <signet.h>
+#include <stats/stats.h>
 #include <timedata.h>
 #include <tinyformat.h>
 #include <txdb.h>
@@ -947,6 +948,10 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
 
     GetMainSignals().TransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence());
 
+    // update mempool stats cache
+    const CFeeRate mempool_min_fee_rate = m_pool.GetMinFee(gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
+    CStats::DefaultStats()->addMempoolSample(m_pool.size(), m_pool.DynamicMemoryUsage(), mempool_min_fee_rate.GetFeePerK());
+
     return MempoolAcceptResult::Success(std::move(ws.m_replaced_transactions), ws.m_base_fees);
 }
 
@@ -1135,38 +1140,24 @@ void CChainState::InitCoinsCache(size_t cache_size_bytes)
 //
 bool CChainState::IsInitialBlockDownload() const
 {
+    static bool fPrev = true;
+
     bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
     bool fNew = false;
-    bool fPrev = m_cached_finished_ibd.load(std::memory_order_relaxed);
-    if (fUpdateChain && pindexBestHeader != nullptr && pindexBestHeader->nHeight > m_chain.Tip()->nHeight + 6)
-        fNew = true;
-    if (fUpdateChain && m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
-        fNew = true;
-    if (fNew) {
-        if (fPrev) {
-            m_cached_finished_ibd.store(false, std::memory_order_relaxed);
-            LogPrintf("%s: Latching to true\n", __func__);
-        }
-        return true;
-    }
-
-    // Optimization: pre-test latch before taking the lock.
-    if (fPrev)
-        return false;
-
-    LOCK(cs_main);
-    if (fPrev)
-        return false;
     if (fImporting || fReindex)
-        return true;
-    if (m_chain.Tip() == nullptr)
-        return true;
-    if (m_chain.Tip()->nChainWork < nMinimumChainWork)
-        return true;
+        fNew = true;
+    else if (m_chain.Tip() == nullptr)
+        fNew = true;
+    else if (fUpdateChain && m_chain.Tip()->nChainWork < nMinimumChainWork)
+        fNew = true;
+    else if (fUpdateChain && m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
+        fNew = true;
 
-    LogPrintf("Leaving InitialBlockDownload (latching to false)\n");
-    m_cached_finished_ibd.store(true, std::memory_order_relaxed);
-    return false;
+    if (fNew != fPrev) {
+        LogPrintf("%s: Setting to %s\n", __func__, fNew ? "true" : "false");
+        fPrev = fNew;
+    }
+    return fNew;
 }
 
 static void AlertNotify(const std::string& strMessage)
@@ -2232,6 +2223,8 @@ bool CChainState::DisconnectTip(BlockValidationState& state, DisconnectedBlockTr
     // Let wallets know transactions went from 1-confirmed to
     // 0-confirmed or conflicted:
     GetMainSignals().BlockDisconnected(pblock, pindexDelete);
+    // add mempool stats sample
+    CStats::DefaultStats()->addMempoolSample(m_mempool->size(), m_mempool->DynamicMemoryUsage(), m_mempool->GetMinFee(gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK());
     return true;
 }
 
@@ -2341,6 +2334,10 @@ bool CChainState::ConnectTip(BlockValidationState& state, CBlockIndex* pindexNew
     // Update m_chain & related variables.
     m_chain.SetTip(pindexNew);
     UpdateTip(pindexNew);
+
+    // add mempool stats sample
+    if (m_mempool)
+        CStats::DefaultStats()->addMempoolSample(m_mempool->size(), m_mempool->DynamicMemoryUsage(), m_mempool->GetMinFee(gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK());
 
     int64_t nTime6 = GetTimeMicros(); nTimePostConnect += nTime6 - nTime5; nTimeTotal += nTime6 - nTime1;
     LogPrint(BCLog::BENCH, "  - Connect postprocess: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime5) * MILLI, nTimePostConnect * MICRO, nTimePostConnect * MILLI / nBlocksTotal);
