@@ -1587,6 +1587,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // ********************************************************* Step 11: import blocks
 
+    uiInterface.InitMessage(_("Importing blocks…").translated);
     if (!CheckDiskSpace(gArgs.GetDataDirNet())) {
         InitError(strprintf(_("Error: Disk space is low for %s"), fs::quoted(fs::PathToString(gArgs.GetDataDirNet()))));
         return false;
@@ -1599,6 +1600,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // Either install a handler to notify us when genesis activates, or set fHaveGenesis directly.
     // No locking, as this happens before any background thread is started.
     boost::signals2::connection block_notify_genesis_wait_connection;
+    uiInterface.InitMessage(_("Activating chain tip…").translated);
     if (chainman.ActiveChain().Tip() == nullptr) {
         block_notify_genesis_wait_connection = uiInterface.NotifyBlockTip_connect(std::bind(BlockNotifyGenesisWait, std::placeholders::_2));
     } else {
@@ -1623,9 +1625,12 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         vImportFiles.push_back(fs::PathFromString(strFile));
     }
 
+    uiInterface.InitMessage(_("Fork loadblk…").translated);
     chainman.m_load_block = std::thread(&util::TraceThread, "loadblk", [=, &chainman, &args] {
         ThreadImport(chainman, vImportFiles, args);
     });
+
+    uiInterface.InitMessage(_("Wait for genesis block…").translated);
 
     // Wait for genesis block to be processed
     {
@@ -1645,6 +1650,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // ********************************************************* Step 12: start node
 
+    uiInterface.InitMessage(_("Starting node…").translated);
     int chain_active_height;
 
     //// debug print

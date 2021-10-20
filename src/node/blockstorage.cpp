@@ -875,6 +875,7 @@ struct CImportingNow {
 
 void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFiles, const ArgsManager& args)
 {
+    LogPrintf("%s: Start\n", __func__);
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::INITIALIZATION_LOAD_BLOCKS);
     ScheduleBatchPriority();
 
@@ -928,6 +929,7 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
         // We can't hold cs_main during ActivateBestChain even though we're accessing
         // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
         // the relevant pointers before the ABC call.
+        LogPrintf("%s: About to ActivateBestChain()\n", __func__);
         for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
             BlockValidationState state;
             if (!chainstate->ActivateBestChain(state, nullptr)) {
@@ -945,6 +947,7 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
     } // End scope of CImportingNow
     if (!ShutdownRequested())
         chainman.ActiveChainstate().LoadMempool(args);
+    LogPrintf("%s: Start LoadMempoolCache loop\n", __func__);
     while(!ShutdownRequested()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         chainman.ActiveChainstate().LoadMempoolCache(args);
