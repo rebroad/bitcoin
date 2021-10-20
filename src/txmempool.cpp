@@ -66,8 +66,14 @@ CChain *g_active_chain;
 
 unsigned int CTxMemPoolEntry::GetHeight() const
 {
+    assert(g_active_chain);
     if (!g_active_chain) {
-        LogPrintf("%s: g_active_chain NULL\n", __func__);
+        static int64_t tLast = 0;
+        int64_t tNow = ::GetTime();
+        if (tNow != tLast) {
+            LogPrintf("%s: g_active_chain NULL\n", __func__);
+            tLast = tNow;
+        }
         return 0;
     }
 
@@ -701,9 +707,15 @@ static void CheckInputsAndUpdateCoins(const CTransaction& tx, CCoinsViewCache& m
 
 void CTxMemPool::check(CChainState& active_chainstate) const
 {
-    if (g_active_chain != &active_chainstate.m_chain)
-        LogPrintf("%s: Setting g_active_chain\n", __func__);
-    g_active_chain = &active_chainstate.m_chain;
+    if (g_active_chain != &active_chainstate.m_chain) {
+        static int64_t tLast = 0;
+        int64_t tNow = ::GetTime();
+        if (tNow != tLast) {
+            LogPrintf("%s: Setting g_active_chain\n", __func__);
+            tLast = tNow;
+        }
+        g_active_chain = &active_chainstate.m_chain;
+    }
 
     if (m_check_ratio == 0) return;
 

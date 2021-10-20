@@ -545,16 +545,14 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
         // We can't hold cs_main during ActivateBestChain even though we're accessing
         // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
         // the relevant pointers before the ABC call.
-        chainman.ActiveChainstate().LoadGenesisBlock();
-        fActivateChain = true;
-        //for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
-        //    BlockValidationState state;
-        //    if (!chainstate->ActivateBestChain(state, nullptr)) { // REBTODO - Set fActivateChain instead?
-        //        LogPrintf("Failed to connect best block (%s)\n", state.ToString());
-        //        StartShutdown();
-        //        return;
-        //    }
-        //}
+        for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
+            BlockValidationState state;
+            if (!chainstate->ActivateBestChain(state, nullptr)) {
+                LogPrintf("Failed to connect best block (%s)\n", state.ToString());
+                StartShutdown();
+                return;
+            }
+        }
 
         if (args.GetBoolArg("-stopafterblockimport", DEFAULT_STOPAFTERBLOCKIMPORT)) {
             LogPrintf("Stopping after block import\n");

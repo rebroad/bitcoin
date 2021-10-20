@@ -1695,7 +1695,7 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
         }
     }
 
-    std::string strDebug = strprintf("%s: PushBlockHeaders to", __func__);
+    std::string strDebug = strprintf("%s: PushBlockHeaders(%s-%s) to", __func__, strHeight(pindexToAnnounce), strHeight(pindexNew));
     {
         LOCK(m_peer_mutex);
         for (auto& it : m_peer_map) {
@@ -4906,6 +4906,10 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
             // Send the current filter if we sent MAX_FILTER previously
             // and made it out of IBD.
             pto.m_tx_relay->m_next_send_feefilter = 0us;
+            if (pto.nRecvBytes1stTx) {
+                pto.nRecvBytes1stTx = 0;
+                LogPrintf("Setting nRecvBytes1stTx=0 peer=%d\n", pto.GetId());
+            }
         }
     }
     if (current_time > pto.m_tx_relay->m_next_send_feefilter) {
@@ -4917,10 +4921,6 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
                 filterToSend, currentFilter, pto.GetId());
             m_connman.PushMessage(&pto, CNetMsgMaker(pto.GetCommonVersion()).Make(NetMsgType::FEEFILTER, filterToSend));
             pto.m_tx_relay->lastSentFeeFilter = filterToSend;
-            if (currentFilter == MAX_MONEY && pto.nRecvBytes1stTx) {
-                pto.nRecvBytes1stTx = 0;
-                LogPrintf("Setting nRecvBytes1stTx=0 peer=%d\n", pto.GetId());
-            }
         }
         pto.m_tx_relay->m_next_send_feefilter = PoissonNextSend(current_time, AVG_FEEFILTER_BROADCAST_INTERVAL);
     }
