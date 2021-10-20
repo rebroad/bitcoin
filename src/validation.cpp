@@ -3878,7 +3878,11 @@ bool BlockManager::LoadBlockIndexDB(std::set<CBlockIndex*, CBlockIndexWorkCompar
 
 void CChainState::LoadMempool(const ArgsManager& args)
 {
-    if (!m_mempool) return;
+    if (!m_mempool) {
+        LogPrintf("%s: no mempool. Exiting\n", __func__);
+        return;
+    }
+    LogPrintf("%s: Start\n", __func__);
     if (args.GetBoolArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL)) {
         ::LoadMempool(*m_mempool, "mempool.dat", *this);
         ::LoadMempool(*m_mempool, "mempool.dat.2", *this);
