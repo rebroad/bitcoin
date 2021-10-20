@@ -64,6 +64,19 @@ size_t CTxMemPoolEntry::GetTxSize() const
 
 CChain *g_active_chain;
 
+void CTxMemPool::IntroduceChain(CChainState& active_chainstate) const
+{
+    if (g_active_chain != &active_chainstate.m_chain) {
+        static int64_t tLast = 0;
+        int64_t tNow = ::GetTime();
+        if (tNow != tLast) {
+            LogPrintf("%s: Setting g_active_chain\n", __func__);
+            tLast = tNow;
+        }
+        g_active_chain = &active_chainstate.m_chain;
+    }
+}
+
 unsigned int CTxMemPoolEntry::GetHeight() const
 {
     assert(g_active_chain);

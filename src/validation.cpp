@@ -4550,6 +4550,7 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
     int64_t unbroadcast = 0;
     int64_t nNow = GetTime();
 
+    pool.IntroduceChain(active_chainstate);
     try {
         uint64_t version;
         file >> version;
