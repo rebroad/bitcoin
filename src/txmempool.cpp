@@ -4,7 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <txmempool.h>
-#include <chain.h> // For FindEarliestAtLeast()
+
 #include <consensus/consensus.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
@@ -22,7 +22,7 @@
 #include <optional>
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& tx, CAmount fee,
-                                 int64_t time, NodeId nodeid,
+                                 int64_t time, unsigned int entry_height, NodeId nodeid,
                                  bool spends_coinbase, int64_t sigops_cost, LockPoints lp)
     : tx{tx},
       nFee{fee},
@@ -30,6 +30,7 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& tx, CAmount fee,
       nUsageSize{RecursiveDynamicUsage(tx)},
       nMemDelta{0},
       nTime{time},
+      entryHeight{entry_height},
       nodeid{nodeid},
       spendsCoinbase{spends_coinbase},
       sigOpCost{sigops_cost},
@@ -60,38 +61,6 @@ void CTxMemPoolEntry::UpdateLockPoints(const LockPoints& lp)
 size_t CTxMemPoolEntry::GetTxSize() const
 {
     return GetVirtualTransactionSize(nTxWeight, sigOpCost);
-}
-
-CChain *g_active_chain;
-
-void CTxMemPool::IntroduceChain(CChainState& active_chainstate) const
-{
-    if (g_active_chain != &active_chainstate.m_chain) {
-        static int64_t tLast = 0;
-        int64_t tNow = ::GetTime();
-        if (tNow != tLast) {
-            LogPrintf("%s: Setting g_active_chain\n", __func__);
-            tLast = tNow;
-        }
-        g_active_chain = &active_chainstate.m_chain;
-    }
-}
-
-unsigned int CTxMemPoolEntry::GetHeight() const
-{
-    assert(g_active_chain);
-    if (!g_active_chain) {
-        static int64_t tLast = 0;
-        int64_t tNow = ::GetTime();
-        if (tNow != tLast) {
-            LogPrintf("%s: g_active_chain NULL\n", __func__);
-            tLast = tNow;
-        }
-        return 0;
-    }
-
-    CBlockIndex* ret = g_active_chain->FindEarliestAtLeast(nTime, 0);
-    return ret ? ret->nHeight - 1 : g_active_chain->Height();
 }
 
 // Update the given tx for any in-mempool descendants.
@@ -720,16 +689,6 @@ static void CheckInputsAndUpdateCoins(const CTransaction& tx, CCoinsViewCache& m
 
 void CTxMemPool::check(CChainState& active_chainstate) const
 {
-    if (g_active_chain != &active_chainstate.m_chain) {
-        static int64_t tLast = 0;
-        int64_t tNow = ::GetTime();
-        if (tNow != tLast) {
-            LogPrintf("%s: Setting g_active_chain\n", __func__);
-            tLast = tNow;
-        }
-        g_active_chain = &active_chainstate.m_chain;
-    }
-
     if (m_check_ratio == 0) return;
 
     if (GetRand(m_check_ratio) >= 1) return;

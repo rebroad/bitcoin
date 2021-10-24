@@ -201,6 +201,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     uint256 hash;
     TestMemPoolEntryHelper entry;
     entry.nFee = 11;
+    entry.nHeight = 11;
 
     fCheckpointsEnabled = false;
 

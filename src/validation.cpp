@@ -700,7 +700,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         }
     }
 
-    entry.reset(new CTxMemPoolEntry(ptx, ws.m_base_fees, nAcceptTime, nodeid,
+    entry.reset(new CTxMemPoolEntry(ptx, ws.m_base_fees, nAcceptTime, m_active_chainstate.m_chain.Height(), nodeid,
             fSpendsCoinbase, nSigOpsCost, lp));
     unsigned int nSize = entry->GetTxSize();
 
@@ -4550,7 +4550,6 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
     int64_t unbroadcast = 0;
     int64_t nNow = GetTime();
 
-    pool.IntroduceChain(active_chainstate);
     try {
         uint64_t version;
         file >> version;

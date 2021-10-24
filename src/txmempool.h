@@ -94,6 +94,7 @@ private:
     const size_t nUsageSize;        //!< ... and total memory usage
     size_t nMemDelta;               //!< Memory change after added
     const int64_t nTime;            //!< Local time when entering the mempool
+    const unsigned int entryHeight; //!< Chain height when entering the mempool
     const NodeId nodeid;            //!< Peer that provided the tx
     const bool spendsCoinbase;      //!< keep track of transactions that spend a coinbase
     const int64_t sigOpCost;        //!< Total sigop cost
@@ -115,7 +116,7 @@ private:
 
 public:
     CTxMemPoolEntry(const CTransactionRef& tx, CAmount fee,
-                    int64_t time, NodeId nodeid,
+                    int64_t time, unsigned int entry_height, NodeId nodeid,
                     bool spends_coinbase,
                     int64_t sigops_cost, LockPoints lp);
 
@@ -125,7 +126,7 @@ public:
     size_t GetTxSize() const;
     size_t GetTxWeight() const { return nTxWeight; }
     std::chrono::seconds GetTime() const { return std::chrono::seconds{nTime}; }
-    unsigned int GetHeight() const;
+    unsigned int GetHeight() const { return entryHeight; }
     NodeId GetPeer() const { return nodeid; }
     int64_t GetSigOpCost() const { return sigOpCost; }
     int64_t GetModifiedFee() const { return nFee + feeDelta; }
@@ -664,9 +665,6 @@ public:
      * the tx is not dependent on other mempool transactions to be included in a block.
      */
     bool HasNoInputsOf(const CTransaction& tx) const EXCLUSIVE_LOCKS_REQUIRED(cs);
-
-    /** Kludge to expose chain to mempool functions */
-    void IntroduceChain(CChainState& active_chainstate) const;
 
     /** Affect CreateNewBlock prioritisation of transactions */
     void PrioritiseTransaction(const uint256& hash, const CAmount& nFeeDelta);
