@@ -58,6 +58,7 @@
 #include <validation_thread.h>
 #include <warnings.h>
 
+#include <algorithm>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -3748,7 +3749,7 @@ CBlockIndex * BlockManager::InsertBlockIndex(const uint256& hash)
 
 bool BlockManager::LoadBlockIndex(
     const Consensus::Params& consensus_params,
-    std::set<CBlockIndex*, CBlockIndexWorkComparator>& block_index_candidates)
+    ChainstateManager& chainman)
 {
     int nHighest = 1;
     if (!m_block_tree_db->LoadBlockIndexGuts(consensus_params, [this](const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return this->InsertBlockIndex(hash); }, nHighest)) {
@@ -3764,6 +3765,27 @@ bool BlockManager::LoadBlockIndex(
         vSortedByHeight.push_back(std::make_pair(pindex->nHeight, pindex));
     }
     sort(vSortedByHeight.begin(), vSortedByHeight.end());
+
+    // Find start of assumed-valid region.
+    int first_assumed_valid_height = std::numeric_limits<int>::max();
+
+    for (const auto& [height, block] : vSortedByHeight) {
+        if (block->IsAssumedValid()) {
+            auto chainstates = chainman.GetAll();
+
+            // If we encounter an assumed-valid block index entry, ensure that we have
+            // one chainstate that tolerates assumed-valid entries and another that does
+            // not (i.e. the background validation chainstate), since assumed-valid
+            // entries should always be pending validation by a fully-validated chainstate.
+            auto any_chain = [&](auto fnc) { return std::any_of(chainstates.cbegin(), chainstates.cend(), fnc); };
+            assert(any_chain([](auto chainstate) { return chainstate->reliesOnAssumedValid(); }));
+            assert(any_chain([](auto chainstate) { return !chainstate->reliesOnAssumedValid(); }));
+
+            first_assumed_valid_height = height;
+            break;
+        }
+    }
+
     int64_t nNow;
     int64_t nLastNow = 0;
     int nHeight = 0;
@@ -3784,11 +3806,14 @@ bool BlockManager::LoadBlockIndex(
         nHeight = pindex->nHeight;
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         pindex->nTimeMax = (pindex->pprev ? std::max(pindex->pprev->nTimeMax, pindex->nTime) : pindex->nTime);
-        // We can link the chain of blocks for which we've received transactions at some point.
+
+        // We can link the chain of blocks for which we've received transactions at some point, or
+        // blocks that are assumed-valid on the basis of snapshot load (see
+        // PopulateAndValidateSnapshot()).
         // Pruned nodes may have deleted the block.
         if (pindex->nTx > 0) {
             if (pindex->pprev) {
-                if (pindex->pprev->HaveTxsDownloaded()) {
+                if (pindex->pprev->nChainTx > 0) {
                     pindex->nChainTx = pindex->pprev->nChainTx + pindex->nTx;
                 } else {
                     pindex->nChainTx = 0;
@@ -3805,7 +3830,36 @@ bool BlockManager::LoadBlockIndex(
         if (pindex->IsAssumedValid() ||
                 (pindex->IsValid(BLOCK_VALID_TRANSACTIONS) &&
                  (pindex->HaveTxsDownloaded() || pindex->pprev == nullptr))) {
-            block_index_candidates.insert(pindex);
+
+            // Fill each chainstate's block candidate set. Only add assumed-valid
+            // blocks to the tip candidate set if the chainstate is allowed to rely on
+            // assumed-valid blocks.
+            //
+            // If all setBlockIndexCandidates contained the assumed-valid blocks, the
+            // background chainstate's ActivateBestChain() call would add assumed-valid
+            // blocks to the chain (based on how FindMostWorkChain() works). Obviously
+            // we don't want this since the purpose of the background validation chain
+            // is to validate assued-valid blocks.
+            //
+            // Note: This is considering all blocks whose height is greater or equal to
+            // the first assumed-valid block to be assumed-valid blocks, and excluding
+            // them from the background chainstate's setBlockIndexCandidates set. This
+            // does mean that some blocks which are not technically assumed-valid
+            // (later blocks on a fork beginning before the first assumed-valid block)
+            // might not get added to the the background chainstate, but this is ok,
+            // because they will still be attached to the active chainstate if they
+            // actually contain more work.
+            //
+            // Instad of this height-based approach, an earlier attempt was made at
+            // detecting "holistically" whether the block index under consideration
+            // relied on an assumed-valid ancestor, but this proved to be too slow to
+            // be practical.
+            for (CChainState* chainstate : chainman.GetAll()) {
+                if (chainstate->reliesOnAssumedValid() ||
+                        pindex->nHeight < first_assumed_valid_height) {
+                    chainstate->setBlockIndexCandidates.insert(pindex);
+                }
+            }
         }
         if (pindex->nStatus & BLOCK_FAILED_MASK && (!pindexBestInvalid || pindex->nChainWork > pindexBestInvalid->nChainWork))
             pindexBestInvalid = pindex;
@@ -3829,11 +3883,9 @@ void BlockManager::Unload() {
     m_block_index.clear();
 }
 
-bool BlockManager::LoadBlockIndexDB(std::set<CBlockIndex*, CBlockIndexWorkComparator>& setBlockIndexCandidates)
+bool BlockManager::LoadBlockIndexDB(ChainstateManager& chainman)
 {
-    if (!LoadBlockIndex(
-            ::Params().GetConsensus(),
-            setBlockIndexCandidates)) {
+    if (!LoadBlockIndex(::Params().GetConsensus(), chainman)) {
         return false;
     }
 
@@ -4194,7 +4246,7 @@ bool ChainstateManager::LoadBlockIndex()
     // Load block index from databases
     bool needs_init = fReindex;
     if (!fReindex) {
-        bool ret = m_blockman.LoadBlockIndexDB(ActiveChainstate().setBlockIndexCandidates);
+        bool ret = m_blockman.LoadBlockIndexDB(*this);
         if (!ret) return false;
         needs_init = m_blockman.m_block_index.empty();
     }
