@@ -19,7 +19,7 @@ static const int GRAPH_PADDING_LEFT = 30+LABEL_LEFT_SIZE;
 static const int GRAPH_PADDING_RIGHT = 30+LABEL_RIGHT_SIZE;
 static const int GRAPH_PADDING_TOP = 10;
 static const int GRAPH_PADDING_TOP_LABEL = 10;
-static const int GRAPH_PADDING_BOTTOM = 50;
+static const int GRAPH_PADDING_BOTTOM = 30;
 
 void ClickableTextItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
@@ -304,7 +304,7 @@ void MempoolStats::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     m_gfx_view->resize(size());
-    m_gfx_view->scene()->setSceneRect(rect().left(), rect().top(),rect().width(),std::max(500, rect().height()));
+    m_gfx_view->scene()->setSceneRect(rect().left(), rect().top(),rect().width(),rect().height());
     drawChart();
 }
 
