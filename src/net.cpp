@@ -55,7 +55,7 @@
 #include <math.h>
 
 /** Maximum number of block-relay-only anchor connections */
-static constexpr size_t MAX_BLOCK_RELAY_ONLY_ANCHORS = 2;
+static constexpr size_t MAX_BLOCK_RELAY_ONLY_ANCHORS = 0;
 static_assert (MAX_BLOCK_RELAY_ONLY_ANCHORS <= static_cast<size_t>(MAX_BLOCK_RELAY_ONLY_CONNECTIONS), "MAX_BLOCK_RELAY_ONLY_ANCHORS must not exceed MAX_BLOCK_RELAY_ONLY_CONNECTIONS.");
 /** Anchor IP address database file name */
 const char* const ANCHORS_DATABASE_FILENAME = "anchors.dat";
@@ -1325,9 +1325,8 @@ void CConnman::NotifyNumConnectionsChanged()
     }
 }
 
-bool CConnman::ShouldRunInactivityChecks(const CNode& node, std::optional<int64_t> now_in) const
+bool CConnman::ShouldRunInactivityChecks(const CNode& node, int64_t now) const
 {
-    const int64_t now = now_in ? now_in.value() : GetTimeSeconds();
     return node.nTimeConnected + m_peer_connect_timeout < now;
 }
 
@@ -2186,7 +2185,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // timer to decide if we should open a FEELER.
 
         if (!m_anchors.empty()) {
-            if (!nOutboundBlockRelay || anchor < m_max_outbound_block_relay)
+            if (anchor < m_max_outbound_block_relay)
                 conn_type = ConnectionType::BLOCK_RELAY;
         } else if (nOutboundFullRelay < m_max_outbound_full_relay) {
             // OUTBOUND_FULL_RELAY

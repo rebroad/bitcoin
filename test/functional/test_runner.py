@@ -40,7 +40,7 @@ except UnicodeDecodeError:
     CROSS = "x "
     CIRCLE = "o "
 
-if os.name != 'nt' or sys.getwindowsversion() >= (10, 0, 14393):
+if os.name != 'nt' or sys.getwindowsversion() >= (10, 0, 14393): #type:ignore
     if os.name == 'nt':
         import ctypes
         kernel32 = ctypes.windll.kernel32  # type: ignore
@@ -100,6 +100,7 @@ BASE_SCRIPTS = [
     'p2p_compactblocks.py',
     'p2p_compactblocks_blocksonly.py',
     'feature_segwit.py --legacy-wallet',
+    'feature_segwit.py --descriptors',
     # vv Tests less than 2m vv
     'wallet_basic.py --legacy-wallet',
     'wallet_basic.py --descriptors',
@@ -209,6 +210,7 @@ BASE_SCRIPTS = [
     'feature_assumevalid.py',
     'example_test.py',
     'wallet_txn_doublespend.py --legacy-wallet',
+    'wallet_multisig_descriptor_psbt.py',
     'wallet_txn_doublespend.py --descriptors',
     'feature_backwards_compatibility.py --legacy-wallet',
     'feature_backwards_compatibility.py --descriptors',

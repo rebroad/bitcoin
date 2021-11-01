@@ -221,7 +221,7 @@ std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::s
         }
 
         context.chain->initMessage(_("Loading wallet…").translated);
-        std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), options.create_flags, error, warnings);
+        const std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), options.create_flags, error, warnings);
         if (!wallet) {
             error = Untranslated("Wallet loading failed.") + Untranslated(" ") + error;
             status = DatabaseStatus::FAILED_LOAD;
@@ -301,7 +301,7 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
 
     // Make the wallet
     context.chain->initMessage(_("Loading wallet…").translated);
-    std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), wallet_creation_flags, error, warnings);
+    const std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), wallet_creation_flags, error, warnings);
     if (!wallet) {
         error = Untranslated("Wallet creation failed.") + Untranslated(" ") + error;
         status = DatabaseStatus::FAILED_CREATE;
@@ -1212,7 +1212,7 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, CWalletTx::Confirmatio
 
 void CWallet::transactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) {
     LOCK(cs_wallet);
-    SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /* block height */ 0, /* block hash */ {}, /* index */ 0});
+    SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /*block_height=*/0, /*block_hash=*/{}, /*block_index=*/0});
 
     auto it = mapWallet.find(tx->GetHash());
     if (it != mapWallet.end()) {
@@ -1253,7 +1253,7 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
         // distinguishing between conflicted and unconfirmed transactions are
         // imperfect, and could be improved in general, see
         // https://github.com/bitcoin-core/bitcoin-devwiki/wiki/Wallet-Transaction-Conflict-Tracking
-        SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /* block height */ 0, /* block hash */ {}, /* index */ 0});
+        SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /*block_height=*/0, /*block_hash=*/{}, /*block_index=*/0});
     }
 }
 
@@ -1281,7 +1281,7 @@ void CWallet::blockDisconnected(const CBlock& block, int height)
     m_last_block_processed_height = height - 1;
     m_last_block_processed = block.hashPrevBlock;
     for (const CTransactionRef& ptx : block.vtx) {
-        SyncTransaction(ptx, {CWalletTx::Status::UNCONFIRMED, /* block height */ 0, /* block hash */ {}, /* index */ 0});
+        SyncTransaction(ptx, {CWalletTx::Status::UNCONFIRMED, /*block_height=*/0, /*block_hash=*/{}, /*block_index=*/0});
     }
 }
 
@@ -1294,7 +1294,7 @@ void CWallet::updatedBlockTip()
 void CWallet::BlockUntilSyncedToCurrentChain() const {
     AssertLockNotHeld(cs_wallet);
     // Skip the queue-draining stuff if we know we're caught up with
-    // ::ChainActive().Tip(), otherwise put a callback in the validation interface queue and wait
+    // chain().Tip(), otherwise put a callback in the validation interface queue and wait
     // for the queue to drain enough to execute it (indicating we are caught up
     // at least with the time we entered this function).
     uint256 last_block_hash = WITH_LOCK(cs_wallet, return m_last_block_processed);
@@ -2515,16 +2515,16 @@ std::unique_ptr<WalletDatabase> MakeWalletDatabase(const std::string& name, cons
     // 2. Path to an existing directory.
     // 3. Path to a symlink to a directory.
     // 4. For backwards compatibility, the name of a data file in -walletdir.
-    const fs::path wallet_path = fsbridge::AbsPathJoin(GetWalletDir(), name);
+    const fs::path wallet_path = fsbridge::AbsPathJoin(GetWalletDir(), fs::PathFromString(name));
     fs::file_type path_type = fs::symlink_status(wallet_path).type();
     if (!(path_type == fs::file_not_found || path_type == fs::directory_file ||
           (path_type == fs::symlink_file && fs::is_directory(wallet_path)) ||
-          (path_type == fs::regular_file && fs::path(name).filename() == name))) {
+          (path_type == fs::regular_file && fs::PathFromString(name).filename() == fs::PathFromString(name)))) {
         error_string = Untranslated(strprintf(
               "Invalid -wallet path '%s'. -wallet path should point to a directory where wallet.dat and "
               "database/log.?????????? files can be stored, a location where such a directory could be created, "
               "or (for backwards compatibility) the name of an existing data file in -walletdir (%s)",
-              name, GetWalletDir()));
+              name, fs::quoted(fs::PathToString(GetWalletDir()))));
         status = DatabaseStatus::FAILED_BAD_PATH;
         return nullptr;
     }
@@ -2540,7 +2540,7 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
     int64_t nStart = GetTimeMillis();
     // TODO: Can't use std::make_shared because we need a custom deleter but
     // should be possible to use std::allocate_shared.
-    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database)), ReleaseWallet);
+    const std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, std::move(database)), ReleaseWallet);
     bool rescan_required = false;
     DBErrors nLoadWalletRet = walletInstance->LoadWallet();
     if (nLoadWalletRet != DBErrors::LOAD_OK) {
@@ -3235,7 +3235,8 @@ void CWallet::LoadActiveScriptPubKeyMan(uint256 id, OutputType type, bool intern
     auto spk_man = m_spk_managers.at(id).get();
     spk_mans[type] = spk_man;
 
-    if (spk_mans_other[type] == spk_man) {
+    const auto it = spk_mans_other.find(type);
+    if (it != spk_mans_other.end() && it->second == spk_man) {
         spk_mans_other.erase(type);
     }
 
