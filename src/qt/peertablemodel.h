@@ -49,7 +49,7 @@ public:
         NetNodeId = 0,
         Address,
         Direction,
-        ConnectionType,
+        //ConnectionType,
         //Network,
         Ping,
         Sent,
@@ -92,7 +92,7 @@ private:
         tr("Direction"),
         /*: Title of Peers Table column which describes the type of
             peer connection. The "type" describes why the connection exists. */
-        tr("Type"),
+        //tr("Type"),
         /*: Title of Peers Table column which states the network the peer
             connected through. */
         //tr("Network"),
