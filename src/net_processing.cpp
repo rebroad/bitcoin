@@ -1695,7 +1695,7 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
         }
     }
 
-    std::string strDebug = strprintf("%s: PushBlockHeaders(%s-%s) to", __func__, strHeight(pindexToAnnounce), strHeight(pindexNew));
+    std::string strDebug = strprintf("%s: PushBlockHeaders(%d) to", __func__, vHashes.size());
     {
         LOCK(m_peer_mutex);
         for (auto& it : m_peer_map) {

@@ -2241,7 +2241,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 if (nLastLast != nLastOutboundCount)
                     LogPrintf("anchor LOC %d -> %d\n", nLastLast, nLastOutboundCount);
             }
-            if (!m_anchors.empty() && (anchor == 0 || nOutboundBlockRelay)) {
+            if (!m_anchors.empty() && (anchor == 0 || nOutboundCount)) {
                 anchor++;
                 const CAddress addr = m_anchors.back();
                 m_anchors.pop_back();
@@ -2267,21 +2267,20 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                         strComment = strprintf("Oh well, I guess we'll find new ones. (tries=%d)", nAnchorTryAgain);
                         nAnchorTryAgain = 0;
                     } else {
-                        int nodes = nOutboundBlockRelay + nOutboundFullRelay;
-                        if ((nAnchorTryAgain == 1 && nodes > 0) ||
-                                (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nodes >= 2))
-                            strComment = strprintf("Oh dear, let's retry(%d) once more...nodes=%d IBD=%d", nAnchorTryAgain, nodes, nPeersIBD);
+                        if ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
+                                (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2))
+                            strComment = strprintf("Oh dear, let's retry(%d) once more...nodes=%d IBD=%d", nAnchorTryAgain, nOutboundCount, nPeersIBD);
                         else
-                            strComment = strprintf("Oh dear, we'll retry(%d) again shortly. nodes=%d IBD=%d", nAnchorTryAgain, nodes, nPeersIBD);
+                            strComment = strprintf("Oh dear, we'll retry(%d) again shortly. nodes=%d IBD=%d", nAnchorTryAgain, nOutboundCount, nPeersIBD);
                     }
                 }
                 LogPrintf("Finished connecting to %d anchors. Connections=%d+%d. %s\n", anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
                 anchor = 0;
             } // m_anchor not empty but anchor != 0
 
-            if ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
+            if (m_anchors.empty() && ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
                     (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2) ||
-                    (nOutboundCount < (nLastOutboundCount+1)*2/3)) { // or a sudden drop in connections
+                    (nOutboundCount < (nLastOutboundCount+1)*2/3))) { // or a sudden drop in connections
                 if (nOutboundCount < (nLastOutboundCount+1)*2/3)
                     LogPrintf("Outbound count dropped (%d < %d) LOC=%d\n", nOutboundCount, (nLastOutboundCount+1)*2/3, nLastOutboundCount);
                 else
