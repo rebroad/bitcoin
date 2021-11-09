@@ -1244,7 +1244,6 @@ if test "x$enable_fuzz" = "xyes"; then
   bitcoin_enable_qt=no
   bitcoin_enable_qt_test=no
   bitcoin_enable_qt_dbus=no
-  enable_wallet=no
   use_bench=no
   use_external_signer=no
   use_upnp=no
@@ -1870,8 +1869,8 @@ PKGCONFIG_LIBDIR_TEMP="$PKG_CONFIG_LIBDIR"
 unset PKG_CONFIG_LIBDIR
 PKG_CONFIG_LIBDIR="$PKGCONFIG_LIBDIR_TEMP"
 
-ac_configure_args="${ac_configure_args} --disable-shared --with-pic --enable-benchmark=no --with-bignum=no --enable-module-recovery --enable-module-schnorrsig --enable-experimental --disable-openssl-tests --enable-fields=32"
-AC_CONFIG_SUBDIRS([src/secp256k1 src/minisketch])
+ac_configure_args="${ac_configure_args} --disable-shared --with-pic --enable-benchmark=no --enable-module-recovery --enable-module-schnorrsig --enable-experimental --disable-openssl-tests"
+AC_CONFIG_SUBDIRS([src/secp256k1])
 
 AC_OUTPUT
 

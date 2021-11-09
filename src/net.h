@@ -316,7 +316,7 @@ public:
     /** read and deserialize data, advances msg_bytes data pointer */
     virtual int Read(Span<const uint8_t>& msg_bytes) = 0;
     // decomposes a message from the context
-    virtual std::optional<CNetMessage> GetMessage(std::chrono::microseconds time, uint32_t& out_err) = 0;
+    virtual CNetMessage GetMessage(std::chrono::microseconds time, bool& reject_message) = 0;
     virtual ~TransportDeserializer() {}
 };
 
@@ -380,7 +380,7 @@ public:
         }
         return ret;
     }
-    std::optional<CNetMessage> GetMessage(std::chrono::microseconds time, uint32_t& out_err_raw_size) override;
+    CNetMessage GetMessage(std::chrono::microseconds time, bool& reject_message) override;
 };
 
 /** The TransportSerializer prepares messages for the network transport
@@ -478,26 +478,6 @@ public:
                 return true;
             case ConnectionType::INBOUND:
             case ConnectionType::MANUAL:
-            case ConnectionType::ADDR_FETCH:
-            case ConnectionType::FEELER:
-                return false;
-        } // no default case, so the compiler can warn about missing cases
-
-        assert(false);
-    }
-
-    /**
-     * If this peer can possibly participate in transaction relay based on its connection type,
-     * return true. To be more precise, a caller should apply specific checks depending on the
-     * connection type.
-     */
-    bool MightSupportTransactionRelay() const {
-        switch (m_conn_type) {
-            case ConnectionType::OUTBOUND_FULL_RELAY:
-            case ConnectionType::MANUAL:
-            case ConnectionType::INBOUND:
-                return true;
-            case ConnectionType::BLOCK_RELAY:
             case ConnectionType::ADDR_FETCH:
             case ConnectionType::FEELER:
                 return false;
