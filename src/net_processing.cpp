@@ -4051,7 +4051,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             else
                 strExtra += " UNSOLICITED";
         }
-        LogPrint(BCLog::BLOCK, "recv block %s%s size=%d peer=%d\n", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
+        LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
         ProcessBlock(pfrom, pblock, forceProcessing);
         return;
     }

@@ -58,7 +58,7 @@
 static constexpr size_t MAX_BLOCK_RELAY_ONLY_ANCHORS = 0;
 static_assert (MAX_BLOCK_RELAY_ONLY_ANCHORS <= static_cast<size_t>(MAX_BLOCK_RELAY_ONLY_CONNECTIONS), "MAX_BLOCK_RELAY_ONLY_ANCHORS must not exceed MAX_BLOCK_RELAY_ONLY_CONNECTIONS.");
 /** Anchor IP address database file name */
-const char* const ANCHORS_DATABASE_FILENAME = "anchors.dat";
+const char* const ANCHORS_DATABASE_FILENAME = "txanchors.dat";
 
 // How often to dump addresses to peers.dat
 static constexpr std::chrono::minutes DUMP_PEERS_INTERVAL{15};

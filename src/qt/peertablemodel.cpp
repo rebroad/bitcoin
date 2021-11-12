@@ -61,13 +61,35 @@ int PeerTableModel::columnCount(const QModelIndex& parent) const
 
 QVariant PeerTableModel::data(const QModelIndex& index, int role) const
 {
-    if(!index.isValid())
+    static uint64_t nCount = 0;
+    static uint64_t nInvalidCount = 0;
+    static uint64_t nDisplayCount = 0;
+    static uint64_t nAlignCount = 0;
+    static uint64_t nStatsCount = 0;
+    uint64_t nNow = GetTime();
+    static uint64_t nLastTime = nNow;
+
+    if (nNow >= nLastTime + 10) {
+        LogPrintf("%s: count=%d invalid=%d display=%d align=%d stats=%d\n", __func__, nCount, nInvalidCount, nDisplayCount, nAlignCount, nStatsCount);
+        nCount = 0;
+        nInvalidCount = 0;
+        nDisplayCount = 0;
+        nAlignCount = 0;
+        nStatsCount = 0;
+        nLastTime = nNow;
+    }
+    nCount++;
+
+    if(!index.isValid()) {
+        nInvalidCount++;
         return QVariant();
+    }
 
     CNodeCombinedStats *rec = static_cast<CNodeCombinedStats*>(index.internalPointer());
 
     const auto column = static_cast<ColumnIndex>(index.column());
     if (role == Qt::DisplayRole) {
+        nDisplayCount++;
         switch (column) {
         case NetNodeId:
             return (qint64)rec->nodeStats.nodeid;
@@ -128,6 +150,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         } // no default case, so the compiler can warn about missing cases
         assert(false);
     } else if (role == Qt::TextAlignmentRole) {
+        nAlignCount++;
         switch (column) {
         case NetNodeId:
             return QVariant(Qt::AlignRight | Qt::AlignVCenter);
@@ -146,6 +169,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         } // no default case, so the compiler can warn about missing cases
         assert(false);
     } else if (role == StatsRole) {
+        nStatsCount++;
         return QVariant::fromValue(rec);
     }
 
