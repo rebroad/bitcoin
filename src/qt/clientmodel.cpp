@@ -201,17 +201,6 @@ OptionsModel *ClientModel::getOptionsModel()
 
 PeerTableModel *ClientModel::getPeerTableModel()
 {
-    static uint64_t nCount = 0;
-    uint64_t nNow = GetTime();
-    static uint64_t nLastTime = nNow;
-
-    if (nNow >= nLastTime + 10) {
-        LogPrintf("%s: count=%d\n", __func__, nCount);
-        nCount = 0;
-        nLastTime = nNow;
-    }
-    nCount++;
-
     return peerTableModel;
 }
 

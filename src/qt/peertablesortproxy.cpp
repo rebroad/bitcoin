@@ -21,17 +21,6 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
     const CNodeStats left_stats = Assert(sourceModel()->data(left_index, PeerTableModel::StatsRole).value<CNodeCombinedStats*>())->nodeStats;
     const CNodeStats right_stats = Assert(sourceModel()->data(right_index, PeerTableModel::StatsRole).value<CNodeCombinedStats*>())->nodeStats;
 
-    static uint64_t nCount = 0;
-    uint64_t nNow = GetTime();
-    static uint64_t nLastTime = nNow;
-
-    nCount++;
-    if (nNow > nLastTime) {
-        //LogPrintf("%s: counts = %d\n", __func__, nCount);
-        nCount = 0;
-        nLastTime = nNow;
-    }
-
     switch (static_cast<PeerTableModel::ColumnIndex>(left_index.column())) {
     case PeerTableModel::NetNodeId:
         return left_stats.nodeid < right_stats.nodeid;
