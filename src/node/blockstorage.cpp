@@ -23,6 +23,7 @@
 #include <validation.h>
 #include <validation_thread.h>
 
+namespace node {
 std::atomic_bool fImporting(false);
 std::atomic_bool fReindex(false);
 std::atomic_bool fActivateChain(false);
@@ -500,12 +501,14 @@ void CleanupBlockRevFiles()
         remove(item.second);
     }
 }
+} // namespace node
 
 std::string CBlockFileInfo::ToString() const
 {
     return strprintf("CBlockFileInfo(blocks=%u, size=%u, heights=%u...%u, time=%s...%s)", nBlocks, nSize, nHeightFirst, nHeightLast, FormatISO8601Date(nTimeFirst), FormatISO8601Date(nTimeLast));
 }
 
+namespace node {
 CBlockFileInfo* BlockManager::GetBlockFileInfo(size_t n)
 {
     LOCK(cs_LastBlockFile);
@@ -974,3 +977,4 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
         chainman.ActiveChainstate().LoadMempoolCache(args);
     }
 }
+} // namespace node
