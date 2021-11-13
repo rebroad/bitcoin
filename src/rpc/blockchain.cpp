@@ -1698,6 +1698,8 @@ static RPCHelpMan getdeploymentinfo()
         },
         RPCResult{
             RPCResult::Type::OBJ, "", "", {
+                {RPCResult::Type::STR, "hash", "requested block hash (or tip)"},
+                {RPCResult::Type::NUM, "height", "requested block height (or tip)"},
                 {RPCResult::Type::OBJ, "deployments", "", {
                     {RPCResult::Type::OBJ, "xxxx", "name of the deployment", RPCHelpForDeployment}
                 }},
@@ -1725,6 +1727,8 @@ static RPCHelpMan getdeploymentinfo()
             const Consensus::Params& consensusParams = Params().GetConsensus();
 
             UniValue deploymentinfo(UniValue::VOBJ);
+            deploymentinfo.pushKV("hash", tip->GetBlockHash().ToString());
+            deploymentinfo.pushKV("height", tip->nHeight);
             deploymentinfo.pushKV("deployments", DeploymentInfo(tip, consensusParams));
             return deploymentinfo;
         },
