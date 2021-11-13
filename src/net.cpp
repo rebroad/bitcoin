@@ -1737,10 +1737,23 @@ void CConnman::SocketHandler()
                 tWorstChanged = tWorstPctChanged; fLatestNodeDegrading = fLatestNodePctDegrading;
             }
             if (tIBDEnded > tWorstChanged) tWorstChanged = tIBDEnded;
-            if ((pnode->GetId() == worstNode) && ((nLastBlockTime > latestOutboundConn && (pnode->nBlockTXs || (pnode->nBlockTXs == 0 && nLastBlockTime - std::max(pnode->nTimeConnected, tIBDEnded) >= 120)) && nOutboundFullRelay >= (int)m_max_outbound_full_relay - 1) || (((now - tWorstChanged >= 45 && nOutboundFullRelay >= (int)m_max_outbound_full_relay - 1) || (now - latestOutboundConn >= 180 && nLowest == 0)) && (!fLatestNodeDegrading || worstNode == latestNode) && (nLowest <= nSecondLowest / 2 || now - latestOutboundConn >= 120)))) {
+            bool MaxedOut = nOutboundFullRelay >= (int)m_max_outbound_full_relay;
+            bool DoIt = false;
+            if (pnode->GetId() == worstNode) {
+                int64_t nTimeConnected = std::max(pnode->nTimeConnected, tIBDEnded);
+                if (MaxedOut) {
+                    // A block came in and so the lowest will always be the lowest - disconnect it
+                    if (nLastBlockTime > latestOutboundConn && (pnode->nBlockTXs || (pnode->nBlockTXs == 0 && nLastBlockTime - nTimeConnected >= 120))) DoIt = true;
+                    // If no change for over 45 seconds and lowest either very low, or no new connections for over 2 minutes
+                    if ((now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && (nLowest <= nSecondLowest / 2 || now - latestOutboundConn >= 120)) DoIt = true;
+                }
+                // Disconnect any nodes where out TX input is zero and connected over 3 minutes
+                if (now - nTimeConnected >= 180 && nLowest == 0) DoIt = true;
+            }
+            if (DoIt) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
                 LogPrintf("%s: Tx%d: %s=%d,%d TimeConn=%d Changed=%d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? "TXpm":"Pct", nLowest, nSecondLowest, now - pnode->nTimeConnected, now - tWorstChanged, pnode->GetId());
-                if ((now - latestOutboundConn) >= 120 && nOutboundFullRelay >= (int)m_max_outbound_full_relay - 1
+                if ((now - latestOutboundConn) >= 120 && MaxedOut
                         && !nAnchorTryAgain && (now - latest1stTx) >= 120) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
                     if (anchors_to_dump.size() > (size_t)m_max_outbound_full_relay - 1) {

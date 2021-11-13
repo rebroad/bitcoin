@@ -1179,7 +1179,7 @@ void PeerManagerImpl::PushNodeVersion(CNode& pnode, int64_t nTime)
     CService addr_you = addr.IsRoutable() && !IsProxy(addr) && addr.IsAddrV1Compatible() ? addr : CService();
     uint64_t your_services{addr.nServices};
 
-    const bool tx_relay = !m_ignore_incoming_txs && pnode.m_tx_relay != nullptr;
+    const bool tx_relay = !m_ignore_incoming_txs && pnode.m_tx_relay != nullptr && !pnode.IsFeelerConn();;
     std::string cleanSubVer;
     {
         LOCK(pnode.cs_SubVer);
@@ -2640,10 +2640,6 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
     m_chainman.ProcessNewBlock(m_chainparams, block, force_processing, &new_block);
     if (new_block) {
         node.nLastBlockTime = GetTime();
-        if (!gArgs.GetBoolArg("-updatechain", true)) {
-            LOCK(cs_main);
-            MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
-        }
     } else {
         LOCK(cs_main);
         mapBlockSource.erase(block->GetHash());
@@ -4753,6 +4749,7 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
 
     if (m_ignore_incoming_txs) return;
     if (!pto.m_tx_relay) return;
+    if (pto.IsFeelerConn()) return;
     if (pto.GetCommonVersion() < FEEFILTER_VERSION) return;
     // peers with the forcerelay permission should not filter txs to us
     if (pto.HasPermission(NetPermissionFlags::ForceRelay)) return;
@@ -4761,7 +4758,7 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
     static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
 
     static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
-    if (m_chainman.ActiveChainstate().IsInitialBlockDownload() || pto.IsFeelerConn()) {
+    if (m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
         // Received tx-inv messages are discarded when the active
         // chainstate is in IBD, so tell the peer to not send them.
         currentFilter = MAX_MONEY;
