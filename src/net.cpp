@@ -1752,7 +1752,7 @@ void CConnman::SocketHandler()
             }
             if (DoIt) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
-                LogPrintf("%s: Tx%d: %s=%d,%d TimeConn=%d Changed=%d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? "TXpm":"Pct", nLowest, nSecondLowest, now - pnode->nTimeConnected, now - tWorstChanged, pnode->GetId());
+                LogPrintf("%s: Tx%d: %s=%d,%d TimeConn=%d Changed=%d LastOut=%d Last1st=%d disconnect peer=%d\n", __func__, nTechnique, nTechnique ? "TXpm":"Pct", nLowest, nSecondLowest, now - pnode->nTimeConnected, now - tWorstChanged, now - latestOutboundConn, now - latest1stTx, pnode->GetId());
                 if ((now - latestOutboundConn) >= 120 && MaxedOut
                         && !nAnchorTryAgain && (now - latest1stTx) >= 120) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
@@ -2262,11 +2262,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 nAnchorTryAgain++;
                 if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay) {
                     strComment = strprintf("No further action needed! (tries=%d)", nAnchorTryAgain);
-                    if (nAnchorTryAgain < 3 && nPeersIBD) {
-                        strComment += strprintf(" but let's try after IBD(%d) anyway!", nPeersIBD);
-                        nAnchorTryAgain = 2;
-                    } else
-                        nAnchorTryAgain = 0;
+                    nAnchorTryAgain = 0;
                 } else {
                     if (nAnchorTryAgain >= 3) { // One retry is sufficient, 2nd retry rarely finds anything new.
                         strComment = strprintf("Oh well, I guess we'll find new ones. (tries=%d)", nAnchorTryAgain);
@@ -2278,6 +2274,10 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                         else
                             strComment = strprintf("Oh dear, we'll retry(%d) again shortly. nodes=%d IBD=%d", nAnchorTryAgain, nOutboundCount, nPeersIBD);
                     }
+                }
+                if (nPeersIBD) {
+                    strComment += strprintf(" but let's try after IBD(%d) anyway!", nPeersIBD);
+                    nAnchorTryAgain = 2;
                 }
                 LogPrintf("Finished connecting to %d anchors. Connections=%d+%d. %s\n", anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
                 anchor = 0;

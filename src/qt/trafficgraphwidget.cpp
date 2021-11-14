@@ -60,6 +60,13 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
             path.lineTo(x, y);
         }
         path.lineTo(x, YMARGIN + h);
+
+        int64_t now = GetTime();
+        static int64_t lastnow = 0;
+        if (lastnow != now) {
+            LogPrintf("%s: height=%d YMARGIN=%d fMax=%d sc=%d sample=%d\n", __func__, height(), YMARGIN, fMax, sampleCount, samples.at(0));
+            lastnow = now;
+        }
     }
 }
 
@@ -91,10 +98,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     }
     // if we drew 3 or fewer lines, break them up at the next lower order of magnitude
     if(fMax / val <= 3.0f) {
-        axisCol = axisCol.darker();
         val = pow(10.0f, base - 1);
-        painter.setPen(axisCol);
         painter.drawText(XMARGIN, YMARGIN + h - h * val / fMax-yMarginText, QString("%1 %2").arg(val).arg(units));
+        axisCol = axisCol.darker();
+        painter.setPen(axisCol);
         int count = 1;
         for(float y = val; y < fMax; y += val, count++) {
             // don't overwrite lines drawn above
