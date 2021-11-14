@@ -2275,7 +2275,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                             strComment = strprintf("Oh dear, we'll retry(%d) again shortly. nodes=%d IBD=%d", nAnchorTryAgain, nOutboundCount, nPeersIBD);
                     }
                 }
-                if (nPeersIBD) {
+                if (nPeersIBD && !nAnchorTryAgain) {
                     strComment += strprintf(" but let's try after IBD(%d) anyway!", nPeersIBD);
                     nAnchorTryAgain = 2;
                 }
