@@ -93,8 +93,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     if(fMax / val <= 5.0f) {
         float oldval = val;
         val = pow(10.0f, base - 1);
-        axisCol = axisCol.darker();
-        painter.setPen(axisCol);
+        painter.setPen(axisCol.darker());
         painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * sqrt(val) / sqrt(fMax))-yMarginText, QString("%1 %2").arg(val).arg(units));
         int count = 1;
         for(float y = val; y < oldval*2; y += val, count++) {
