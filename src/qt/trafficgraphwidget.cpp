@@ -56,7 +56,7 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
             x = XMARGIN + w - w * i / DESIRED_SAMPLES;
-            int y = YMARGIN + h - int(h * 1.0 * sqrt(samples.at(i)) / sqrt(fMax));
+            int y = YMARGIN + h - int(h * 1.0 * log(samples.at(i)+1) / log(fMax+1));
             path.lineTo(x, y);
         }
         path.lineTo(x, YMARGIN + h);
@@ -75,7 +75,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
-    if(sqrt(fMax) <= 0.0f) return;
+    if(log(fMax+1) <= 0.0f) return;
 
     QColor axisCol(Qt::gray);
     int h = height() - YMARGIN * 2;
@@ -90,16 +90,16 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     const float yMarginText = 2.0;
 
     // if we drew 5 or fewer lines, break them up at the next lower order of magnitude
-    if(fMax / val <= 5.0f) {
+    if(fMax / val <= 10.0f) {
         float oldval = val;
         val = pow(10.0f, base - 1);
         painter.setPen(axisCol.darker());
-        painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * sqrt(val) / sqrt(fMax))-yMarginText, QString("%1 %2").arg(val).arg(units));
+        painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * log(val+1) / log(fMax+1))-yMarginText, QString("%1 %2").arg(val).arg(units));
         int count = 1;
-        for(float y = val; y < oldval*2; y += val, count++) {
+        for(float y = val; y < oldval; y += val, count++) {
             if(count % 10 == 0)
                 continue;
-            int yy = YMARGIN + h - (h * 1.0 * sqrt(y) / sqrt(fMax));
+            int yy = YMARGIN + h - (h * 1.0 * log(y+1) / log(fMax+1));
             painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
         }
         val = oldval;
@@ -107,10 +107,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     // draw lines
     painter.setPen(axisCol);
     for(float y = val; y < fMax; y += val) {
-        int yy = YMARGIN + h - (h * 1.0 * sqrt(y) / sqrt(fMax));
+        int yy = YMARGIN + h - (h * 1.0 * log(y+1) / log(fMax+1));
         painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
     }
-    painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * sqrt(val) / sqrt(fMax))-yMarginText, QString("%1 %2").arg(val).arg(units));
+    painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * log(val+1) / log(fMax+1))-yMarginText, QString("%1 %2").arg(val).arg(units));
 
     painter.setRenderHint(QPainter::Antialiasing);
     if(!vSamplesIn.empty()) {

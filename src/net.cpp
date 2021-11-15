@@ -1603,7 +1603,7 @@ void CConnman::SocketHandler()
     static NodeId lastWorstTXpm = -1;
     float nGlobalTXpm = 0;
     float nGlobalBps = 0;
-    const int64_t now = GetTimeSeconds();
+    int64_t now = GetTimeSeconds();
     static int64_t tWorstPctChanged = now;
     static int64_t tWorstTXpmChanged = now;
     static int64_t tIBDEnded = now;
