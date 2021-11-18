@@ -247,4 +247,17 @@ void InterruptSocks5(bool interrupt);
  */
 bool Socks5(const std::string& strDest, uint16_t port, const ProxyCredentials* auth, const Sock& socket);
 
+/**
+ * Determine if a port is "bad" from the perspective of attempting to connect
+ * to a node on that port.
+ * See
+ * https://fetch.spec.whatwg.org/#port-blocking
+ * https://chromium.googlesource.com/chromium/src.git/+/refs/heads/main/net/base/port_util.cc
+ * https://hg.mozilla.org/mozilla-central/file/tip/netwerk/base/nsIOService.cpp
+ * https://github.com/bitcoin/bitcoin/pull/23306#issuecomment-947516736
+ * @param[in] port Port to check.
+ * @return true if the port is bad
+ */
+bool IsBadPort(uint16_t port);
+
 #endif // BITCOIN_NETBASE_H
