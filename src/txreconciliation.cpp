@@ -94,7 +94,7 @@ class TxReconciliationTracker::Impl {
         bool added = WITH_LOCK(m_mutex, return m_local_salts.emplace(peer_id, m_local_recon_salt).second);
         // We do this exactly once per peer (which are unique by NodeId, see GetNewNodeId) so it's
         // safe to assume we don't have this record yet.
-        assert(added);
+        //assert(added);
 
         LogPrint(BCLog::NET, "Pre-register peer=%d for reconciling.\n", peer_id);
         return std::make_tuple(we_initiate_recon, we_respond_recon, RECON_VERSION, m_local_recon_salt);
