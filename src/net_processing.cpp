@@ -476,9 +476,9 @@ private:
     bool AlreadyHaveTx(const GenTxid& gtxid) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     /**
-     * Filter for transactions that were recently rejected by
-     * AcceptToMemoryPool. These are not rerequested until the chain tip
-     * changes, at which point the entire filter is reset.
+     * Filter for transactions that were recently rejected by the mempool.
+     * These are not rerequested until the chain tip changes, at which point
+     * the entire filter is reset.
      *
      * Without this filter we'd be re-requesting txs from each of our peers,
      * increasing bandwidth consumption considerably. For instance, with 100
@@ -1509,6 +1509,7 @@ bool PeerManagerImpl::MaybePunishNodeForTx(NodeId nodeid, const TxValidationStat
     case TxValidationResult::TX_WITNESS_STRIPPED:
     case TxValidationResult::TX_CONFLICT:
     case TxValidationResult::TX_MEMPOOL_POLICY:
+    case TxValidationResult::TX_NO_MEMPOOL:
         break;
     }
     if (message != "") {
@@ -2316,15 +2317,16 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 if (vGetData.size() > 0) {
                     std::string strItem;
                     if (!m_ignore_incoming_txs && m_mempool.size() > 10 &&
-                        nodestate->fSupportsDesiredCmpctVersion &&
-                        vGetData.size() == 1) { // REBTODO - 5 (MAX_CMPCTBLOCK_DEPTH) within best_height, use cmpct
+                        nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 &&
+                        pindexLast->nHeight <= m_chainman.ActiveChain().Height() + 6) {
                         if (!pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) // REBTEMP - log this experimental thing
                             LogPrintf("CURIOUS: Fetching a cmpctblock whose parent (%s) not yet in our chain!\n",
                                 strHeight(pindexLast->pprev));
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                         strItem = "cmpct";
-                    }
+                    } else if (vGetData.size() == 1)
+                        LogPrintf("miit=%d mempool=%d Supports=%d\n", m_ignore_incoming_txs ? 1:0, m_mempool.size(), nodestate->fSupportsDesiredCmpctVersion ? 1:0);
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     // Next line needed because now we'll use the first cmpctblock block received,
                     // not necessarily the one we're requesting here.
@@ -2396,7 +2398,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
         if (porphanTx == nullptr) continue;
 
         int64_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, porphanTx, from_peer, false /* bypass_limits */);
+        const MempoolAcceptResult result = m_chainman.ProcessTransaction(porphanTx, from_peer);
         const TxValidationState& state = result.m_state;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
@@ -2463,8 +2465,6 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             break;
         }
     }
-    CChainState& active_chainstate = m_chainman.ActiveChainstate();
-    m_mempool.check(active_chainstate.CoinsTip(), active_chainstate.m_chain.Height() + 1);
 }
 
 bool PeerManagerImpl::PrepareBlockFilterRequest(CNode& peer,
@@ -3495,13 +3495,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
 	size_t nMemUsageBefore = m_mempool.DynamicMemoryUsage();
-        const MempoolAcceptResult result = AcceptToMemoryPool(m_chainman.ActiveChainstate(), m_mempool, ptx, pfrom.GetId(), false /* bypass_limits */);
+        const MempoolAcceptResult result = m_chainman.ProcessTransaction(ptx, pfrom.GetId());
         const TxValidationState& state = result.m_state;
         bool fOrphanAdded = false;
 
         if (result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
-            CChainState& active_chainstate = m_chainman.ActiveChainstate();
-            m_mempool.check(active_chainstate.CoinsTip(), active_chainstate.m_chain.Height() + 1);
             // As this version of the transaction was acceptable, we can forget about any
             // requests for it.
             m_txrequest.ForgetTxHash(tx.GetHash());
@@ -3623,8 +3621,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
 
         // If a tx has been detected by m_recent_rejects, we will have reached
-        // this point and the tx will have been ignored. Because we haven't run
-        // the tx through AcceptToMemoryPool, we won't have computed a DoS
+        // this point and the tx will have been ignored. Because we haven't
+        // submitted the tx to our mempool, we won't have computed a DoS
         // score for it or determined exactly why we consider it invalid.
         //
         // This means we won't penalize any peer subsequently relaying a DoSy
@@ -5286,7 +5284,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 uint32_t nFetchFlags = GetFetchFlags(*pto);
                 vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                 BlockRequested(pto->GetId(), *pindex);
-                LogPrint(BCLog::BLOCK, "Requesting block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
+                LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {

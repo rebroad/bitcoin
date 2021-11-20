@@ -50,24 +50,25 @@ int TrafficGraphWidget::getGraphRangeMins() const
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
     int sampleCount = samples.size();
-    if(sampleCount > 0) {
+    if(sampleCount > 0 && fMax > 0) {
         int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
             x = XMARGIN + w - w * i / DESIRED_SAMPLES;
-            int y = YMARGIN + h - int(h * 1.0 * pow(samples.at(i), 0.301030) / pow(fMax, 0.301030));
+            int y = YMARGIN + h - (int)(h * 1.0 * (fToggle ? (pow(samples.at(i), 0.3) / pow(fMax, 0.3)) : (samples.at(i) / fMax)));
             path.lineTo(x, y);
         }
         path.lineTo(x, YMARGIN + h);
-
-        int64_t now = GetTime();
-        static int64_t lastnow = 0;
-        if (lastnow != now) {
-            //LogPrintf("%s: height=%d YMARGIN=%d fMax=%d sc=%d sample=%d\n", __func__, height(), YMARGIN, fMax, sampleCount, samples.at(0));
-            lastnow = now;
-        }
     }
+}
+
+void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
+{
+    QWidget::mousePressEvent(event);
+    fToggle = !fToggle;
+    QPaintEvent* erm = nullptr;
+    paintEvent(erm);
 }
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *)
@@ -75,7 +76,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
-    if(pow(fMax, 0.301030) <= 0.0f) return;
+    if(fMax <= 0.0f) return;
 
     QColor axisCol(Qt::gray);
     int h = height() - YMARGIN * 2;
@@ -89,17 +90,17 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     const QString units = tr("kB/s");
     const float yMarginText = 2.0;
 
-    // if we drew 5 or fewer lines, break them up at the next lower order of magnitude
-    if(fMax / val <= 10.0f) {
+    // if we drew 10 or 3 fewer lines, break them up at the next lower order of magnitude
+    if(fMax / val <= (fToggle ? 10.0f : 3.0f)) {
         float oldval = val;
         val = pow(10.0f, base - 1);
         painter.setPen(axisCol.darker());
-        painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * pow(val, 0.301030) / pow(fMax, 0.301030))-yMarginText, QString("%1 %2").arg(val).arg(units));
+        painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * (fToggle ? (pow(val, 0.3) / pow(fMax, 0.3)) : (val / fMax)))-yMarginText, QString("%1 %2").arg(val).arg(units));
         int count = 1;
-        for(float y = val; y < oldval; y += val, count++) {
+        for(float y = val; y < (fToggle ? oldval : fMax); y += val, count++) {
             if(count % 10 == 0)
                 continue;
-            int yy = YMARGIN + h - (h * 1.0 * pow(y, 0.301030) / pow(fMax, 0.301030));
+            int yy = YMARGIN + h - (h * 1.0 * (fToggle ? (pow(y, 0.3) / pow(fMax, 0.3)) : (y / fMax)));
             painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
         }
         val = oldval;
@@ -107,10 +108,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     // draw lines
     painter.setPen(axisCol);
     for(float y = val; y < fMax; y += val) {
-        int yy = YMARGIN + h - (h * 1.0 * pow(y, 0.301030) / pow(fMax, 0.301030));
+        int yy = YMARGIN + h - (h * 1.0 * (fToggle ? (pow(y, 0.3) / pow(fMax, 0.3)) : (y / fMax)));
         painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
     }
-    painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * pow(val, 0.301030) / pow(fMax, 0.301030))-yMarginText, QString("%1 %2").arg(val).arg(units));
+    painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * (fToggle ? (pow(val, 0.3) / pow(fMax, 0.3)) : (val / fMax)))-yMarginText, QString("%1 %2").arg(val).arg(units));
 
     painter.setRenderHint(QPainter::Antialiasing);
     if(!vSamplesIn.empty()) {
@@ -185,10 +186,9 @@ void TrafficGraphWidget::clear()
 {
     timer->stop();
 
-    vSamplesOut.clear();
-    vSamplesIn.clear();
-    fMax = 0.0f;
-
+    //vSamplesOut.clear();
+    //vSamplesIn.clear();
+    //fMax = 0.0f;
     if(clientModel) {
         nLastBytesIn = clientModel->node().getTotalBytesRecv();
         nLastBytesOut = clientModel->node().getTotalBytesSent();
