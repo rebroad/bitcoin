@@ -3517,14 +3517,14 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     return true;
 }
 
-int BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
+int ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
     // Check for duplicate
     uint256 hash = block.GetHash();
-    BlockMap::iterator miSelf = m_block_index.find(hash);
+    BlockMap::iterator miSelf{m_blockman.m_block_index.find(hash)};
     if (hash != chainparams.GetConsensus().hashGenesisBlock) {
-        if (miSelf != m_block_index.end()) {
+        if (miSelf != m_blockman.m_block_index.end()) {
             // Block header is already known.
             CBlockIndex* pindex = miSelf->second;
             if (ppindex)
@@ -3543,8 +3543,8 @@ int BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationSt
 
         // Get prev block index
         CBlockIndex* pindexPrev = nullptr;
-        BlockMap::iterator mi = m_block_index.find(block.hashPrevBlock);
-        if (mi == m_block_index.end()) {
+        BlockMap::iterator mi{m_blockman.m_block_index.find(block.hashPrevBlock)};
+        if (mi == m_blockman.m_block_index.end()) {
             LogPrint(BCLog::VALIDATION, "%s: %s prev block not found\n", __func__, hash.ToString());
             return state.Invalid(BlockValidationResult::BLOCK_MISSING_PREV, "prev-blk-not-found");
         }
@@ -3553,7 +3553,7 @@ int BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationSt
             LogPrint(BCLog::VALIDATION, "%s: %s prev block invalid\n", __func__, hash.ToString());
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
         }
-        if (!ContextualCheckBlockHeader(block, state, *this, chainparams, pindexPrev, GetAdjustedTime())) {
+        if (!ContextualCheckBlockHeader(block, state, m_blockman, chainparams, pindexPrev, GetAdjustedTime())) {
             LogPrint(BCLog::VALIDATION, "%s: Consensus::ContextualCheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }
@@ -3582,7 +3582,7 @@ int BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationSt
             // hasn't been validated up to BLOCK_VALID_SCRIPTS. This is a performance
             // optimization, in the common case of adding a new block to the tip,
             // we don't need to iterate over the failed blocks list.
-            for (const CBlockIndex* failedit : m_failed_blocks) {
+            for (const CBlockIndex* failedit : m_blockman.m_failed_blocks) {
                 if (pindexPrev->GetAncestor(failedit->nHeight) == failedit) {
                     assert(failedit->nStatus & BLOCK_FAILED_VALID);
                     CBlockIndex* invalid_walk = pindexPrev;
@@ -3597,7 +3597,7 @@ int BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationSt
             }
         }
     }
-    CBlockIndex* pindex = AddToBlockIndex(block);
+    CBlockIndex* pindex{m_blockman.AddToBlockIndex(block)};
 
     if (ppindex)
         *ppindex = pindex;
@@ -3614,12 +3614,13 @@ int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& h
         LOCK(cs_main);
         for (const CBlockHeader& header : headers) {
             CBlockIndex *pindex = nullptr; // Use a temp pindex instead of ppindex to avoid a const_cast
-            int accepted = m_blockman.AcceptBlockHeader(
-                header, state, chainparams, &pindex);
+            int accepted{AcceptBlockHeader(header, state, chainparams, &pindex)};
             ActiveChainstate().CheckBlockIndex();
 
+            if (!accepted) {
+                return false;
+            }
             if (accepted == 2) nCount++;
-            if (accepted == false) return 0;
 
             if (ppindex) {
                 *ppindex = pindex;
@@ -3645,7 +3646,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     CBlockIndex *pindexDummy = nullptr;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
 
-    bool accepted_header = m_blockman.AcceptBlockHeader(block, state, m_params, &pindex);
+    bool accepted_header{m_chainman.AcceptBlockHeader(block, state, m_params, &pindex)};
     CheckBlockIndex();
 
     if (!accepted_header)
