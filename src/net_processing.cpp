@@ -3509,7 +3509,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         CNodeState* nodestate = State(pfrom.GetId());
         if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
-        if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
+        if (nodestate->nBlockAfterTXs > 1) {
+            LogPrintf("nBlockAfterTXs %d -> %d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1);
+            nodestate->nBlockAfterTXs--;
+        }
 
         const uint256& hash = nodestate->m_wtxid_relay ? wtxid : txid;
         pfrom.AddKnownTx(hash); // REBTODO - check what this does
