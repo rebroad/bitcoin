@@ -1638,6 +1638,8 @@ void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &blo
 static RecursiveMutex cs_most_recent_block;
 static std::shared_ptr<const CBlock> most_recent_block GUARDED_BY(cs_most_recent_block);
 static std::shared_ptr<const CBlockHeaderAndShortTxIDs> most_recent_compact_block GUARDED_BY(cs_most_recent_block);
+static CBlockHeaderAndShortTxIDs last_recved_cmpctblock1;
+static CBlockHeaderAndShortTxIDs last_recved_cmpctblock2;
 static uint256 most_recent_block_hash GUARDED_BY(cs_most_recent_block);
 static bool fWitnessesPresentInMostRecentCompactBlock GUARDED_BY(cs_most_recent_block);
 
@@ -2331,6 +2333,11 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 for (const CBlockIndex *pindex : reverse_iterate(vToFetch)) {
                     if (nodestate->nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
                         // Can't download any more from this peer
+                        break;
+                    }
+                    if (pindex->GetBlockHash() == last_recved_cmpctblock1.header.GetHash() ||
+                        pindex->GetBlockHash() == last_recved_cmpctblock2.header.GetHash()) {
+                        // We'll pick this up in SendMessages() next
                         break;
                     }
                     uint32_t nFetchFlags = GetFetchFlags(pfrom);
@@ -3720,7 +3727,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         int nNew = m_chainman.ProcessNewBlockHeaders({cmpctblock.header}, state, m_chainparams, &pindex);
         if (nNew > 0) received_new_header = true;
         if (pindex) DoTime(pindex->nHeight, pfrom.GetId());
-        LogRecv(nNew, pindex, "cmpctblock", nSize, pfrom.GetId());
+        if (time_received != std::chrono::seconds{2}) LogRecv(nNew, pindex, "cmpctblock", nSize, pfrom.GetId());
         if (state.IsInvalid()) {
             MaybePunishNodeForBlock(pfrom.GetId(), state, /*via_compact_block*/ true, "invalid header via cmpctblock");
             return;
@@ -3834,11 +3841,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 BlockTransactionsRequest req;
                 int nFromConPeers = 0; int nFromDisPeers = 0; int nFromExtra = 0; int nFromMemDat = 0; int nFromPack = 0;
                 int nFromReorg = 0; int nFromRecycledPeers = 0;
+                bool fSeenBefore = (cmpctblock.header.GetHash() == last_recved_cmpctblock1.header.GetHash() ||
+                    cmpctblock.header.GetHash() == last_recved_cmpctblock2.header.GetHash());
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize))
                         req.indexes.push_back(i);
-                    else {
+                    else if (!fSeenBefore) {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
                                 pnode->nBlockBytes += nSize;
@@ -3870,7 +3879,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 if (nFromPack) strTXfrom += strprintf(" Pack=%d", nFromPack);
                 if (nFromReorg) strTXfrom += strprintf(" Reorg=%d", nFromReorg);
                 if (nFromRecycledPeers) strTXfrom += strprintf(" RecycledPeers=%d", nFromRecycledPeers);
-                LogPrintf("TX have from%s\n", strTXfrom);
+                if (!fSeenBefore) LogPrintf("TX have from%s\n", strTXfrom);
                 if (req.indexes.empty()) {
                     // Dirty hack to jump to BLOCKTXN code (TODO: move message handling into their own functions)
                     BlockTransactions txn;
@@ -3878,6 +3887,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     blockTxnMsg << txn;
                     fProcessBLOCKTXN = true;
                 } else {
+                    if (!fSeenBefore) {
+                        last_recved_cmpctblock2 = last_recved_cmpctblock1;
+                        last_recved_cmpctblock1 = cmpctblock;
+                    }
                     LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d TXif=%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), nodestate->nTxInFlight, pfrom.GetId());
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
@@ -5329,10 +5342,22 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             NodeId staller = -1;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
             for (const CBlockIndex *pindex : vToDownload) {
-                uint32_t nFetchFlags = GetFetchFlags(*pto);
-                vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
+                CBlockHeaderAndShortTxIDs* cached_cmpctblock{nullptr};
+                if (pindex->GetBlockHash() == last_recved_cmpctblock1.header.GetHash())
+                    cached_cmpctblock = &last_recved_cmpctblock1;
+                if (pindex->GetBlockHash() == last_recved_cmpctblock2.header.GetHash())
+                    cached_cmpctblock = &last_recved_cmpctblock2;
+                if (CanDirectFetch() && cached_cmpctblock) {
+                    LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) %s peer=%d\n", pto->GetId(), strBlkInfo(pindex));
+                    CDataStream cmpctblkMsg(SER_NETWORK, PROTOCOL_VERSION);
+                    cmpctblkMsg << *cached_cmpctblock;
+                    ProcessMessage(*pto, NetMsgType::CMPCTBLOCK, cmpctblkMsg, std::chrono::seconds{2}, false);
+                } else {
+                    uint32_t nFetchFlags = GetFetchFlags(*pto);
+                    vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
+                    LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
+                }
                 BlockRequested(pto->GetId(), *pindex);
-                LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {

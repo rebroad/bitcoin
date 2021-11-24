@@ -3380,7 +3380,7 @@ int BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationSt
 // Exposed wrapper for AcceptBlockHeader
 int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex)
 {
-    AssertLockNotHeld(cs_main);
+    //AssertLockNotHeld(cs_main);
     int nCount = 0;
     {
         LOCK(cs_main);
