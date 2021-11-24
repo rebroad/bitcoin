@@ -437,6 +437,9 @@ private:
     /** Number of times net.cpp has run a ProcessMessages() loop */
     int64_t nNetClicks{0};
 
+    /** Total of bytes received from all currently connected nodes */
+    int nTotalBytesRecv{0};
+
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
 
@@ -4435,9 +4438,16 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
 {
     bool fMoreWork = false;
     static bool fLastToggle = false;
+    static int nBytesRecv = 0;
+    {
+        LOCK(pfrom->cs_vRecv);
+        nBytesRecv += pfrom->nRecvBytes;
+    }
     if (fLastToggle != fToggle) {
         nNetClicks++;
         fLastToggle = fToggle;
+        nTotalBytesRecv = nBytesRecv;
+        nBytesRecv = 0;
     }
 
     PeerRef peer = GetPeerRef(pfrom->GetId());
