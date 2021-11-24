@@ -3804,11 +3804,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 BlockTransactionsRequest req;
                 int nFromConPeers = 0; int nFromDisPeers = 0; int nFromExtra = 0; int nFromMemDat = 0; int nFromPack = 0;
                 int nFromReorg = 0; int nFromRecycledPeers = 0;
+                bool fSeenBefore = cmpctblock.header.GetHash() == last_recved_cmpctblock.header.GetHash();
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize))
                         req.indexes.push_back(i);
-                    else {
+                    else if (!fSeenBefore) {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
                                 pnode->nBlockBytes += nSize;
@@ -4882,14 +4883,15 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
     MaybeSendAddr(*pto, *peer, current_time);
 
-    CNodeState &state = *State(pto->GetId());
-    bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->IsAddrFetchConn()); // Download if this is a nice peer, or we have no nice peers and this one might do.
     {
         LOCK(cs_main);
+
+        CNodeState &state = *State(pto->GetId());
 
         // Start block sync
         if (pindexBestHeader == nullptr)
             pindexBestHeader = m_chainman.ActiveChain().Tip();
+        bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->IsAddrFetchConn()); // Download if this is a nice peer, or we have no nice peers and this one might do.
         if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
             // Only actively request headers from a single peer, unless we're close to today.
             if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
@@ -4997,7 +4999,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     {
                         LOCK(cs_most_recent_block);
                         if (most_recent_block_hash == pBestIndex->GetBlockHash()) {
-                            if (state.fWantsCmpctWitness || !fWitnessesPresentInMostRecentCompactBlock) { // REBTODO this logic seems wrong
+                            if (state.fWantsCmpctWitness || !fWitnessesPresentInMostRecentCompactBlock)
                                 m_connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, *most_recent_compact_block));
                             else {
                                 CBlockHeaderAndShortTxIDs cmpctblock(*most_recent_block, state.fWantsCmpctWitness);
@@ -5294,8 +5296,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         // GetTime() is used by this anti-DoS logic so we can test this using mocktime
         ConsiderEviction(*pto, GetTime());
 
-    } // LOCK(cs_main)
-
         //
         // Message: getdata (blocks)
         //
@@ -5359,6 +5359,6 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         }
 
         MaybeSendFeefilter(*pto, current_time);
-
+    } // release cs_main
     return true;
 }
