@@ -91,6 +91,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     const QString units = tr("kB/s");
     const float yMarginText = 2.0;
 
+    static float lastfMax = fMax;
+    if (lastfMax != fMax) {
+        LogPrintf("%s: fMax=%d fMax/val=%f\n", __func__, fMax, fMax / val);
+        lastfMax = fMax;
+    }
+
     // if we drew 10 or 3 fewer lines, break them up at the next lower order of magnitude
     if(fMax / val <= (fToggle ? 10.0f : 3.0f)) {
         float oldval = val;

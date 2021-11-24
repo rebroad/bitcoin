@@ -141,12 +141,12 @@ void MempoolStats::drawChart()
         }
 
         // make a nice y-axis scale - REBTODO - why doesn't this achieve 0, 2, 4, 6, 8?
-        const int amount_of_h_lines = 5;
+        const int amount_of_h_lines = 4;
         if (max_num > 0) {
-            int val = qFloor(log10(1.0*max_num/amount_of_h_lines));
+            int val = qFloor(log10(1.0*max_num/(amount_of_h_lines+1)));
             int stepbase = qPow(10.0f, val);
             int step = qCeil((1.0*max_num/amount_of_h_lines) / stepbase) * stepbase;
-            max_num_graph = step*(amount_of_h_lines-1);
+            max_num_graph = step*amount_of_h_lines;
             static size_t last_max_num = 0;
             if (last_max_num != max_num) {
                 LogPrintf("max_num=%d val=%d stepbase=%d step=%d mng=%d\n", max_num, val, stepbase, step, max_num_graph);
@@ -161,13 +161,13 @@ void MempoolStats::drawChart()
         // draw horizontal grid
         QPainterPath grid_path(QPointF(current_x, bottom));
         int bottomNum = 0;
-        for (int i=0; i < amount_of_h_lines; i++)
+        for (int i=0; i <= amount_of_h_lines; i++)
         {
-            qreal lY = bottom-i*(maxheight_g/(amount_of_h_lines-1));
+            qreal lY = bottom-i*(maxheight_g/amount_of_h_lines);
             grid_path.moveTo(GRAPH_PADDING_LEFT, lY);
             grid_path.lineTo(GRAPH_PADDING_LEFT+maxwidth, lY);
 
-            size_t grid_num = (float)i*(max_num_graph-bottomNum)/(amount_of_h_lines-1) + bottomNum;
+            size_t grid_num = (float)i*(max_num_graph-bottomNum)/amount_of_h_lines + bottomNum;
             QGraphicsTextItem *item_num;
             if (fCount)
                 item_num = m_scene->addText(QString::number(grid_num), gridFont);
