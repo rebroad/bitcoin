@@ -1614,6 +1614,7 @@ void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &blo
 static RecursiveMutex cs_most_recent_block;
 static std::shared_ptr<const CBlock> most_recent_block GUARDED_BY(cs_most_recent_block);
 static std::shared_ptr<const CBlockHeaderAndShortTxIDs> most_recent_compact_block GUARDED_BY(cs_most_recent_block);
+static CBlockHeaderAndShortTxIDs last_recved_cmpctblock;
 static uint256 most_recent_block_hash GUARDED_BY(cs_most_recent_block);
 static bool fWitnessesPresentInMostRecentCompactBlock GUARDED_BY(cs_most_recent_block);
 
@@ -3325,6 +3326,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // Unlock cs_most_recent_block to avoid cs_main lock inversion
         }
         if (recent_block) {
+            LogPrint(BCLog::BLOCKSEND, "send cached blocktxn %s peer=%d\n", req.blockhash.ToString(), pfrom.GetId());
             SendBlockTransactions(pfrom, *recent_block, req);
             return;
         }
@@ -3343,6 +3345,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 bool ret = ReadBlockFromDisk(block, pindex, m_chainparams.GetConsensus());
                 assert(ret);
 
+                LogPrint(BCLog::BLOCKSEND, "send uncached blocktxn %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
                 SendBlockTransactions(pfrom, block, req);
                 return;
             }
@@ -3846,14 +3849,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     blockTxnMsg << txn;
                     fProcessBLOCKTXN = true;
                 } else {
-                    bool fWitnessEnabled = DeploymentActiveAt(*pindex, m_chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
-                    {
-                        LOCK(cs_most_recent_block);
-                        most_recent_block_hash = cmpctblock.header.GetHash();
-                        most_recent_block = nullptr;
-                        most_recent_compact_block = cmpctblock;
-                        fWitnessesPresentInMostRecentCompactBlock = fWitnessEnabled;
-                    }
+                    last_recved_cmpctblock = cmpctblock;
                     LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), pfrom.GetId());
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
@@ -5018,7 +5014,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         bool ret = ReadBlockFromDisk(block, pBestIndex, consensusParams);
                         assert(ret);
                         CBlockHeaderAndShortTxIDs cmpctblock(block, state.fWantsCmpctWitness);
-                        LogPrint(BCLog::BLOCKSEND, "send cmpctblock %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
+                        LogPrint(BCLog::BLOCKSEND, "send uncached cmpctblock %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
                         m_connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
                     } else
                         LogPrint(BCLog::BLOCKSEND, "send cached cmpctblock %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
@@ -5315,13 +5311,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 a_recent_block_hash = most_recent_block_hash;
             }
             for (const CBlockIndex *pindex : vToDownload) {
-                if (pindex->GetBlockHash() == a_recent_block_hash) {
+                if (pindex->GetBlockHash() == last_recved_cmpctblock.header.GetHash()) {
                     LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) peer=%d\n", pto->GetId());
                     CDataStream cmpctblkMsg(SER_NETWORK, PROTOCOL_VERSION);
-                    {
-                        LOCK(cs_most_recent_block);
-                        cmpctblkMsg << most_recent_compact_block;
-                    }
+                    cmpctblkMsg << last_recved_cmpctblock;
                     ProcessMessage(*pto, NetMsgType::CMPCTBLOCK, cmpctblkMsg, current_time, false);
                 } else {
                     uint32_t nFetchFlags = GetFetchFlags(*pto);
