@@ -140,13 +140,18 @@ void MempoolStats::drawChart()
                 display_fee_up_to_range = i;
         }
 
-        // make a nice y-axis scale
+        // make a nice y-axis scale - REBTODO - why doesn't this achieve 0, 2, 4, 6, 8?
         const int amount_of_h_lines = 5;
         if (max_num > 0) {
             int val = qFloor(log10(1.0*max_num/amount_of_h_lines));
             int stepbase = qPow(10.0f, val);
             int step = qCeil((1.0*max_num/amount_of_h_lines) / stepbase) * stepbase;
-            max_num_graph = step*amount_of_h_lines;
+            max_num_graph = step*(amount_of_h_lines-1);
+            static size_t last_max_num = 0;
+            if (last_max_num != max_num) {
+                LogPrintf("max_num=%d val=%d stepbase=%d step=%d mng=%d\n", max_num, val, stepbase, step, max_num_graph);
+                last_max_num = max_num;
+            }
         }
 
         // calculate the x axis step per sample

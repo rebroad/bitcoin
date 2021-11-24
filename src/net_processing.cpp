@@ -436,6 +436,9 @@ private:
     /** Number of times net.cpp has run a ProcessMessages() loop */
     int64_t nNetClicks{0};
 
+    /** Total of bytes received from all currently connected nodes */
+    int nTotalBytesRecv{0};
+
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
 
@@ -1276,6 +1279,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
 {
     NodeId nodeid = node.GetId();
     int misbehavior{0};
+
     {
     LOCK(cs_main);
     {
@@ -1299,6 +1303,9 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
 
     if (state->fSyncStarted)
         nSyncStarted--;
+
+    if (state->vBlocksInFlight.size() != 0)
+        LogPrintf("%s: vBlocksInFlight=%d nBlocksInFlight=%d\n", __func__, state->vBlocksInFlight.size(), state->nBlocksInFlight);
 
     int nBlocksInFlight = 0;
     for (const QueuedBlock& entry : state->vBlocksInFlight) {
@@ -3451,7 +3458,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         CNodeState* nodestate = State(pfrom.GetId());
         if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
-        if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
+        if (nodestate->nBlockAfterTXs > 1) {
+            LogPrintf("nBlockAfterTXs %d -> %d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1);
+            nodestate->nBlockAfterTXs--;
+        }
 
         const uint256& hash = nodestate->m_wtxid_relay ? wtxid : txid;
         pfrom.AddKnownTx(hash); // REBTODO - check what this does
@@ -3836,6 +3846,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     blockTxnMsg << txn;
                     fProcessBLOCKTXN = true;
                 } else {
+                    bool fWitnessEnabled = DeploymentActiveAt(*pindex, m_chainparams.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT);
+                    {
+                        LOCK(cs_most_recent_block);
+                        most_recent_block_hash = cmpctblock.header.GetHash();
+                        most_recent_block = nullptr;
+                        most_recent_compact_block = cmpctblock;
+                        fWitnessesPresentInMostRecentCompactBlock = fWitnessEnabled;
+                    }
                     LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), pfrom.GetId());
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
@@ -4358,9 +4376,16 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
 {
     bool fMoreWork = false;
     static bool fLastToggle = false;
+    static int nBytesRecv = 0;
+    {
+        LOCK(pfrom->cs_vRecv);
+        nBytesRecv += pfrom->nRecvBytes;
+    }
     if (fLastToggle != fToggle) {
         nNetClicks++;
         fLastToggle = fToggle;
+        nTotalBytesRecv = nBytesRecv;
+        nBytesRecv = 0;
     }
 
     PeerRef peer = GetPeerRef(pfrom->GetId());
@@ -4917,13 +4942,14 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             const CBlockIndex *pBestIndex = nullptr; // last header queued for delivery
             ProcessBlockAvailability(pto->GetId()); // ensure pindexBestKnownBlock is up-to-date
 
+            const CBlockIndex* pindex;
             if (!fRevertToInv) {
                 bool fFoundStartingHeader = false;
                 // Try to find first header that our peer doesn't have, and
                 // then send all headers past that one.  If we come across any
                 // headers that aren't on m_chainman.ActiveChain(), give up.
                 for (const uint256& hash : peer->m_blocks_for_headers_relay) {
-                    const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
+                    pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
                     assert(pindex);
                     if (m_chainman.ActiveChain()[pindex->nHeight] != pindex) {
                         // Bail out if we reorged away from this block
@@ -4977,13 +5003,14 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     {
                         LOCK(cs_most_recent_block);
                         if (most_recent_block_hash == pBestIndex->GetBlockHash()) {
-                            if (state.fWantsCmpctWitness || !fWitnessesPresentInMostRecentCompactBlock)
+                            if (state.fWantsCmpctWitness || !fWitnessesPresentInMostRecentCompactBlock) { // REBTODO this logic seems wrong
                                 m_connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, *most_recent_compact_block));
-                            else {
+                                fGotBlockFromCache = true;
+                            } else if (most_recent_block) {
                                 CBlockHeaderAndShortTxIDs cmpctblock(*most_recent_block, state.fWantsCmpctWitness);
                                 m_connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
+                                fGotBlockFromCache = true;
                             }
-                            fGotBlockFromCache = true;
                         }
                     }
                     if (!fGotBlockFromCache) {
@@ -4991,8 +5018,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         bool ret = ReadBlockFromDisk(block, pBestIndex, consensusParams);
                         assert(ret);
                         CBlockHeaderAndShortTxIDs cmpctblock(block, state.fWantsCmpctWitness);
+                        LogPrint(BCLog::BLOCKSEND, "send cmpctblock %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
                         m_connman.PushMessage(pto, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK, cmpctblock));
-                    }
+                    } else
+                        LogPrint(BCLog::BLOCKSEND, "send cached cmpctblock %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
                     state.pindexBestHeaderSent = pBestIndex;
                 } else if (state.fPreferHeaders) {
                     if (vHeaders.size() > 1) {
@@ -5280,11 +5309,26 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             std::vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
+            uint256 a_recent_block_hash{0};
+            {
+                LOCK(cs_most_recent_block);
+                a_recent_block_hash = most_recent_block_hash;
+            }
             for (const CBlockIndex *pindex : vToDownload) {
-                uint32_t nFetchFlags = GetFetchFlags(*pto);
-                vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-                BlockRequested(pto->GetId(), *pindex);
-                LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
+                if (pindex->GetBlockHash() == a_recent_block_hash) {
+                    LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) peer=%d\n", pto->GetId());
+                    CDataStream cmpctblkMsg(SER_NETWORK, PROTOCOL_VERSION);
+                    {
+                        LOCK(cs_most_recent_block);
+                        cmpctblkMsg << most_recent_compact_block;
+                    }
+                    ProcessMessage(*pto, NetMsgType::CMPCTBLOCK, cmpctblkMsg, current_time, false);
+                } else {
+                    uint32_t nFetchFlags = GetFetchFlags(*pto);
+                    vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
+                    BlockRequested(pto->GetId(), *pindex);
+                    LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
+                }
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {
