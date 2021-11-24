@@ -40,7 +40,7 @@ class ReconciliationState {
      * peer wants to announce. Sketches are computed over transaction short IDs.
      * These values are used to salt short IDs.
      */
-    const uint64_t m_k0, m_k1;
+    [[maybe_unused]] const uint64_t m_k0, m_k1;
 
     public:
 

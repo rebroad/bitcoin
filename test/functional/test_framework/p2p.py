@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 2010 ArtForz -- public domain half-a-node
 # Copyright (c) 2012 Jeff Garzik
-# Copyright (c) 2010-2020 The Bitcoin Core developers
+# Copyright (c) 2010-2021 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test objects for interacting with a bitcoind node over the p2p protocol.
@@ -59,6 +59,7 @@ from test_framework.messages import (
     msg_sendaddrv2,
     msg_sendcmpct,
     msg_sendheaders,
+    msg_sendrecon,
     msg_tx,
     MSG_TX,
     MSG_TYPE_MASK,
@@ -118,6 +119,7 @@ MESSAGEMAP = {
     b"sendaddrv2": msg_sendaddrv2,
     b"sendcmpct": msg_sendcmpct,
     b"sendheaders": msg_sendheaders,
+    b"sendrecon": msg_sendrecon,
     b"tx": msg_tx,
     b"verack": msg_verack,
     b"version": msg_version,
@@ -413,6 +415,7 @@ class P2PInterface(P2PConnection):
     def on_sendaddrv2(self, message): pass
     def on_sendcmpct(self, message): pass
     def on_sendheaders(self, message): pass
+    def on_sendrecon(self, message): pass
     def on_tx(self, message): pass
     def on_wtxidrelay(self, message): pass
 
