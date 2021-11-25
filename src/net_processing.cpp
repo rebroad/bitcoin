@@ -3690,7 +3690,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         int nNew = m_chainman.ProcessNewBlockHeaders({cmpctblock.header}, state, m_chainparams, &pindex);
         if (nNew > 0) received_new_header = true;
         if (pindex) DoTime(pindex->nHeight, pfrom.GetId());
-        LogRecv(nNew, pindex, "cmpctblock", nSize, pfrom.GetId());
+        bool fSeenBefore = cmpctblock.header.GetHash() == last_recved_cmpctblock.header.GetHash();
+        if (!fSeenBefore) LogRecv(nNew, pindex, "cmpctblock", nSize, pfrom.GetId());
         if (state.IsInvalid()) {
             MaybePunishNodeForBlock(pfrom.GetId(), state, /*via_compact_block*/ true, "invalid header via cmpctblock");
             return;
@@ -3773,7 +3774,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 std::list<QueuedBlock>::iterator* queuedBlockIt = nullptr;
                 if (!BlockRequested(pfrom.GetId(), *pindex, &queuedBlockIt)) {
                     LogPrint(BCLog::BLOCK, "MarkBlockAsInFlight=false (was already in flight). peer=%d\n", pfrom.GetId());
-                    if (!(*queuedBlockIt)->partialBlock) { // REBTODO - we already know this is true
+                    if (!(*queuedBlockIt)->partialBlock) {
                         LogPrint(BCLog::BLOCK, "No partialBlock. Call reset()\n"); // REB - what is reset()?
                         (*queuedBlockIt)->partialBlock.reset(new PartiallyDownloadedBlock(&m_mempool));
                     } else {
@@ -3804,7 +3805,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 BlockTransactionsRequest req;
                 int nFromConPeers = 0; int nFromDisPeers = 0; int nFromExtra = 0; int nFromMemDat = 0; int nFromPack = 0;
                 int nFromReorg = 0; int nFromRecycledPeers = 0;
-                bool fSeenBefore = cmpctblock.header.GetHash() == last_recved_cmpctblock.header.GetHash();
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize))
@@ -3841,7 +3841,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 if (nFromPack) strTXfrom += strprintf(" Pack=%d", nFromPack);
                 if (nFromReorg) strTXfrom += strprintf(" Reorg=%d", nFromReorg);
                 if (nFromRecycledPeers) strTXfrom += strprintf(" RecycledPeers=%d", nFromRecycledPeers);
-                LogPrintf("TX have from%s\n", strTXfrom);
+                if (!fSeenBefore) LogPrintf("TX have from%s\n", strTXfrom);
                 if (req.indexes.empty()) {
                     // Dirty hack to jump to BLOCKTXN code (TODO: move message handling into their own functions)
                     BlockTransactions txn;
@@ -3849,7 +3849,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     blockTxnMsg << txn;
                     fProcessBLOCKTXN = true;
                 } else {
-                    last_recved_cmpctblock = cmpctblock;
+                    if (!fSeenBefore) last_recved_cmpctblock = cmpctblock;
                     LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), pfrom.GetId());
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));

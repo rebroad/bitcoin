@@ -91,12 +91,6 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     const QString units = tr("kB/s");
     const float yMarginText = 2.0;
 
-    static float lastfMax = fMax;
-    if (lastfMax != fMax) {
-        LogPrintf("%s: fMax=%d fMax/val=%f\n", __func__, fMax, fMax / val);
-        lastfMax = fMax;
-    }
-
     // if we drew 10 or 3 fewer lines, break them up at the next lower order of magnitude
     if(fMax / val <= (fToggle ? 10.0f : 3.0f)) {
         float oldval = val;
@@ -104,7 +98,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.setPen(axisCol.darker());
         painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * (fToggle ? (pow(val, 0.30102) / pow(fMax, 0.30102)) : (val / fMax)))-yMarginText, QString("%1 %2").arg(val).arg(units));
         int count = 1;
-        for(float y = val; y < (fToggle ? (((fMax / val) < 2.0f) ? (oldval*2) : oldval) : fMax); y += val, count++) {
+        for(float y = val; y < (fToggle ? ((fMax / val < 20) ? oldval*2 : oldval) : fMax); y += val, count++) {
             if(count % 10 == 0)
                 continue;
             int yy = YMARGIN + h - (h * 1.0 * (fToggle ? (pow(y, 0.30102) / pow(fMax, 0.30102)) : (y / fMax)));
@@ -185,17 +179,17 @@ void TrafficGraphWidget::setGraphRangeMins(int mins)
     int msecsPerSample = nMins * 60 * 1000 / DESIRED_SAMPLES;
     timer->stop();
     timer->setInterval(msecsPerSample);
-
-    clear();
+    timer->start();
 }
 
 void TrafficGraphWidget::clear()
 {
     timer->stop();
 
-    //vSamplesOut.clear();
-    //vSamplesIn.clear();
-    //fMax = 0.0f;
+    vSamplesOut.clear();
+    vSamplesIn.clear();
+    fMax = 0.0f;
+
     if(clientModel) {
         nLastBytesIn = clientModel->node().getTotalBytesRecv();
         nLastBytesOut = clientModel->node().getTotalBytesSent();
