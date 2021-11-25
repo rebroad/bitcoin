@@ -1227,8 +1227,10 @@ bool CChainState::IsInitialBlockDownload() const
         fNew = true;
     else if (fUpdateChain && m_chain.Tip()->nChainWork < nMinimumChainWork)
         fNew = true;
-    else if (fUpdateChain && m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge))
+    else if (fUpdateChain && m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge)) {
+        if (!fPrev) LogPrintf("%s: Setting to true as tip age is over %s old.\n", __func__, strAge(nMaxTipAge));
         fNew = true;
+    }
 
     if (fNew != fPrev) {
         LogPrintf("%s: Setting to %s\n", __func__, fNew ? "true" : "false");
