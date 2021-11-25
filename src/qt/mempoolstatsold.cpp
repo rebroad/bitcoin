@@ -250,8 +250,10 @@ void MempoolStatsOld::drawChart()
 
     int64_t dynMemUsagelog10Val1 = pow(10.0, floor(log10(maxDynMemUsage)));
     int64_t dynMemUsagelog10Val2 = pow(10.0, floor(log10(1.0*(maxDynMemUsage)/4)));
-    if (dynMemUsagelog10Val1 == 0)
+    if (dynMemUsagelog10Val1 == 0) {
+        LogPrintf("%s: dynMemUsagelog10Val == 0. Exiting\n", __func__);
         return;
+    }
     int64_t topDynMemUsage1 = ceil((double)maxDynMemUsage/dynMemUsagelog10Val1)*dynMemUsagelog10Val1;
     int64_t topDynMemUsage2 = ceil((1.0*maxDynMemUsage/4)/dynMemUsagelog10Val2)*dynMemUsagelog10Val2*4;
     int64_t bottomDynMemUsage1 = floor((double)minDynMemUsage/dynMemUsagelog10Val1)*dynMemUsagelog10Val1;
@@ -264,8 +266,10 @@ void MempoolStatsOld::drawChart()
 
     int64_t txCountLog10Val1 = pow(10.0, floor(log10(maxTxCount)));
     int64_t txCountLog10Val2 = pow(10.0, floor(log10(1.0*maxTxCount/4)));
-    if (txCountLog10Val1 == 0)
+    if (txCountLog10Val1 == 0) {
+        LogPrintf("%s: txCountLog10Val == 0. Exiting\n", __func__);
         return;
+    }
     int64_t topTxCount1 = ceil((double)maxTxCount/txCountLog10Val1)*txCountLog10Val1;
     int64_t topTxCount2 = ceil((1.0*maxTxCount/4)/txCountLog10Val2)*txCountLog10Val2*4;
     int64_t bottomTxCount1 = floor((double)minTxCount/txCountLog10Val1)*txCountLog10Val1;
