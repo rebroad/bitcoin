@@ -215,7 +215,6 @@ void MempoolStatsOld::drawChart()
     int bottom = ui->graphicsView->size().height()-GRAPH_PADDING_BOTTOM;
     qreal maxwidth = ui->graphicsView->size().width()-GRAPH_PADDING_LEFT-GRAPH_PADDING_RIGHT;
     qreal maxheightG = ui->graphicsView->size().height()-GRAPH_PADDING_TOP-GRAPH_PADDING_TOP_LABEL-LABEL_HEIGHT;
-    float paddingTopSizeFactor = 1.2;
     qreal step = maxwidth/(double)vSamples.size();
 
     // make sure we skip samples that would be drawn narrower then 1px
@@ -249,13 +248,33 @@ void MempoolStatsOld::drawChart()
             maxMinFee = sample.m_min_fee_per_k;
     }
 
-    int64_t dynMemUsagelog10Val = pow(10.0, floor(log10(maxDynMemUsage*paddingTopSizeFactor-minDynMemUsage)));
-    int64_t topDynMemUsage = ceil((double)maxDynMemUsage*paddingTopSizeFactor/dynMemUsagelog10Val)*dynMemUsagelog10Val;
-    int64_t bottomDynMemUsage = floor((double)minDynMemUsage/dynMemUsagelog10Val)*dynMemUsagelog10Val;
+    int64_t dynMemUsagelog10Val1 = pow(10.0, floor(log10(maxDynMemUsage)));
+    int64_t dynMemUsagelog10Val2 = pow(10.0, floor(log10(1.0*(maxDynMemUsage)/4)));
+    if (dynMemUsagelog10Val1 == 0)
+        return;
+    int64_t topDynMemUsage1 = ceil((double)maxDynMemUsage/dynMemUsagelog10Val1)*dynMemUsagelog10Val1;
+    int64_t topDynMemUsage2 = ceil((1.0*maxDynMemUsage/4)/dynMemUsagelog10Val2)*dynMemUsagelog10Val2*4;
+    int64_t bottomDynMemUsage1 = floor((double)minDynMemUsage/dynMemUsagelog10Val1)*dynMemUsagelog10Val1;
+    int64_t bottomDynMemUsage2 = floor((1.0*minDynMemUsage/4)/dynMemUsagelog10Val2)*dynMemUsagelog10Val2*4;
+    int64_t topDynMemUsage; int64_t bottomDynMemUsage;
+    if (topDynMemUsage1 < topDynMemUsage2) topDynMemUsage = topDynMemUsage1;
+    else topDynMemUsage = topDynMemUsage2;
+    if (bottomDynMemUsage1 < bottomDynMemUsage2) bottomDynMemUsage = bottomDynMemUsage2;
+    else bottomDynMemUsage = bottomDynMemUsage1;
 
-    int64_t txCountLog10Val = pow(10.0, floor(log10(maxTxCount*paddingTopSizeFactor-minTxCount)));
-    int64_t topTxCount = ceil((double)maxTxCount*paddingTopSizeFactor/txCountLog10Val)*txCountLog10Val;
-    int64_t bottomTxCount = floor((double)minTxCount/txCountLog10Val)*txCountLog10Val;
+    int64_t txCountLog10Val1 = pow(10.0, floor(log10(maxTxCount)));
+    int64_t txCountLog10Val2 = pow(10.0, floor(log10(1.0*maxTxCount/4)));
+    if (txCountLog10Val1 == 0)
+        return;
+    int64_t topTxCount1 = ceil((double)maxTxCount/txCountLog10Val1)*txCountLog10Val1;
+    int64_t topTxCount2 = ceil((1.0*maxTxCount/4)/txCountLog10Val2)*txCountLog10Val2*4;
+    int64_t bottomTxCount1 = floor((double)minTxCount/txCountLog10Val1)*txCountLog10Val1;
+    int64_t bottomTxCount2 = floor((1.0*minTxCount/4)/txCountLog10Val2)*txCountLog10Val2*4;
+    int64_t topTxCount; int64_t bottomTxCount;
+    if (topTxCount1 < topTxCount2) topTxCount = topTxCount1;
+    else topTxCount = topTxCount2;
+    if (bottomTxCount1 < bottomTxCount2) bottomTxCount = bottomTxCount2;
+    else bottomTxCount = bottomTxCount1;
 
     qreal currentX = GRAPH_PADDING_LEFT;
     QPainterPath dynMemUsagePath(QPointF(currentX, bottom));
@@ -270,7 +289,9 @@ void MempoolStatsOld::drawChart()
         if (sample.m_time_delta == vSamples.front().m_time_delta)
         {
             dynMemUsagePath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topDynMemUsage-bottomDynMemUsage)*(sample.m_dyn_mem_usage-bottomDynMemUsage));
-            txCountPath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topTxCount-bottomTxCount)*(sample.m_tx_count-bottomTxCount));
+            double divide = (topTxCount-bottomTxCount)*((sample.m_tx_count)-bottomTxCount);
+            if (divide == 0) divide=1;
+            txCountPath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/divide);
             minFeePath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/maxMinFee*sample.m_min_fee_per_k);
         }
         else
