@@ -166,13 +166,13 @@ static void WalletTxToJSON(const CWallet& wallet, const CWalletTx& wtx, UniValue
     entry.pushKV("confirmations", confirms);
     if (wtx.IsCoinBase())
         entry.pushKV("generated", true);
-    if (confirms > 0)
+    if (auto* conf = wtx.state<TxStateConfirmed>())
     {
-        entry.pushKV("blockhash", wtx.m_confirm.hashBlock.GetHex());
-        entry.pushKV("blockheight", wtx.m_confirm.block_height);
-        entry.pushKV("blockindex", wtx.m_confirm.nIndex);
+        entry.pushKV("blockhash", conf->confirmed_block_hash.GetHex());
+        entry.pushKV("blockheight", conf->confirmed_block_height);
+        entry.pushKV("blockindex", conf->position_in_block);
         int64_t block_time;
-        CHECK_NONFATAL(chain.findBlock(wtx.m_confirm.hashBlock, FoundBlock().time(block_time)));
+        CHECK_NONFATAL(chain.findBlock(conf->confirmed_block_hash, FoundBlock().time(block_time)));
         entry.pushKV("blocktime", block_time);
     } else {
         entry.pushKV("trusted", CachedTxIsTrusted(wallet, wtx));
@@ -2522,7 +2522,6 @@ static RPCHelpMan getwalletinfo()
 
     size_t kpExternalSize = pwallet->KeypoolCountExternalKeys();
     const auto bal = GetBalance(*pwallet);
-    int64_t kp_oldest = pwallet->GetOldestKeyPoolTime();
     obj.pushKV("walletname", pwallet->GetName());
     obj.pushKV("walletversion", pwallet->GetVersion());
     obj.pushKV("format", pwallet->GetDatabase().Format());
@@ -2530,8 +2529,9 @@ static RPCHelpMan getwalletinfo()
     obj.pushKV("unconfirmed_balance", ValueFromAmount(bal.m_mine_untrusted_pending));
     obj.pushKV("immature_balance", ValueFromAmount(bal.m_mine_immature));
     obj.pushKV("txcount",       (int)pwallet->mapWallet.size());
-    if (kp_oldest > 0) {
-        obj.pushKV("keypoololdest", kp_oldest);
+    const auto kp_oldest = pwallet->GetOldestKeyPoolTime();
+    if (kp_oldest.has_value()) {
+        obj.pushKV("keypoololdest", kp_oldest.value());
     }
     obj.pushKV("keypoolsize", (int64_t)kpExternalSize);
 

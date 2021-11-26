@@ -221,7 +221,6 @@ void MempoolStatsOld::drawChart()
     int bottom = ui->graphicsView->size().height()-GRAPH_PADDING_BOTTOM;
     qreal maxwidth = ui->graphicsView->size().width()-GRAPH_PADDING_LEFT-GRAPH_PADDING_RIGHT;
     qreal maxheightG = ui->graphicsView->size().height()-GRAPH_PADDING_TOP-GRAPH_PADDING_TOP_LABEL-LABEL_HEIGHT;
-    float paddingTopSizeFactor = 1;
     qreal step = maxwidth/(double)vSamples.size();
 
     // make sure we skip samples that would be drawn narrower then 1px
@@ -255,14 +254,15 @@ void MempoolStatsOld::drawChart()
             maxMinFee = sample.m_min_fee_per_k;
     }
 
-    int64_t dynMemUsagelog10Val1 = pow(10.0, floor(log10(maxDynMemUsage*paddingTopSizeFactor-minDynMemUsage)));
-    int64_t dynMemUsagelog10Val2 = pow(10.0, floor(log10(1.0*(maxDynMemUsage*paddingTopSizeFactor-minDynMemUsage)/4)));
+    int64_t dynMemUsagelog10Val1 = pow(10.0, floor(log10(maxDynMemUsage)));
+    //int64_t dynMemUsagelog10Val2 = pow(10.0, floor(log10(1.0*((maxDynMemUsage-minDynMemUsage))/4)));
+    int64_t dynMemUsagelog10Val2 = pow(10.0, floor(log10(1.0*(maxDynMemUsage)/4)));
     if (dynMemUsagelog10Val1 == 0) {
         LogPrintf("%s: dynMemUsagelog10Val == 0. Exiting\n", __func__);
         return;
     }
-    int64_t topDynMemUsage1 = ceil((double)maxDynMemUsage*paddingTopSizeFactor/dynMemUsagelog10Val1)*dynMemUsagelog10Val1;
-    int64_t topDynMemUsage2 = ceil((1.0*maxDynMemUsage*paddingTopSizeFactor/4)/dynMemUsagelog10Val2)*dynMemUsagelog10Val2*4;
+    int64_t topDynMemUsage1 = ceil((double)maxDynMemUsage/dynMemUsagelog10Val1)*dynMemUsagelog10Val1;
+    int64_t topDynMemUsage2 = ceil((1.0*maxDynMemUsage/4)/dynMemUsagelog10Val2)*dynMemUsagelog10Val2*4;
     int64_t bottomDynMemUsage1 = floor((double)minDynMemUsage/dynMemUsagelog10Val1)*dynMemUsagelog10Val1;
     int64_t bottomDynMemUsage2 = floor((1.0*minDynMemUsage/4)/dynMemUsagelog10Val2)*dynMemUsagelog10Val2*4;
     int64_t topDynMemUsage; int64_t bottomDynMemUsage;
@@ -271,14 +271,15 @@ void MempoolStatsOld::drawChart()
     if (bottomDynMemUsage1 < bottomDynMemUsage2) bottomDynMemUsage = bottomDynMemUsage2;
     else bottomDynMemUsage = bottomDynMemUsage1;
 
-    int64_t txCountLog10Val1 = pow(10.0, floor(log10(maxTxCount*paddingTopSizeFactor-minTxCount)));
-    int64_t txCountLog10Val2 = pow(10.0, floor(log10(1.0*(maxTxCount*paddingTopSizeFactor-minTxCount)/4)));
+    int64_t txCountLog10Val1 = pow(10.0, floor(log10(maxTxCount)));
+    //int64_t txCountLog10Val2 = pow(10.0, floor(log10(1.0*(maxTxCount-minTxCount)/4)));
+    int64_t txCountLog10Val2 = pow(10.0, floor(log10(1.0*maxTxCount/4)));
     if (txCountLog10Val1 == 0) {
         LogPrintf("%s: txCountLog10Val == 0. Exiting\n", __func__);
         return;
     }
-    int64_t topTxCount1 = ceil((double)maxTxCount*paddingTopSizeFactor/txCountLog10Val1)*txCountLog10Val1;
-    int64_t topTxCount2 = ceil((1.0*maxTxCount*paddingTopSizeFactor/4)/txCountLog10Val2)*txCountLog10Val2*4;
+    int64_t topTxCount1 = ceil((double)maxTxCount/txCountLog10Val1)*txCountLog10Val1;
+    int64_t topTxCount2 = ceil((1.0*maxTxCount/4)/txCountLog10Val2)*txCountLog10Val2*4;
     int64_t bottomTxCount1 = floor((double)minTxCount/txCountLog10Val1)*txCountLog10Val1;
     int64_t bottomTxCount2 = floor((1.0*minTxCount/4)/txCountLog10Val2)*txCountLog10Val2*4;
     int64_t topTxCount; int64_t bottomTxCount;

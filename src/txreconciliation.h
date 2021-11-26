@@ -66,73 +66,6 @@ class TxReconciliationTracker {
     bool RegisterPeer(NodeId peer_id, bool peer_inbound,
         bool recon_requestor, bool recon_responder, uint32_t recon_version, uint64_t remote_salt);
 
-    /**
-     * Step 1. Add new transactions we want to announce to the peer to the local reconciliation set
-     * of the peer, so that those transactions will be reconciled later.
-     */
-    void AddToReconSet(NodeId peer_id, const std::vector<uint256>& txs_to_reconcile);
-
-    /**
-     * Before Step 2, we might want to remove a wtxid from the reconciliation set, for example if
-     * the peer just announced the transaction to us.
-     */
-    void TryRemovingFromReconSet(NodeId peer_id, const uint256 wtxid_to_remove);
-
-    /**
-     * Step 2. If a it's time to request a reconciliation from the peer, this function will return
-     * the details of our local state, which should be communicated to the peer so that they better
-     * know what we need:
-     * - size of our reconciliation set for the peer
-     * - our q-coefficient with the peer, formatted to be transmitted as integer value
-     * If the peer was not previously registered for reconciliations, returns nullopt.
-     */
-    std::optional<std::pair<uint16_t, uint16_t>> MaybeRequestReconciliation(NodeId peer_id);
-
-    /**
-     * Step 2. Record an (expected) reconciliation request with parameters to respond when its time.
-     * All initial reconciliation responses will be done not immediately but in batches after
-     * a delay, to prevent privacy leaks.
-     * If peer seems to violate the protocol, do nothing.
-     */
-    void HandleReconciliationRequest(NodeId peer_id, uint16_t peer_recon_set_size, uint16_t peer_q);
-
-    /**
-     * Step 2. Once it's time to respond to reconciliation requests, we construct a sketch from
-     * the local reconciliation set, and send it to the initiator.
-     * If the peer was not previously registered for reconciliations or it's not the time yet,
-     * returns false.
-     */
-    bool RespondToReconciliationRequest(NodeId peer_id, std::vector<uint8_t>& skdata);
-
-    /**
-     * Step 3. Process a response to our reconciliation request.
-     * Returns false if the peer seems to violate the protocol.
-     * Populates the vectors so that we know which transactions should be requested and announced,
-     * and whether reconciliation succeeded (nullopt if the reconciliation is not over yet and
-     * extension should be requested).
-     */
-    bool HandleSketch(NodeId peer_id, const std::vector<uint8_t>& skdata,
-        // returning values
-        std::vector<uint32_t>& txs_to_request, std::vector<uint256>& txs_to_announce, std::optional<bool>& result);
-
-    /**
-     * Step 5. Peer requesting extension after reconciliation they initiated failed on their side:
-     * the sketch we sent to them was not sufficient to find the difference.
-     * No privacy leak can happen here because sketch extension is constructed over the snapshot.
-     * If the peer seems to violate the protocol, do nothing.
-     */
-    void HandleExtensionRequest(NodeId peer_id);
-
-    /**
-     * Step 4. Once we received a signal of reconciliation finalization with a given result from the
-     * initiating peer, announce the following transactions:
-     * - in case of a failure, all transactions we had for that peer
-     * - in case of a success, transactions the peer asked for by short id (ask_shortids)
-     * Return false if the peer seems to violate the protocol.
-     */
-    bool FinalizeInitByThem(NodeId peer_id, bool recon_result,
-        const std::vector<uint32_t>& remote_missing_short_ids, std::vector<uint256>& remote_missing);
-
     // Helpers
 
     /**
@@ -145,22 +78,6 @@ class TxReconciliationTracker {
      * Check if a peer is registered to reconcile with us.
      */
     bool IsPeerRegistered(NodeId peer_id) const;
-
-    /**
-     * Returns the size of the reconciliation set we have locally for the given peer.
-     * If the peer was not previously registered for reconciliations, returns nullopt.
-     */
-    std::optional<size_t> GetPeerSetSize(NodeId peer_id) const;
-
-    /**
-     * Returns whether for the given call the peer is chosen as a low-fanout destination.
-     */
-    bool ShouldFloodTo(uint256 wtxid, NodeId peer_id) const;
-
-    /**
-     * Check whether a particular transaction is being currently reconciled with a given peer.
-     */
-    bool CurrentlyReconcilingTx(NodeId peer_id, const uint256 wtxid) const;
 };
 
 #endif // BITCOIN_TXRECONCILIATION_H
