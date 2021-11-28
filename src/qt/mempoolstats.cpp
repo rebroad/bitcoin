@@ -145,12 +145,11 @@ void MempoolStats::drawChart()
         if (max_num > 0) {
             int stepbase1 = qPow(10.0f, qFloor(log10(max_num))); // top value
             int stepbase2 = qPow(10.0f, qFloor(log10(1.0*max_num/amount_of_h_lines))); // first value
-            //int stepbase3 = qPow(10.0f, qFloor(log10(2.0*max_num/amount_of_h_lines))); // second value
-            int step1 = (qCeil((max_num) / stepbase1) * stepbase1) / amount_of_h_lines;
+            int stepbase3 = qPow(10.0f, qFloor(log10(2.0*max_num/amount_of_h_lines))); // second value
+            int step1 = (qCeil((1.0*max_num) / stepbase1) * stepbase1) / amount_of_h_lines;
             int step2 = qCeil((1.0*max_num/amount_of_h_lines) / stepbase2) * stepbase2;
-            //int step3 = qCeil((2.0*max_num/amount_of_h_lines) / stepbase3) * stepbase3 * 2;
-            //max_num_graph = std::min(std::min(step1,step2),step3)*amount_of_h_lines;
-            max_num_graph = std::min(step1,step2)*amount_of_h_lines;
+            int step3 = qCeil((2.0*max_num/amount_of_h_lines) / stepbase3) * stepbase3 / 2;
+            max_num_graph = std::min(std::min(step1,step2),step3)*amount_of_h_lines;
         }
 
         // calculate the x axis step per sample
@@ -317,7 +316,6 @@ void MempoolStats::showEvent(QShowEvent *event)
     QWidget::showEvent(event);
     if (m_clientmodel)
         drawChart();
-    LogPrintf("%s: showEvent()\n", __func__);
 }
 
 void MempoolStats::mousePressEvent(QMouseEvent *event)

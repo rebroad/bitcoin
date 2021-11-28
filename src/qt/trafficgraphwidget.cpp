@@ -67,9 +67,7 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
 {
     QWidget::mousePressEvent(event);
     fToggle = !fToggle;
-    timer->stop();
-    timer->setInterval(timer->interval());
-    timer->start();
+    QWidget::update();
 }
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *)
@@ -98,7 +96,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.setPen(axisCol.darker());
         painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * (fToggle ? (pow(val, 0.30102) / pow(fMax, 0.30102)) : (val / fMax)))-yMarginText, QString("%1 %2").arg(val).arg(units));
         int count = 1;
-        for(float y = val; y < (fToggle ? ((fMax / val < 20) ? oldval*2 : oldval) : fMax); y += val, count++) {
+        for(float y = val; y < (!fToggle || fMax / val < 20 ? fMax : oldval); y += val, count++) {
             if(count % 10 == 0)
                 continue;
             int yy = YMARGIN + h - (h * 1.0 * (fToggle ? (pow(y, 0.30102) / pow(fMax, 0.30102)) : (y / fMax)));

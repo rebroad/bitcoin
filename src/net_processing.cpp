@@ -710,6 +710,7 @@ struct CNodeState {
     std::list<QueuedBlock> vBlocksInFlight;
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     std::chrono::microseconds m_downloading_since{0us};
+    int64_t m_download_report_clicks{0};
     int nBlocksInFlight{0};
     //! How many TXs are currently in flight
     unsigned int nTxInFlight{0};
@@ -860,6 +861,7 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
     if (state->vBlocksInFlight.begin() == list_it) {
         // First block on the queue was received, update the start download time for the next one
         state->m_downloading_since = std::max(state->m_downloading_since, GetTime<std::chrono::microseconds>());
+        state->m_download_report_clicks = nNetClicks;
     }
     state->vBlocksInFlight.erase(list_it);
 
@@ -906,6 +908,7 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, st
     if (state->nBlocksInFlight == 1) {
         // We're starting a block download (batch) from this peer.
         state->m_downloading_since = GetTime<std::chrono::microseconds>();
+        state->m_download_report_clicks = nNetClicks;
         m_peers_downloading_from++;
     }
     itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it))).first;
@@ -2302,9 +2305,9 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
             // very large reorg at a time we think we're close to caught up to
             // the main chain -- this shouldn't really happen.  Bail out on the
             // direct fetch and rely on parallel download instead.
-            if (!m_chainman.ActiveChain().Contains(pindexWalk)) {
-                LogPrint(BCLog::BLOCK, "Large reorg, won't direct fetch to %s peer=%d\n",
-                        strBlockInfo(pindexLast), pfrom.GetId());
+            if (fUpdateChain && !m_chainman.ActiveChain().Contains(pindexWalk)) {
+                LogPrint(BCLog::BLOCK, "Large reorg, won't direct fetch from %s peer=%d\n",
+                        strBlockInfo(pindexWalk), pfrom.GetId());
             } else {
                 std::vector<CInv> vGetData;
                 // Download as much as possible, from earliest to latest.
@@ -2325,10 +2328,10 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     std::string strItem;
                     if (!m_ignore_incoming_txs && m_mempool.size() > 10 &&
                         nodestate->fSupportsDesiredCmpctVersion && vGetData.size() == 1 &&
-                        pindexLast->nHeight <= m_chainman.ActiveChain().Height() + 6) {
+                        (!fUpdateChain || pindexLast->nHeight <= m_chainman.ActiveChain().Height() + 6)) {
                         if (!pindexLast->pprev->IsValid(BLOCK_VALID_CHAIN)) // REBTEMP - log this experimental thing
-                            LogPrintf("CURIOUS: Fetching a cmpctblock whose parent (%s) not yet in our chain!\n",
-                                strHeight(pindexLast->pprev));
+                            LogPrintf("CURIOUS: Fetching a cmpctblock %d ahead of tip!\n",
+                                pindexLast->nHeight - m_chainman.ActiveChain().Height());
                         // In any case, we want to download using a compact block, not a regular one
                         vGetData[0] = CInv(MSG_CMPCT_BLOCK, vGetData[0].hash);
                         strItem = "cmpct";
@@ -3337,7 +3340,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
             const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(req.blockhash);
             if (!pindex || !(pindex->nStatus & BLOCK_HAVE_DATA)) {
-                LogPrint(BCLog::NET, "Peer %d sent us a getblocktxn for a block we don't have\n", pfrom.GetId());
+                LogPrintf("CURIOUS: recv getblocktxn for a block we don't have. peer=%d\n", pfrom.GetId());
                 return;
             }
 
@@ -3465,7 +3468,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         CNodeState* nodestate = State(pfrom.GetId());
         if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
         if (nodestate->nBlockAfterTXs > 1) {
-            LogPrintf("nBlockAfterTXs %d -> %d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1);
+            LogPrintf("nBlockAfterTXs %d -> %d clicks=%d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1,
+                nNetClicks - nodestate->m_download_report_clicks);
+            nodestate->m_download_report_clicks = nNetClicks;
             nodestate->nBlockAfterTXs--;
         }
 
@@ -3859,6 +3864,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
                     // If we get more TXs than currently in flight then we know the request has been ignored.
                     nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // Add 2 so that one more TX is requested.
+                    nodestate->m_download_report_clicks = nNetClicks;
                 }
             } // if a cmpctblock that we can process
         } else {
@@ -4320,7 +4326,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // completed in TxRequestTracker.
                     CNodeState *nodestate = State(pfrom.GetId());
                     if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
-                    if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
+                    if (nodestate->nBlockAfterTXs > 1) {
+                        LogPrintf("nBlockAfterTXs %d -> %d clicks=%d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1, nNetClicks - nodestate->m_download_report_clicks);
+                        nodestate->m_download_report_clicks = nNetClicks;
+                        nodestate->nBlockAfterTXs--;
+                    }
                     m_txrequest.ReceivedResponse(pfrom.GetId(), inv.hash);
                 }
             }
@@ -4657,7 +4667,7 @@ void PeerManagerImpl::MaybeSendPing(CNode& node_to, Peer& peer, std::chrono::mic
         now > peer.m_ping_start.load() + std::chrono::seconds{TIMEOUT_INTERVAL}) {
         // The ping timeout is using mocktime. To disable the check during
         // testing, increase -peertimeout.
-        LogPrintf("ping timeout: %fs peer=%d\n", 0.000001 * count_microseconds(now - peer.m_ping_start.load()), peer.m_id);
+        LogPrintf("ping timeout: %fs nLastRecv=%d peer=%d\n", 0.000001 * count_microseconds(now - peer.m_ping_start.load()), GetTime() - node_to.nLastRecv,  peer.m_id);
         //node_to.fDisconnect = true;
         peer.m_ping_nonce_sent = 0;
         return;
@@ -5022,12 +5032,12 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     state.pindexBestHeaderSent = pBestIndex;
                 } else if (state.fPreferHeaders) {
                     if (vHeaders.size() > 1) {
-                        LogPrint(BCLog::BLOCKSEND, "%s: %u headers, range (%s, %s), to peer=%d\n", __func__,
+                        LogPrint(BCLog::BLOCKSEND, "send %u headers, range (%s, %s), to peer=%d\n",
                                 vHeaders.size(),
                                 vHeaders.front().GetHash().ToString(),
                                 vHeaders.back().GetHash().ToString(), pto->GetId());
                     } else {
-                        LogPrint(BCLog::BLOCKSEND, "send header %s peer=%d\n", __func__,
+                        LogPrint(BCLog::BLOCKSEND, "send header %s peer=%d\n",
                                 vHeaders.front().GetHash().ToString(), pto->GetId());
                     }
                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::HEADERS, vHeaders));
@@ -5251,8 +5261,9 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             int64_t nNow = GetTime();
             int nDelay = nNow - pto->nLastRecv;
             if (nDelay > m_longest_delay && current_time > state.m_downloading_since + std::chrono::seconds{m_longest_delay}) {
-                LogPrintf("Block download max delay %ds -> %ds nOPWVD=%d peer=%d\n", m_longest_delay, nDelay, nOtherPeersWithValidatedDownloads, pto->GetId());
+                LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, pto->GetId());
                 m_longest_delay = nDelay;
+                state.m_download_report_clicks = nNetClicks;
             }
             if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
                 current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1)) {
