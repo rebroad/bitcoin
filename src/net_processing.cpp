@@ -711,6 +711,7 @@ struct CNodeState {
     std::list<QueuedBlock> vBlocksInFlight;
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     std::chrono::microseconds m_downloading_since{0us};
+    int64_t m_download_report_clicks{0};
     int nBlocksInFlight{0};
     //! How many TXs are currently in flight
     unsigned int nTxInFlight{0};
@@ -861,6 +862,7 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
     if (state->vBlocksInFlight.begin() == list_it) {
         // First block on the queue was received, update the start download time for the next one
         state->m_downloading_since = std::max(state->m_downloading_since, GetTime<std::chrono::microseconds>());
+        state->m_download_report_clicks = nNetClicks;
     }
     state->vBlocksInFlight.erase(list_it);
 
@@ -907,6 +909,7 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, st
     if (state->nBlocksInFlight == 1) {
         // We're starting a block download (batch) from this peer.
         state->m_downloading_since = GetTime<std::chrono::microseconds>();
+        state->m_download_report_clicks = nNetClicks;
         m_peers_downloading_from++;
     }
     itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it))).first;
@@ -3510,7 +3513,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         CNodeState* nodestate = State(pfrom.GetId());
         if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
         if (nodestate->nBlockAfterTXs > 1) {
-            LogPrintf("nBlockAfterTXs %d -> %d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1);
+            LogPrintf("nBlockAfterTXs %d -> %d clicks=%d peer=%d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1,
+                nNetClicks - nodestate->m_download_report_clicks, pfrom.GetId());
+            nodestate->m_download_report_clicks = nNetClicks;
             nodestate->nBlockAfterTXs--;
         }
 
@@ -3909,6 +3914,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // If we get more TXs than currently in flight then we know the request has been ignored.
                     if (nodestate->nBlockAfterTXs == 0) { // we can track only one blocktxn at a time
                         nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // Add 2 so that one more TX is requested.
+                        nodestate->m_download_report_clicks = nNetClicks;
                     }
                 }
             } // if a cmpctblock that we can process
@@ -4385,7 +4391,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     // completed in TxRequestTracker.
                     CNodeState *nodestate = State(pfrom.GetId());
                     if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
-                    if (nodestate->nBlockAfterTXs > 1) nodestate->nBlockAfterTXs--;
+                    if (nodestate->nBlockAfterTXs > 1) {
+                        LogPrintf("nBlockAfterTXs %d -> %d clicks=%d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1, nNetClicks - nodestate->m_download_report_clicks);
+                        nodestate->m_download_report_clicks = nNetClicks;
+                        nodestate->nBlockAfterTXs--;
+                    }
                     m_txrequest.ReceivedResponse(pfrom.GetId(), inv.hash);
                 }
             }
@@ -5317,8 +5327,9 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             int64_t nNow = GetTime();
             int nDelay = nNow - count_seconds(pto->m_last_recv);
             if (nDelay > m_longest_delay && current_time > state.m_downloading_since + std::chrono::seconds{m_longest_delay}) {
-                LogPrintf("Block download max delay %ds -> %ds nOPWVD=%d peer=%d\n", m_longest_delay, nDelay, nOtherPeersWithValidatedDownloads, pto->GetId());
+                LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d nLBT=%s peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, strAge(nNow - pto->nLastBlockTime), pto->GetId());
                 m_longest_delay = nDelay;
+                state.m_download_report_clicks = nNetClicks;
             }
             if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
                 current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1) && nNow - pto->nLastBlockTime > 10) {
