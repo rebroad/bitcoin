@@ -95,6 +95,11 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         val = pow(10.0f, base - 1);
         painter.setPen(axisCol.darker());
         painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * (fToggle ? (pow(val, 0.30102) / pow(fMax, 0.30102)) : (val / fMax)))-yMarginText, QString("%1 %2").arg(val).arg(units));
+        if (fToggle) {
+            painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * pow(val*0.1, 0.30102) / pow(fMax, 0.30102))-yMarginText, QString("%1 %2").arg(val*0.1).arg(units));
+            int yy = YMARGIN + h - (h * 1.0 * pow(val*0.1, 0.30102) / pow(fMax, 0.30102));
+            painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
+        }
         int count = 1;
         for(float y = val; y < (!fToggle || fMax / val < 20 ? fMax : oldval); y += val, count++) {
             if(count % 10 == 0)
