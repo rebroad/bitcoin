@@ -1224,10 +1224,13 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     if (state->fSyncStarted)
         nSyncStarted--;
 
+    int64_t DLsince = state->m_downloading_since.count() / 1000000;
+    int nBlocksInFlight = state->vBlocksInFlight.size();
     for (const QueuedBlock& entry : state->vBlocksInFlight) {
         mapBlocksInFlight.erase(entry.pindex->GetBlockHash());
     }
-    WITH_LOCK(g_cs_orphans, m_orphanage.EraseForPeer(nodeid));
+    int nErasedOrphans;
+    WITH_LOCK(g_cs_orphans, nErasedOrphans = m_orphanage.EraseForPeer(nodeid));
     m_txrequest.DisconnectedPeer(nodeid);
     // Do not check whether peer is registered for reconciliation here, but rather delegate checks
     // to the module. Otherwise it's easy to skip deleting an intermediate state (e.g., we store
@@ -1242,6 +1245,12 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     assert(m_wtxid_relay_peers >= 0);
 
     mapNodeState.erase(nodeid);
+
+    if (nBlocksInFlight || nErasedOrphans) {
+        unsigned int nMaxOrphans = (unsigned int)std::max((int64_t)0, gArgs.GetIntArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
+        int64_t nNow = GetTime();
+        LogPrintf("%s: %s%sfDisc=%d LastRecv=%s LastSend=%s DLsince=%s peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight. ", nBlocksInFlight) : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, strAge(nNow - count_seconds(node.m_last_recv)), strAge(nNow - count_seconds(node.m_last_send)), strAge(nNow - DLsince), nodeid);
+    }
 
     if (mapNodeState.empty()) {
         // Do a consistency check after the last peer is removed.
