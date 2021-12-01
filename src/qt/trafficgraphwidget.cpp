@@ -24,7 +24,6 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
     fMax(0.0f),
-    ttpoint(-1), // Tooltip point to highlight
     nMins(0),
     vSamplesIn(),
     vSamplesOut(),
@@ -135,6 +134,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
+    LogPrintf("%s: Start. fMax=%f\n", __func__, fMax);
+
     if(fMax <= 0.0f) return;
 
     QColor axisCol(Qt::gray);
@@ -171,8 +172,13 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     }
     // draw lines
     painter.setPen(axisCol);
+    if (val == 0) return; // Should never happen
     for(float y = val; y < fMax; y += val) {
         int yy = YMARGIN + h - (h * 1.0 * (fToggle ? (pow(y, 0.30102) / pow(fMax, 0.30102)) : (y / fMax)));
+        static int64_t last_time = 0; static float last_y = -1; int64_t time = GetTime();
+        if (time != last_time || last_y != y) {
+            last_time = time; last_y = y;
+        }
         painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
     }
     painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * (fToggle ? (pow(val, 0.30102) / pow(fMax, 0.30102)) : (val / fMax)))-yMarginText, QString("%1 %2").arg(val).arg(units));
@@ -194,7 +200,6 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     }
     if (ttpoint >= 0 && ttpoint < vTimeStamp.size()) {
         int i = ttpoint;
-        LogPrintf("%s: i = ttpoint = %d\n", __func__, i);
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
         int x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
@@ -208,7 +213,8 @@ void TrafficGraphWidget::updateRates()
 {
     if(!clientModel) return;
 
-    static int64_t nTime = GetTimeMillis();
+    static int64_t nTime = 0;
+    nTime = GetTimeMillis();
     static int64_t nLastTime = nTime - timer->interval();
     int nRealInterval = nTime - nLastTime;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),

@@ -5269,13 +5269,13 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             int64_t nNow = GetTime();
             int nDelay = nNow - pto->nLastRecv;
             if (nDelay > m_longest_delay && current_time > state.m_downloading_since + std::chrono::seconds{m_longest_delay}) {
-                LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, pto->GetId());
+                LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d nLBT=%ds peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, nNow - pto->nLastBlockTime, pto->GetId());
                 m_longest_delay = nDelay;
                 state.m_download_report_clicks = nNetClicks;
             }
             if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
-                current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1)) {
-                LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - pto->nLastRecv, nOtherPeersWithValidatedDownloads, pto->GetId());
+                current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1) && nNow - pto->nLastBlockTime > 10) {
+                LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d nLBT=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - pto->nLastRecv, nOtherPeersWithValidatedDownloads, nNow - pto->nLastBlockTime, pto->GetId());
                 pto->fDisconnect = true;
                 return true;
             }
