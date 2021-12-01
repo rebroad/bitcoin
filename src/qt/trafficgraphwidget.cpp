@@ -71,38 +71,38 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
 {
     QWidget::mousePressEvent(event);
     fToggle = !fToggle;
-    //QWidget::update();
     update();
 }
 
-void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
+void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=false*/)
 {
     static int x = -1;
+    static int global_x = 0;
     static int y = 0;
+    static int global_y = 0;
     static int last_x = -1;
     static int last_y = -1;
     if (event) {
         x = event->x();
+        global_x = event->globalX();
         y = event->y();
-        QWidget::mouseMoveEvent(event);
+        global_y = event->globalY();
     }
     if (x == -1) return;
-    
+
     int w = width() - XMARGIN * 2;
     int sampleCount = vTimeStamp.size();
     int real_i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
     static int i = real_i;
     int new_x = x;
     if (x == last_x && y == last_y) { // Follow ToolTip value if mouse has not moved
-        if (!event) {
-            i++;
-            new_x = XMARGIN + w - w * i / DESIRED_SAMPLES;
-        }
-        static int old_i = -1; static int old_new_x = -1; static bool old_event = true;
+        if (fShiftLeft && i>=0 && i < sampleCount) i++;
+        new_x = XMARGIN + w - w * i / DESIRED_SAMPLES;
+        static int old_i = -1; static int old_new_x = -1;
         bool new_event = event ? true : false;
-        if (i != old_i || new_x != old_new_x || old_event != new_event) {
-            LogPrintf("No movement. x=%d y=%d new_x=%d i=%d real_i=%d event=%d\n", x, y, new_x, i, real_i, event ? 1:0);
-            old_i = i; old_new_x = new_x; old_event = new_event;
+        if (i != old_i || new_x != old_new_x || new_event) {
+            LogPrintf("No movement. x=%d y=%d new_x=%d i=%d real_i=%d w=%d event=%d left=%d\n", x, y, new_x, i, real_i, w, event ? 1:0, fShiftLeft ? 1:0);
+            old_i = i; old_new_x = new_x;
         }
     } else {
         i = real_i;
@@ -118,9 +118,15 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(i) - vTimeStamp.at(i+1)));
         if (milliseconds_between_samples < 1000)
             strTime += strprintf(".%03d", (vTimeStamp.at(i))%1000);
-        QToolTip::showText(QPoint(new_x,y), QString::fromStdString(strTime));
+        QToolTip::showText(QPoint(global_x,global_y), QString::fromStdString(strTime));
     } else
         QToolTip::hideText();
+}
+
+void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
+{
+    UpdateToolTip(event);
+    QWidget::mouseMoveEvent(event);
 }
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *)
@@ -185,30 +191,25 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.setPen(Qt::red);
         painter.drawPath(p);
     }
+    QMouseEvent *mouseevent = nullptr;
+    UpdateToolTip(mouseevent); // Update the ToolTip
 }
 
 void TrafficGraphWidget::updateRates()
 {
     if(!clientModel) return;
 
-    static int64_t nTime = 0;
-    static int64_t nLastTime = 0;
-    nTime = GetTimeMillis();
+    static int64_t nTime = GetTimeMillis();
+    static int64_t nLastTime = nTime - timer->interval();
     int nRealInterval = nTime - nLastTime;
-    nLastTime = nTime;
-    //static int64_t nLastReport = 0;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
-    //int nInterval = timer->interval();
-    //if ((nTime >= nLastReport + 10000) && ((nRealInterval <= nInterval * 0.9) || (nRealInterval >= nInterval * 1.1))) {
-    //    LogPrintf("%s: nInterval=%d nRealInterval=%d\n", __func__, nInterval, nRealInterval);
-    //    nLastReport = nTime;
-    //}
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
     vSamplesIn.push_front(in_rate_kilobytes_per_sec);
     vSamplesOut.push_front(out_rate_kilobytes_per_sec);
-    vTimeStamp.push_front(nTime);
+    vTimeStamp.push_front(nLastTime);
+    nLastTime = nTime;
     nLastBytesIn = bytesIn;
     nLastBytesOut = bytesOut;
 
@@ -232,7 +233,7 @@ void TrafficGraphWidget::updateRates()
     fMax = tmax;
     update();
     QMouseEvent *mouseevent = nullptr;
-    mouseMoveEvent(mouseevent); // Update the ToolTip
+    UpdateToolTip(mouseevent, true); // Update the ToolTip
 }
 
 void TrafficGraphWidget::setGraphRangeMins(int mins)

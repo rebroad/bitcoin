@@ -27,6 +27,7 @@ public:
 protected:
     void paintEvent(QPaintEvent *) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void UpdateToolTip(QMouseEvent *event, bool fShiftLeft = false);
     void mouseMoveEvent(QMouseEvent *event) override;
     bool fToggle = true;
 
