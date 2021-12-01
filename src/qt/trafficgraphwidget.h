@@ -41,6 +41,7 @@ private:
 
     QTimer *timer;
     float fMax;
+    int ttpoint; // ToolTip point to highlight
     int nMins;
     QQueue<float> vSamplesIn;
     QQueue<float> vSamplesOut;

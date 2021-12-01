@@ -24,6 +24,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
     fMax(0.0f),
+    ttpoint(-1), // Tooltip point to highlight
     nMins(0),
     vSamplesIn(),
     vSamplesOut(),
@@ -99,9 +100,8 @@ void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=fal
         if (fShiftLeft && i>=0 && i < sampleCount) i++;
         new_x = XMARGIN + w - w * i / DESIRED_SAMPLES;
         static int old_i = -1; static int old_new_x = -1;
-        bool new_event = event ? true : false;
-        if (i != old_i || new_x != old_new_x || new_event) {
-            LogPrintf("No movement. x=%d y=%d new_x=%d i=%d real_i=%d w=%d event=%d left=%d\n", x, y, new_x, i, real_i, w, event ? 1:0, fShiftLeft ? 1:0);
+        if (i != old_i || new_x != old_new_x || event) {
+            LogPrintf("No movement. x=%d y=%d new_x=%d i=%d sc=%d real_i=%d w=%d event=%d left=%d\n", x, y, new_x, i, sampleCount, real_i, w, event ? 1:0, fShiftLeft ? 1:0);
             old_i = i; old_new_x = new_x;
         }
     } else {
@@ -110,6 +110,7 @@ void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=fal
         last_x = x; last_y = y;
     }
     if (i >= 0 && i < sampleCount) {
+        ttpoint = i;
         std::string strTime = FormatISO8601Time(vTimeStamp.at(i)/1000);
         int milliseconds_between_samples = 1000;
         if (i > 0)
@@ -191,8 +192,16 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.setPen(Qt::red);
         painter.drawPath(p);
     }
-    QMouseEvent *mouseevent = nullptr;
-    UpdateToolTip(mouseevent); // Update the ToolTip
+    if (ttpoint >= 0 && ttpoint < vTimeStamp.size()) {
+        int i = ttpoint;
+        LogPrintf("%s: i = ttpoint = %d\n", __func__, i);
+        painter.setPen(Qt::yellow);
+        int w = width() - XMARGIN * 2;
+        int x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
+        int sample = std::max(vSamplesIn.at(i), vSamplesOut.at(i));
+        int y = YMARGIN + h - (int)(h * 1.0 * (fToggle ? (pow(sample, 0.30102) / pow(fMax, 0.30102)) : (sample / fMax)));
+        painter.drawEllipse(QPointF(x,y), 3, 3);
+    }
 }
 
 void TrafficGraphWidget::updateRates()
