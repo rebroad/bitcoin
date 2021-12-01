@@ -1306,11 +1306,8 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     if (state->fSyncStarted)
         nSyncStarted--;
 
-    int64_t DLsince = state->m_downloading_since.count();
-    if (state->vBlocksInFlight.size() != 0)
-        LogPrintf("%s: vBlocksInFlight=%d nBlocksInFlight=%d peer=%d\n", __func__, state->vBlocksInFlight.size(), state->nBlocksInFlight, nodeid);
-
-    int nBlocksInFlight = 0;
+    int64_t DLsince = state->m_downloading_since.count() / 1000000;
+    int nBlocksInFlight = state->vBlocksInFlight.size();
     for (const QueuedBlock& entry : state->vBlocksInFlight) {
         mapBlocksInFlight.erase(entry.pindex->GetBlockHash());
         nBlocksInFlight++;
@@ -1335,7 +1332,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     unsigned int nMaxOrphans = (unsigned int)std::max((int64_t)0, gArgs.GetIntArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
     if (nBlocksInFlight || nErasedOrphans) {
         int64_t nNow = GetTime();
-        LogPrintf("%s: %s%sfDisc=%d LastRecv=%s LastSend=%s DLsince=%s peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight. ", nBlocksInFlight) : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, strAge(nNow - node.nLastRecv), strAge(nNow - DLsince), strAge(nNow - node.nLastSend), nodeid);
+        LogPrintf("%s: %s%sfDisc=%d LastRecv=%s LastSend=%s DLsince=%s peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight. ", nBlocksInFlight) : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, strAge(nNow - node.nLastRecv), strAge(nNow - node.nLastSend), strAge(nNow - DLsince), nodeid);
     }
 
     if (mapNodeState.empty()) {
@@ -2349,8 +2346,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     // not necessarily the one we're requesting here.
                     mapBlockSource.emplace(vGetData[0].hash, std::make_pair(pfrom.GetId(), false));
                     if (vGetData.size() == 1) {
-                        LogPrint(BCLog::BLOCK, "Requesting %sblock %s peer=%d\n", strItem,
-                            strBlockInfo(vToFetch[0]), pfrom.GetId());
+                        LogPrint(BCLog::BLOCK, "Requesting %sblock %s TXif=%d peer=%d\n", strItem,
+                            strBlockInfo(vToFetch[0]), nodestate->nTxInFlight, pfrom.GetId());
                     }
                 }
             }
@@ -3475,8 +3472,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         CNodeState* nodestate = State(pfrom.GetId());
         if (nodestate->nTxInFlight) nodestate->nTxInFlight--;
         if (nodestate->nBlockAfterTXs > 1) {
-            LogPrintf("nBlockAfterTXs %d -> %d clicks=%d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1,
-                nNetClicks - nodestate->m_download_report_clicks);
+            LogPrintf("nBlockAfterTXs %d -> %d clicks=%d peer=%d\n", nodestate->nBlockAfterTXs, nodestate->nBlockAfterTXs-1,
+                nNetClicks - nodestate->m_download_report_clicks, pfrom.GetId());
             nodestate->m_download_report_clicks = nNetClicks;
             nodestate->nBlockAfterTXs--;
         }
@@ -3870,7 +3867,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         last_recved_cmpctblock2 = last_recved_cmpctblock1;
                         last_recved_cmpctblock1 = cmpctblock;
                     }
-                    LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), pfrom.GetId());
+                    LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d TXif=%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), nodestate->nTxInFlight, pfrom.GetId());
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
                     // If we get more TXs than currently in flight then we know the request has been ignored.
@@ -4657,7 +4654,7 @@ void PeerManagerImpl::CheckForStaleTipAndEvictPeers()
         // Check whether our tip is stale, and if so, allow using an extra
         // outbound peer
         if (!fImporting && !fReindex && m_connman.GetNetworkActive() && m_connman.GetUseAddrmanOutgoing() && TipMayBeStale()) {
-            LogPrintf("Potential stale tip detected, will try using extra outbound peer (last tip update: %d seconds ago)\n", time_in_seconds - m_last_tip_update);
+            LogPrintf("Potential stale tip detected, will try using extra outbound peer (last tip update: %s ago)\n", strAge(time_in_seconds - m_last_tip_update));
             m_connman.SetTryNewOutboundPeer(true);
         } else if (m_connman.GetTryNewOutboundPeer()) {
             m_connman.SetTryNewOutboundPeer(false);
@@ -4678,7 +4675,7 @@ void PeerManagerImpl::MaybeSendPing(CNode& node_to, Peer& peer, std::chrono::mic
         now > peer.m_ping_start.load() + std::chrono::seconds{TIMEOUT_INTERVAL}) {
         // The ping timeout is using mocktime. To disable the check during
         // testing, increase -peertimeout.
-        LogPrintf("ping timeout: %s nLastRecv=%s peer=%d\n", strAge(count_microseconds(now - peer.m_ping_start.load() / 1000000)), strAge(now.count() - node_to.nLastRecv), peer.m_id);
+        LogPrintf("ping timeout: %s nLastRecv=%s peer=%d\n", strAge(count_microseconds(now - peer.m_ping_start.load()) / 1000000), strAge(now.count() / 1000000 - node_to.nLastRecv), peer.m_id);
         //node_to.fDisconnect = true;
         peer.m_ping_nonce_sent = 0;
         return;

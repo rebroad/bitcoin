@@ -671,7 +671,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
 
             if ((msg.m_command == NetMsgType::INV || msg.m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx) {
                 nRecvBytes1stTx = nRecvBytes - msg.m_raw_message_size - msg_bytes.size();
-                nTime1stTx = nLastRecv;
+                nTime1stTx = (int64_t)nLastRecv;
                 LogPrintf("%s: 1stTx t=%d size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, nTime1stTx - nTimeConnected, msg.m_raw_message_size, nRecvBytes1stTx, nRecvBytes, handled, msg_bytes.size(), GetId());
             }
             if (msg.m_command == NetMsgType::BLOCK) nLastBlock = nLastRecv;
@@ -1326,10 +1326,16 @@ void CConnman::DisconnectNodes()
         }
     }
     LOCK(m_nodes_mutex);
-    if (m_nodes.size() == 0 && nodes_disconnected_copy.size() > 0) {
-        LogPrintf("NO PEERS CONNECTED. Resetting NodeId.\n\n");
-        nAnchorTryAgain = 0;
-        ResetNewNodeId();
+    if (m_nodes.size() == 0) {
+        static int LastNDC = -1;
+        static int LastND = -1;
+        if ((int)nodes_disconnected_copy.size() != LastNDC || LastND != (int)m_nodes_disconnected.size()) {
+            LogPrintf("NO PEERS CONNECTED. Resetting NodeId. ndc:%d->%d nd:%d->%d\n\n", LastNDC, nodes_disconnected_copy.size(), LastND, m_nodes_disconnected.size());
+            LastNDC = nodes_disconnected_copy.size();
+            LastND = m_nodes_disconnected.size();
+            nAnchorTryAgain = 0;
+            ResetNewNodeId();
+        }
     }
 }
 
@@ -1711,7 +1717,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             nSecondLowestPct = nSecondLowestBPct;
         }
         if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm)
-            LogPrintf("%s: worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d:%d) Global: TXpm=%d Pct=%d %s\n", __func__, nTechnique, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, (int)nLowestTXpm, (int)nSecondLowestTXpm, nGlobalTXpm, 100 * nTotalMempoolBytes / (nTotalBytesRecv+1), strBps(nGlobalBps));
+            LogPrintf("worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d:%d) Global: TXpm=%d Pct=%d %s\n", nTechnique, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, (int)nLowestTXpm, (int)nSecondLowestTXpm, nGlobalTXpm, 100 * nTotalMempoolBytes / (nTotalBytesRecv+1), strBps(nGlobalBps));
         if (lastWorstPct != worstNodePct) {
             tWorstPctChanged = now;
             lastWorstPct = worstNodePct;
@@ -1752,13 +1758,13 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                     // A block came in and so the lowest will always be the lowest - disconnect it
                     if (nLastBlockTime > latestOutboundConn && (pnode->nBlockTXs || (pnode->nBlockTXs == 0 && nLastBlockTime - nTimeConnected >= 120))) {
                         strReason += "R1";
-                        strDetails += strprintf(" LastBlk=%d", now - nLastBlockTime);
+                        strDetails += strprintf("LastBlk=%d", now - nLastBlockTime);
                         DoIt = true;
                     }
                     // If no change for over 45 seconds and lowest either very low, or no new connections for over 2 minutes
-                    if ((now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && (nLowest <= nSecondLowest / 2 || now - latestOutboundConn >= 120)) {
+                    if ((now - tWorstChanged >= 45) && (!fLatestNodeDegrading || worstNode == latestNode) && (nLowest <= nSecondLowest / 2 || now - latest1stTx >= 120)) {
                         strReason += "R2";
-                        strDetails += strprintf(" Changed=%d", now - tWorstChanged);
+                        strDetails += strprintf("Changed=%d", now - tWorstChanged);
                         DoIt = true;
                     }
                 }
@@ -1770,7 +1776,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             }
             if (DoIt) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
-                LogPrintf("%s: %s=%d,%d %s %sTimeConn=%d LastOut=%d Last1st=%d disconnect peer=%d\n", __func__, nTechnique ? "TXpm":"TX%%", nLowest, nSecondLowest, strReason, strDetails, now - pnode->nTimeConnected, now - latestOutboundConn, now - latest1stTx, pnode->GetId());
+                LogPrintf("Evict%d: %s=%d,%d %s %s TimeConn=%d LastOut=%d Last1st=%d disconnect peer=%d\n", nTechnique, nTechnique ? "TXpm":"TX%", nLowest, nSecondLowest, strReason, strDetails, now - pnode->nTimeConnected, now - latestOutboundConn, now - latest1stTx, pnode->GetId());
                 if ((now - latestOutboundConn) >= 120 && MaxedOut
                         && !nAnchorTryAgain && (now - latest1stTx) >= 120) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();

@@ -10,6 +10,8 @@
 #include <QPainterPath>
 #include <QColor>
 #include <QTimer>
+#include <QHelpEvent>
+#include <QToolTip>
 
 #include <cmath>
 
@@ -25,12 +27,14 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     nMins(0),
     vSamplesIn(),
     vSamplesOut(),
+    vTimeStamp(),
     nLastBytesIn(0),
     nLastBytesOut(0),
     clientModel(nullptr)
 {
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
+    setMouseTracking(true);
 }
 
 void TrafficGraphWidget::setClientModel(ClientModel *model)
@@ -67,7 +71,56 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
 {
     QWidget::mousePressEvent(event);
     fToggle = !fToggle;
-    QWidget::update();
+    //QWidget::update();
+    update();
+}
+
+void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
+{
+    static int x = -1;
+    static int y = 0;
+    static int last_x = -1;
+    static int last_y = -1;
+    if (event) {
+        x = event->x();
+        y = event->y();
+        QWidget::mouseMoveEvent(event);
+    }
+    if (x == -1) return;
+    
+    int w = width() - XMARGIN * 2;
+    int sampleCount = vTimeStamp.size();
+    int real_i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
+    static int i = real_i;
+    int new_x = x;
+    if (x == last_x && y == last_y) { // Follow ToolTip value if mouse has not moved
+        if (!event) {
+            i++;
+            new_x = XMARGIN + w - w * i / DESIRED_SAMPLES;
+        }
+        static int old_i = -1; static int old_new_x = -1; static bool old_event = true;
+        bool new_event = event ? true : false;
+        if (i != old_i || new_x != old_new_x || old_event != new_event) {
+            LogPrintf("No movement. x=%d y=%d new_x=%d i=%d real_i=%d event=%d\n", x, y, new_x, i, real_i, event ? 1:0);
+            old_i = i; old_new_x = new_x; old_event = new_event;
+        }
+    } else {
+        i = real_i;
+        LogPrintf("Movement! x=%d->%d y=%d->%d i=%d event=%d\n", last_x, x, last_y, y, i, event ? 1:0);
+        last_x = x; last_y = y;
+    }
+    if (i >= 0 && i < sampleCount) {
+        std::string strTime = FormatISO8601Time(vTimeStamp.at(i)/1000);
+        int milliseconds_between_samples = 1000;
+        if (i > 0)
+            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(i-1) - vTimeStamp.at(i)));
+        if (i + 1 < sampleCount)
+            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(i) - vTimeStamp.at(i+1)));
+        if (milliseconds_between_samples < 1000)
+            strTime += strprintf(".%03d", (vTimeStamp.at(i))%1000);
+        QToolTip::showText(QPoint(new_x,y), QString::fromStdString(strTime));
+    } else
+        QToolTip::hideText();
 }
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *)
@@ -155,6 +208,7 @@ void TrafficGraphWidget::updateRates()
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
     vSamplesIn.push_front(in_rate_kilobytes_per_sec);
     vSamplesOut.push_front(out_rate_kilobytes_per_sec);
+    vTimeStamp.push_front(nTime);
     nLastBytesIn = bytesIn;
     nLastBytesOut = bytesOut;
 
@@ -163,6 +217,9 @@ void TrafficGraphWidget::updateRates()
     }
     while(vSamplesOut.size() > DESIRED_SAMPLES) {
         vSamplesOut.pop_back();
+    }
+    while(vTimeStamp.size() > DESIRED_SAMPLES) {
+        vTimeStamp.pop_back();
     }
 
     float tmax = 0.0f;
@@ -174,6 +231,8 @@ void TrafficGraphWidget::updateRates()
     }
     fMax = tmax;
     update();
+    QMouseEvent *mouseevent = nullptr;
+    mouseMoveEvent(mouseevent); // Update the ToolTip
 }
 
 void TrafficGraphWidget::setGraphRangeMins(int mins)
@@ -191,6 +250,7 @@ void TrafficGraphWidget::clear()
 
     vSamplesOut.clear();
     vSamplesIn.clear();
+    vTimeStamp.clear();
     fMax = 0.0f;
 
     if(clientModel) {

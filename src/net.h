@@ -435,7 +435,7 @@ public:
     std::atomic<int64_t> nTime1stTx{0};
     int64_t nLastBlock{0};
     std::atomic<int64_t> nLastSend{0};
-    int64_t nLastRecv{0};
+    std::atomic<int64_t> nLastRecv{0};
     //! Unix epoch time at peer connection, in seconds.
     const int64_t nTimeConnected;
     std::atomic<int64_t> nTimeOffset{0};

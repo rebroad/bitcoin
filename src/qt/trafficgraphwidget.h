@@ -27,6 +27,7 @@ public:
 protected:
     void paintEvent(QPaintEvent *) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
     bool fToggle = true;
 
 public Q_SLOTS:
@@ -42,6 +43,7 @@ private:
     int nMins;
     QQueue<float> vSamplesIn;
     QQueue<float> vSamplesOut;
+    QQueue<int64_t> vTimeStamp;
     quint64 nLastBytesIn;
     quint64 nLastBytesOut;
     ClientModel *clientModel;

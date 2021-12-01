@@ -63,7 +63,7 @@ void MempoolStats::setClientModel(ClientModel *model)
 
 // define the colors for the feeranges
 // TODO: find a more dynamic way to assign colors
-const static std::vector<QColor> colors = { QColor("#434144"), QColor("#535154"), QColor("#0000ac"), QColor("#0000c2"), QColor("#0000d8"), QColor("#0000ec"), QColor("#0000ff"), QColor("#2c2cff"), QColor("#5858ff"), QColor("#8080ff"),
+const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac"), QColor("#0000c2"), QColor("#0000d8"), QColor("#0000ec"), QColor("#0000ff"), QColor("#2c2cff"), QColor("#5858ff"), QColor("#8080ff"),
                                             QColor("#008000"), QColor("#00a000"), QColor("#00c000"), QColor("#00e000"), QColor("#30e030"), QColor("#60e060"), QColor("#90e090"),
                                             QColor("#808000"), QColor("#989800"), QColor("#b0b000"), QColor("#c8c800"), QColor("#e0e000"), QColor("#e0e030"), QColor("#e0e060"),
                                             QColor("#800000"), QColor("#a00000"), QColor("#c00000"), QColor("#e00000"), QColor("#e02020"), QColor("#e04040"), QColor("#e06060"),

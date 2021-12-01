@@ -175,14 +175,8 @@ void MempoolStatsOld::drawChart()
     }
 
     // set dynamic label positions
-    int maxValueSize1 = std::max(std::max(txCountValueItem->boundingRect().width(), dynMemUsageValueItem->boundingRect().width()), minFeeValueItem->boundingRect().width());
-    int maxValueSize = ceil(maxValueSize1*0.11)*10; //use size steps of 10dip
-
-    static int lastMVS = 0;
-    if (lastMVS != maxValueSize1) {
-        LogPrintf("%s: maxValueSize1 %d->%d maxValueSize=%d\n", __func__, lastMVS, maxValueSize1, maxValueSize);
-        lastMVS = maxValueSize1;
-    }
+    int maxValueSize = std::max(std::max(txCountValueItem->boundingRect().width(), dynMemUsageValueItem->boundingRect().width()), minFeeValueItem->boundingRect().width());
+    maxValueSize = ceil(maxValueSize*0.11)*10; //use size steps of 10dip
 
     int rightPaddingLabels = std::max(std::max(dynMemUsageSwitch->boundingRect().width(), txCountSwitch->boundingRect().width()), minFeeSwitch->boundingRect().width())+maxValueSize;
     int rightPadding = 10;
