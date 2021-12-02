@@ -86,7 +86,6 @@ void MempoolStats::drawChart()
     QFont gridFont;
     gridFont.setPointSize(8);
     int display_up_to_range = 0;
-    int display_fee_up_to_range = 0;
     qreal maxwidth = m_gfx_view->scene()->sceneRect().width()-GRAPH_PADDING_LEFT-GRAPH_PADDING_RIGHT;
     {
         // we are going to access the clientmodel feehistogram directly avoding a copy
@@ -136,8 +135,6 @@ void MempoolStats::drawChart()
         for(size_t i = 0; i < fee_subtotal_totalnum.size(); i++) {
             if (fee_subtotal_totalnum[i] > 0)
                 display_up_to_range = i;
-            if (fee_subtotal_num[i] > 0)
-                display_fee_up_to_range = i;
         }
 
         // make a nice y-axis scale
@@ -189,7 +186,7 @@ void MempoolStats::drawChart()
         c_y-=c_margin;
         int i = 0;
         for (const interfaces::mempool_feeinfo& list_entry : m_clientmodel->m_mempool_feehist[0].second) {
-            if (i > display_fee_up_to_range) {
+            if (i > display_up_to_range) {
                 continue;
             }
             ClickableRectItem *fee_rect = new ClickableRectItem();

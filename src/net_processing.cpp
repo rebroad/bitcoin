@@ -2304,7 +2304,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
             // very large reorg at a time we think we're close to caught up to
             // the main chain -- this shouldn't really happen.  Bail out on the
             // direct fetch and rely on parallel download instead.
-            if (fUpdateChain && !m_chainman.ActiveChain().Contains(pindexWalk)) {
+            if (!m_chainman.ActiveChain().Contains(pindexWalk)) {
                 LogPrint(BCLog::BLOCK, "Large reorg, won't direct fetch from %s peer=%d\n",
                         strBlockInfo(pindexWalk), pfrom.GetId());
             } else {
@@ -2769,7 +2769,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             bool fDisconnect = !pfrom.IsInboundConn(); // Allow inbound to connect
             LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%x offered, %x expected) %speer=%d\n",
                 nServices, GetDesirableServiceFlags(nServices), fDisconnect ? "disconnecting " : "", pfrom.GetId());
-            if (fDisconnect) { // REBTODO - Allow 8 and 1024 OR 1 (witness and limited or node)
+            if (fDisconnect) { // REBTODO - Allow 8 and (1024 OR 1) (witness and limited or node)
                 pfrom.fDisconnect = true;
                 return;
             }
@@ -3454,10 +3454,15 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             pfrom.fDisconnect = true;
             return;
         }
+
+        // Stop processing the transaction early if we are still in IBD since we don't
+        // have enough information to validate it yet. Sending unsolicited transactions
+        // is not considered a protocol violation, so don't punish the peer.
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
             static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
             static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
             LogPrintf("recv tx(%d) %sduring IBD peer=%d\n", pfrom.nRecvBytes1stTx ? 1:0, pfrom.m_tx_relay && pfrom.m_tx_relay->lastSentFeeFilter == MAX_FILTER ? "violation ":"", pfrom.GetId());
+            return;
         }
 
         CTransactionRef ptx;
@@ -4073,6 +4078,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 strExtra += " UNSOLICITED";
         }
         LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
+        if (pfrom.nRecvBytes1stTx) {
+            int nBIF = State(pfrom.GetId())->nBlocksInFlight;
+            int nLBT = int(GetTime() - pfrom.nLastBlockTime);
+            if (nBIF > 3 || nLBT < 60) {
+                pfrom.nRecvBytes1stTx = 0;
+                LogPrintf("Setting nRecvBytes1stTx=0 BIF=%d nLBT=%s peer=%d\n", nBIF, strAge(nLBT), pfrom.GetId());
+            }
+        }
         ProcessBlock(pfrom, pblock, forceProcessing);
         return;
     }
@@ -5269,7 +5282,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             int64_t nNow = GetTime();
             int nDelay = nNow - pto->nLastRecv;
             if (nDelay > m_longest_delay && current_time > state.m_downloading_since + std::chrono::seconds{m_longest_delay}) {
-                LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d nLBT=%ds peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, nNow - pto->nLastBlockTime, pto->GetId());
+                LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d nLBT=%s peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, strAge(nNow - pto->nLastBlockTime), pto->GetId());
                 m_longest_delay = nDelay;
                 state.m_download_report_clicks = nNetClicks;
             }

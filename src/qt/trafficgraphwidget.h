@@ -26,11 +26,11 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *) override;
+    int y_value(float value);
     void mousePressEvent(QMouseEvent *event) override;
-    int y_value(int value);
+    bool fToggle = true;
     void UpdateToolTip(QMouseEvent *event, bool fShiftLeft = false);
     void mouseMoveEvent(QMouseEvent *event) override;
-    bool fToggle = true;
     int ttpoint = -1;
 
 public Q_SLOTS:

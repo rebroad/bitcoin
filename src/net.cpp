@@ -10,6 +10,7 @@
 #include <net.h>
 
 #include <addrdb.h>
+#include <addrman.h>
 #include <banman.h>
 #include <clientversion.h>
 #include <compat.h>
@@ -511,7 +512,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         addr_bind = GetBindAddress(sock->Get());
     }
     CNode* pnode = new CNode(id, nLocalServices, sock->Release(), addrConnect, CalculateKeyedNetGroup(addrConnect), nonce, addr_bind, pszDest ? pszDest : "", conn_type, /* inbound_onion */ false);
-    pnode->AddRef(1); // Creation (out)
+    pnode->AddRef(1); // REB - Creation (out)
     if (pnode->GetId() == 0)
         LogPrintf("%s: Created pnode=%d GRC=%d\n", __func__, pnode->GetId(), pnode->GetRefCount());
 
@@ -1224,7 +1225,7 @@ void CConnman::CreateNodeFromAcceptedSocket(SOCKET hSocket,
 
     const bool inbound_onion = std::find(m_onion_binds.begin(), m_onion_binds.end(), addr_bind) != m_onion_binds.end();
     CNode* pnode = new CNode(id, nodeServices, hSocket, addr, CalculateKeyedNetGroup(addr), nonce, addr_bind, "", ConnectionType::INBOUND, inbound_onion);
-    pnode->AddRef(1); // Creation (in)
+    pnode->AddRef(1); // REB - Creation (in)
     pnode->m_permissionFlags = permissionFlags;
     pnode->m_prefer_evict = discouraged;
     m_msgproc->InitializeNode(pnode);
@@ -1307,7 +1308,7 @@ void CConnman::DisconnectNodes()
 
                 // hold in disconnected pool until all refs are released
                 LogPrintf("%s: Add to m_nodes_disconnected m_nodes.size %d->%d GRC=%d %speer=%d\n", __func__, m_nodesSizeBefore, m_nodesSizeAfter, pnode->GetRefCount(), pnode->IsFeelerConn() ? "feel " : pnode->IsInboundConn() ? "incoming ":"", pnode->GetId());
-                pnode->Release(1); // deletion
+                pnode->Release(1); // REB - deletion
                 m_nodes_disconnected.push_back(pnode);
             }
         }
@@ -1566,7 +1567,7 @@ void CConnman::SocketHandler()
     std::set<SOCKET> error_set;
 
     {
-        const NodesSnapshot snap{*this, /*shuffle=*/false};
+        const NodesSnapshot snap{*this, 2, /*shuffle=*/false};
 
         // Check for the readiness of the already connected sockets and the
         // listening sockets in one call ("readiness" as in poll(2) or
@@ -1880,7 +1881,7 @@ void CConnman::SocketHandlerListening(const std::set<SOCKET>& recv_set)
         if (interruptNet) {
             return;
         }
-        if (listen_socket.socket != INVALID_SOCKET && recv_set.count(listen_socket.socket) > 0) {
+        if (recv_set.count(listen_socket.socket) > 0) {
             AcceptConnection(listen_socket);
         }
     }
@@ -2573,7 +2574,7 @@ void CConnman::ThreadMessageHandler()
             // Randomize the order in which we process messages from/to our peers.
             // This prevents attacks in which an attacker exploits having multiple
             // consecutive connections in the m_nodes list.
-            const NodesSnapshot snap{*this, /*shuffle=*/true};
+            const NodesSnapshot snap{*this, 4, /*shuffle=*/true};
 
             static bool fToggle = false; // So that net_processing can see this loop
             for (CNode* pnode : snap.Nodes()) {

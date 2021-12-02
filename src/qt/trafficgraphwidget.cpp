@@ -51,6 +51,11 @@ int TrafficGraphWidget::getGraphRangeMins() const
     return nMins;
 }
 
+int TrafficGraphWidget::y_value(float value)
+{
+    return YMARGIN + h - (h * 1.0 * (fToggle ? (pow(value, 0.30102) / pow(fMax, 0.30102)) : (value / fMax)));
+}
+
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
     int sampleCount = samples.size();
@@ -60,7 +65,7 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
             x = XMARGIN + w - w * i / DESIRED_SAMPLES;
-            int y = YMARGIN + h - (int)(h * 1.0 * (fToggle ? (pow(samples.at(i), 0.30102) / pow(fMax, 0.30102)) : (samples.at(i) / fMax)));
+            int y = y_value(samples.at(i));
             path.lineTo(x, y);
         }
         path.lineTo(x, YMARGIN + h);
@@ -74,9 +79,10 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
     update();
 }
 
-int TrafficGraphWidget::y_value(int value)
+float floatmax(float a, float b)
 {
-    return YMARGIN + h - (h * 1.0 * (fToggle ? (pow(value, 0.30102) / pow(fMax, 0.30102)) : (value / fMax)));
+    if (a > b) return a;
+    else return b;
 }
 
 void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=false*/)
@@ -99,8 +105,10 @@ void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=fal
         if (x != last_x || y != last_y) {
             fMoved = true;
             last_x = x; last_y = y;
-        } else if (!fShiftLeft)
-            return; // Exit if mouse has not moved AND graph not updated.
+        } else if (!fShiftLeft) return; // Exit if mouse has not moved AND graph not updated.
+    } else if (!fShiftLeft) {
+        LogPrintf("%s: No event AND no update!\n", __func__); // Should never happen
+        return;
     }
     if (x == -1) return; // Exit if we've never acquired pointer coordinates.
     h = height() - YMARGIN * 2;
@@ -111,13 +119,14 @@ void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=fal
         unsigned int smallest_distance = h; int closest_i = i;
         for (int test_i = i - 2; test_i <= i + 2; test_i++) {
             if (test_i < 0 || test_i >= sampleCount) continue;
-            int y_data = y_value(std::max(vSamplesIn.at(test_i), vSamplesOut.at(test_i)));
+            float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
+            int y_data = y_value(val);
             unsigned int distance = abs(y - y_data);
             if (distance < smallest_distance) {
                 smallest_distance = distance;
                 closest_i = test_i;
             }
-            LogPrintf("test_i=%d y=%d data=%d dist=%d smdist=%d cl_i=%d\n", test_i, y, y_data, distance, smallest_distance, closest_i);
+            LogPrintf("i=%d test_i=%d h=%d val=%f y=%d data=%d dist=%d smdist=%d cl_i=%d\n", i, test_i, h, val, y, y_data, distance, smallest_distance, closest_i);
         }
         ttpoint = closest_i;
     } else {
@@ -126,8 +135,7 @@ void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=fal
     update(); // Calls paintEvent()
     if (ttpoint >= 0 && ttpoint < sampleCount) {
         int new_x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
-        int sample = std::max(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint));
-        int new_y = YMARGIN + h - (int)(h * 1.0 * (fToggle ? (pow(sample, 0.30102) / pow(fMax, 0.30102)) : (sample / fMax)));
+        int new_y = y_value(floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint)));
         std::string strTime = FormatISO8601Time(vTimeStamp.at(ttpoint)/1000);
         int milliseconds_between_samples = 1000;
         if (ttpoint > 0)
@@ -170,17 +178,17 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         float oldval = val;
         val = pow(10.0f, base - 1);
         painter.setPen(axisCol.darker());
-        painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * (fToggle ? (pow(val, 0.30102) / pow(fMax, 0.30102)) : (val / fMax)))-yMarginText, QString("%1 %2").arg(val).arg(units));
+        painter.drawText(XMARGIN, y_value(val)-yMarginText, QString("%1 %2").arg(val).arg(units));
         if (fToggle) {
-            painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * pow(val*0.1, 0.30102) / pow(fMax, 0.30102))-yMarginText, QString("%1 %2").arg(val*0.1).arg(units));
-            int yy = YMARGIN + h - (h * 1.0 * pow(val*0.1, 0.30102) / pow(fMax, 0.30102));
+            int yy = y_value(val*0.1);
+            painter.drawText(XMARGIN, yy-yMarginText, QString("%1 %2").arg(val*0.1).arg(units));
             painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
         }
         int count = 1;
         for(float y = val; y < (!fToggle || fMax / val < 20 ? fMax : oldval); y += val, count++) {
             if(count % 10 == 0)
                 continue;
-            int yy = YMARGIN + h - (h * 1.0 * (fToggle ? (pow(y, 0.30102) / pow(fMax, 0.30102)) : (y / fMax)));
+            int yy = y_value(y);
             painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
         }
         val = oldval;
@@ -188,10 +196,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     // draw lines
     painter.setPen(axisCol);
     for(float y = val; y < fMax; y += val) {
-        int yy = YMARGIN + h - (h * 1.0 * (fToggle ? (pow(y, 0.30102) / pow(fMax, 0.30102)) : (y / fMax)));
+        int yy = y_value(y);
         painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
     }
-    painter.drawText(XMARGIN, YMARGIN + h - (h * 1.0 * (fToggle ? (pow(val, 0.30102) / pow(fMax, 0.30102)) : (val / fMax)))-yMarginText, QString("%1 %2").arg(val).arg(units));
+    painter.drawText(XMARGIN, y_value(val)-yMarginText, QString("%1 %2").arg(val).arg(units));
 
     painter.setRenderHint(QPainter::Antialiasing);
     if(!vSamplesIn.empty()) {
@@ -208,14 +216,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.setPen(Qt::red);
         painter.drawPath(p);
     }
-    int sampleCount = vTimeStamp.size();
-    if (ttpoint >= 0 && ttpoint < sampleCount) {
+    if (ttpoint >= 0 && ttpoint < vTimeStamp.size()) {
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
         int x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
-        int sample = std::max(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint));
-        int y = YMARGIN + h - (int)(h * 1.0 * (fToggle ? (pow(sample, 0.30102) / pow(fMax, 0.30102)) : (sample / fMax)));
-        painter.drawEllipse(QPointF(x,y), 3, 3);
+        int sample = floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint));
+        painter.drawEllipse(QPointF(x,y_value(sample)), 3, 3);
     }
 }
 

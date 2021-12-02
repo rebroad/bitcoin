@@ -215,24 +215,6 @@ bool CheckFinalTx(const CBlockIndex* active_chain_tip, const CTransaction &tx, i
     return IsFinalTx(tx, nBlockHeight, nBlockTime);
 }
 
-bool TestLockPointValidity(CChain& active_chain, const LockPoints* lp)
-{
-    AssertLockHeld(cs_main);
-    assert(lp);
-    // If there are relative lock times then the maxInputBlock will be set
-    // If there are no relative lock times, the LockPoints don't depend on the chain
-    if (lp->maxInputBlock) {
-        // Check whether active_chain is an extension of the block at which the LockPoints
-        // calculation was valid.  If not LockPoints are no longer valid
-        if (!active_chain.Contains(lp->maxInputBlock)) {
-            return false;
-        }
-    }
-
-    // LockPoints still valid
-    return true;
-}
-
 bool CheckSequenceLocks(CBlockIndex* tip,
                         const CCoinsView& coins_view,
                         const CTransaction& tx,
@@ -352,8 +334,8 @@ void CChainState::MaybeUpdateMempoolForReorg(
     while (it != disconnectpool.queuedTx.get<insertion_order>().rend()) {
         // ignore validation errors in resurrected transactions
         if (!fAddToMempool || (*it)->IsCoinBase() ||
-            AcceptToMemoryPool(
-                *this, *m_mempool, *it, -4, true /* bypass_limits */).m_result_type !=
+            AcceptToMemoryPool(*m_mempool, *this, *it, GetTime(), -4,
+                /* bypass_limits= */true, /* test_accept= */ false).m_result_type !=
                     MempoolAcceptResult::ResultType::VALID) {
             // If the transaction doesn't make it in to the mempool, remove any
             // transactions that depend on it (which would now be orphans).
@@ -371,8 +353,39 @@ void CChainState::MaybeUpdateMempoolForReorg(
     // the disconnectpool that were added back and cleans up the mempool state.
     m_mempool->UpdateTransactionsFromBlock(vHashUpdate);
 
+    const auto check_final_and_mature = [this, flags=STANDARD_LOCKTIME_VERIFY_FLAGS](CTxMemPool::txiter it)
+        EXCLUSIVE_LOCKS_REQUIRED(m_mempool->cs, ::cs_main) {
+        bool should_remove = false;
+        AssertLockHeld(m_mempool->cs);
+        AssertLockHeld(::cs_main);
+        const CTransaction& tx = it->GetTx();
+        LockPoints lp = it->GetLockPoints();
+        bool validLP = TestLockPointValidity(m_chain, &lp);
+        CCoinsViewMemPool view_mempool(&CoinsTip(), *m_mempool);
+        if (!CheckFinalTx(m_chain.Tip(), tx, flags)
+            || !CheckSequenceLocks(m_chain.Tip(), view_mempool, tx, flags, &lp, validLP)) {
+            // Note if CheckSequenceLocks fails the LockPoints may still be invalid
+            // So it's critical that we remove the tx and not depend on the LockPoints.
+            should_remove = true;
+        } else if (it->GetSpendsCoinbase()) {
+            for (const CTxIn& txin : tx.vin) {
+                auto it2 = m_mempool->mapTx.find(txin.prevout.hash);
+                if (it2 != m_mempool->mapTx.end())
+                    continue;
+                const Coin &coin = CoinsTip().AccessCoin(txin.prevout);
+                assert(!coin.IsSpent());
+                unsigned int nMemPoolHeight = m_chain.Tip()->nHeight + 1;
+                if (coin.IsSpent() || (coin.IsCoinBase() && ((signed long)nMemPoolHeight) - coin.nHeight < COINBASE_MATURITY)) {
+                    should_remove = true;
+                    break;
+                }
+            }
+        }
+        return should_remove;
+    };
+
     // We also need to remove any now-immature transactions
-    m_mempool->removeForReorg(*this, STANDARD_LOCKTIME_VERIFY_FLAGS);
+    m_mempool->removeForReorg(m_chain, check_final_and_mature);
     // Re-limit mempool size, in case we added any transactions
     LimitMempoolSize(
         *m_mempool,
@@ -949,8 +962,8 @@ bool MemPoolAccept::ConsensusScriptChecks(const ATMPArgs& args, Workspace& ws)
     unsigned int currentBlockScriptVerifyFlags = GetBlockScriptFlags(m_active_chainstate.m_chain.Tip(), chainparams.GetConsensus());
     if (!CheckInputsFromMempoolAndCache(tx, state, m_view, m_pool, currentBlockScriptVerifyFlags,
                                         ws.m_precomputed_txdata, m_active_chainstate.CoinsTip())) {
-        return error("%s: BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but not STANDARD flags %s, %s",
-                __func__, hash.ToString(), state.ToString());
+        LogPrintf("BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but not STANDARD flags %s, %s\n", hash.ToString(), state.ToString());
+        return Assume(false);
     }
 
     return true;
@@ -1090,15 +1103,13 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactions(const std::
 
 } // anon namespace
 
-/** (try to) add transaction to memory pool with a specified acceptance time **/
-static MempoolAcceptResult AcceptToMemoryPoolWithTime(const CChainParams& chainparams, CTxMemPool& pool,
-                                                      CChainState& active_chainstate,
-                                                      const CTransactionRef &tx, int64_t nAcceptTime, NodeId nodeid,
-                                                      bool bypass_limits, bool test_accept)
-                                                      EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+MempoolAcceptResult AcceptToMemoryPool(CTxMemPool& pool, CChainState& active_chainstate, const CTransactionRef& tx,
+                                       int64_t accept_time, NodeId nodeid, bool bypass_limits, bool test_accept)
+    EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
+    const CChainParams& chainparams{active_chainstate.m_params};
     std::vector<COutPoint> coins_to_uncache;
-    auto args = MemPoolAccept::ATMPArgs::SingleAccept(chainparams, nAcceptTime, nodeid, bypass_limits, coins_to_uncache, test_accept);
+    auto args = MemPoolAccept::ATMPArgs::SingleAccept(chainparams, accept_time, nodeid, bypass_limits, coins_to_uncache, test_accept);
     const MempoolAcceptResult result = MemPoolAccept(pool, active_chainstate).AcceptSingleTransaction(tx, args);
     if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
         // Remove coins that were not present in the coins cache before calling
@@ -1113,12 +1124,6 @@ static MempoolAcceptResult AcceptToMemoryPoolWithTime(const CChainParams& chainp
     BlockValidationState state_dummy;
     active_chainstate.FlushStateToDisk(state_dummy, FlushStateMode::PERIODIC);
     return result;
-}
-
-MempoolAcceptResult AcceptToMemoryPool(CChainState& active_chainstate, CTxMemPool& pool, const CTransactionRef& tx,
-                                       NodeId nodeid, bool bypass_limits, bool test_accept)
-{
-    return AcceptToMemoryPoolWithTime(Params(), pool, active_chainstate, tx, GetTime(), nodeid, bypass_limits, test_accept);
 }
 
 PackageMempoolAcceptResult ProcessNewPackage(CChainState& active_chainstate, CTxMemPool& pool,
@@ -1173,8 +1178,8 @@ CChainState::CChainState(
     ChainstateManager& chainman,
     std::optional<uint256> from_snapshot_blockhash)
     : m_mempool(mempool),
-      m_params(::Params()),
       m_blockman(blockman),
+      m_params(::Params()),
       m_chainman(chainman),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
 
@@ -2057,7 +2062,7 @@ bool CChainState::FlushStateToDisk(
         fDoFullFlush = (mode == FlushStateMode::ALWAYS) || fCacheLarge || fCacheCritical || fPeriodicFlush || fFlushForPrune;
         // Write blocks and block index to disk.
         if (fDoFullFlush || fPeriodicWrite) {
-            // Depend on nMinDiskSpace to ensure we can write block index
+            // Ensure we can write block index
             if (!CheckDiskSpace(gArgs.GetBlocksDirPath())) {
                 return AbortNode(state, "Disk space is too low!", _("Disk space is too low!"));
             }
@@ -2115,6 +2120,13 @@ bool CChainState::FlushStateToDisk(
             nLastFlush = nNow;
             full_flush_completed = true;
         }
+        TRACE6(utxocache, flush,
+               (int64_t)(GetTimeMicros() - nNow.count()), // in microseconds (µs)
+               (u_int32_t)mode,
+               (u_int64_t)coins_count,
+               (u_int64_t)coins_mem_usage,
+               (bool)fFlushForPrune,
+               (bool)fDoFullFlush);
     }
     if (full_flush_completed) {
         // Update best block in wallet (so we can detect restored wallets).
@@ -3533,7 +3545,7 @@ MempoolAcceptResult ChainstateManager::ProcessTransaction(const CTransactionRef&
         state.Invalid(TxValidationResult::TX_NO_MEMPOOL, "no-mempool");
         return MempoolAcceptResult::Failure(state);
     }
-    auto result = AcceptToMemoryPool(active_chainstate, *active_chainstate.m_mempool, tx, nodeid, /*bypass_limits=*/ false, test_accept);
+    auto result = AcceptToMemoryPool(*active_chainstate.m_mempool, active_chainstate, tx, GetTime(), nodeid, /* bypass_limits= */ false, test_accept);
     active_chainstate.m_mempool->check(active_chainstate.CoinsTip(), active_chainstate.m_chain.Height() + 1);
     return result;
 }
@@ -4607,7 +4619,6 @@ static const uint64_t MEMPOOL_DUMP_VERSION = 1;
 
 bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_chainstate, FopenFn mockable_fopen_function)
 {
-    const CChainParams& chainparams = Params();
     int64_t nExpiryTimeout = gArgs.GetIntArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY) * 60 * 60;
     FILE* filestr{mockable_fopen_function(gArgs.GetDataDirNet() / filename, "rb")};
     CAutoFile file(filestr, SER_DISK, CLIENT_VERSION);
@@ -4645,8 +4656,8 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
             }
             if (nTime > nNow - nExpiryTimeout) {
                 LOCK(cs_main);
-                if (AcceptToMemoryPoolWithTime(chainparams, pool, active_chainstate, tx, nTime, -2, false /* bypass_limits */,
-                                               false /* test_accept */).m_result_type == MempoolAcceptResult::ResultType::VALID) {
+                if (AcceptToMemoryPool(pool, active_chainstate, tx, nTime, -2, /* bypass_limits= */ false,
+                                               /* test_accept= */ false).m_result_type == MempoolAcceptResult::ResultType::VALID) {
                     ++count;
                 } else {
                     // mempool may contain the transaction already, e.g. from

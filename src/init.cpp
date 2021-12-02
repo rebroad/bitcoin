@@ -29,13 +29,13 @@
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <mapport.h>
-#include <miner.h>
 #include <net.h>
 #include <net_permissions.h>
 #include <net_processing.h>
 #include <netbase.h>
 #include <node/blockstorage.h>
 #include <node/context.h>
+#include <node/miner.h>
 #include <node/ui_interface.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
@@ -1566,7 +1566,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
                         const CBlockIndex* tip = chainstate->m_chain.Tip();
                         RPCNotifyBlockChange(tip);
-                        if (tip && tip->nTime > GetAdjustedTime() + 2 * 60 * 60) {
+                        if (tip && tip->nTime > GetTime() + MAX_FUTURE_BLOCK_TIME) {
                             strLoadError = _("The block database contains a block which appears to be from the future. "
                                     "This may be due to your computer's date and time being set incorrectly. "
                                     "Only rebuild the block database if you are sure that your computer's date and time are correct");
