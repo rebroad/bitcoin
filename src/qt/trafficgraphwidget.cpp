@@ -55,7 +55,7 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
     int sampleCount = samples.size();
     if(sampleCount > 0 && fMax > 0) {
-        int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
+        int w = width() - XMARGIN * 2;
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
@@ -72,6 +72,11 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
     QWidget::mousePressEvent(event);
     fToggle = !fToggle;
     update();
+}
+
+int TrafficGraphWidget::y_value(int value)
+{
+    return YMARGIN + h - (h * 1.0 * (fToggle ? (pow(value, 0.30102) / pow(fMax, 0.30102)) : (value / fMax)));
 }
 
 void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=false*/)
@@ -98,13 +103,23 @@ void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=fal
             return; // Exit if mouse has not moved AND graph not updated.
     }
     if (x == -1) return; // Exit if we've never acquired pointer coordinates.
-
+    h = height() - YMARGIN * 2;
     int w = width() - XMARGIN * 2;
-    int h = height() - YMARGIN * 2;
-    int real_i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
+    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
     int sampleCount = vTimeStamp.size();
     if (fMoved) { // Follow ToolTip value if mouse has not moved
-        ttpoint = real_i;
+        unsigned int smallest_distance = h; int closest_i = i;
+        for (int test_i = i - 2; test_i <= i + 2; test_i++) {
+            if (test_i < 0 || test_i >= sampleCount) continue;
+            int y_data = y_value(std::max(vSamplesIn.at(test_i), vSamplesOut.at(test_i)));
+            unsigned int distance = abs(y - y_data);
+            if (distance < smallest_distance) {
+                smallest_distance = distance;
+                closest_i = test_i;
+            }
+            LogPrintf("test_i=%d y=%d data=%d dist=%d smdist=%d cl_i=%d\n", test_i, y, y_data, distance, smallest_distance, closest_i);
+        }
+        ttpoint = closest_i;
     } else {
         if (ttpoint >= 0 && ttpoint < sampleCount) ttpoint++;
     }
@@ -139,7 +154,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     if(fMax <= 0.0f) return;
 
     QColor axisCol(Qt::gray);
-    int h = height() - YMARGIN * 2;
+    h = height() - YMARGIN * 2;
     painter.setPen(axisCol);
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
