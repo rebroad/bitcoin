@@ -31,8 +31,6 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
     bool fToggle = true;
     int ttpoint = -1;
-    int x_offset = 0;
-    int y_offset = 0;
 
 public Q_SLOTS:
     void updateRates();

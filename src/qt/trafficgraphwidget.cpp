@@ -80,6 +80,8 @@ void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=fal
     static int y = 0;
     static int last_x = -1;
     static int last_y = -1;
+    static int x_offset = 0;
+    static int y_offset = 0;
     bool fMoved = false;
     if (event) {
         QWidget::mouseMoveEvent(event);
@@ -98,13 +100,30 @@ void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=fal
     if (x == -1) return; // Exit if we've never acquired pointer coordinates.
 
     int w = width() - XMARGIN * 2;
+    int h = height() - YMARGIN * 2;
     int real_i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
+    int sampleCount = vTimeStamp.size();
     if (fMoved) { // Follow ToolTip value if mouse has not moved
         ttpoint = real_i;
     } else {
-        if (ttpoint >= 0 && ttpoint < vTimeStamp.size()) ttpoint++;
+        if (ttpoint >= 0 && ttpoint < sampleCount) ttpoint++;
     }
     update(); // Calls paintEvent()
+    if (ttpoint >= 0 && ttpoint < sampleCount) {
+        int new_x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
+        int sample = std::max(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint));
+        int new_y = YMARGIN + h - (int)(h * 1.0 * (fToggle ? (pow(sample, 0.30102) / pow(fMax, 0.30102)) : (sample / fMax)));
+        std::string strTime = FormatISO8601Time(vTimeStamp.at(ttpoint)/1000);
+        int milliseconds_between_samples = 1000;
+        if (ttpoint > 0)
+            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - vTimeStamp.at(ttpoint)));
+        if (ttpoint + 1 < sampleCount)
+            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint) - vTimeStamp.at(ttpoint+1)));
+        if (milliseconds_between_samples < 1000)
+            strTime += strprintf(".%03d", (vTimeStamp.at(ttpoint))%1000);
+        QToolTip::showText(QPoint(new_x + x_offset, new_y + y_offset), QString::fromStdString(strTime));
+    } else
+        QToolTip::hideText();
 }
 
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
@@ -182,17 +201,6 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int sample = std::max(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint));
         int y = YMARGIN + h - (int)(h * 1.0 * (fToggle ? (pow(sample, 0.30102) / pow(fMax, 0.30102)) : (sample / fMax)));
         painter.drawEllipse(QPointF(x,y), 3, 3);
-        std::string strTime = FormatISO8601Time(vTimeStamp.at(ttpoint)/1000);
-        int milliseconds_between_samples = 1000;
-        if (ttpoint > 0)
-            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - vTimeStamp.at(ttpoint)));
-        if (ttpoint + 1 < sampleCount)
-            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint) - vTimeStamp.at(ttpoint+1)));
-        if (milliseconds_between_samples < 1000)
-            strTime += strprintf(".%03d", (vTimeStamp.at(ttpoint))%1000);
-        QToolTip::showText(QPoint(x + x_offset, y + y_offset), QString::fromStdString(strTime));
-    } else {
-        QToolTip::hideText();
     }
 }
 
