@@ -91,7 +91,6 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     static int y = 0;
     static int last_x = -1;
     static int last_y = -1;
-    bool fMoved = false;
     QWidget::mouseMoveEvent(event);
     x = event->x();
     y = event->y();
@@ -109,11 +108,11 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
         float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
         int y_data = y_value(val);
         unsigned int distance = abs(y - y_data);
-        if (distance < smallest_distance && distance < 50) {
+        if (distance < smallest_distance) {
             smallest_distance = distance;
             closest_i = test_i;
         }
-        LogPrintf("i=%d test_i=%d h=%d val=%f y=%d data=%d dist=%d smdist=%d cl_i=%d\n", i, test_i, h, val, y, y_data, distance, smallest_distance, closest_i);
+        //LogPrintf("i=%d test_i=%d h=%d val=%f y=%d data=%d dist=%d smdist=%d cl_i=%d\n", i, test_i, h, val, y, y_data, distance, smallest_distance, closest_i);
     }
     ttpoint = closest_i;
     if (ttpoint != last_ttpoint) update(); // Calls paintEvent() to draw or delete the highlighted point
@@ -191,17 +190,19 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
         std::string strTime;
         int64_t sampleTime = vTimeStamp.at(ttpoint);
-        if (GetTime() - sampleTime > 60*60*23)
-            strTime = FormatISO8601Time(vTimeStamp.at(ttpoint)/1000);
+        int age = GetTime() - sampleTime/1000;
+        if (age < 60*60*23)
+            strTime = FormatISO8601Time(sampleTime/1000);
         else
-            strTime = FormatISO8601DateTime(vTimeStamp.at(ttpoint)/1000);
+            strTime = FormatISO8601DateTime(sampleTime/1000);
         int milliseconds_between_samples = 1000;
         if (ttpoint > 0)
-            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - vTimeStamp.at(ttpoint)));
+            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - sampleTime));
         if (ttpoint + 1 < sampleCount)
-            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint) - vTimeStamp.at(ttpoint+1)));
+            milliseconds_between_samples = std::min(milliseconds_between_samples, int(sampleTime - vTimeStamp.at(ttpoint+1)));
         if (milliseconds_between_samples < 1000)
-            strTime += strprintf(".%03d", (vTimeStamp.at(ttpoint))%1000);
+            strTime += strprintf(".%03d", (sampleTime%1000));
+        strTime += strprintf("\nIn %f\nOut %f", vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint));
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), QString::fromStdString(strTime));
     } else
         QToolTip::hideText();

@@ -1330,13 +1330,15 @@ void CConnman::DisconnectNodes()
     if (m_nodes.size() == 0) {
         static int LastNDC = -1;
         static int LastND = -1;
+        static int nCount = 0;
         if ((int)nodes_disconnected_copy.size() != LastNDC || LastND != (int)m_nodes_disconnected.size()) {
-            LogPrintf("NO PEERS CONNECTED. Resetting NodeId. ndc:%d->%d nd:%d->%d\n\n", LastNDC, nodes_disconnected_copy.size(), LastND, m_nodes_disconnected.size());
+            LogPrintf("NO PEERS CONNECTED. Resetting NodeId. count=%d ndc:%d->%d nd:%d->%d\n\n", nCount, LastNDC, nodes_disconnected_copy.size(), LastND, m_nodes_disconnected.size());
             LastNDC = nodes_disconnected_copy.size();
             LastND = m_nodes_disconnected.size();
             nAnchorTryAgain = 0;
             ResetNewNodeId();
-        }
+            nCount = 0;
+        } else nCount++;
     }
 }
 

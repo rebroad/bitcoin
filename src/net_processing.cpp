@@ -715,8 +715,7 @@ struct CNodeState {
     //! How many TXs are currently in flight
     unsigned int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN - support two concurrent requests.
-    int nBlockAfterTXs1{0};
-    int nBlockAfterTXs2{0};
+    int nBlockAfterTXs{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -3938,12 +3937,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LOCK(cs_main);
 
             CNodeState *state = State(pfrom.GetId());
-            int nTooHigh = state->nBlocksAfterTXs - 2;
+            int nTooHigh = state->nBlockAfterTXs - 2;
             if (nTooHigh > 0) {
                 LogPrintf("nTxInFlight was too high by %d. Resetting. peer=%d\n", nTooHigh, pfrom.GetId());
                 state->nBlocksInFlight -= nTooHigh;
             }
-            state->nBlockAfterTXs = 0; REBHERE
+            state->nBlockAfterTXs = 0;
 
             std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
             if (it == mapBlocksInFlight.end()) {
