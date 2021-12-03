@@ -2799,8 +2799,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices)) {
             bool fDisconnect = !pfrom.IsInboundConn(); // Allow inbound to connect
-            LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%x offered, %x expected) %speer=%d\n",
-                nServices, GetDesirableServiceFlags(nServices), fDisconnect ? "disconnecting " : "", pfrom.GetId());
+            LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%s offered, %s expected) %speer=%d\n",
+                strBinary(nServices), strBinary(GetDesirableServiceFlags(nServices)), fDisconnect ? "disconnecting " : "", pfrom.GetId());
             if (fDisconnect) { // REBTODO - Allow 8 and (1024 OR 1) (witness and limited or node)
                 pfrom.fDisconnect = true;
                 return;

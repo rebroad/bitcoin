@@ -410,6 +410,12 @@ std::string strAge(const int64_t nAge) {
         return strprintf("%.1fd", nAge/86400.0);
 }
 
+std::string strBinary(const int byte) {
+    return strprintf("%c%c%c%c%c%c%c%c", byte & 0x80 ? '1':'0', byte & 0x40 ? '1':'0',
+        byte & 0x20 ? '1':'0', byte & 0x10 ? '1':'0', byte & 0x08 ? '1':'0',
+        byte & 0x04 ? '1':'0', byte & 0x02 ? '1':'0', byte & 0x01 ? '1':'0');
+}
+
 /** Upper bound for mantissa.
  * 10^18-1 is the largest arbitrary decimal that will fit in a signed 64-bit integer.
  * Larger integers cannot consist of arbitrary combinations of 0-9:
