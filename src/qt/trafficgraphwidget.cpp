@@ -85,73 +85,38 @@ float floatmax(float a, float b)
     else return b;
 }
 
-void TrafficGraphWidget::UpdateToolTip(QMouseEvent *event, bool fShiftLeft/*=false*/)
+void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
 {
     static int x = -1;
     static int y = 0;
     static int last_x = -1;
     static int last_y = -1;
-    static int x_offset = 0;
-    static int y_offset = 0;
     bool fMoved = false;
-    if (event) {
-        QWidget::mouseMoveEvent(event);
-        x = event->x();
-        int global_x = event->globalX();
-        y = event->y();
-        int global_y = event->globalY();
-        x_offset = global_x - x;
-        y_offset = global_y - y;
-        if (x != last_x || y != last_y) {
-            fMoved = true;
-            last_x = x; last_y = y;
-        } else if (!fShiftLeft) return; // Exit if mouse has not moved AND graph not updated.
-    } else if (!fShiftLeft) {
-        LogPrintf("%s: No event AND no update!\n", __func__); // Should never happen
-        return;
-    }
-    if (x == -1) return; // Exit if we've never acquired pointer coordinates.
-    h = height() - YMARGIN * 2;
+    QWidget::mouseMoveEvent(event);
+    x = event->x();
+    y = event->y();
+    x_offset = event->globalX() - x;
+    y_offset = event->globalY() - y;
+    if (x == last_x && y == last_y) return;
+
+    last_x = x; last_y = y;
     int w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
-    int sampleCount = vTimeStamp.size();
-    if (fMoved) { // Follow ToolTip value if mouse has not moved
-        unsigned int smallest_distance = h; int closest_i = i;
-        for (int test_i = i - 2; test_i <= i + 2; test_i++) {
-            if (test_i < 0 || test_i >= sampleCount) continue;
-            float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
-            int y_data = y_value(val);
-            unsigned int distance = abs(y - y_data);
-            if (distance < smallest_distance) {
-                smallest_distance = distance;
-                closest_i = test_i;
-            }
-            LogPrintf("i=%d test_i=%d h=%d val=%f y=%d data=%d dist=%d smdist=%d cl_i=%d\n", i, test_i, h, val, y, y_data, distance, smallest_distance, closest_i);
+    int last_ttpoint = DESIRED_SAMPLES; // a value that the new one cannot equal
+    unsigned int smallest_distance = h; int closest_i = -1;
+    for (int test_i = i - 2; test_i <= i + 2; test_i++) {
+        if (test_i < 0 || test_i >= vTimeStamp.size()) continue;
+        float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
+        int y_data = y_value(val);
+        unsigned int distance = abs(y - y_data);
+        if (distance < smallest_distance && distance < 50) {
+            smallest_distance = distance;
+            closest_i = test_i;
         }
-        ttpoint = closest_i;
-    } else {
-        if (ttpoint >= 0 && ttpoint < sampleCount) ttpoint++;
+        LogPrintf("i=%d test_i=%d h=%d val=%f y=%d data=%d dist=%d smdist=%d cl_i=%d\n", i, test_i, h, val, y, y_data, distance, smallest_distance, closest_i);
     }
-    update(); // Calls paintEvent()
-    if (ttpoint >= 0 && ttpoint < sampleCount) {
-        int new_x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
-        int new_y = y_value(floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint)));
-        std::string strTime = FormatISO8601Time(vTimeStamp.at(ttpoint)/1000);
-        int milliseconds_between_samples = 1000;
-        if (ttpoint > 0)
-            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - vTimeStamp.at(ttpoint)));
-        if (ttpoint + 1 < sampleCount)
-            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint) - vTimeStamp.at(ttpoint+1)));
-        if (milliseconds_between_samples < 1000)
-            strTime += strprintf(".%03d", (vTimeStamp.at(ttpoint))%1000);
-        QToolTip::showText(QPoint(new_x + x_offset, new_y + y_offset), QString::fromStdString(strTime));
-    } else
-        QToolTip::hideText();
-}
-
-void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
-{
-    UpdateToolTip(event);
+    ttpoint = closest_i;
+    if (ttpoint != last_ttpoint) update(); // Calls paintEvent() to draw or delete the highlighted point
 }
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *)
@@ -216,13 +181,30 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.setPen(Qt::red);
         painter.drawPath(p);
     }
-    if (ttpoint >= 0 && ttpoint < vTimeStamp.size()) {
+    int sampleCount = vTimeStamp.size();
+    if (ttpoint >= 0 && ttpoint < sampleCount) {
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
         int x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
-        int sample = floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint));
-        painter.drawEllipse(QPointF(x,y_value(sample)), 3, 3);
-    }
+        int y = y_value(floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint)));
+        painter.drawEllipse(QPointF(x,y), 3, 3);
+
+        std::string strTime;
+        int64_t sampleTime = vTimeStamp.at(ttpoint);
+        if (GetTime() - sampleTime > 60*60*23)
+            strTime = FormatISO8601Time(vTimeStamp.at(ttpoint)/1000);
+        else
+            strTime = FormatISO8601DateTime(vTimeStamp.at(ttpoint)/1000);
+        int milliseconds_between_samples = 1000;
+        if (ttpoint > 0)
+            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - vTimeStamp.at(ttpoint)));
+        if (ttpoint + 1 < sampleCount)
+            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint) - vTimeStamp.at(ttpoint+1)));
+        if (milliseconds_between_samples < 1000)
+            strTime += strprintf(".%03d", (vTimeStamp.at(ttpoint))%1000);
+        QToolTip::showText(QPoint(x + x_offset, y + y_offset), QString::fromStdString(strTime));
+    } else
+        QToolTip::hideText();
 }
 
 void TrafficGraphWidget::updateRates()
@@ -262,8 +244,8 @@ void TrafficGraphWidget::updateRates()
         if(f > tmax) tmax = f;
     }
     fMax = tmax;
-    QMouseEvent *mouseevent = nullptr;
-    UpdateToolTip(mouseevent, true); // Update the ToolTip
+    if (ttpoint >=0 && ttpoint < vTimeStamp.size()) ttpoint++; // Move the selected point to the left
+    update();
 }
 
 void TrafficGraphWidget::setGraphRangeMins(int mins)

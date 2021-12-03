@@ -714,8 +714,9 @@ struct CNodeState {
     int nBlocksInFlight{0};
     //! How many TXs are currently in flight
     unsigned int nTxInFlight{0};
-    //! How many TXs were in flight when we sent GETBLOCKTXN
-    int nBlockAfterTXs{0};
+    //! How many TXs were in flight when we sent GETBLOCKTXN - support two concurrent requests.
+    int nBlockAfterTXs1{0};
+    int nBlockAfterTXs2{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2767,8 +2768,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices)) {
             bool fDisconnect = !pfrom.IsInboundConn(); // Allow inbound to connect
-            LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%x offered, %x expected) %speer=%d\n",
-                nServices, GetDesirableServiceFlags(nServices), fDisconnect ? "disconnecting " : "", pfrom.GetId());
+            LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%s offered, %s expected) %speer=%d\n",
+                strBinary(nServices), strBinary(GetDesirableServiceFlags(nServices)), fDisconnect ? "disconnecting " : "", pfrom.GetId());
             if (fDisconnect) { // REBTODO - Allow 8 and (1024 OR 1) (witness and limited or node)
                 pfrom.fDisconnect = true;
                 return;
@@ -3923,11 +3924,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LogPrint(BCLog::NET, "Unexpected blocktxn message received from peer=%d\n", pfrom.GetId());
             return;
         }
-        {
-            LOCK(cs_main);
-            CNodeState *nodestate = State(pfrom.GetId());
-            nodestate->nBlockAfterTXs = 0;
-        }
 
         BlockTransactions resp;
         int nSize = vRecv.size();
@@ -3938,6 +3934,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         bool fWrongPeer = false;
         {
             LOCK(cs_main);
+
+            CNodeState *state = State(pfrom.GetId());
+            state->nBlockAfterTXs = 0; REBHERE
 
             std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
             if (it == mapBlocksInFlight.end()) {
@@ -4079,10 +4078,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
         if (pfrom.nRecvBytes1stTx) {
-            int nBIF = State(pfrom.GetId())->nBlocksInFlight;
+            int nBIF;
+            WITH_LOCK(cs_main, nBIF = State(pfrom.GetId())->nBlocksInFlight);
             int nLBT = int(GetTime() - pfrom.nLastBlockTime);
             if (nBIF > 3 || nLBT < 60) {
                 pfrom.nRecvBytes1stTx = 0;
+                pfrom.nMempoolBytes = 0;
+                pfrom.nMempoolTXs = 0;
                 LogPrintf("Setting nRecvBytes1stTx=0 BIF=%d nLBT=%s peer=%d\n", nBIF, strAge(nLBT), pfrom.GetId());
             }
         }

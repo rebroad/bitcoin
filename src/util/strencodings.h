@@ -117,6 +117,7 @@ T LocaleIndependentAtoi(const std::string& str)
 
 std::string strBps(uint64_t bits);
 std::string strAge(const int64_t nAge);
+std::string strBinary(int byte);
 
 /**
  * Tests if the given character is a decimal digit.
