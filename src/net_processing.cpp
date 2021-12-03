@@ -3877,8 +3877,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
                     // If we get more TXs than currently in flight then we know the request has been ignored.
-                    nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // Add 2 so that one more TX is requested.
-                    nodestate->m_download_report_clicks = nNetClicks;
+                    if (nodestate->nBlockAfterTXs == 0) { // we can track only one blocktxn at a time
+                        nodestate->nBlockAfterTXs = nodestate->nTxInFlight + 2; // Add 2 so that one more TX is requested.
+                        nodestate->m_download_report_clicks = nNetClicks;
+                    }
                 }
             } // if a cmpctblock that we can process
         } else {
@@ -3936,6 +3938,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LOCK(cs_main);
 
             CNodeState *state = State(pfrom.GetId());
+            int nTooHigh = state->nBlocksAfterTXs - 2;
+            if (nTooHigh > 0) {
+                LogPrintf("nTxInFlight was too high by %d. Resetting. peer=%d\n", nTooHigh, pfrom.GetId());
+                state->nBlocksInFlight -= nTooHigh;
+            }
             state->nBlockAfterTXs = 0; REBHERE
 
             std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
