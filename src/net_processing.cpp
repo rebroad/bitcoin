@@ -3975,10 +3975,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             CNodeState *state = State(pfrom.GetId());
             int nTooHigh = state->nBlockAfterTXs - 2;
             if (nTooHigh > 0) {
+                LogPrintf("nTxInFlight was too high by %d. Resetting. peer=%d\n", nTooHigh, pfrom.GetId());
                 state->nBlocksInFlight -= nTooHigh;
             }
             state->nBlockAfterTXs = 0;
-
 
             std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
             if (it == mapBlocksInFlight.end()) {
