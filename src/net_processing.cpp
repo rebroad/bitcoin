@@ -714,7 +714,7 @@ struct CNodeState {
     int nBlocksInFlight{0};
     //! How many TXs are currently in flight
     unsigned int nTxInFlight{0};
-    //! How many TXs were in flight when we sent GETBLOCKTXN - support two concurrent requests.
+    //! How many TXs were in flight when we sent GETBLOCKTXN
     int nBlockAfterTXs{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
