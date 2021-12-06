@@ -249,7 +249,6 @@ void MempoolStatsOld::drawChart()
     }
 
     int64_t dynMemUsagelog10Val1 = pow(10.0, floor(log10(maxDynMemUsage)));
-    //int64_t dynMemUsagelog10Val2 = pow(10.0, floor(log10(1.0*((maxDynMemUsage-minDynMemUsage))/4)));
     int64_t dynMemUsagelog10Val2 = pow(10.0, floor(log10(1.0*(maxDynMemUsage)/4)));
     if (dynMemUsagelog10Val1 == 0) {
         LogPrintf("%s: dynMemUsagelog10Val == 0. Exiting\n", __func__);
@@ -266,7 +265,6 @@ void MempoolStatsOld::drawChart()
     else bottomDynMemUsage = bottomDynMemUsage1;
 
     int64_t txCountLog10Val1 = pow(10.0, floor(log10(maxTxCount)));
-    //int64_t txCountLog10Val2 = pow(10.0, floor(log10(1.0*(maxTxCount-minTxCount)/4)));
     int64_t txCountLog10Val2 = pow(10.0, floor(log10(1.0*maxTxCount/4)));
     if (txCountLog10Val1 == 0) {
         LogPrintf("%s: txCountLog10Val == 0. Exiting\n", __func__);

@@ -27,13 +27,12 @@ public:
 protected:
     void paintEvent(QPaintEvent *) override;
     int y_value(float value);
-    void mousePressEvent(QMouseEvent *event) override;
-    bool fToggle = true;
-    void UpdateToolTip(QMouseEvent *event, bool fShiftLeft = false);
     void mouseMoveEvent(QMouseEvent *event) override;
     int ttpoint = -1;
     int x_offset = 0;
     int y_offset = 0;
+    void mousePressEvent(QMouseEvent *event) override;
+    bool fToggle = true;
 
 public Q_SLOTS:
     void updateRates();
@@ -45,7 +44,6 @@ private:
 
     QTimer *timer;
     float fMax;
-    int h; // graph height
     int nMins;
     QQueue<float> vSamplesIn;
     QQueue<float> vSamplesOut;

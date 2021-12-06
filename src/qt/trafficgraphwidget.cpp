@@ -53,6 +53,7 @@ int TrafficGraphWidget::getGraphRangeMins() const
 
 int TrafficGraphWidget::y_value(float value)
 {
+    int h = height() - YMARGIN * 2;
     return YMARGIN + h - (h * 1.0 * (fToggle ? (pow(value, 0.30102) / pow(fMax, 0.30102)) : (value / fMax)));
 }
 
@@ -60,7 +61,7 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
     int sampleCount = samples.size();
     if(sampleCount > 0 && fMax > 0) {
-        int w = width() - XMARGIN * 2;
+        int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
@@ -70,13 +71,6 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
         }
         path.lineTo(x, YMARGIN + h);
     }
-}
-
-void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
-{
-    QWidget::mousePressEvent(event);
-    fToggle = !fToggle;
-    update();
 }
 
 float floatmax(float a, float b)
@@ -99,10 +93,10 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     if (x == last_x && y == last_y) return;
 
     last_x = x; last_y = y;
-    int w = width() - XMARGIN * 2;
+    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
     int last_ttpoint = DESIRED_SAMPLES; // a value that the new one cannot equal
-    unsigned int smallest_distance = h; int closest_i = -1;
+    unsigned int smallest_distance = 50; int closest_i = -1;
     int sampleSize = vTimeStamp.size();
     if (i >= -8 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
         for (int test_i = i - 2; test_i <= i + 8; test_i++) {
@@ -118,7 +112,17 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     }
     LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
     ttpoint = closest_i;
-    if (ttpoint != last_ttpoint) update(); // Calls paintEvent() to draw or delete the highlighted point
+    if (ttpoint != last_ttpoint) {
+        update(); // Calls paintEvent() to draw or delete the highlighted point
+        last_ttpoint = ttpoint;
+    }
+}
+
+void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
+{
+    QWidget::mousePressEvent(event);
+    fToggle = !fToggle;
+    update();
 }
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *)
@@ -129,7 +133,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     if(fMax <= 0.0f) return;
 
     QColor axisCol(Qt::gray);
-    h = height() - YMARGIN * 2;
+    int h = height() - YMARGIN * 2;
     painter.setPen(axisCol);
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
@@ -220,6 +224,12 @@ void TrafficGraphWidget::updateRates()
     int nRealInterval = nTime - nLastTime;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
+    //static int64_t nLastReport = 0;
+    //int nInterval = timer->interval();
+    //if ((nTime >= nLastReport + 10000) && ((nRealInterval <= nInterval * 0.9) || (nRealInterval >= nInterval * 1.1))) {
+    //    LogPrintf("%s: nInterval=%d nRealInterval=%d\n", __func__, nInterval, nRealInterval);
+    //    nLastReport = nTime;
+    //}
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
     vSamplesIn.push_front(in_rate_kilobytes_per_sec);
