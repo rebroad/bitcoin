@@ -369,19 +369,38 @@ std::string FormatParagraph(const std::string& in, size_t width, size_t indent)
     return out.str();
 }
 
-std::string strBps(uint64_t bits) {
-    if (bits < 10'000)
-        //: "Bits per second"
-        return strprintf("%dbps", bits);
-    if (bits < 10'000'000)
-        //: "Kilobits per second"
-        return strprintf("%dkbps", bits / 1'000);
-    if (bits < 10'000'000'000)
-        //: "Megabits per second"
-        return strprintf("%dMbps", bits / 1'000'000);
+std::string strUnit(float value, std::string strUnit, int dp) {
+    std::string letter;
+    if (value < 1'000) {
+        ;
+    } else if (value < 1'000'000) {
+        letter = "k";
+        value /= 1'000;
+    } else if (value < 1'000'000'000) {
+        letter = "M";
+        value /= 1'000'000;
+    } else {
+        letter = "G";
+        value /= 1'000'000'000;
+    }
+    if (value < 1)
+        return strprintf(strprintf("%%.%df%s%s", dp, letter, strUnit), value);
+    if (value < 10) 
+        return strprintf(strprintf("%%.%df%s%s", std::max(dp - 1, 0), letter, strUnit), value);
+    if (value < 100) 
+        return strprintf(strprintf("%%.%df%s%s", std::max(dp - 2, 0), letter, strUnit), value);
+    if (value < 1'000) 
+        return strprintf(strprintf("%%.%df%s%s", std::max(dp - 3, 0), letter, strUnit), value);
 
-    //: "Gigabits per second"
-    return strprintf("%fGbps", bits / 1'000'000'000);
+    return strprintf(strprintf("%%.%df%s%s", std::max(dp - 4, 0), letter, strUnit), value);
+}
+
+std::string strBps(float bits) {
+    return strUnit(bits, "bps", 3);
+}
+
+std::string strBytesps(float bytes) {
+    return strUnit(bytes, "B/s", 3);
 }
 
 std::string strAge(const int64_t nAge) {

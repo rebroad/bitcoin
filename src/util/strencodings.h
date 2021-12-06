@@ -115,7 +115,9 @@ T LocaleIndependentAtoi(const std::string& str)
     return result;
 }
 
-std::string strBps(uint64_t bits);
+std::string strUnit(float value, std::string strUnit, int dp);
+std::string strBps(float bits);
+std::string strBytesps(float bytes);
 std::string strAge(const int64_t nAge);
 std::string strBinary(int byte);
 

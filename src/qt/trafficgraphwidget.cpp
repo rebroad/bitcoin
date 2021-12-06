@@ -103,17 +103,20 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
     int last_ttpoint = DESIRED_SAMPLES; // a value that the new one cannot equal
     unsigned int smallest_distance = h; int closest_i = -1;
-    for (int test_i = i - 2; test_i <= i + 2; test_i++) {
-        if (test_i < 0 || test_i >= vTimeStamp.size()) continue;
-        float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
-        int y_data = y_value(val);
-        unsigned int distance = abs(y - y_data);
-        if (distance < smallest_distance) {
-            smallest_distance = distance;
-            closest_i = test_i;
+    int sampleSize = vTimeStamp.size();
+    if (i >= -8 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
+        for (int test_i = i - 2; test_i <= i + 8; test_i++) {
+            if (test_i < 0 || test_i >= sampleSize) continue;
+            float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
+            int y_data = y_value(val);
+            unsigned int distance = abs(y - y_data);
+            if (distance < smallest_distance) {
+                smallest_distance = distance;
+                closest_i = test_i;
+            }
         }
-        //LogPrintf("i=%d test_i=%d h=%d val=%f y=%d data=%d dist=%d smdist=%d cl_i=%d\n", i, test_i, h, val, y, y_data, distance, smallest_distance, closest_i);
     }
+    LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
     ttpoint = closest_i;
     if (ttpoint != last_ttpoint) update(); // Calls paintEvent() to draw or delete the highlighted point
 }
@@ -202,7 +205,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(sampleTime - vTimeStamp.at(ttpoint+1)));
         if (milliseconds_between_samples < 1000)
             strTime += strprintf(".%03d", (sampleTime%1000));
-        strTime += strprintf("\nIn %f\nOut %f", vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint));
+        strTime += strprintf("\nIn %s\nOut %s", strBytesps(vSamplesIn.at(ttpoint)*1000), strBytesps(vSamplesOut.at(ttpoint)*1000));
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), QString::fromStdString(strTime));
     } else
         QToolTip::hideText();
@@ -212,8 +215,7 @@ void TrafficGraphWidget::updateRates()
 {
     if(!clientModel) return;
 
-    static int64_t nTime = 0;
-    nTime = GetTimeMillis();
+    int64_t nTime = GetTimeMillis();
     static int64_t nLastTime = nTime - timer->interval();
     int nRealInterval = nTime - nLastTime;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
