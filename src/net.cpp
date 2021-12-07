@@ -1327,18 +1327,10 @@ void CConnman::DisconnectNodes()
         }
     }
     LOCK(m_nodes_mutex);
-    if (m_nodes.size() == 0) {
-        static int LastNDC = -1;
-        static int LastND = -1;
-        static int nCount = 0;
-        if ((int)nodes_disconnected_copy.size() != LastNDC || LastND != (int)m_nodes_disconnected.size()) {
-            LogPrintf("NO PEERS CONNECTED. Resetting NodeId. count=%d ndc:%d->%d nd:%d->%d\n\n", nCount, LastNDC, nodes_disconnected_copy.size(), LastND, m_nodes_disconnected.size());
-            LastNDC = nodes_disconnected_copy.size();
-            LastND = m_nodes_disconnected.size();
-            nAnchorTryAgain = 0;
-            ResetNewNodeId();
-            nCount = 0;
-        } else nCount++;
+    if (m_nodes.size() == 0 && nodes_disconnected_copy.size() > 0 && m_nodes_disconnected.size() == 0) {
+        LogPrintf("NO PEERS CONNECTED. Resetting NodeId\n");
+        nAnchorTryAgain = 0;
+        ResetNewNodeId();
     }
 }
 
@@ -2949,6 +2941,7 @@ static CNetCleanup instance_of_cnetcleanup;
 
 void CConnman::Interrupt()
 {
+    LogPrintf("%s: Start\n", __func__);
     {
         LOCK(mutexMsgProc);
         flagInterruptMsgProc = true;
@@ -3002,7 +2995,7 @@ void CConnman::StopNodes()
     WITH_LOCK(m_nodes_mutex, nodes.swap(m_nodes));
     for (CNode* pnode : nodes) {
         pnode->CloseSocketDisconnect();
-        LogPrintf("%s: Calling DeleteNode GRC=%d from Delete peer connection. peer=%ds\n", __func__, pnode->GetRefCount(), pnode->GetId());
+        LogPrintf("%s: Calling DeleteNode GRC=%d from Delete peer connection. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
         DeleteNode(pnode);
     }
 

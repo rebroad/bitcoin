@@ -5,6 +5,7 @@
 #include <interfaces/node.h>
 #include <qt/trafficgraphwidget.h>
 #include <qt/clientmodel.h>
+#include <qt/guiutil.h>
 
 #include <QPainter>
 #include <QPainterPath>
@@ -195,22 +196,22 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int y = y_value(floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint)));
         painter.drawEllipse(QPointF(x,y), 3, 3);
 
-        std::string strTime;
+        QString strTip;
         int64_t sampleTime = vTimeStamp.at(ttpoint);
         int age = GetTime() - sampleTime/1000;
         if (age < 60*60*23)
-            strTime = FormatISO8601Time(sampleTime/1000);
+            strTip = QString::fromStdString(FormatISO8601Time(sampleTime/1000));
         else
-            strTime = FormatISO8601DateTime(sampleTime/1000);
+            strTip = QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
         int milliseconds_between_samples = 1000;
         if (ttpoint > 0)
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - sampleTime));
         if (ttpoint + 1 < sampleCount)
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(sampleTime - vTimeStamp.at(ttpoint+1)));
         if (milliseconds_between_samples < 1000)
-            strTime += strprintf(".%03d", (sampleTime%1000));
-        strTime += strprintf("\nIn %s\nOut %s", strBytesps(vSamplesIn.at(ttpoint)*1000), strBytesps(vSamplesOut.at(ttpoint)*1000));
-        QToolTip::showText(QPoint(x + x_offset, y + y_offset), QString::fromStdString(strTime));
+            strTip += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
+        strTip += "\n " + tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
+        QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTip);
     } else
         QToolTip::hideText();
 }
