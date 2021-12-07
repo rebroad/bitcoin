@@ -2943,6 +2943,7 @@ static CNetCleanup instance_of_cnetcleanup;
 
 void CConnman::Interrupt()
 {
+    LogPrintf("%s: Start\n", __func__);
     {
         LOCK(mutexMsgProc);
         flagInterruptMsgProc = true;
