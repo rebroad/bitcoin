@@ -7,6 +7,7 @@
 
 #include <QWidget>
 #include <QQueue>
+#include <QLabel>
 
 class ClientModel;
 
@@ -43,6 +44,7 @@ private:
     void paintPath(QPainterPath &path, QQueue<float> &samples);
 
     QTimer *timer;
+    QLabel *label;
     float fMax;
     int nMins;
     QQueue<float> vSamplesIn;

@@ -12,8 +12,6 @@
 #include <QColor>
 #include <QTimer>
 #include <QHelpEvent>
-#include <QToolTip>
-
 #include <cmath>
 
 #define DESIRED_SAMPLES         800
@@ -24,6 +22,7 @@
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
+    label(nullptr),
     fMax(0.0f),
     nMins(0),
     vSamplesIn(),
@@ -34,6 +33,8 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     clientModel(nullptr)
 {
     timer = new QTimer(this);
+    label = new QLabel;
+    label->setWindowFlag(Qt::ToolTip);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
     setMouseTracking(true);
 }
@@ -111,7 +112,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             }
         }
     }
-    LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
+    //LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
     ttpoint = closest_i;
     if (ttpoint != last_ttpoint) {
         update(); // Calls paintEvent() to draw or delete the highlighted point
@@ -212,9 +213,11 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         if (milliseconds_between_samples < 1000)
             strTip += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
         strTip += "\n " + tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
-        QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTip);
+        label->move(QPoint(x + x_offset + 10, y + y_offset + 20));
+        label->setText(strTip);
+        if (label->isHidden()) label->show();
     } else
-        QToolTip::hideText();
+        label->hide();
 }
 
 void TrafficGraphWidget::updateRates()

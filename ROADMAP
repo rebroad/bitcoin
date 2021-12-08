@@ -1,3 +1,5 @@
+Scale network traffic graph such that in non-linear, the smallest value is max 10 pixels high
+
 Set txrelay to 0 for feeler and addr outbound connections
 
 Set 1stTx to 0 when IBD finishes (when we send the first real feefilter? or change IBD logic?)
