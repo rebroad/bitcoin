@@ -151,16 +151,17 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         val = pow(10.0f, base - 1);
         painter.setPen(axisCol.darker());
         painter.drawText(XMARGIN, y_value(val)-yMarginText, QString("%1 %2").arg(val).arg(units));
-        if (fToggle) {
-            int yy = y_value(val*0.1);
-            painter.drawText(XMARGIN, yy-yMarginText, QString("%1 %2").arg(val*0.1).arg(units));
-            painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
-        }
         int count = 1;
         for(float y = val; y < (!fToggle || fMax / val < 20 ? fMax : oldval); y += val, count++) {
             if(count % 10 == 0)
                 continue;
             int yy = y_value(y);
+            painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
+        }
+        if (fToggle) {
+            int yy = y_value(val*0.1);
+            painter.setPen(axisCol.darker().darker());
+            painter.drawText(XMARGIN, yy-yMarginText, QString("%1 %2").arg(val*0.1).arg(units));
             painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
         }
         val = oldval;
