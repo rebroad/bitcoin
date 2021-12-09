@@ -112,9 +112,9 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             }
         }
     }
-    //LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
     ttpoint = closest_i;
     if (ttpoint != last_ttpoint) {
+        LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
         update(); // Calls paintEvent() to draw or delete the highlighted point
         last_ttpoint = ttpoint;
     }
