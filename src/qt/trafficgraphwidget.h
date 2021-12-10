@@ -28,7 +28,6 @@ protected:
     void paintEvent(QPaintEvent *) override;
     int y_value(float value);
     void mouseMoveEvent(QMouseEvent *event) override;
-    void updateToolTip(int x, int y);
     int ttpoint = -1;
     int x_offset = 0;
     int y_offset = 0;
@@ -37,6 +36,7 @@ protected:
 
 public Q_SLOTS:
     void updateRates();
+    void updateToolTip();
     void setGraphRangeMins(int mins);
     void clear();
 
@@ -44,6 +44,7 @@ private:
     void paintPath(QPainterPath &path, QQueue<float> &samples);
 
     QTimer *timer;
+    QTimer *tt_timer;
     float fMax;
     int nMins;
     QQueue<float> vSamplesIn;

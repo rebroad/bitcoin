@@ -24,6 +24,7 @@
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
+    tt_timer(nullptr),
     fMax(0.0f),
     nMins(0),
     vSamplesIn(),
@@ -34,7 +35,10 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     clientModel(nullptr)
 {
     timer = new QTimer(this);
+    tt_timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
+    connect(tt_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateToolTip);
+    tt_timer->setInterval(9000); // 1 second less than the ToolTip expiry
     setMouseTracking(true);
 }
 
@@ -207,11 +211,22 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         if (milliseconds_between_samples < 1000)
             strTime += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
+        if (timer->interval() > 10000) { // Keep the ToolTip fresh (expires after 10 seconds)
+            tt_timer->start();
+        } else
+            tt_timer->stop();
         // Line below allows ToolTip to move faster than once every 10 seconds.
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n  " + strData);
     } else
         QToolTip::hideText();
+}
+
+void TrafficGraphWidget::updateToolTip()
+{
+    // The ToolTip lasts only 10 seconds, so keep updating at least this often.
+    LogPrintf("%s: Running\n", __func__);
+    update();
 }
 
 void TrafficGraphWidget::updateRates()
@@ -266,8 +281,8 @@ void TrafficGraphWidget::setGraphRangeMins(int mins)
     int msecsPerSample = nMins * 60 * 1000 / DESIRED_SAMPLES;
     timer->stop();
     timer->setInterval(msecsPerSample);
-    setToolTipDuration(msecsPerSample+500); // REBTODO - does this just effect the traffic graph?
     timer->start();
+    update();
 }
 
 void TrafficGraphWidget::clear()
