@@ -96,7 +96,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     static int last_ttpoint = DESIRED_SAMPLES; // a value that the new one cannot equal
     unsigned int smallest_distance = 50; int closest_i = -1;
     int sampleSize = vTimeStamp.size();
-    if (i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
+    if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
         for (int test_i = i - 2; test_i <= i + 10; test_i++) {
             if (test_i < 0 || test_i >= sampleSize) continue;
             float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
@@ -207,7 +207,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         if (milliseconds_between_samples < 1000)
             strTime += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
-        QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData); // To allow tooltip to move
+        // Line below allows ToolTip to move faster than once every 10 seconds.
+        QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n  " + strData);
     } else
         QToolTip::hideText();
