@@ -222,15 +222,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
 void TrafficGraphWidget::updateToolTip()
 {
-    // The ToolTip lasts only 10 seconds, so keep updating at least this often.
     if (!QToolTip::isVisible()) {
-        if (ttpoint >= 0) {
+        if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             ttpoint = -1;
-            LogPrintf("%s: InVisible. Setting ttpoint = -1. Call update()\n", __func__);
             update();
         }
-    } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so update
-        LogPrintf("%s: Visible. Time>tt_time+9 Call update()\n", __func__);
+    } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
         update();
     }
 }
