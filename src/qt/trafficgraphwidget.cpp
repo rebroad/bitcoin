@@ -87,10 +87,9 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     static int last_y = -1;
     int x = event->x();
     int y = event->y();
+    if (x == last_x && y == last_y) return; // No movement so exit
     x_offset = event->globalX() - x;
     y_offset = event->globalY() - y;
-    if (x == last_x && y == last_y) return;
-
     last_x = x; last_y = y;
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
@@ -187,26 +186,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.setPen(Qt::red);
         painter.drawPath(p);
     }
-    int x = 0, y = 0;
     if (ttpoint >= 0 && ttpoint < vTimeStamp.size()) {
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
-        x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
-        y = y_value(floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint)));
+        int x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
+        int y = y_value(floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint)));
         painter.drawEllipse(QPointF(x, y), 3, 3);
-    }
-    updateToolTip(x, y);
-}
-
-void TrafficGraphWidget::updateToolTip(int new_x, int new_y)
-{
-    LogPrintf("%s: x = %d, y = %d\n", __func__, new_x, new_y);
-    static int last_ttpoint = DESIRED_SAMPLES; // a value that the new value cannot equal
-    static int x = 0;
-    static int y = 0;
-    if (ttpoint != last_ttpoint) {
-        if (new_x) x = new_x;
-        if (new_y) y = new_y;
         QString strTime;
         int64_t sampleTime = vTimeStamp.at(ttpoint);
         int age = GetTime() - sampleTime/1000;
@@ -226,12 +211,6 @@ void TrafficGraphWidget::updateToolTip(int new_x, int new_y)
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n  " + strData);
     } else
         QToolTip::hideText();
-    LogPrintf("%s: toolTipDuration = %d\n", __func__, toolTipDuration());
-}
-
-void TrafficGraphWidget::timerToolTip()
-{
-    updateToolTip(0, 0);
 }
 
 void TrafficGraphWidget::updateRates()
@@ -286,7 +265,7 @@ void TrafficGraphWidget::setGraphRangeMins(int mins)
     int msecsPerSample = nMins * 60 * 1000 / DESIRED_SAMPLES;
     timer->stop();
     timer->setInterval(msecsPerSample);
-    setToolTipDuration(msecsPerSample); // REBTODO - does this just effect the traffic graph?
+    setToolTipDuration(msecsPerSample+500); // REBTODO - does this just effect the traffic graph?
     timer->start();
 }
 

@@ -37,7 +37,6 @@ protected:
 
 public Q_SLOTS:
     void updateRates();
-    void timerToolTip();
     void setGraphRangeMins(int mins);
     void clear();
 
