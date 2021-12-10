@@ -33,6 +33,7 @@ protected:
     int y_offset = 0;
     void mousePressEvent(QMouseEvent *event) override;
     bool fToggle = true;
+    int64_t tt_time = 0;
 
 public Q_SLOTS:
     void updateRates();

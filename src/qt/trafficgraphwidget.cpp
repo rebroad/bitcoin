@@ -38,7 +38,8 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     tt_timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
     connect(tt_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateToolTip);
-    tt_timer->setInterval(9000); // 1 second less than the ToolTip expiry
+    tt_timer->setInterval(500);
+    tt_timer->start();
     setMouseTracking(true);
 }
 
@@ -91,9 +92,9 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     static int last_y = -1;
     int x = event->x();
     int y = event->y();
-    if (x == last_x && y == last_y) return; // No movement so exit
     x_offset = event->globalX() - x;
     y_offset = event->globalY() - y;
+    if (x == last_x && y == last_y) return; // No movement so exit
     last_x = x; last_y = y;
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
@@ -211,13 +212,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         if (milliseconds_between_samples < 1000)
             strTime += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
-        if (timer->interval() > 10000) { // Keep the ToolTip fresh (expires after 10 seconds)
-            tt_timer->start();
-        } else
-            tt_timer->stop();
         // Line below allows ToolTip to move faster than once every 10 seconds.
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n  " + strData);
+        tt_time = GetTime();
     } else
         QToolTip::hideText();
 }
@@ -225,8 +223,16 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 void TrafficGraphWidget::updateToolTip()
 {
     // The ToolTip lasts only 10 seconds, so keep updating at least this often.
-    LogPrintf("%s: Running\n", __func__);
-    update();
+    if (!QToolTip::isVisible()) {
+        if (ttpoint >= 0) {
+            ttpoint = -1;
+            LogPrintf("%s: InVisible. Setting ttpoint = -1. Call update()\n", __func__);
+            update();
+        }
+    } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so update
+        LogPrintf("%s: Visible. Time>tt_time+9 Call update()\n", __func__);
+        update();
+    }
 }
 
 void TrafficGraphWidget::updateRates()
