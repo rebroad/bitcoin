@@ -12,6 +12,8 @@
 #include <QColor>
 #include <QTimer>
 #include <QHelpEvent>
+#include <QToolTip>
+
 #include <cmath>
 
 #define DESIRED_SAMPLES         800
@@ -22,7 +24,6 @@
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
-    label(nullptr),
     fMax(0.0f),
     nMins(0),
     vSamplesIn(),
@@ -33,8 +34,6 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     clientModel(nullptr)
 {
     timer = new QTimer(this);
-    label = new QLabel;
-    label->setWindowFlag(Qt::ToolTip);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
     setMouseTracking(true);
 }
@@ -62,7 +61,7 @@ int TrafficGraphWidget::y_value(float value)
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
     int sampleCount = samples.size();
-    if(sampleCount > 0 && fMax > 0) {
+    if (sampleCount  > 0) {
         int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
@@ -83,13 +82,11 @@ float floatmax(float a, float b)
 
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
 {
-    static int x = -1;
-    static int y = 0;
+    QWidget::mouseMoveEvent(event);
     static int last_x = -1;
     static int last_y = -1;
-    QWidget::mouseMoveEvent(event);
-    x = event->x();
-    y = event->y();
+    int x = event->x();
+    int y = event->y();
     x_offset = event->globalX() - x;
     y_offset = event->globalY() - y;
     if (x == last_x && y == last_y) return;
@@ -97,11 +94,11 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     last_x = x; last_y = y;
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
-    int last_ttpoint = DESIRED_SAMPLES; // a value that the new one cannot equal
+    static int last_ttpoint = DESIRED_SAMPLES; // a value that the new one cannot equal
     unsigned int smallest_distance = 50; int closest_i = -1;
     int sampleSize = vTimeStamp.size();
-    if (i >= -8 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
-        for (int test_i = i - 2; test_i <= i + 8; test_i++) {
+    if (i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
+        for (int test_i = i - 2; test_i <= i + 10; test_i++) {
             if (test_i < 0 || test_i >= sampleSize) continue;
             float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
             int y_data = y_value(val);
@@ -190,34 +187,51 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.setPen(Qt::red);
         painter.drawPath(p);
     }
-    int sampleCount = vTimeStamp.size();
-    if (ttpoint >= 0 && ttpoint < sampleCount) {
+    int x = 0, y = 0;
+    if (ttpoint >= 0 && ttpoint < vTimeStamp.size()) {
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
-        int x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
-        int y = y_value(floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint)));
-        painter.drawEllipse(QPointF(x,y), 3, 3);
+        x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
+        y = y_value(floatmax(vSamplesIn.at(ttpoint), vSamplesOut.at(ttpoint)));
+        painter.drawEllipse(QPointF(x, y), 3, 3);
+    }
+    updateToolTip(x, y);
+}
 
-        QString strTip;
+void TrafficGraphWidget::updateToolTip(int new_x, int new_y)
+{
+    LogPrintf("%s: x = %d, y = %d\n", __func__, new_x, new_y);
+    static int last_ttpoint = DESIRED_SAMPLES; // a value that the new value cannot equal
+    static int x = 0;
+    static int y = 0;
+    if (ttpoint != last_ttpoint) {
+        if (new_x) x = new_x;
+        if (new_y) y = new_y;
+        QString strTime;
         int64_t sampleTime = vTimeStamp.at(ttpoint);
         int age = GetTime() - sampleTime/1000;
         if (age < 60*60*23)
-            strTip = QString::fromStdString(FormatISO8601Time(sampleTime/1000));
+            strTime = QString::fromStdString(FormatISO8601Time(sampleTime/1000));
         else
-            strTip = QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
+            strTime = QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
         int milliseconds_between_samples = 1000;
         if (ttpoint > 0)
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - sampleTime));
-        if (ttpoint + 1 < sampleCount)
+        if (ttpoint + 1 < vTimeStamp.size())
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(sampleTime - vTimeStamp.at(ttpoint+1)));
         if (milliseconds_between_samples < 1000)
-            strTip += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
-        strTip += "\n " + tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
-        label->move(QPoint(x + x_offset + 10, y + y_offset + 20));
-        label->setText(strTip);
-        if (label->isHidden()) label->show();
+            strTime += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
+        QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
+        QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData); // To allow tooltip to move
+        QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n  " + strData);
     } else
-        label->hide();
+        QToolTip::hideText();
+    LogPrintf("%s: toolTipDuration = %d\n", __func__, toolTipDuration());
+}
+
+void TrafficGraphWidget::timerToolTip()
+{
+    updateToolTip(0, 0);
 }
 
 void TrafficGraphWidget::updateRates()
@@ -272,6 +286,7 @@ void TrafficGraphWidget::setGraphRangeMins(int mins)
     int msecsPerSample = nMins * 60 * 1000 / DESIRED_SAMPLES;
     timer->stop();
     timer->setInterval(msecsPerSample);
+    setToolTipDuration(msecsPerSample); // REBTODO - does this just effect the traffic graph?
     timer->start();
 }
 

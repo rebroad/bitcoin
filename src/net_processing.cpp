@@ -4597,8 +4597,8 @@ void PeerManagerImpl::EvictExtraOutboundPeers(int64_t time_in_seconds)
                 LogPrintf("disconnecting extra block-relay-only peer=%d (last block received at time %d)\n", pnode->GetId(), pnode->nLastBlockTime);
                 return true;
             } else {
-                LogPrint(BCLog::NET, "keeping block-relay-only peer=%d chosen for eviction (connect time: %d, blocks_in_flight: %d)\n",
-                    pnode->GetId(), pnode->nTimeConnected, node_state->nBlocksInFlight);
+                LogPrint(BCLog::CONN, "keeping block-relay-only peer=%d chosen for eviction (connect time: %s, blocks_in_flight: %d)\n",
+                    pnode->GetId(), strAge(time_in_seconds - pnode->nTimeConnected), node_state->nBlocksInFlight);
             }
             return false;
         });
@@ -4643,7 +4643,7 @@ void PeerManagerImpl::EvictExtraOutboundPeers(int64_t time_in_seconds)
                     //pnode->fDisconnect = true;
                     return true;
                 } else {
-                    LogPrint(BCLog::CONN, "keeping outbound peer=%d chosen for eviction (connect time: %d, blocks_in_flight: %d)\n", pnode->GetId(), pnode->nTimeConnected, state.nBlocksInFlight);
+                    LogPrint(BCLog::CONN, "keeping outbound peer=%d chosen for eviction (connect time: %s, blocks_in_flight: %d)\n", pnode->GetId(), strAge(time_in_seconds - pnode->nTimeConnected), state.nBlocksInFlight);
                     return false;
                 }
             });
