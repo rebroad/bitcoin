@@ -224,15 +224,21 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
 void TrafficGraphWidget::updateToolTip()
 {
+    static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
-            ttpoint = -1;
-            LogPrintf("%s: InVisible. Setting ttpoint = -1. Call update()\n", __func__);
+            if (last_fToggle == fToggle) { // Not lost due to a toggle
+                ttpoint = -1;
+                LogPrintf("%s: InVisible. Setting ttpoint = -1. Call update()\n", __func__);
+            } else
+                LogPrintf("%s: InVisible but toggled. Call update()\n", __func__);
             update();
+            last_fToggle = fToggle;
         }
     } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
         LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
         update();
+        last_fToggle = fToggle;
     }
 }
 
