@@ -112,6 +112,8 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             }
         }
     }
+    //if (ttpoint != closest_i || closest_i != -1)
+    //    LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
     if (ttpoint != closest_i) {
         ttpoint = closest_i;
         update(); // Calls paintEvent() to draw or delete the highlighted point
@@ -122,7 +124,10 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
 void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
 {
     QWidget::mousePressEvent(event);
+    int x = event->x();
+    int y = event->y();
     fToggle = !fToggle;
+    LogPrintf("%s: x=%d y=%d\n", __func__, x-XMARGIN, y-YMARGIN);
     update();
 }
 
@@ -131,10 +136,16 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
+    int h = height() - YMARGIN * 2; int w = width() - XMARGIN * 2;
+    static int last_h = 0; static int last_w = 0;
+    if (last_h != h || last_w != w) {
+        LogPrintf("%s: w=%d h=%d\n", __func__, w, h);
+        last_w = w; last_h = h;
+    }
+
     if(fMax <= 0.0f) return;
 
     QColor axisCol(Qt::gray);
-    int h = height() - YMARGIN * 2;
     painter.setPen(axisCol);
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
@@ -199,8 +210,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         std::chrono::milliseconds sampleTime{0};
         if (ttpoint + 1 < sampleCount)
             sampleTime = vTimeStamp[m_value].at(ttpoint+1);
-        else
+        else {
+            strTime = "to ";
             sampleTime = vTimeStamp[m_value].at(ttpoint);
+        }
         int age = GetTime() - sampleTime.count() / 1000;
         if (age < 60*60*23)
             strTime += QString::fromStdString(FormatISO8601Time(sampleTime.count() / 1000));
@@ -212,7 +225,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
                 strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{(nDuration+500)/1000});
             else
                 strTime += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{nDuration*1000});
-        }
+        } else // REBTEMP
+            strTime += QString::fromStdString(strprintf(" i=%d ttp=%d nDur=%d", m_value, ttpoint, nDuration));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn[m_value].at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut[m_value].at(ttpoint)*1000);
         // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
@@ -232,6 +246,11 @@ void TrafficGraphWidget::update_fMax()
         if(f > tmax) tmax = f;
     }
     new_fMax = tmax;
+    static float last_fMax = -1;
+    if (new_fMax != last_fMax) {
+        LogPrintf("%s: i=%d new_fMax = %d -> %d\n", __func__, m_new_value, last_fMax, new_fMax);
+        last_fMax = new_fMax;
+    }
 }
 
 bool update_num(float new_val, float &current, float &increment, int length)
@@ -240,12 +259,14 @@ bool update_num(float new_val, float &current, float &increment, int length)
         return false;
 
     if (abs(increment) <= abs(0.8 * current) / length) { // allow equal to as current and increment could be zero
+        int old_increment = increment;
         if (new_val > current)
             increment = 1.0 * (current+1) / length; // +1s are to get it started even if current is zero
         else
             increment = -1.0 * (current+1) / length;
         if (abs(increment) > abs(new_val - current)) // Only check this when creating an increment
             increment = 0; // Nothing to do!
+        LogPrintf("%s: new increment: %d+1 / %d = %d->%d\n", __func__, current, length, old_increment, increment);
     } else {
         if (((increment > 0) && (current + increment * 2 > new_val)) ||
                 ((increment < 0) && (current + increment * 2 < new_val))) {
@@ -258,8 +279,11 @@ bool update_num(float new_val, float &current, float &increment, int length)
         }
     }
     if (abs(increment) < 0.8 * current / length) {
-        if ((increment >= 0 && new_val > current) || (increment <= 0 && new_val < current))
+        if ((increment >= 0 && new_val > current) || (increment <= 0 && new_val < current)) {
+            if (increment)
+                LogPrintf("%s: final jump. inc=%d < 0.8 * %d / %d\n", __func__, abs(increment), current, length);
             current = new_val;
+        }
         increment = 0;
     } else
         current += increment;
@@ -297,11 +321,18 @@ void TrafficGraphWidget::updateStuff()
         fUpdate = true;
     if (update_num(values[m_new_value], m_range, x_increment, width() - XMARGIN * 2)) {
         if (values[m_new_value] > m_range && values[m_value] < m_range) {
+            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
+                values[m_value], values[m_value+1], m_range);
             m_value++; // TODO - re-assess the tooltip
-        } else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99)
+        } else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
+            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
+                values[m_value], values[m_value-1], m_range);
             m_value--; // TODO - re-assess the tooltip
+        }
         fUpdate = true;
+        LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
     } else if (m_value != m_new_value) {
+        LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, m_new_value);
         fUpdate = true;
         m_value = m_new_value;
     }
@@ -311,12 +342,17 @@ void TrafficGraphWidget::updateStuff()
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             if (last_fToggle == fToggle) { // Not lost due to a toggle
                 ttpoint = -1;
-            } else
+                LogPrintf("%s: InVisible. Setting ttpoint = -1. age=%d Call update()\n", __func__, GetTime() - tt_time);
+            } else {
                 last_fToggle = fToggle;
+                LogPrintf("%s: InVisible but toggled. Call update()\n", __func__);
+            }
             fUpdate = true;
         }
-    } else if (ttpoint >= 0 && GetTime() >= tt_time + 9) // ToolTip is about to expire so refresh it.
+    } else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
+        LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
         fUpdate = true; // TODO - technically it's only the ToolTip that needs to be refreshed
+    }
 
     if (fUpdate)
         update();
@@ -328,6 +364,10 @@ void TrafficGraphWidget::updateRates(int i)
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
     int nRealInterval = (nTime - nLastTime[i]).count();
+    static int nDebugI = 0;
+    if (i > nDebugI) nDebugI = i;
+    if (nDebugI == i)
+        LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
     vSamplesIn[i].push_front(in_rate_kilobytes_per_sec);
@@ -337,6 +377,8 @@ void TrafficGraphWidget::updateRates(int i)
     nLastBytesIn[i] = bytesIn;
     nLastBytesOut[i] = bytesOut;
     static bool fFull[VALUES_SIZE];
+    if (!fFull[i] && vTimeStamp[i].size()+5 > DESIRED_SAMPLES)
+        LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES - vTimeStamp[i].size());
     while(vTimeStamp[i].size() > DESIRED_SAMPLES) {
         if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i])
             m_bump_value = true;

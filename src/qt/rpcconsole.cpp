@@ -571,6 +571,8 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     m_node.rpcSetTimerInterfaceIfUnset(rpcTimerInterface);
 
     setTrafficGraphRange(1); // 1 is the lowest setting (0 bumps up)
+    //ui->sldGraphRange->setTickPosition(QSlider::TicksBelow);
+    //ui->sldGraphRange->setTickInterval(200);
     updateDetailWidget();
 
     consoleFontSize = settings.value(fontSizeSettingsKey, QFont().pointSize()).toInt();
@@ -1145,11 +1147,14 @@ void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
         if (slider_value > set_slider_value)
             this_click_is_up = true;
         if (now - last_click_time < 250 && this_click_is_up != last_click_was_up) {
+            LogPrintf("%s: ignoring snap %s (last was %s %dms ago)\n", __func__, this_click_is_up ? "UP":"DOWN",
+                last_click_was_up ? "UP":"DOWN", now - last_click_time);
             bouncing = true;
             ui->sldGraphRange->blockSignals(true);
             ui->sldGraphRange->setValue(set_slider_value);
             ui->sldGraphRange->blockSignals(false);
-        }
+        } else
+            LogPrintf("%s: snap slider_val=%d->%d %s (last:%s) value=%d\n", __func__, set_slider_value, slider_value, this_click_is_up ? "UP":"DOWN", last_click_was_up ? "UP":"DOWN", value);
         last_click_time = now;
         last_click_was_up = this_click_is_up;
         set_slider_value = slider_value;
@@ -1170,23 +1175,30 @@ void RPCConsole::setTrafficGraphRange(unsigned int value)
         ui->sldGraphRange->setValue(set_slider_value);
         ui->sldGraphRange->blockSignals(false);
     }
+    //if (!slider_in_use) // PageStep was used, slider was not dragged
+    //    ui->sldGraphRange->setValue(set_slider_value); // Snap the slider to where this value is
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(mins));
+    if (!slider_in_use) // As too much debug otherwise
+        LogPrintf("%s: value=%d slider=%d mins=%d %s\n", __func__, value, set_slider_value, mins.count(), slider_in_use ? "":"SNAP");
 }
 
 void RPCConsole::on_sldGraphRange_sliderReleased()
 {
+    LogPrintf("%s: hello\n", __func__);
     ui->sldGraphRange->setValue(set_slider_value); // Snap the slider to where this value is
     slider_in_use = false;
 }
 
 void RPCConsole::on_sldGraphRange_sliderPressed()
 {
+    LogPrintf("%s: hello\n", __func__);
     slider_in_use = true;
 }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
     if (!slider_in_use && ui->trafficGraph->GraphRangeBump()) {
+        LogPrintf("%s: Bump it up!\n", __func__);
         setTrafficGraphRange(0); // bump it up
     }
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
