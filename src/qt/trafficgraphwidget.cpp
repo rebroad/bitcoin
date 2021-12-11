@@ -125,6 +125,7 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
 {
     QWidget::mousePressEvent(event);
     fToggle = !fToggle;
+    LogPrintf("%: here\n", __func__);
     update();
 }
 
@@ -191,7 +192,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.setPen(Qt::red);
         painter.drawPath(p);
     }
-    if (ttpoint >= 0 && ttpoint < vTimeStamp.size()) {
+    int sampleCount = vTimeStamp.size();
+    if (ttpoint >= 0 && ttpoint < sampleCount) {
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
         int x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
@@ -207,7 +209,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int milliseconds_between_samples = 1000;
         if (ttpoint > 0)
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - sampleTime));
-        if (ttpoint + 1 < vTimeStamp.size())
+        if (ttpoint + 1 < sampleCount)
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(sampleTime - vTimeStamp.at(ttpoint+1)));
         if (milliseconds_between_samples < 1000)
             strTime += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
@@ -225,9 +227,11 @@ void TrafficGraphWidget::updateToolTip()
     if (!QToolTip::isVisible()) {
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             ttpoint = -1;
+            LogPrintf("%s: InVisible. Setting ttpoint = -1. Call update()\n", __func__);
             update();
         }
     } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
+        LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
         update();
     }
 }
@@ -285,7 +289,6 @@ void TrafficGraphWidget::setGraphRangeMins(int mins)
     timer->stop();
     timer->setInterval(msecsPerSample);
     timer->start();
-    update();
 }
 
 void TrafficGraphWidget::clear()
