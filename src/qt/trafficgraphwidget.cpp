@@ -114,6 +114,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     }
     if (ttpoint != closest_i) {
         ttpoint = closest_i;
+        LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
         update(); // Calls paintEvent() to draw or delete the highlighted point
     }
     last_x = x; last_y = y;
@@ -123,6 +124,7 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
 {
     QWidget::mousePressEvent(event);
     fToggle = !fToggle;
+    LogPrintf("%: here\n", __func__);
     update();
 }
 
@@ -226,11 +228,14 @@ void TrafficGraphWidget::updateToolTip()
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             if (last_fToggle == fToggle) { // Not lost due to a toggle
                 ttpoint = -1;
-            }
+                LogPrintf("%s: InVisible. Setting ttpoint = -1. Call update()\n", __func__);
+            } else
+                LogPrintf("%s: InVisible but toggled. Call update()\n", __func__);
             update();
             last_fToggle = fToggle;
         }
     } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
+        LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
         update();
         last_fToggle = fToggle;
     }
