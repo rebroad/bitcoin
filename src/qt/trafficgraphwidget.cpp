@@ -146,7 +146,6 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     int base = floor(log10(fMax));
     float val = pow(10.0f, base);
 
-    const QString units = tr("kB/s");
     const float yMarginText = 2.0;
 
     // if we drew 10 or 3 fewer lines, break them up at the next lower order of magnitude
@@ -154,7 +153,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         float oldval = val;
         val = pow(10.0f, base - 1);
         painter.setPen(axisCol.darker());
-        painter.drawText(XMARGIN, y_value(val)-yMarginText, QString("%1 %2").arg(val).arg(units));
+        painter.drawText(XMARGIN, y_value(val)-yMarginText, GUIUtil::formatBytesps(val*1000));
         int count = 1;
         for(float y = val; y < (!fToggle || fMax / val < 20 ? fMax : oldval); y += val, count++) {
             if(count % 10 == 0)
@@ -165,7 +164,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         if (fToggle) {
             int yy = y_value(val*0.1);
             painter.setPen(axisCol.darker().darker());
-            painter.drawText(XMARGIN, yy-yMarginText, QString("%1 %2").arg(val*0.1).arg(units));
+            painter.drawText(XMARGIN, yy-yMarginText, GUIUtil::formatBytesps(val*100));
             painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
         }
         val = oldval;
@@ -176,7 +175,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int yy = y_value(y);
         painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
     }
-    painter.drawText(XMARGIN, y_value(val)-yMarginText, QString("%1 %2").arg(val).arg(units));
+    painter.drawText(XMARGIN, y_value(val)-yMarginText, GUIUtil::formatBytesps(val*1000));
 
     painter.setRenderHint(QPainter::Antialiasing);
     if(!vSamplesIn.empty()) {
@@ -239,7 +238,7 @@ void TrafficGraphWidget::updateDisplay()
     }
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
-        if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
+        if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             if (last_fToggle == fToggle) { // Not lost due to a toggle
                 ttpoint = -1;
                 LogPrintf("%s: InVisible. Setting ttpoint = -1. age=%d Call update()\n", __func__, GetTime() - tt_time);
@@ -281,13 +280,13 @@ void TrafficGraphWidget::updateRates()
     nLastBytesIn = bytesIn;
     nLastBytesOut = bytesOut;
 
-    while(vSamplesIn.size() > DESIRED_SAMPLES) {
+    while(vSamplesIn.size() >= DESIRED_SAMPLES) {
         vSamplesIn.pop_back();
     }
-    while(vSamplesOut.size() > DESIRED_SAMPLES) {
+    while(vSamplesOut.size() >= DESIRED_SAMPLES) {
         vSamplesOut.pop_back();
     }
-    while(vTimeStamp.size() > DESIRED_SAMPLES) {
+    while(vTimeStamp.size() >= DESIRED_SAMPLES) {
         vTimeStamp.pop_back();
     }
 
@@ -299,7 +298,7 @@ void TrafficGraphWidget::updateRates()
         if(f > tmax) tmax = f;
     }
     new_fMax = tmax;
-    if (ttpoint >=0 && ttpoint < vTimeStamp.size()) ttpoint++; // Move the selected point to the left
+    if (ttpoint >=0 && ttpoint < DESIRED_SAMPLES) ttpoint++; // Move the selected point to the left
     update();
 }
 
