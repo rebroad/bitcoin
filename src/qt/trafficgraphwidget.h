@@ -37,7 +37,7 @@ protected:
 
 public Q_SLOTS:
     void updateRates();
-    void updateToolTip();
+    void updateDisplay();
     void setGraphRangeMins(int mins);
     void clear();
 
@@ -47,6 +47,7 @@ private:
     QTimer *timer;
     QTimer *tt_timer;
     float fMax;
+    float new_fMax;
     int nMins;
     QQueue<float> vSamplesIn;
     QQueue<float> vSamplesOut;

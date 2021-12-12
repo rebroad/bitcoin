@@ -26,6 +26,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     timer(nullptr),
     tt_timer(nullptr),
     fMax(0.0f),
+    new_fMax(0.0f),
     nMins(0),
     vSamplesIn(),
     vSamplesOut(),
@@ -37,8 +38,8 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     timer = new QTimer(this);
     tt_timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
-    connect(tt_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateToolTip);
-    tt_timer->setInterval(500);
+    connect(tt_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateDisplay);
+    tt_timer->setInterval(200);
     tt_timer->start();
     setMouseTracking(true);
 }
@@ -221,21 +222,34 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         QToolTip::hideText();
 }
 
-void TrafficGraphWidget::updateToolTip()
+void TrafficGraphWidget::updateDisplay()
 {
+    bool fUpdate = false;
+    if (new_fMax && fMax != new_fMax) {
+        fUpdate = true;
+        if (abs((height() * fMax / new_fMax) - height()) > 1) {
+            LogPrintf("%s: old=%d new=%d\n", __func__, int(height() * fMax / new_fMax), height());
+            fMax = (new_fMax + fMax) / 2;
+        } else {
+            LogPrintf("%s: new=%d COPY\n", __func__, height());
+            fMax = new_fMax;
+        }
+    }
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             if (last_fToggle == fToggle) { // Not lost due to a toggle
                 ttpoint = -1;
-                LogPrintf("%s: InVisible. Setting ttpoint = -1. Call update()\n", __func__);
+                LogPrintf("%s: InVisible. Setting ttpoint = -1. age=%d Call update()\n", __func__, GetTime() - tt_time);
             } else
                 LogPrintf("%s: InVisible but toggled. Call update()\n", __func__);
-            update();
-            last_fToggle = fToggle;
+            fUpdate = true;
         }
     } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
         LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
+        fUpdate = true;
+    }
+    if (fUpdate) {
         update();
         last_fToggle = fToggle;
     }
@@ -282,7 +296,7 @@ void TrafficGraphWidget::updateRates()
     for (const float f : vSamplesOut) {
         if(f > tmax) tmax = f;
     }
-    fMax = tmax;
+    new_fMax = tmax;
     if (ttpoint >=0 && ttpoint < vTimeStamp.size()) ttpoint++; // Move the selected point to the left
     update();
 }
@@ -303,7 +317,7 @@ void TrafficGraphWidget::clear()
     vSamplesOut.clear();
     vSamplesIn.clear();
     vTimeStamp.clear();
-    fMax = 0.0f;
+    new_fMax = 0.0f;
 
     if(clientModel) {
         nLastBytesIn = clientModel->node().getTotalBytesRecv();
