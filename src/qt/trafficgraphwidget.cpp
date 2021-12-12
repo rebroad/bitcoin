@@ -88,6 +88,8 @@ float floatmax(float a, float b)
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
 {
     QWidget::mouseMoveEvent(event);
+    static int last_x = -1;
+    static int last_y = -1;
     int x = event->x();
     int y = event->y();
     x_offset = event->globalX() - x;
@@ -107,9 +109,9 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             }
         }
     }
-    if (ttpoint != closest_i) {
+    if (ttpoint != closest_i && closest_i != -1 && (last_x != x || last_y != y)) {
         LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
-        ttpoint = closest_i;
+        ttpoint = closest_i; last_x = x; last_y = y;
         update(); // Calls paintEvent() to draw or delete the highlighted point
     }
 }
