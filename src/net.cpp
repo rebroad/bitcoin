@@ -594,8 +594,8 @@ void CNode::CopyStats(CNodeStats& stats)
     } else {
         stats.fRelayTxes = false;
     }
-    X(nLastSend);
-    X(nLastRecv);
+    X(m_last_send);
+    X(m_last_recv);
     X(nLastTXTime);
     X(nLastBlockTime);
     X(nTimeConnected);
@@ -649,7 +649,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
     complete = false;
     const auto time = GetTime<std::chrono::microseconds>();
     LOCK(cs_vRecv);
-    nLastRecv = std::chrono::duration_cast<std::chrono::seconds>(time).count();
+    m_last_recv = std::chrono::duration_cast<std::chrono::seconds>(time);
     nRecvBytes += msg_bytes.size();
     while (msg_bytes.size() > 0) {
         // absorb network data
@@ -672,10 +672,10 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
 
             if ((msg.m_command == NetMsgType::INV || msg.m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx) {
                 nRecvBytes1stTx = nRecvBytes - msg.m_raw_message_size - msg_bytes.size();
-                nTime1stTx = (int64_t)nLastRecv;
+                nTime1stTx = m_last_recv.count();
                 LogPrintf("%s: 1stTx t=%d size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, nTime1stTx - nTimeConnected, msg.m_raw_message_size, nRecvBytes1stTx, nRecvBytes, handled, msg_bytes.size(), GetId());
             }
-            if (msg.m_command == NetMsgType::BLOCK) nLastBlock = nLastRecv;
+            if (msg.m_command == NetMsgType::BLOCK) nLastBlock = m_last_recv.count();
 
             // Store received bytes per message command
             // to prevent a memory DOS, only allow valid commands
@@ -783,7 +783,7 @@ CNetMessage V1TransportDeserializer::GetMessage(const std::chrono::microseconds 
     if (memcmp(hash.begin(), hdr.pchChecksum, CMessageHeader::CHECKSUM_SIZE) != 0) {
         LogPrint(BCLog::NET, "Header error: Wrong checksum (%s, %u bytes), expected %s was %s, peer=%d\n",
                  SanitizeString(msg.m_command), msg.m_message_size,
-                 HexStr(Span<uint8_t>(hash.begin(), hash.begin() + CMessageHeader::CHECKSUM_SIZE)),
+                 HexStr(Span{hash}.first(CMessageHeader::CHECKSUM_SIZE)),
                  HexStr(hdr.pchChecksum),
                  m_node_id);
         reject_message = true;
@@ -827,7 +827,7 @@ size_t CConnman::SocketSendData(CNode& node) const
             nBytes = send(node.hSocket, reinterpret_cast<const char*>(data.data()) + node.nSendOffset, data.size() - node.nSendOffset, MSG_NOSIGNAL | MSG_DONTWAIT);
         }
         if (nBytes > 0) {
-            node.nLastSend = GetTimeSeconds();
+            node.m_last_send = GetTime<std::chrono::seconds>();
             node.nSendBytes += nBytes;
             node.nSendOffset += nBytes;
             nSentSize += nBytes;
@@ -1349,31 +1349,33 @@ void CConnman::NotifyNumConnectionsChanged()
     }
 }
 
-bool CConnman::ShouldRunInactivityChecks(const CNode& node, int64_t now) const
+bool CConnman::ShouldRunInactivityChecks(const CNode& node, std::chrono::seconds now) const
 {
-    return node.nTimeConnected + m_peer_connect_timeout < now;
+    return std::chrono::seconds{node.nTimeConnected} + m_peer_connect_timeout < now;
 }
 
 bool CConnman::InactivityCheck(const CNode& node) const
 {
-    // Use non-mockable system time (otherwise these timers will pop when we
-    // use setmocktime in the tests).
-    int64_t now = GetTimeSeconds();
+    // Tests that see disconnects after using mocktime can start nodes with a
+    // large timeout. For example, -peertimeout=999999999.
+    const auto now{GetTime<std::chrono::seconds>()};
+    const auto last_send{node.m_last_send.load()};
+    const auto last_recv{node.m_last_recv.load()};
 
     if (!ShouldRunInactivityChecks(node, now)) return false;
 
-    if (node.nLastRecv == 0 || node.nLastSend == 0) {
-        LogPrintf( "socket no message in first %i seconds, %d %d disconnect peer=%d\n", m_peer_connect_timeout, node.nLastRecv != 0, node.nLastSend != 0, node.GetId());
+    if (last_recv.count() == 0 || last_send.count() == 0) {
+        LogPrintf("socket no message in first %i seconds, %d %d disconnect peer=%d\n", count_seconds(m_peer_connect_timeout), last_recv.count() != 0, last_send.count() != 0, node.GetId());
         return true;
     }
 
-    if (now > node.nLastSend + TIMEOUT_INTERVAL) {
-        LogPrintf("socket sending timeout: %s disconnect peer=%d\n", strAge(now - node.nLastSend), node.GetId());
+    if (now > last_send + TIMEOUT_INTERVAL) {
+        LogPrintf("socket sending timeout: %s disconnect peer=%d\n", strAge(count_seconds(now - last_send)), node.GetId());
         return true;
     }
 
-    if (now > node.nLastRecv + TIMEOUT_INTERVAL) {
-        LogPrintf("socket receive timeout: %s disconnect peer=%d\n", strAge(now - node.nLastRecv), node.GetId());
+    if (now > last_recv + TIMEOUT_INTERVAL) {
+        LogPrintf("socket receive timeout: %s disconnect peer=%d\n", strAge(count_seconds(now - last_recv)), node.GetId());
         return true;
     }
 
@@ -1817,7 +1819,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             if (nBytes > 0)
             {
                 bool notify = false;
-                if (!pnode->ReceiveMsgBytes(Span<const uint8_t>(pchBuf, nBytes), notify)) {
+                if (!pnode->ReceiveMsgBytes({pchBuf, (size_t)nBytes}, notify)) {
                     LogPrintf("%s: ReceiveMsgBytes failed. Disconnect peer=%d\n", __func__, pnode->GetId());
                     pnode->CloseSocketDisconnect();
                 }
@@ -3195,7 +3197,6 @@ void CConnman::RecordBytesSent(uint64_t bytes)
         nMaxOutboundTotalBytesSentInCycle = 0;
     }
 
-    // TODO, exclude peers with download permission
     nMaxOutboundTotalBytesSentInCycle += bytes;
 }
 

@@ -334,8 +334,8 @@ void CChainState::MaybeUpdateMempoolForReorg(
     while (it != disconnectpool.queuedTx.get<insertion_order>().rend()) {
         // ignore validation errors in resurrected transactions
         if (!fAddToMempool || (*it)->IsCoinBase() ||
-            AcceptToMemoryPool(*m_mempool, *this, *it, GetTime(), -4,
-                /* bypass_limits= */true, /* test_accept= */ false).m_result_type !=
+            AcceptToMemoryPool(*this, *it, GetTime(), -4,
+                /*bypass_limits=*/true, /*test_accept=*/false).m_result_type !=
                     MempoolAcceptResult::ResultType::VALID) {
             // If the transaction doesn't make it in to the mempool, remove any
             // transactions that depend on it (which would now be orphans).
@@ -360,7 +360,7 @@ void CChainState::MaybeUpdateMempoolForReorg(
         AssertLockHeld(::cs_main);
         const CTransaction& tx = it->GetTx();
         LockPoints lp = it->GetLockPoints();
-        bool validLP = TestLockPointValidity(m_chain, &lp);
+        const bool validLP{TestLockPointValidity(m_chain, lp)};
         CCoinsViewMemPool view_mempool(&CoinsTip(), *m_mempool);
         if (!CheckFinalTx(m_chain.Tip(), tx, flags)
             || !CheckSequenceLocks(m_chain.Tip(), view_mempool, tx, flags, &lp, validLP)) {
@@ -374,8 +374,8 @@ void CChainState::MaybeUpdateMempoolForReorg(
                     continue;
                 const Coin &coin = CoinsTip().AccessCoin(txin.prevout);
                 assert(!coin.IsSpent());
-                unsigned int nMemPoolHeight = m_chain.Tip()->nHeight + 1;
-                if (coin.IsSpent() || (coin.IsCoinBase() && ((signed long)nMemPoolHeight) - coin.nHeight < COINBASE_MATURITY)) {
+                const auto mempool_spend_height{m_chain.Tip()->nHeight + 1};
+                if (coin.IsSpent() || (coin.IsCoinBase() && mempool_spend_height - coin.nHeight < COINBASE_MATURITY)) {
                     should_remove = true;
                     break;
                 }
@@ -730,6 +730,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // to coins_to_uncache)
     m_view.SetBackend(m_dummy);
 
+    assert(m_active_chainstate.m_blockman.LookupBlockIndex(m_view.GetBestBlock()) == m_active_chainstate.m_chain.Tip());
+
     // Only accept BIP68 sequence locked transactions that can be mined in the next
     // block; we don't want our mempool filled up with transactions that can't
     // be mined yet.
@@ -738,7 +740,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     if (!CheckSequenceLocks(m_active_chainstate.m_chain.Tip(), m_view, tx, STANDARD_LOCKTIME_VERIFY_FLAGS, &lp))
         return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "non-BIP68-final");
 
-    if (!Consensus::CheckTxInputs(tx, state, m_view, m_active_chainstate.m_blockman.GetSpendHeight(m_view), ws.m_base_fees)) {
+    // The mempool holds txs for the next block, so pass height+1 to CheckTxInputs
+    if (!Consensus::CheckTxInputs(tx, state, m_view, m_active_chainstate.m_chain.Height() + 1, ws.m_base_fees)) {
         return false; // state filled in by CheckTxInputs
     }
 
@@ -1103,11 +1106,14 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactions(const std::
 
 } // anon namespace
 
-MempoolAcceptResult AcceptToMemoryPool(CTxMemPool& pool, CChainState& active_chainstate, const CTransactionRef& tx,
+MempoolAcceptResult AcceptToMemoryPool(CChainState& active_chainstate, const CTransactionRef& tx,
                                        int64_t accept_time, NodeId nodeid, bool bypass_limits, bool test_accept)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     const CChainParams& chainparams{active_chainstate.m_params};
+    assert(active_chainstate.GetMempool() != nullptr);
+    CTxMemPool& pool{*active_chainstate.GetMempool()};
+
     std::vector<COutPoint> coins_to_uncache;
     auto args = MemPoolAccept::ATMPArgs::SingleAccept(chainparams, accept_time, nodeid, bypass_limits, coins_to_uncache, test_accept);
     const MempoolAcceptResult result = MemPoolAccept(pool, active_chainstate).AcceptSingleTransaction(tx, args);
@@ -1325,14 +1331,6 @@ bool CScriptCheck::operator()() {
     return VerifyScript(scriptSig, m_tx_out.scriptPubKey, witness, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, m_tx_out.nValue, cacheStore, *txdata), &error);
 }
 
-int BlockManager::GetSpendHeight(const CCoinsViewCache& inputs)
-{
-    AssertLockHeld(cs_main);
-    CBlockIndex* pindexPrev = LookupBlockIndex(inputs.GetBestBlock());
-    return pindexPrev->nHeight + 1;
-}
-
-
 static CuckooCache::cache<uint256, SignatureCacheHasher> g_scriptExecutionCache;
 static CSHA256 g_scriptExecutionCacheHasher;
 
@@ -1504,6 +1502,7 @@ int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out)
  *  When FAILED is returned, view is left in an indeterminate state. */
 DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view)
 {
+    AssertLockHeld(::cs_main);
     bool fClean = true;
 
     CBlockUndo blockUndo;
@@ -3443,6 +3442,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     // This requires some new chain data structure to efficiently look up if a
     // block is in a chain leading to a candidate for best tip, despite not
     // being such a candidate itself.
+    // Note that this would break the getblockfrompeer RPC
 
     // TODO: deal better with return value and error conditions for duplicate
     // and unrequested blocks.
@@ -3540,13 +3540,13 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
 MempoolAcceptResult ChainstateManager::ProcessTransaction(const CTransactionRef& tx, NodeId nodeid, bool test_accept)
 {
     CChainState& active_chainstate = ActiveChainstate();
-    if (!active_chainstate.m_mempool) {
+    if (!active_chainstate.GetMempool()) {
         TxValidationState state;
         state.Invalid(TxValidationResult::TX_NO_MEMPOOL, "no-mempool");
         return MempoolAcceptResult::Failure(state);
     }
-    auto result = AcceptToMemoryPool(*active_chainstate.m_mempool, active_chainstate, tx, GetTime(), nodeid, /* bypass_limits= */ false, test_accept);
-    active_chainstate.m_mempool->check(active_chainstate.CoinsTip(), active_chainstate.m_chain.Height() + 1);
+    auto result = AcceptToMemoryPool(active_chainstate, tx, GetTime(), nodeid, /*bypass_limits=*/ false, test_accept);
+    active_chainstate.GetMempool()->check(active_chainstate.CoinsTip(), active_chainstate.m_chain.Height() + 1);
     return result;
 }
 
@@ -3948,7 +3948,7 @@ CVerifyDB::~CVerifyDB()
 
 bool CVerifyDB::VerifyDB(
     CChainState& chainstate,
-    const CChainParams& chainparams,
+    const Consensus::Params& consensus_params,
     CCoinsView& coinsview,
     int nCheckLevel, int nCheckDepth)
 {
@@ -3990,10 +3990,10 @@ bool CVerifyDB::VerifyDB(
         }
         CBlock block;
         // check level 0: read from disk
-        if (!ReadBlockFromDisk(block, pindex, chainparams.GetConsensus()))
+        if (!ReadBlockFromDisk(block, pindex, consensus_params))
             return error("VerifyDB(): *** ReadBlockFromDisk failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
         // check level 1: verify block validity
-        if (nCheckLevel >= 1 && !CheckBlock(block, state, chainparams.GetConsensus()))
+        if (nCheckLevel >= 1 && !CheckBlock(block, state, consensus_params))
             return error("%s: *** found bad block at %d, hash=%s (%s)\n", __func__,
                          pindex->nHeight, pindex->GetBlockHash().ToString(), state.ToString());
         // check level 2: verify undo validity
@@ -4041,7 +4041,7 @@ bool CVerifyDB::VerifyDB(
             uiInterface.ShowProgress(_("Verifying blocks…").translated, percentageDone, false);
             pindex = chainstate.m_chain.Next(pindex);
             CBlock block;
-            if (!ReadBlockFromDisk(block, pindex, chainparams.GetConsensus()))
+            if (!ReadBlockFromDisk(block, pindex, consensus_params))
                 return error("VerifyDB(): *** ReadBlockFromDisk failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
             if (!chainstate.ConnectBlock(block, state, pindex, coins)) {
                 return error("VerifyDB(): *** found unconnectable block at %d, hash=%s (%s)", pindex->nHeight, pindex->GetBlockHash().ToString(), state.ToString());
@@ -4656,8 +4656,8 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
             }
             if (nTime > nNow - nExpiryTimeout) {
                 LOCK(cs_main);
-                if (AcceptToMemoryPool(pool, active_chainstate, tx, nTime, -2, /* bypass_limits= */ false,
-                                               /* test_accept= */ false).m_result_type == MempoolAcceptResult::ResultType::VALID) {
+                const auto& accepted = AcceptToMemoryPool(active_chainstate, tx, nTime, -2, /*bypass_limits=*/false, /*test_accept=*/false);
+                if (accepted.m_result_type == MempoolAcceptResult::ResultType::VALID) {
                     ++count;
                 } else {
                     // mempool may contain the transaction already, e.g. from
