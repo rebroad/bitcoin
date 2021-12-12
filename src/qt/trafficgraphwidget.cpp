@@ -111,9 +111,10 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             }
         }
     }
+    if (ttpoint != closest_i || closest_i != -1)
+        LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
     if (ttpoint != closest_i) {
         ttpoint = closest_i;
-        LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
         update(); // Calls paintEvent() to draw or delete the highlighted point
     }
     last_x = x; last_y = y;
@@ -227,11 +228,12 @@ void TrafficGraphWidget::updateDisplay()
     bool fUpdate = false;
     if (new_fMax && fMax != new_fMax) {
         fUpdate = true;
-        if (abs((height() * fMax / new_fMax) - height()) > 1) {
-            LogPrintf("%s: old=%d new=%d\n", __func__, int(height() * fMax / new_fMax), height());
+        int h = height() - YMARGIN * 2;
+        if (abs((h*2 * fMax / new_fMax) - h*2) > 1) {
+            LogPrintf("%s: old=%d new=%d\n", __func__, int(h * fMax / new_fMax), h);
             fMax = (new_fMax + fMax) / 2;
         } else {
-            LogPrintf("%s: new=%d COPY\n", __func__, height());
+            LogPrintf("%s: new=%d COPY\n", __func__, h);
             fMax = new_fMax;
         }
     }
@@ -243,6 +245,7 @@ void TrafficGraphWidget::updateDisplay()
                 LogPrintf("%s: InVisible. Setting ttpoint = -1. age=%d Call update()\n", __func__, GetTime() - tt_time);
             } else
                 LogPrintf("%s: InVisible but toggled. Call update()\n", __func__);
+            last_fToggle = fToggle;
             fUpdate = true;
         }
     } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
@@ -251,7 +254,6 @@ void TrafficGraphWidget::updateDisplay()
     }
     if (fUpdate) {
         update();
-        last_fToggle = fToggle;
     }
 }
 
