@@ -88,22 +88,16 @@ float floatmax(float a, float b)
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
 {
     QWidget::mouseMoveEvent(event);
-    static int last_x = -1;
-    static int last_y = -1;
     int x = event->x();
     int y = event->y();
     x_offset = event->globalX() - x;
     y_offset = event->globalY() - y;
-    if (x == last_x && y == last_y) return; // No movement so exit
-    last_x = x; last_y = y;
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
-    static int last_ttpoint = DESIRED_SAMPLES; // a value that the new one cannot equal
     unsigned int smallest_distance = 50; int closest_i = -1;
     int sampleSize = vTimeStamp.size();
     if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
-        for (int test_i = i - 2; test_i <= i + 10; test_i++) {
-            if (test_i < 0 || test_i >= sampleSize) continue;
+        for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
             float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
             int y_data = y_value(val);
             unsigned int distance = abs(y - y_data);
@@ -113,11 +107,10 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             }
         }
     }
-    ttpoint = closest_i;
-    if (ttpoint != last_ttpoint) {
+    if (ttpoint != closest_i) {
         LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
+        ttpoint = closest_i;
         update(); // Calls paintEvent() to draw or delete the highlighted point
-        last_ttpoint = ttpoint;
     }
 }
 
