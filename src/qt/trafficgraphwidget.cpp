@@ -94,6 +94,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     int y = event->y();
     x_offset = event->globalX() - x;
     y_offset = event->globalY() - y;
+    if (last_x == x && last_y == x) return; // Do nothing if mouse hasn't moved
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
     unsigned int smallest_distance = 50; int closest_i = -1;
@@ -109,7 +110,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             }
         }
     }
-    if (ttpoint != closest_i && (ttpoint == -1 || last_x != x || last_y != y)) {
+    if (ttpoint != closest_i) {
         LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
         ttpoint = closest_i; last_x = x; last_y = y;
         update(); // Calls paintEvent() to draw or delete the highlighted point
