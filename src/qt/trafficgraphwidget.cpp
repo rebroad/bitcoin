@@ -66,7 +66,7 @@ int TrafficGraphWidget::y_value(float value)
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
     int sampleCount = samples.size();
-    if (sampleCount  > 0) {
+    if (sampleCount > 0) {
         int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
@@ -111,8 +111,8 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
         }
     }
     if (ttpoint != closest_i) {
-        LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
         ttpoint = closest_i; last_x = x; last_y = y;
+        LogPrintf("i=%d h=%d y-margin=%d smdist=%d cl_i=%d\n", i, h, y-YMARGIN, smallest_distance, closest_i);
         update(); // Calls paintEvent() to draw or delete the highlighted point
     }
 }
