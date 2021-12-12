@@ -5353,17 +5353,17 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     cached_cmpctblock = &last_recved_cmpctblock1;
                 if (pindex->GetBlockHash() == last_recved_cmpctblock2.header.GetHash())
                     cached_cmpctblock = &last_recved_cmpctblock2;
-                if (cached_cmpctblock) {
-                    LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) peer=%d\n", pto->GetId());
+                if (CanDirectFetch() && cached_cmpctblock) {
+                    LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) %s peer=%d\n", pto->GetId(), strBlkInfo(pindex));
                     CDataStream cmpctblkMsg(SER_NETWORK, PROTOCOL_VERSION);
                     cmpctblkMsg << *cached_cmpctblock;
                     ProcessMessage(*pto, NetMsgType::CMPCTBLOCK, cmpctblkMsg, std::chrono::seconds{2}, false);
                 } else {
                     uint32_t nFetchFlags = GetFetchFlags(*pto);
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
-                    BlockRequested(pto->GetId(), *pindex);
                     LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
                 }
+                BlockRequested(pto->GetId(), *pindex);
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {
