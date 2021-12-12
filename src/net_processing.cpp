@@ -1332,7 +1332,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     if (nBlocksInFlight || nErasedOrphans) {
         unsigned int nMaxOrphans = (unsigned int)std::max((int64_t)0, gArgs.GetIntArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
         int64_t nNow = GetTime();
-        LogPrintf("%s: %s%sfDisc=%d LastRecv=%s LastSend=%s DLsince=%s peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight. ", nBlocksInFlight) : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, strAge(nNow - node.nLastRecv), strAge(nNow - node.nLastSend), strAge(nNow - DLsince), nodeid);
+        LogPrintf("%s: %s%sfDisc=%d LastRecv=%s LastSend=%s DLsince=%s peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight. ", nBlocksInFlight) : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, strAge(nNow - count_seconds(node.m_last_recv)), strAge(nNow - count_seconds(node.m_last_send)), strAge(nNow - DLsince), nodeid);
     }
 
     if (mapNodeState.empty()) {
@@ -4733,7 +4733,7 @@ void PeerManagerImpl::MaybeSendPing(CNode& node_to, Peer& peer, std::chrono::mic
     {
         // The ping timeout is using mocktime. To disable the check during
         // testing, increase -peertimeout.
-        LogPrintf("ping timeout: %s nLastRecv=%s peer=%d\n", strAge(count_microseconds(now - peer.m_ping_start.load()) / 1000000), strAge(now.count() / 1000000 - node_to.nLastRecv), peer.m_id);
+        LogPrintf("ping timeout: %s nLastRecv=%s peer=%d\n", strAge(count_microseconds(now - peer.m_ping_start.load()) / 1000000), strAge(now.count() / 1000000 - count_seconds(node_to.m_last_recv)), peer.m_id);
         //node_to.fDisconnect = true;
         peer.m_ping_nonce_sent = 0;
         return;
@@ -4942,13 +4942,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
     if (MaybeDiscourageAndDisconnect(*pto, *peer)) return true;
 
     // Don't send anything until the version handshake is complete
-    if (!pto->fSuccessfullyConnected || pto->fDisconnect)
+    if (!pto->fSuccessfullyConnected || pto->fDisconnect || ShutdownRequested())
         return true;
-
-    if (ShutdownRequested()) {
-        LogPrintf("CURIOUS: %s running when shutting down.\n", __func__);
-        return true;
-    }
 
     // If we get here, the outgoing message serialization version is set and can't change.
     const CNetMsgMaker msgMaker(pto->GetCommonVersion());
@@ -5330,7 +5325,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 return true;
             }
             int64_t nNow = GetTime();
-            int nDelay = nNow - pto->nLastRecv;
+            int nDelay = nNow - count_seconds(pto->m_last_recv);
             if (nDelay > m_longest_delay && current_time > state.m_downloading_since + std::chrono::seconds{m_longest_delay}) {
                 LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d nLBT=%s peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, strAge(nNow - pto->nLastBlockTime), pto->GetId());
                 m_longest_delay = nDelay;
@@ -5338,7 +5333,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             }
             if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
                 current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1) && nNow - pto->nLastBlockTime > 10) {
-                LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d nLBT=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - pto->nLastRecv, nOtherPeersWithValidatedDownloads, nNow - pto->nLastBlockTime, pto->GetId());
+                LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d nLBT=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - count_seconds(pto->m_last_recv), nOtherPeersWithValidatedDownloads, nNow - pto->nLastBlockTime, pto->GetId());
                 pto->fDisconnect = true;
                 return true;
             }
