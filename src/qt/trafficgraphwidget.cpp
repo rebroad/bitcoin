@@ -318,11 +318,13 @@ void TrafficGraphWidget::clear()
     vSamplesOut.clear();
     vSamplesIn.clear();
     vTimeStamp.clear();
-    new_fMax = 0.0f;
+    new_fMax = 0.0f; fMax = 0.0f;
 
     if(clientModel) {
         nLastBytesIn = clientModel->node().getTotalBytesRecv();
         nLastBytesOut = clientModel->node().getTotalBytesSent();
     }
+    update();
+    UninterruptibleSleep(std::chrono::milliseconds{timer->interval()});
     timer->start();
 }
