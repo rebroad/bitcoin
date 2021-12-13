@@ -96,16 +96,16 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             int64_t now = GetTimeSeconds();
             if (rec->nodeStats.nRecvBytes1stTx && rec->nodeStats.nTime1stTx != now)
                 return GUIUtil::formatBps((rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx) * 8.0 / (now - rec->nodeStats.nTime1stTx));
-            else if (rec->nodeStats.nTimeConnected != now)
-                return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8.0 / (now - rec->nodeStats.nTimeConnected));
+            else if (count_seconds(rec->nodeStats.nTimeConnected) != now)
+                return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8.0 / (now - count_seconds(rec->nodeStats.nTimeConnected)));
             else
                 return QString::fromStdString("");
         }
         case TxBpsPct: {
             int64_t now = GetTimeSeconds();
             std::string dots;
-            if (now - rec->nodeStats.nTimeConnected >= 120) dots="";
-            else if (now - rec->nodeStats.nTimeConnected >= 60) dots=".";
+            if (now - count_seconds(rec->nodeStats.nTimeConnected) >= 120) dots="";
+            else if (now - count_seconds(rec->nodeStats.nTimeConnected) >= 60) dots=".";
             else dots="..";
             if (rec->nodeStats.nRecvBytes1stTx && rec->nodeStats.nRecvBytes1stTx != rec->nodeStats.nRecvBytes) {
                 float nTxBpsPct = 100.0 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx);
