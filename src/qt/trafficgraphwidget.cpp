@@ -33,6 +33,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     vTimeStamp(),
     nLastBytesIn(0),
     nLastBytesOut(0),
+    nLastTime(0),
     clientModel(nullptr)
 {
     timer = new QTimer(this);
@@ -50,6 +51,7 @@ void TrafficGraphWidget::setClientModel(ClientModel *model)
     if(model) {
         nLastBytesIn = model->node().getTotalBytesRecv();
         nLastBytesOut = model->node().getTotalBytesSent();
+        nLastTime = GetTimeMillis();
     }
 }
 
@@ -261,16 +263,18 @@ void TrafficGraphWidget::updateRates()
     if(!clientModel) return;
 
     int64_t nTime = GetTimeMillis();
-    static int64_t nLastTime = nTime - timer->interval();
     int nRealInterval = nTime - nLastTime;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
-    //static int64_t nLastReport = 0;
-    //int nInterval = timer->interval();
-    //if ((nTime >= nLastReport + 10000) && ((nRealInterval <= nInterval * 0.9) || (nRealInterval >= nInterval * 1.1))) {
-    //    LogPrintf("%s: nInterval=%d nRealInterval=%d\n", __func__, nInterval, nRealInterval);
-    //    nLastReport = nTime;
-    //}
+    static int64_t nLastReport = 0;
+    int nInterval = timer->interval();
+    if ((nRealInterval <= nInterval * 0.9) || (nRealInterval >= nInterval * 1.1)) {
+        if (nTime >= nLastReport + 1000) {
+            LogPrintf("%s: nInterval=%d nRealInterval=%d\n", __func__, nInterval, nRealInterval);
+            nLastReport = nTime;
+        }
+    }
+    if (nRealInterval < nInterval * 0.9) return;
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
     vSamplesIn.push_front(in_rate_kilobytes_per_sec);
@@ -323,8 +327,8 @@ void TrafficGraphWidget::clear()
     if(clientModel) {
         nLastBytesIn = clientModel->node().getTotalBytesRecv();
         nLastBytesOut = clientModel->node().getTotalBytesSent();
+        nLastTime = GetTimeMillis();
     }
     update();
-    UninterruptibleSleep(std::chrono::milliseconds{timer->interval()});
     timer->start();
 }

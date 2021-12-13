@@ -54,6 +54,7 @@ private:
     QQueue<int64_t> vTimeStamp;
     quint64 nLastBytesIn;
     quint64 nLastBytesOut;
+    int64_t nLastTime;
     ClientModel *clientModel;
 };
 
