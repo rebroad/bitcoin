@@ -2684,7 +2684,7 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
     bool new_block{false};
     m_chainman.ProcessNewBlock(m_chainparams, block, force_processing, &new_block);
     if (new_block) {
-        node.nLastBlockTime = GetTime<std::chrono::seconds>();
+        node.m_last_block_time = GetTime<std::chrono::seconds>();
     } else {
         LOCK(cs_main);
         mapBlockSource.erase(block->GetHash());
@@ -3571,7 +3571,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             _RelayTransaction(tx.GetHash(), tx.GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
-            pfrom.nLastTXTime = GetTime<std::chrono::seconds>();
+            pfrom.m_last_tx_time = GetTime<std::chrono::seconds>();
             pfrom.nMempoolBytes += tx.GetTotalSize();
             pfrom.nMempoolTXs++;
 
@@ -4120,7 +4120,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (pfrom.nRecvBytes1stTx) {
             int nBIF;
             WITH_LOCK(cs_main, nBIF = State(pfrom.GetId())->nBlocksInFlight);
-            int nLBT = int(GetTime() - count_seconds(pfrom.nLastBlockTime));
+            int nLBT = int(GetTime() - count_seconds(pfrom.m_last_block_time));
             if (nBIF > 3 || nLBT < 60) {
                 pfrom.nRecvBytes1stTx = 0;
                 pfrom.nMempoolBytes = 0;
@@ -4612,7 +4612,7 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
             if (pnode->GetId() > youngest_peer.first) {
                 next_youngest_peer = youngest_peer;
                 youngest_peer.first = pnode->GetId();
-                youngest_peer.second = pnode->nLastBlockTime;
+                youngest_peer.second = pnode->m_last_block_time;
             }
         });
         NodeId to_disconnect = youngest_peer.first;
@@ -4630,14 +4630,14 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
             // valid headers chain with at least as much work as our tip.
             CNodeState *node_state = State(pnode->GetId());
             if (node_state == nullptr ||
-                (now - pnode->nTimeConnected >= MINIMUM_CONNECT_TIME && node_state->nBlocksInFlight == 0)) {
+                (now - pnode->m_connected >= MINIMUM_CONNECT_TIME && node_state->nBlocksInFlight == 0)) {
                 pnode->fDisconnect = true;
                 LogPrintf("disconnecting extra block-relay-only peer=%d (last block received at time %d)\n",
-                         pnode->GetId(), count_seconds(pnode->nLastBlockTime));
+                         pnode->GetId(), count_seconds(pnode->m_last_block_time));
                 return true;
             } else {
                 LogPrint(BCLog::CONN, "keeping block-relay-only peer=%d chosen for eviction (connect time: %d, blocks_in_flight: %d)\n",
-                         pnode->GetId(), strAge(count_seconds(now) - count_seconds(pnode->nTimeConnected)), node_state->nBlocksInFlight);
+                         pnode->GetId(), strAge(count_seconds(now) - count_seconds(pnode->m_connected)), node_state->nBlocksInFlight);
             }
             return false;
         });
@@ -4677,13 +4677,13 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
                 // Also don't disconnect any peer we're trying to download a
                 // block from.
                 CNodeState &state = *State(pnode->GetId());
-                if (now - pnode->nTimeConnected > MINIMUM_CONNECT_TIME && state.nBlocksInFlight == 0) {
+                if (now - pnode->m_connected > MINIMUM_CONNECT_TIME && state.nBlocksInFlight == 0) {
                     LogPrintf("disconnecting extra outbound peer=%d (last block announcement received at time %d)\n", pnode->GetId(), oldest_block_announcement);
                     //pnode->fDisconnect = true;
                     return true;
                 } else {
                     LogPrint(BCLog::CONN, "keeping outbound peer=%d chosen for eviction (connect time: %s, blocks_in_flight: %d)\n",
-                             pnode->GetId(), strAge(count_seconds(now - pnode->nTimeConnected)), state.nBlocksInFlight);
+                             pnode->GetId(), strAge(count_seconds(now - pnode->m_connected)), state.nBlocksInFlight);
                     return false;
                 }
             });
@@ -4950,7 +4950,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
     const auto current_time = GetTime<std::chrono::microseconds>();
 
-    if (pto->IsAddrFetchConn() && current_time - pto->nTimeConnected > 10 * AVG_ADDRESS_BROADCAST_INTERVAL) {
+    if (pto->IsAddrFetchConn() && current_time - pto->m_connected > 10 * AVG_ADDRESS_BROADCAST_INTERVAL) {
         LogPrintf("addrfetch connection timeout; disconnecting peer=%d\n", pto->GetId());
         pto->fDisconnect = true;
         return true;
@@ -5327,13 +5327,13 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             int64_t nNow = GetTime();
             int nDelay = nNow - count_seconds(pto->m_last_recv);
             if (nDelay > m_longest_delay && current_time > state.m_downloading_since + std::chrono::seconds{m_longest_delay}) {
-                LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d nLBT=%s peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->nLastBlockTime)), pto->GetId());
+                LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d nLBT=%s peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->m_last_block_time)), pto->GetId());
                 m_longest_delay = nDelay;
                 state.m_download_report_clicks = nNetClicks;
             }
             if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
-                current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1) && nNow - count_seconds(pto->nLastBlockTime) > 10) {
-                LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d nLBT=%s disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - count_seconds(pto->m_last_recv), nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->nLastBlockTime)), pto->GetId());
+                current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1) && nNow - count_seconds(pto->m_last_block_time) > 10) {
+                LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d nLBT=%s disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - count_seconds(pto->m_last_recv), nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->m_last_block_time)), pto->GetId());
                 pto->fDisconnect = true;
                 return true;
             }
