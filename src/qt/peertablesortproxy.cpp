@@ -36,8 +36,8 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
         return left_stats.m_min_ping_time < right_stats.m_min_ping_time;
     case PeerTableModel::Sent: {
         int64_t now = GetTimeSeconds();
-        int Right = right_stats.nSendBytes * 8 / (now + 1 - right_stats.nTimeConnected);
-        int Left = left_stats.nSendBytes * 8 / (now + 1 - left_stats.nTimeConnected);
+        int Right = right_stats.nSendBytes * 8 / (now + 1 - count_seconds(right_stats.nTimeConnected));
+        int Left = left_stats.nSendBytes * 8 / (now + 1 - count_seconds(left_stats.nTimeConnected));
         return Left < Right;
     }
     case PeerTableModel::Recv: {
@@ -46,11 +46,11 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
         if (right_stats.nRecvBytes1stTx)
             Right = ((right_stats.nRecvBytes - right_stats.nRecvBytes1stTx) * 8 / (now + 1 - right_stats.nTime1stTx));
         else
-            Right = right_stats.nRecvBytes * 8 / (now + 1 - right_stats.nTimeConnected);
+            Right = right_stats.nRecvBytes * 8 / (now + 1 - count_seconds(right_stats.nTimeConnected));
         if (left_stats.nRecvBytes1stTx)
             Left = ((left_stats.nRecvBytes - left_stats.nRecvBytes1stTx) * 8 / (now + 1 - left_stats.nTime1stTx));
         else
-            Left = left_stats.nRecvBytes * 8 / (now + 1 - left_stats.nTimeConnected);
+            Left = left_stats.nRecvBytes * 8 / (now + 1 - count_seconds(left_stats.nTimeConnected));
         return Left < Right;
     }
     /*case PeerTableModel::TxBps: {

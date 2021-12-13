@@ -87,8 +87,8 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             return GUIUtil::formatPingTime(rec->nodeStats.m_min_ping_time);
         case Sent: {
             int64_t now = GetTimeSeconds();
-            if (now != rec->nodeStats.nTimeConnected) // Avoid division by zero
-                return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8.0 / (now - rec->nodeStats.nTimeConnected));
+            if (now != count_seconds(rec->nodeStats.nTimeConnected)) // Avoid division by zero
+                return GUIUtil::formatBps(rec->nodeStats.nSendBytes * 8.0 / (now - count_seconds(rec->nodeStats.nTimeConnected)));
             else
                 return QString::fromStdString("");
         }
