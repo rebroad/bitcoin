@@ -301,8 +301,12 @@ void TrafficGraphWidget::updateRates()
     for (const float f : vSamplesOut) {
         if(f > tmax) tmax = f;
     }
+    static float last_fMax = -1;
     new_fMax = tmax;
-    LogPrintf("%s: new_fMax = %d\n", __func__, new_fMax);
+    if (new_fMax != last_fMax) {
+        LogPrintf("%s: new_fMax = %d -> %d\n", __func__, last_fMax, new_fMax);
+        last_fMax = new_fMax;
+    }
     if (ttpoint >=0 && ttpoint < DESIRED_SAMPLES) ttpoint++; // Move the selected point to the left
     update();
 }
