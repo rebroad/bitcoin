@@ -274,7 +274,7 @@ void TrafficGraphWidget::updateRates()
             nLastReport = nTime;
         }
     }
-    if (nRealInterval < nInterval * 0.9) return;
+    if (nRealInterval < nInterval * 0.5) return;
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
     vSamplesIn.push_front(in_rate_kilobytes_per_sec);
@@ -284,13 +284,13 @@ void TrafficGraphWidget::updateRates()
     nLastBytesIn = bytesIn;
     nLastBytesOut = bytesOut;
 
-    while(vSamplesIn.size() >= DESIRED_SAMPLES) {
+    while(vSamplesIn.size() > DESIRED_SAMPLES) {
         vSamplesIn.pop_back();
     }
-    while(vSamplesOut.size() >= DESIRED_SAMPLES) {
+    while(vSamplesOut.size() > DESIRED_SAMPLES) {
         vSamplesOut.pop_back();
     }
-    while(vTimeStamp.size() >= DESIRED_SAMPLES) {
+    while(vTimeStamp.size() > DESIRED_SAMPLES) {
         vTimeStamp.pop_back();
     }
 
@@ -302,6 +302,7 @@ void TrafficGraphWidget::updateRates()
         if(f > tmax) tmax = f;
     }
     new_fMax = tmax;
+    LogPrintf("%s: new_fMax = %d\n", __func__, new_fMax);
     if (ttpoint >=0 && ttpoint < DESIRED_SAMPLES) ttpoint++; // Move the selected point to the left
     update();
 }
