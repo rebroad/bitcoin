@@ -1058,7 +1058,7 @@ std::string strBlkHeight(const CBlockIndex* pindex)
 {
     if (!pindex)
         return "NULL";
-    return strprintf("%s (%s)", pindex->GetBlockHash().ToString(), strHeight(pindex));
+    return strprintf("%s (%s)", stripZeros(pindex->GetBlockHash().ToString()), strHeight(pindex));
 }
 
 std::string PeerManagerImpl::strBlkInfo(const CBlockIndex* pindex, bool* fFork /*=nullptr*/)
@@ -1075,7 +1075,7 @@ std::string PeerManagerImpl::strBlockInfo(const CBlockIndex* pindex, bool* fFork
 {
     if (!pindex)
         return "NULL";
-    return strprintf("%s %s", pindex->GetBlockHash().ToString(), strBlkInfo(pindex, fFork));
+    return strprintf("%s %s", stripZeros(pindex->GetBlockHash().ToString()), strBlkInfo(pindex, fFork));
 }
 
 void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller)
@@ -1534,7 +1534,7 @@ bool PeerManagerImpl::BlockRequestAllowed(const CBlockIndex* pindex)
            (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, m_chainparams.GetConsensus()) < STALE_RELAY_AGE_LIMIT);
 }
 
-bool PeerManagerImpl::FetchBlock(NodeId id, const uint256& hash, const CBlockIndex& index)
+bool PeerManagerImpl::FetchBlock(NodeId id, const uint256& hash, const CBlockIndex& index) // REBTODO called from where?
 {
     if (fImporting || fReindex) return false;
 
@@ -1559,12 +1559,12 @@ bool PeerManagerImpl::FetchBlock(NodeId id, const uint256& hash, const CBlockInd
     });
 
     if (success) {
-        LogPrint(BCLog::NET, "Requesting block %s from peer=%d\n",
-                 hash.ToString(), id);
+        LogPrint(BCLog::BLOCK, "Requesting block %s from peer=%d\n",
+                 stripZeros(hash.ToString()), id);
     } else {
         RemoveBlockRequest(hash);
-        LogPrint(BCLog::NET, "Failed to request block %s from peer=%d\n",
-                 hash.ToString(), id);
+        LogPrint(BCLog::BLOCK, "Failed to request block %s from peer=%d\n",
+                 stripZeros(hash.ToString()), id);
     }
     return success;
 }
@@ -1694,7 +1694,7 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         if (state.fPreferHeaderAndIDs && (!fWitnessEnabled || state.fWantsCmpctWitness) &&
                 !PeerHasHeader(&state, pindex) && PeerHasHeader(&state, pindex->pprev)) {
 
-            LogPrint(BCLog::BLOCKSEND, "send cmpctblock %s %s peer=%d\n", hashBlock.ToString(), strBlkInfo(pindex), pnode->GetId());
+            LogPrint(BCLog::BLOCKSEND, "send cmpctblock %s peer=%d\n", strBlockInfo(pindex), pnode->GetId());
             m_connman.PushMessage(pnode, msgMaker.Make(NetMsgType::CMPCTBLOCK, *pcmpctblock));
             state.pindexBestHeaderSent = pindex;
         }
@@ -2249,8 +2249,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
             nodestate->nUnconnectingHeaders++;
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), uint256()));
             LogPrint(BCLog::BLOCK, "received header %s: missing prev block %s, sending getheaders (%d) to end (peer=%d, nUnconnectingHeaders=%d)\n",
-                    headers[0].GetHash().ToString(),
-                    headers[0].hashPrevBlock.ToString(),
+                    stripZeros(headers[0].GetHash().ToString()),
+                    stripZeros(headers[0].hashPrevBlock.ToString()),
                     pindexBestHeader->nHeight,
                     pfrom.GetId(), nodestate->nUnconnectingHeaders);
             // Set hashLastUnknownBlock for this peer, so that if we
@@ -2793,14 +2793,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             remoteAddr = " peeraddr=" + pfrom.addr.ToString();
 
         bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsOutboundOrBlockRelayConn() || cleanSubVer.find("bitnodes") != std::string::npos || pfrom.IsInboundConn());
-        LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s v=%d s=%x relay=%d%s %speer=%d\n",
-                  cleanSubVer, pfrom.nVersion, nServices, fRelay, remoteAddr,
+        LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s v=%d s=%s relay=%d%s %speer=%d\n",
+                  cleanSubVer, pfrom.nVersion, strBinary(nServices), fRelay, remoteAddr,
                   pfrom.IsInboundConn() ? "inbound " : "", pfrom.GetId());
 
         if (pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices)) {
             bool fDisconnect = !pfrom.IsInboundConn(); // Allow inbound to connect
-            LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%s offered, %s expected) %speer=%d\n",
-                strBinary(nServices), strBinary(GetDesirableServiceFlags(nServices)), fDisconnect ? "disconnecting " : "", pfrom.GetId());
+            LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%s expected) %speer=%d\n",
+                strBinary(GetDesirableServiceFlags(nServices)), fDisconnect ? "disconnecting " : "", pfrom.GetId());
             if (fDisconnect) { // REBTODO - Allow 8 and (1024 OR 1) (witness and limited or node)
                 pfrom.fDisconnect = true;
                 return;
@@ -3215,7 +3215,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     DoTime(pindex->nHeight, pfrom.GetId());
                     LogRecv(0, pindex, "inv block", 0, pfrom.GetId());
                 } else
-                    LogPrint(BCLog::BLOCK, "recv inv %s (new) peer=%d\n", inv.ToString(), pfrom.GetId());
+                    LogPrint(BCLog::BLOCK, "recv inv %s (new) peer=%d\n", stripZeros(inv.ToString()), pfrom.GetId());
 
                 UpdateBlockAvailability(pfrom.GetId(), inv.hash);
                 if (!fAlreadyHave && !fImporting && !fReindex && !IsBlockRequested(inv.hash)) {
@@ -3247,7 +3247,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
                 const GenTxid gtxid = ToGenTxid(inv);
                 const bool fAlreadyHave = AlreadyHaveTx(gtxid);
-                LogPrint(BCLog::NET, "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
+                LogPrint(BCLog::TX, "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom.GetId());
 
                 pfrom.AddKnownTx(inv.hash);
                 if (!fAlreadyHave && !fIBD) {
@@ -3260,7 +3260,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (best_block != nullptr) {
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), *best_block));
-            LogPrint(BCLog::BLOCK, "getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, best_block->ToString(), pfrom.GetId());
+            LogPrint(BCLog::BLOCK, "getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, stripZeros(best_block->ToString()), pfrom.GetId());
         }
 
         return;
@@ -3275,11 +3275,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        LogPrint(BCLog::NET, "received getdata (%u invsz) peer=%d\n", vInv.size(), pfrom.GetId());
-
-        if (vInv.size() > 0) {
+        if (vInv.size() == 1) {
             LogPrint(BCLog::NET, "received getdata for: %s peer=%d\n", vInv[0].ToString(), pfrom.GetId());
-        }
+        } else
+            LogPrint(BCLog::NET, "received getdata (%u invsz) peer=%d\n", vInv.size(), pfrom.GetId());
 
         {
             LOCK(peer->m_getdata_requests_mutex);
@@ -3370,7 +3369,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         // REBTODO - store with nodestate the last block hash of the cmpctblk sent to this node - if the requested hash is different, log as CURIOUS
         if (recent_block) {
-            LogPrint(BCLog::BLOCKSEND, "send cached blocktxn %s peer=%d\n", req.blockhash.ToString(), pfrom.GetId());
+            LogPrint(BCLog::BLOCKSEND, "send cached blocktxn %s peer=%d\n", stripZeros(req.blockhash.ToString()), pfrom.GetId());
             SendBlockTransactions(pfrom, *recent_block, req);
             return;
         }
@@ -3733,7 +3732,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 // Doesn't connect (or is genesis), instead of DoSing in AcceptBlockHeader, request deeper headers
                 if (!m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), uint256()));
-                    LogPrint(BCLog::BLOCK, "recv cmpctblock %s send getheaders (%d) peer=%d\n", cmpctblock.header.GetHash().ToString(), strBlkHeight(pindexBestHeader), pfrom.GetId());
+                    LogPrint(BCLog::BLOCK, "recv cmpctblock %s send getheaders (%s) peer=%d\n", stripZeros(cmpctblock.header.GetHash().ToString()), strHeight(pindexBestHeader), pfrom.GetId());
                 }
                 return;
             }
@@ -3982,7 +3981,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
             std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator it = mapBlocksInFlight.find(resp.blockhash);
             if (it == mapBlocksInFlight.end()) {
-                LogPrint(BCLog::BLOCK, "recv blocktxn %s not in flight. peer=%d\n", resp.blockhash.ToString(), pfrom.GetId());
+                LogPrint(BCLog::BLOCK, "recv blocktxn %s not in flight. peer=%d\n", stripZeros(resp.blockhash.ToString()), pfrom.GetId());
                 return;
             }
             const CBlockIndex *pindex = it->second.second->pindex;
@@ -4118,7 +4117,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             else
                 strExtra += " UNSOLICITED";
         }
-        LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
+        LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", stripZeros(pblock->GetHash().ToString()), strExtra, nSize, pfrom.GetId());
         if (pfrom.nRecvBytes1stTx) {
             int nBIF;
             WITH_LOCK(cs_main, nBIF = State(pfrom.GetId())->nBlocksInFlight);
@@ -5100,11 +5099,11 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     if (vHeaders.size() > 1) {
                         LogPrint(BCLog::BLOCKSEND, "send %u headers, range (%s, %s), to peer=%d\n",
                                 vHeaders.size(),
-                                vHeaders.front().GetHash().ToString(),
-                                vHeaders.back().GetHash().ToString(), pto->GetId());
+                                stripZeros(vHeaders.front().GetHash().ToString()),
+                                stripZeros(vHeaders.back().GetHash().ToString()), pto->GetId());
                     } else {
                         LogPrint(BCLog::BLOCKSEND, "send header %s peer=%d\n",
-                                vHeaders.front().GetHash().ToString(), pto->GetId());
+                                stripZeros(vHeaders.front().GetHash().ToString()), pto->GetId());
                     }
                     m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::HEADERS, vHeaders));
                     state.pindexBestHeaderSent = pBestIndex;
@@ -5124,15 +5123,15 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     // This should be very rare and could be optimized out.
                     // Just log for now.
                     if (m_chainman.ActiveChain()[pindex->nHeight] != pindex) {
-                        LogPrint(BCLog::BLOCKSEND, "send block inv %s not on main chain (tip=%s) peer=%d\n",
-                            strBlockInfo(pindex), strBlockInfo(m_chainman.ActiveChain().Tip()));
+                        LogPrint(BCLog::BLOCKSEND, "send block inv %s not on main chain. peer=%d\n",
+                            strBlockInfo(pindex), pto->GetId());
                     }
 
                     // If the peer's chain has this block, don't inv it back.
                     if (!PeerHasHeader(&state, pindex)) {
                         peer->m_blocks_for_inv_relay.push_back(hashToAnnounce);
-                        LogPrint(BCLog::NET, "%s: sending inv peer=%d hash=%s\n", __func__,
-                            pto->GetId(), hashToAnnounce.ToString());
+                        LogPrint(BCLog::BLOCKSEND, "send block inv %s peer=%d\n",
+                            strBlockInfo(pindex), pto->GetId());
                     }
                 }
             }
