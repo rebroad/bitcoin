@@ -49,6 +49,7 @@ private:
     QTimer *timer;
     QTimer *disp_timer;
     float fMax;
+    float new_fMax;
     std::chrono::minutes m_range{0};
     QQueue<float> vSamplesIn;
     QQueue<float> vSamplesOut;

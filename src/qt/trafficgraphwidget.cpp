@@ -27,6 +27,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     timer(nullptr),
     disp_timer(nullptr),
     fMax(0.0f),
+    new_fMax(0.0f),
     vSamplesIn(),
     vSamplesOut(),
     vTimeStamp(),
@@ -217,9 +218,32 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
 void TrafficGraphWidget::updateDisplay()
 {
-    // This function refreshes or deletes the ToolTip.
+    // This function refreshes or deletes the ToolTip. Also used for smooth Y scaling changes.
 
     bool fUpdate = false;
+    static float increment = 0;
+    static float old_fMax = 0;
+    if (new_fMax && fMax != new_fMax) {
+        fUpdate = true;
+        int h = height() - YMARGIN * 2;
+        if (!increment) {
+            old_fMax = fMax;
+            if (fMax) increment = fMax / h;
+            else increment = new_fMax / 2;
+        } else if (abs(old_fMax - fMax) + increment * 2 < abs(new_fMax - old_fMax) / 2) {
+            increment = increment * 2;
+        } else {
+            increment = abs(new_fMax - fMax) / 2;
+        }
+        if (abs((h * fMax / new_fMax) - h) > 1) {
+            if (new_fMax > fMax)
+                fMax += increment;
+            else
+                fMax -= increment;
+        } else {
+            fMax = new_fMax;
+        }
+    } else increment = 0;
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
@@ -273,7 +297,7 @@ void TrafficGraphWidget::updateRates()
     for (const float f : vSamplesOut) {
         if(f > tmax) tmax = f;
     }
-    fMax = tmax;
+    new_fMax = tmax;
     if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
         ttpoint++; // Move the selected point to the left
         if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
@@ -297,12 +321,13 @@ void TrafficGraphWidget::clear()
     vSamplesOut.clear();
     vSamplesIn.clear();
     vTimeStamp.clear();
-    fMax = 0.0f;
+    new_fMax = 0.0f; fMax = 0.0f;
 
     if(clientModel) {
         nLastBytesIn = clientModel->node().getTotalBytesRecv();
         nLastBytesOut = clientModel->node().getTotalBytesSent();
         nLastTime = GetTimeMillis();
     }
+    update();
     timer->start();
 }
