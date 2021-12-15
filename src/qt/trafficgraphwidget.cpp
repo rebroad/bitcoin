@@ -26,6 +26,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     timer(nullptr),
     tt_timer(nullptr),
     fMax(0.0f),
+    new_fMax(0.0f),
     nMins(0),
     vSamplesIn(),
     vSamplesOut(),
