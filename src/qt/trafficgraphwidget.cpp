@@ -240,7 +240,7 @@ void TrafficGraphWidget::updateDisplay()
     }
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
-        if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
+        if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             if (last_fToggle == fToggle) { // Not lost due to a toggle
                 ttpoint = -1;
                 LogPrintf("%s: InVisible. Setting ttpoint = -1. age=%d Call update()\n", __func__, GetTime() - tt_time);
@@ -249,7 +249,7 @@ void TrafficGraphWidget::updateDisplay()
             last_fToggle = fToggle;
             fUpdate = true;
         }
-    } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
+    } else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
         LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
         fUpdate = true;
     }
@@ -307,7 +307,10 @@ void TrafficGraphWidget::updateRates()
         LogPrintf("%s: new_fMax = %d -> %d\n", __func__, last_fMax, new_fMax);
         last_fMax = new_fMax;
     }
-    if (ttpoint >=0 && ttpoint < DESIRED_SAMPLES) ttpoint++; // Move the selected point to the left
+    if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
+        ttpoint++; // Move the selected point to the left
+        if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
+    }
     update();
 }
 
