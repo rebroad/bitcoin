@@ -69,7 +69,7 @@ int TrafficGraphWidget::y_value(float value)
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
     int sampleCount = samples.size();
-    if (sampleCount > 0) {
+    if(sampleCount > 0) {
         int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
