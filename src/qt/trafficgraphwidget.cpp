@@ -40,7 +40,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     tt_timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
     connect(tt_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateDisplay);
-    tt_timer->setInterval(250);
+    tt_timer->setInterval(100);
     tt_timer->start();
     setMouseTracking(true);
 }
@@ -234,7 +234,8 @@ void TrafficGraphWidget::updateDisplay()
         int h = height() - YMARGIN * 2;
         if (!increment) {
             old_fMax = fMax;
-            increment = abs(fMax - new_fMax) / h;
+            if (fMax) increment = abs(fMax - new_fMax) / h;
+            else increment = abs(fMax - new_fMax) / 2;
             LogPrintf("increment = (fmax - new_fMax) / h = %f / %d = %f\n", abs(fMax - new_fMax), h, increment);
         } else if (abs(old_fMax - fMax) + increment * 2 < abs(new_fMax - old_fMax) / 2) {
             LogPrintf("increment double: %f -> %f\n", increment, increment * 2);
