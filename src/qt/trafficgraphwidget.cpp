@@ -40,7 +40,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     tt_timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
     connect(tt_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateDisplay);
-    tt_timer->setInterval(200);
+    tt_timer->setInterval(250);
     tt_timer->start();
     setMouseTracking(true);
 }
@@ -227,17 +227,29 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 void TrafficGraphWidget::updateDisplay()
 {
     bool fUpdate = false;
+    static float increment = 0;
+    static float old_fMax = 0;
     if (new_fMax && fMax != new_fMax) {
         fUpdate = true;
         int h = height() - YMARGIN * 2;
+        if (!increment) {
+            old_fMax = fMax;
+            increment = fMax / h;
+        } else if (abs(new_fMax - fMax) + increment * 2 < abs(new_fMax - old_fMax) / 2)
+            increment = increment * 2;
+        else
+            increment = abs(new_fMax - fMax) / 2;
         if (abs((h*2 * fMax / new_fMax) - h*2) > 1) {
-            LogPrintf("%s: old=%d new=%d\n", __func__, int(h * fMax / new_fMax), h);
-            fMax = (new_fMax + fMax) / 2;
+            LogPrintf("%s: old=%d new=%d inc=%d\n", __func__, int(h * fMax / new_fMax), h, increment);
+            if (new_fMax > fMax)
+                fMax += increment;
+            else
+                fMax -= increment;
         } else {
             LogPrintf("%s: new=%d COPY\n", __func__, h);
             fMax = new_fMax;
         }
-    }
+    } else increment = 0;
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
