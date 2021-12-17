@@ -125,8 +125,10 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
 void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
 {
     QWidget::mousePressEvent(event);
+    int x = event->x();
+    int y = event->y();
     fToggle = !fToggle;
-    LogPrintf("%: here\n", __func__);
+    LogPrintf("%: x=%d y=%d\n", __func__, x-XMARGIN, y-YMARGIN);
     update();
 }
 
