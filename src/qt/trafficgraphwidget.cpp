@@ -313,7 +313,7 @@ void TrafficGraphWidget::updateRates()
     for (const float f : vSamplesOut) {
         if(f > tmax) tmax = f;
     }
-    fMax = tmax;
+    new_fMax = tmax;
     if (ttpoint >=0 && ttpoint < vTimeStamp.size()) ttpoint++; // Move the selected point to the left
     update();
 }
