@@ -410,10 +410,16 @@ std::string strAge(const int64_t nAge) {
         return strprintf("%.1fd", nAge/86400.0);
 }
 
+std::string stripZeros(std::string input) {
+    std::string str = input;
+    str.erase(0, std::min(str.find_first_not_of('0'), str.size() - 1));
+    return str;
+}
+
 std::string strBinary(const int byte) {
-    return strprintf("%c%c%c%c%c%c%c%c", byte & 0x80 ? '1':'0', byte & 0x40 ? '1':'0',
+    return stripZeros(strprintf("%c%c%c%c%c%c%c%c", byte & 0x80 ? '1':'0', byte & 0x40 ? '1':'0',
         byte & 0x20 ? '1':'0', byte & 0x10 ? '1':'0', byte & 0x08 ? '1':'0',
-        byte & 0x04 ? '1':'0', byte & 0x02 ? '1':'0', byte & 0x01 ? '1':'0');
+        byte & 0x04 ? '1':'0', byte & 0x02 ? '1':'0', byte & 0x01 ? '1':'0'));
 }
 
 /** Upper bound for mantissa.
