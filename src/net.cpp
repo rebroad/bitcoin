@@ -670,7 +670,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                 continue;
             }
 
-            if ((msg.m_command == NetMsgType::INV || msg.m_command == NetMsgType::BLOCKTXN) && !nRecvBytes1stTx) {
+            if ((msg.m_command == NetMsgType::INV || msg.m_command == NetMsgType::BLOCKTXN || msg.m_command == NetMsgType::TX) && !nRecvBytes1stTx) {
                 nRecvBytes1stTx = nRecvBytes - msg.m_raw_message_size - msg_bytes.size();
                 nTime1stTx = count_seconds(m_last_recv);
                 LogPrintf("%s: 1stTx t=%d size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, nTime1stTx - nTimeConnected, msg.m_raw_message_size, nRecvBytes1stTx, nRecvBytes, handled, msg_bytes.size(), GetId());
