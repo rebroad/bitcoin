@@ -216,7 +216,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         if (milliseconds_between_samples < 1000)
             strTime += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
-        // Line below allows ToolTip to move faster than once every 10 seconds.
+        // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n  " + strData);
         tt_time = GetTime();
@@ -224,7 +224,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         QToolTip::hideText();
 }
 
-void TrafficGraphWidget::updateToolTip()
+void TrafficGraphWidget::updateDisplay()
 {
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
@@ -234,13 +234,15 @@ void TrafficGraphWidget::updateToolTip()
                 LogPrintf("%s: InVisible. Setting ttpoint = -1. Call update()\n", __func__);
             } else
                 LogPrintf("%s: InVisible but toggled. Call update()\n", __func__);
-            update();
             last_fToggle = fToggle;
+            fUpdate = true;
         }
-    } else if (GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
+    } else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
         LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
+        fUpdate = true;
+    }
+    if (fUpdate) {
         update();
-        last_fToggle = fToggle;
     }
 }
 
