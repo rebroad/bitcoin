@@ -342,12 +342,13 @@ void TrafficGraphWidget::clear()
     vSamplesOut.clear();
     vSamplesIn.clear();
     vTimeStamp.clear();
-    fMax = 0.0f;
+    new_fMax = 0.0f; fMax = 0.0f;
 
     if(clientModel) {
         nLastBytesIn = clientModel->node().getTotalBytesRecv();
         nLastBytesOut = clientModel->node().getTotalBytesSent();
         nLastTime = GetTimeMillis();
     }
+    update();
     timer->start();
 }
