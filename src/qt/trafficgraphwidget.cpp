@@ -24,7 +24,7 @@
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
-    tt_timer(nullptr),
+    disp_timer(nullptr),
     fMax(0.0f),
     new_fMax(0.0f),
     nMins(0),
@@ -37,11 +37,11 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     clientModel(nullptr)
 {
     timer = new QTimer(this);
-    tt_timer = new QTimer(this);
+    disp_timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
-    connect(tt_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateToolTip);
-    tt_timer->setInterval(500);
-    tt_timer->start();
+    connect(disp_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateDisplay);
+    disp_timer->setInterval(100);
+    disp_timer->start();
     setMouseTracking(true);
 }
 
