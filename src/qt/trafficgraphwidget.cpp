@@ -148,7 +148,6 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     int base = floor(log10(fMax));
     float val = pow(10.0f, base);
 
-    const QString units = tr("kB/s");
     const float yMarginText = 2.0;
 
     // if we drew 10 or 3 fewer lines, break them up at the next lower order of magnitude
@@ -156,7 +155,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         float oldval = val;
         val = pow(10.0f, base - 1);
         painter.setPen(axisCol.darker());
-        painter.drawText(XMARGIN, y_value(val)-yMarginText, QString("%1 %2").arg(val).arg(units));
+        painter.drawText(XMARGIN, y_value(val)-yMarginText, GUIUtil::formatBytesps(val*1000));
         int count = 1;
         for(float y = val; y < (!fToggle || fMax / val < 20 ? fMax : oldval); y += val, count++) {
             if(count % 10 == 0)
@@ -167,7 +166,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         if (fToggle) {
             int yy = y_value(val*0.1);
             painter.setPen(axisCol.darker().darker());
-            painter.drawText(XMARGIN, yy-yMarginText, QString("%1 %2").arg(val*0.1).arg(units));
+            painter.drawText(XMARGIN, yy-yMarginText, GUIUtil::formatBytesps(val*100));
             painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
         }
         val = oldval;
@@ -178,7 +177,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int yy = y_value(y);
         painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
     }
-    painter.drawText(XMARGIN, y_value(val)-yMarginText, QString("%1 %2").arg(val).arg(units));
+    painter.drawText(XMARGIN, y_value(val)-yMarginText, GUIUtil::formatBytesps(val*1000));
 
     painter.setRenderHint(QPainter::Antialiasing);
     if(!vSamplesIn.empty()) {
