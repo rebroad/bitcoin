@@ -234,9 +234,9 @@ void TrafficGraphWidget::updateDisplay()
         int h = height() - YMARGIN * 2;
         if (!increment) {
             old_fMax = fMax;
-            if (fMax) increment = abs(fMax - new_fMax) / h;
-            else increment = abs(fMax - new_fMax) / 2;
-            LogPrintf("increment = (fmax - new_fMax) / h = %f / %d = %f\n", abs(fMax - new_fMax), h, increment);
+            if (fMax) increment = fMax / h;
+            else increment = new_fMax / 2;
+            LogPrintf("increment = fmax / h = %f / %d = %f\n", fMax, h, increment);
         } else if (abs(old_fMax - fMax) + increment * 2 < abs(new_fMax - old_fMax) / 2) {
             LogPrintf("increment double: %f -> %f\n", increment, increment * 2);
             increment = increment * 2;
