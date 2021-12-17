@@ -63,7 +63,7 @@ void base_blob<BITS>::SetHex(const std::string& str)
 template <unsigned int BITS>
 std::string base_blob<BITS>::ToString() const
 {
-    return (GetHex());
+    return stripZeros(GetHex());
 }
 
 // Explicit instantiations for base_blob<160>
