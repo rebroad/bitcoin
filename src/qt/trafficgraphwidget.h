@@ -47,6 +47,7 @@ private:
     QTimer *timer;
     QTimer *disp_timer;
     float fMax;
+    float new_fMax;
     int nMins;
     QQueue<float> vSamplesIn;
     QQueue<float> vSamplesOut;
