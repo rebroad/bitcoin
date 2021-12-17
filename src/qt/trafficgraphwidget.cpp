@@ -226,9 +226,32 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
 void TrafficGraphWidget::updateDisplay()
 {
-    // This function refreshes or deletes the ToolTip.
+    // This function refreshes or deletes the ToolTip. Also used for smooth Y scaling changes.
 
     bool fUpdate = false;
+    static float increment = 0;
+    static float old_fMax = 0;
+    if (new_fMax && fMax != new_fMax) {
+        fUpdate = true;
+        int h = height() - YMARGIN * 2;
+        if (!increment) {
+            old_fMax = fMax;
+            if (fMax) increment = fMax / h;
+            else increment = new_fMax / 2;
+        } else if (abs(old_fMax - fMax) + increment * 2 < abs(new_fMax - old_fMax) / 2) {
+            increment = increment * 2;
+        } else {
+            increment = abs(new_fMax - fMax) / 2;
+        }
+        if (abs((h * fMax / new_fMax) - h) > 1) {
+            if (new_fMax > fMax)
+                fMax += increment;
+            else
+                fMax -= increment;
+        } else {
+            fMax = new_fMax;
+        }
+    } else increment = 0;
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
