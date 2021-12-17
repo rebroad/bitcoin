@@ -231,7 +231,7 @@ void TrafficGraphWidget::updateDisplay()
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             if (last_fToggle == fToggle) { // Not lost due to a toggle
                 ttpoint = -1;
-                LogPrintf("%s: InVisible. Setting ttpoint = -1. Call update()\n", __func__);
+                LogPrintf("%s: InVisible. Setting ttpoint = -1. age=%d Call update()\n", __func__, GetTime() - tt_time);
             } else
                 LogPrintf("%s: InVisible but toggled. Call update()\n", __func__);
             last_fToggle = fToggle;
