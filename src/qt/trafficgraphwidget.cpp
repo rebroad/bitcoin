@@ -244,7 +244,7 @@ void TrafficGraphWidget::updateDisplay()
             LogPrintf("old=%f cur=%f new=%f : increment: %f -> %f\n", old_fMax, fMax, new_fMax, increment, abs(new_fMax - fMax) / 2);
             increment = abs(new_fMax - fMax) / 2;
         }
-        if (abs((h * 2 * fMax / new_fMax) - h * 2) > 1) {
+        if (abs((h * fMax / new_fMax) - h) > 1) {
             LogPrintf("%s: old=%d new=%d inc=%f\n", __func__, int(h * fMax / new_fMax), h, increment);
             if (new_fMax > fMax)
                 fMax += increment;
