@@ -4008,15 +4008,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 } else
                     LogPrint(BCLog::BLOCK, "blocktxn %s INVALID wrong peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
                 return; // This return isn't needed as it'll hit the one later on
-            } else if (status == READ_STATUS_FAILED) {
+            } else if (status == READ_STATUS_FAILED && !fWrongPeer) {
                 // Might have collided, fall back to getdata now :(
-                if (!fWrongPeer) {
-                    std::vector<CInv> invs;
-                    invs.push_back(CInv(MSG_BLOCK | GetFetchFlags(pfrom), resp.blockhash));
-                    m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, invs));
-                    LogPrint(BCLog::BLOCK, "blocktxn %s FAILED. send getdata block peer=%d\n", strBlkHeight(pindex), pfrom.GetId());
-                } else
-                    LogPrint(BCLog::BLOCK, "blocktxn %s FAILED. wrong peer=%d\n", strBlkHeight(pindex), pfrom.GetId());
+                std::vector<CInv> invs;
+                invs.push_back(CInv(MSG_BLOCK | GetFetchFlags(pfrom), resp.blockhash));
+                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, invs));
+                LogPrint(BCLog::BLOCK, "blocktxn %s FAILED. send getdata block peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
             } else {
                 // Block is either okay, or possibly we received
                 // READ_STATUS_CHECKBLOCK_FAILED.

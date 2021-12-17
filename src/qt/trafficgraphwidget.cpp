@@ -260,8 +260,8 @@ void TrafficGraphWidget::updateDisplay()
                 LogPrintf("%s: InVisible. Setting ttpoint = -1. age=%d Call update()\n", __func__, GetTime() - tt_time);
             } else
                 LogPrintf("%s: InVisible but toggled. Call update()\n", __func__);
-            last_fToggle = fToggle;
             fUpdate = true;
+            last_fToggle = fToggle;
         }
     } else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
         LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
@@ -280,14 +280,7 @@ void TrafficGraphWidget::updateRates()
     int nRealInterval = nTime - nLastTime;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
-    static int64_t nLastReport = 0;
     int nInterval = timer->interval();
-    if ((nRealInterval <= nInterval * 0.9) || (nRealInterval >= nInterval * 1.1)) {
-        if (nTime >= nLastReport + 1000) {
-            LogPrintf("%s: nInterval=%d nRealInterval=%d\n", __func__, nInterval, nRealInterval);
-            nLastReport = nTime;
-        }
-    }
     if (nRealInterval < nInterval * 0.5) return;
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
