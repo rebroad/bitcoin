@@ -236,22 +236,17 @@ void TrafficGraphWidget::updateDisplay()
             old_fMax = fMax;
             if (fMax) increment = fMax / h;
             else increment = new_fMax / 2;
-            LogPrintf("increment = fmax / h = %f / %d = %f\n", fMax, h, increment);
         } else if (abs(old_fMax - fMax) + increment * 2 < abs(new_fMax - old_fMax) / 2) {
-            LogPrintf("increment double: %f -> %f\n", increment, increment * 2);
             increment = increment * 2;
         } else {
-            LogPrintf("old=%f cur=%f new=%f : increment: %f -> %f\n", old_fMax, fMax, new_fMax, increment, abs(new_fMax - fMax) / 2);
             increment = abs(new_fMax - fMax) / 2;
         }
         if (abs((h * fMax / new_fMax) - h) > 1) {
-            LogPrintf("%s: old=%d new=%d inc=%f\n", __func__, int(h * fMax / new_fMax), h, increment);
             if (new_fMax > fMax)
                 fMax += increment;
             else
                 fMax -= increment;
         } else {
-            LogPrintf("%s: new=%d COPY\n", __func__, h);
             fMax = new_fMax;
         }
     } else increment = 0;
