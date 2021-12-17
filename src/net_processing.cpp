@@ -1534,7 +1534,7 @@ bool PeerManagerImpl::BlockRequestAllowed(const CBlockIndex* pindex)
            (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, m_chainparams.GetConsensus()) < STALE_RELAY_AGE_LIMIT);
 }
 
-bool PeerManagerImpl::FetchBlock(NodeId id, const uint256& hash, const CBlockIndex& index)
+bool PeerManagerImpl::FetchBlock(NodeId id, const uint256& hash, const CBlockIndex& index) // REBTODO called from where?
 {
     if (fImporting || fReindex) return false;
 
