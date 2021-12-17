@@ -226,6 +226,9 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
 void TrafficGraphWidget::updateDisplay()
 {
+    // This function refreshes or deletes the ToolTip.
+
+    bool fUpdate = false;
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
