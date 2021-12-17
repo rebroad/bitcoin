@@ -24,7 +24,7 @@
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
-    tt_timer(nullptr),
+    disp_timer(nullptr),
     fMax(0.0f),
     new_fMax(0.0f),
     nMins(0),
@@ -37,11 +37,11 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     clientModel(nullptr)
 {
     timer = new QTimer(this);
-    tt_timer = new QTimer(this);
+    disp_timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
-    connect(tt_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateDisplay);
-    tt_timer->setInterval(100);
-    tt_timer->start();
+    connect(disp_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateDisplay);
+    disp_timer->setInterval(100);
+    disp_timer->start();
     setMouseTracking(true);
 }
 
@@ -216,7 +216,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         if (milliseconds_between_samples < 1000)
             strTime += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
-        // Line below allows ToolTip to move faster than once every 10 seconds.
+        // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n  " + strData);
         tt_time = GetTime();
@@ -226,6 +226,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
 void TrafficGraphWidget::updateDisplay()
 {
+    // This function refreshes or deletes the ToolTip. Also used for smooth Y scaling changes.
+
     bool fUpdate = false;
     static float increment = 0;
     static float old_fMax = 0;

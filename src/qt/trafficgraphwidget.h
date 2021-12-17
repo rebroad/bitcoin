@@ -45,7 +45,7 @@ private:
     void paintPath(QPainterPath &path, QQueue<float> &samples);
 
     QTimer *timer;
-    QTimer *tt_timer;
+    QTimer *disp_timer;
     float fMax;
     float new_fMax;
     int nMins;
