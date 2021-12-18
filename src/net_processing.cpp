@@ -440,6 +440,9 @@ private:
     /** Total of bytes received from all currently connected nodes */
     int nTotalBytesRecv{0};
 
+    /** When sipa disconnect logic last invoked. */
+    int64_t tSipaDisconnect{0};
+
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
 
@@ -712,6 +715,7 @@ struct CNodeState {
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     std::chrono::microseconds m_downloading_since{0us};
     int64_t m_download_report_clicks{0};
+    int64_t tSipaDisconnect{0};
     int nBlocksInFlight{0};
     //! How many TXs are currently in flight
     unsigned int nTxInFlight{0};
