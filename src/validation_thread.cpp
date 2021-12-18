@@ -8,7 +8,7 @@ void CConnman::ThreadValidation()
 {
     LogPrintf("%s: Starting\n", __func__);
     int nSleep = 0;
-    while (!flagInterruptMsgProc) {
+    while (!interruptNet) {
         if (fActivateChain) {
             if (!fActivatingChain) {
 	        if (nSleep != 100)
