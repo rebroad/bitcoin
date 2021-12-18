@@ -2631,7 +2631,7 @@ std::string strHeight(const CBlockIndex* pindex, bool *fFork /* = nullptr */) {
 
 bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
 {
-    if (!gArgs.GetBoolArg("-updatechain", true))
+    if (ShutdownRequested() || !gArgs.GetBoolArg("-updatechain", true))
         return true;
 
     // Note that while we're often called here from ProcessNewBlock, this is
