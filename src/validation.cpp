@@ -2558,7 +2558,7 @@ bool CChainState::ActivateBestChainStep(BlockValidationState& state, CBlockIndex
                 }
             } else {
                 PruneBlockIndexCandidates();
-                if (!pindexOldTip || m_chain.Tip()->nChainWork > pindexOldTip->nChainWork) {
+                if (!pindexOldTip || m_chain.Tip()->nChainWork > pindexOldTip->nChainWork || ShutdownRequested()) {
                     // We're in a better position than we were. Return temporarily to release the lock.
                     fContinue = false;
                     break;
