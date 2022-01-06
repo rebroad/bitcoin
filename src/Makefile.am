@@ -242,6 +242,7 @@ BITCOIN_CORE_H = \
   util/check.h \
   util/epochguard.h \
   util/error.h \
+  util/fastrange.h \
   util/fees.h \
   util/getuniquepath.h \
   util/golombrice.h \
