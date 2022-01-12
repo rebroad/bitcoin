@@ -14,6 +14,7 @@
 #include <QHelpEvent>
 #include <QToolTip>
 
+#include <chrono>
 #include <cmath>
 
 #define DESIRED_SAMPLES         800
@@ -26,8 +27,6 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     timer(nullptr),
     fMax(0.0f),
     new_fMax(0.0f),
-    fMins(1),
-    new_fMins(1),
     nValue(0),
     vSamplesIn(),
     vSamplesOut(),
@@ -64,6 +63,8 @@ int TrafficGraphWidget::y_value(float value)
     int h = height() - YMARGIN * 2;
     return YMARGIN + h - (h * 1.0 * (fToggle ? (pow(value, 0.30102) / pow(fMax, 0.30102)) : (value / fMax)));
 }
+
+std::chrono::minutes TrafficGraphWidget::getGraphRange() const { return m_range; }
 
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
@@ -247,7 +248,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         QToolTip::hideText();
 }
 
-static const std::vector<int> values{5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
+static const std::vector<std::chrono::minutes> values{5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
 
 void TrafficGraphWidget::update_fMax()
 {
@@ -309,8 +310,8 @@ void TrafficGraphWidget::updateStuff()
 
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
-        int64_t msecsPerSample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
-        if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) { // REBTODO - fix bad timing
+        const auto msecs_per_sample{std::chrono::duration_case<std::chrono::milliseconds>(values[i] / DESIRED_SAMPLES};
+        if (nTime > (nLastTime[i] + msecs_per_sample - nInterval/2)) { // REBTODO - fix bad timing
             updateRates(i);
             if (i == nValue) {
                 if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
@@ -403,12 +404,12 @@ void TrafficGraphWidget::updateRates(int i)
     }
 }
 
-int TrafficGraphWidget::setGraphRange(float fMinutes)
+std::chrono::minutes TrafficGraphWidget::setGraphRange(std::chrono::minutes new_range)
 {
     unsigned int smallest_distance = values[VALUES_SIZE-1];
     int closest_i = 0;
     for (int i = 0; i < VALUES_SIZE; i++) {
-        unsigned int distance = abs(int(fMins) - values[i]);
+        unsigned int distance = abs(new_range - values[i]);
         if (distance < smallest_distance) {
             smallest_distance = distance;
             closest_i = i;
@@ -416,18 +417,11 @@ int TrafficGraphWidget::setGraphRange(float fMinutes)
     }
     int old_nValue = nValue;
     nValue = closest_i; // REBTODO - set nValue somewhere in the smoothing logic
-    new_fMins = values[nValue];
+    m_new_range = values[nValue];
     if (nValue != old_nValue)
         update_fMax();
-    LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, nValue, fMins, new_fMins);
+    LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, old_nValue, nValue, m_range, m_new_range);
     update();
 
-    return new_fMins;
-}
-
-float TrafficGraphWidget::getGraphRange(bool update_fMins)
-{
-    if (update_fMins)
-        new_fMins = values[nValue]; // Start scaling to the value to settle on.
-    return fMins;
+    return m_new_range;
 }

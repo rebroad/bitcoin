@@ -55,6 +55,7 @@
 #include <QVariant>
 
 #include <cmath>
+#include <chrono>
 
 const int CONSOLE_HISTORY = 50;
 const QSize FONT_RANGE(4, 40);
@@ -1134,12 +1135,12 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
-    int fMins = pow((value+2000) * .0005, 8) * 5;
-    int new_fMins = ui->trafficGraph->setGraphRange(fMins);
+    int mins = pow((value+2000) * .0005, 8) * 5;
+    int new_mins = ui->trafficGraph->setGraphRange(std::chrono::minutes{mins});
     snap_slider_value = pow(new_fMins/5, .125) * 2000 - 2000 + 0.5;
     if (!slider_in_use) // PageStep was used, slider was not dragged
         ui->sldGraphRange->setValue(snap_slider_value); // Snap the slider to where this value is
-    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{new_fMins}));
+    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{new_mins}));
     LogPrintf("%s: value=%d fMins=%d %s\n", __func__, value, fMins, slider_in_use ? "":"SNAP");
 }
 
