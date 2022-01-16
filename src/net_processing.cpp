@@ -1198,7 +1198,7 @@ void PeerManagerImpl::PushNodeVersion(CNode& pnode)
     const bool tx_relay = !m_ignore_incoming_txs && pnode.m_tx_relay != nullptr && !pnode.IsFeelerConn();;
     std::string cleanSubVer;
     {
-        LOCK(pnode.cs_SubVer);
+        LOCK(pnode.m_subver_mutex);
         cleanSubVer = pnode.cleanSubVer;
     }
     int nProtVersion = PROTOCOL_VERSION;
@@ -1936,7 +1936,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         (((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
         !pfrom.HasPermission(NetPermissionFlags::Download) // nodes with the download permission may exceed target
     ) {
-        LOCK(pfrom.cs_SubVer);
+        LOCK(pfrom.m_subver_mutex);
         LogPrintf("historical block (%d) serving limit reached, %s disconnect peer=%d\n", pindex->nHeight, pfrom.cleanSubVer, pfrom.GetId());
         pfrom.fDisconnect = true;
         return;
@@ -2772,7 +2772,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         pfrom.nServices = nServices;
         pfrom.SetAddrLocal(addrMe);
         {
-            LOCK(pfrom.cs_SubVer);
+            LOCK(pfrom.m_subver_mutex);
             pfrom.cleanSubVer = cleanSubVer;
         }
         peer->m_starting_height = starting_height;
