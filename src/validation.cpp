@@ -2879,6 +2879,8 @@ std::string strHeight(const CBlockIndex* pindex, bool *fFork /* = nullptr */) {
 
 bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr<const CBlock> pblock)
 {
+    AssertLockNotHeld(m_chainstate_mutex);
+
     if (!gArgs.GetBoolArg("-updatechain", true))
         return true;
 
@@ -3011,6 +3013,8 @@ bool CChainState::PreciousBlock(BlockValidationState& state, CBlockIndex* pindex
 
 bool CChainState::InvalidateBlock(BlockValidationState& state, CBlockIndex* pindex)
 {
+    AssertLockNotHeld(m_chainstate_mutex);
+
     // Genesis block can't be invalidated
     assert(pindex);
     if (pindex->nHeight == 0) return false;
