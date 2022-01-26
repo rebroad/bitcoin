@@ -440,9 +440,6 @@ private:
     /** Total of bytes received from all currently connected nodes */
     int nTotalBytesRecv{0};
 
-    /** When sipa disconnect logic last invoked. */
-    int64_t tSipaDisconnect{0};
-
     /** Whether this node is running in blocks only mode */
     const bool m_ignore_incoming_txs;
 
@@ -3999,8 +3996,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (resp.txn.size()) {
                 // Don't log where we were called from cmpctblock
                 LogPrint(BCLog::BLOCK, "recv blocktxn %s indexes=%d size=%d %speer=%d\n", strBlkHeight(pindex), resp.txn.size(), nSize, fWrongPeer ? "wrong " : "", pfrom.GetId());
-                pfrom.nBlockTXs += resp.txn.size();
-                pfrom.nBlockBytes += nSize;
+                pfrom.nMempoolTXs += resp.txn.size();
+                pfrom.nMempoolBytes += nSize;
             }
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
