@@ -4551,7 +4551,8 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
         }
         uint64_t num;
         file >> num;
-        while (num--) {
+        while (num) {
+            --num;
             CTransactionRef tx;
             int64_t nTime;
             int64_t nFeeDelta;
