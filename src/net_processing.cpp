@@ -1222,7 +1222,7 @@ void PeerManagerImpl::PushNodeVersion(CNode& pnode)
     const bool tx_relay = !m_ignore_incoming_txs && pnode.m_tx_relay != nullptr && !pnode.IsFeelerConn();;
     std::string cleanSubVer;
     {
-        LOCK(pnode.cs_SubVer);
+        LOCK(pnode.m_subver_mutex);
         cleanSubVer = pnode.cleanSubVer;
     }
     int nProtVersion = PROTOCOL_VERSION;
@@ -1964,7 +1964,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         (((pindexBestHeader != nullptr) && (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() > HISTORICAL_BLOCK_AGE)) || inv.IsMsgFilteredBlk()) &&
         !pfrom.HasPermission(NetPermissionFlags::Download) // nodes with the download permission may exceed target
     ) {
-        LOCK(pfrom.cs_SubVer);
+        LOCK(pfrom.m_subver_mutex);
         LogPrintf("historical block (%d) serving limit reached, %s disconnect peer=%d\n", pindex->nHeight, pfrom.cleanSubVer, pfrom.GetId());
         pfrom.fDisconnect = true;
         return;
@@ -2489,7 +2489,6 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             m_connman.ForNode(from_peer, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
                 pnode->nMempoolBytes += nSize;
                 pnode->nMempoolTXs++;
-                pnode->nLastTXTime = GetTime();
                 return true;
             });
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
@@ -4665,7 +4664,7 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
                 (now - pnode->m_connected >= MINIMUM_CONNECT_TIME && node_state->nBlocksInFlight == 0)) {
                 pnode->fDisconnect = true;
                 LogPrintf("disconnecting extra block-relay-only peer=%d (last block received %s ago)\n",
-                         pnode->GetId(), strAge(count_seconds(now - pnode->m_last_block_time)));
+                         pnode->GetId(), strAge(count_seconds(now) - count_seconds(pnode->m_last_block_time)));
                 return true;
             } else {
                 LogPrint(BCLog::CONN, "keeping block-relay-only peer=%d chosen for eviction (connect time: %s, blocks_in_flight: %d)\n",
@@ -4715,7 +4714,7 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
                     return true;
                 } else {
                     LogPrint(BCLog::CONN, "keeping outbound peer=%d chosen for eviction (connect time: %s, blocks_in_flight: %d)\n",
-                             pnode->GetId(), strAge(time_in_seconds - count_seconds(pnode->m_connected)), state.nBlocksInFlight);
+                             pnode->GetId(), strAge(count_seconds(now - pnode->m_connected)), state.nBlocksInFlight);
                     return false;
                 }
             });

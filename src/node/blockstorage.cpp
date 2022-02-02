@@ -5,6 +5,7 @@
 #include <node/blockstorage.h>
 
 #include <chain.h>
+#include <node/ui_interface.h>
 #include <chainparams.h>
 #include <clientversion.h>
 #include <consensus/validation.h>

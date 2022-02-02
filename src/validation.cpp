@@ -525,6 +525,7 @@ public:
                                                 std::vector<COutPoint>& coins_to_uncache) {
             return ATMPArgs{/* m_chainparams */ chainparams,
                             /* m_accept_time */ accept_time,
+                            /* m_nodeid */ -3,
                             /* m_bypass_limits */ false,
                             /* m_coins_to_uncache */ coins_to_uncache,
                             /* m_test_accept */ false,
@@ -3592,8 +3593,10 @@ int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& h
             int accepted{AcceptBlockHeader(header, state, chainparams, &pindex)};
             ActiveChainstate().CheckBlockIndex();
 
+            if (!accepted) {
+                return false;
+            }
             if (accepted == 2) nCount++;
-            if (accepted == false) return 0;
 
             if (ppindex) {
                 *ppindex = pindex;
@@ -3622,7 +3625,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     CBlockIndex *pindexDummy = nullptr;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
 
-    bool accepted_header{m_chainman.AcceptBlockHeader(block, state, m_params, &pindex)};
+    int accepted_header{m_chainman.AcceptBlockHeader(block, state, m_params, &pindex)};
     CheckBlockIndex();
 
     if (!accepted_header)
