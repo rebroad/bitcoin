@@ -1,16 +1,11 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2020 The Bitcoin Core developers
+// Copyright (c) 2009-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <util/system.h>
 
 #ifdef ENABLE_EXTERNAL_SIGNER
-#if defined(WIN32) && !defined(__kernel_entry)
-// A workaround for boost 1.71 incompatibility with mingw-w64 compiler.
-// For details see https://github.com/bitcoin/bitcoin/pull/22348.
-#define __kernel_entry
-#endif
 #include <boost/process.hpp>
 #endif // ENABLE_EXTERNAL_SIGNER
 
@@ -151,7 +146,7 @@ bool CheckDiskSpace(const fs::path& dir, uint64_t additional_bytes)
 }
 
 std::streampos GetFileSize(const char* path, std::streamsize max) {
-    std::ifstream file(path, std::ios::binary);
+    fsbridge::ifstream file{path, std::ios::binary};
     file.ignore(max);
     return file.gcount();
 }

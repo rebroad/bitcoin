@@ -1,5 +1,5 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-// Copyright (c) 2009-2020 The Bitcoin Core developers
+// Copyright (c) 2009-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -40,6 +40,13 @@
 
 #include <memory>
 #include <stdint.h>
+
+using node::BlockAssembler;
+using node::CBlockTemplate;
+using node::IncrementExtraNonce;
+using node::NodeContext;
+using node::RegenerateCommitments;
+using node::UpdateTime;
 
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
@@ -184,7 +191,7 @@ static bool getScriptFromDescriptor(const std::string& descriptor, CScript& scri
         FlatSigningProvider provider;
         std::vector<CScript> scripts;
         if (!desc->Expand(0, key_provider, scripts, provider)) {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Cannot derive script without private keys"));
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Cannot derive script without private keys");
         }
 
         // Combo descriptors can have 2 or 4 scripts, so we can't just check scripts.size() == 1

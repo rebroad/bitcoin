@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2020 The Bitcoin Core developers
+// Copyright (c) 2011-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,6 +18,7 @@
 #include <netbase.h>
 #include <util/system.h>
 #include <util/threadnames.h>
+#include <util/time.h>
 #include <validation.h>
 
 #include <stdint.h>
@@ -236,12 +237,12 @@ QString ClientModel::formatClientStartupTime() const
 
 QString ClientModel::dataDir() const
 {
-    return GUIUtil::boostPathToQString(gArgs.GetDataDirNet());
+    return GUIUtil::PathToQString(gArgs.GetDataDirNet());
 }
 
 QString ClientModel::blocksDir() const
 {
-    return GUIUtil::boostPathToQString(gArgs.GetBlocksDirPath());
+    return GUIUtil::PathToQString(gArgs.GetBlocksDirPath());
 }
 
 void ClientModel::updateBanlist()
@@ -320,7 +321,7 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
     const bool throttle = (sync_state != SynchronizationState::POST_INIT && !fHeader) || sync_state == SynchronizationState::INIT_REINDEX;
     const int64_t now = throttle ? GetTimeMillis() : 0;
     int64_t& nLastUpdateNotification = fHeader ? nLastHeaderTipUpdateNotification : nLastBlockTipUpdateNotification;
-    if (throttle && now < nLastUpdateNotification + MODEL_UPDATE_DELAY) {
+    if (throttle && now < nLastUpdateNotification + count_milliseconds(MODEL_UPDATE_DELAY)) {
         return;
     }
 

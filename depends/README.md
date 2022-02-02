@@ -29,6 +29,7 @@ Common `host-platform-triplet`s for cross compilation are:
 - `x86_64-pc-linux-gnu` for x86 Linux
 - `x86_64-w64-mingw32` for Win64
 - `x86_64-apple-darwin` for macOS
+- `arm64-apple-darwin` for ARM macOS
 - `arm-linux-gnueabihf` for Linux ARM 32 bit
 - `aarch64-linux-gnu` for Linux ARM 64 bit
 - `powerpc64-linux-gnu` for Linux POWER 64-bit (big endian)
@@ -38,7 +39,6 @@ Common `host-platform-triplet`s for cross compilation are:
 - `s390x-linux-gnu` for Linux S390X
 - `armv7a-linux-android` for Android ARM 32 bit
 - `aarch64-linux-android` for Android ARM 64 bit
-- `i686-linux-android` for Android x86 32 bit
 - `x86_64-linux-android` for Android x86 64 bit
 
 The paths are automatically configured and no other options are needed unless targeting [Android](../doc/build-android.md).
@@ -47,7 +47,7 @@ The paths are automatically configured and no other options are needed unless ta
 
 #### For macOS cross compilation
 
-    sudo apt-get install curl librsvg2-bin libtiff-tools bsdmainutils cmake imagemagick libz-dev python3-setuptools libtinfo5 xorriso
+    sudo apt-get install curl bsdmainutils cmake libz-dev python3-setuptools libtinfo5 xorriso
 
 Note: You must obtain the macOS SDK before proceeding with a cross-compile.
 Under the depends directory, create a subdirectory named `SDKs`.
@@ -79,9 +79,6 @@ For linux POWER 64-bit cross compilation (there are no packages for 32-bit):
 For linux RISC-V 64-bit cross compilation (there are no packages for 32-bit):
 
     sudo apt-get install g++-riscv64-linux-gnu binutils-riscv64-linux-gnu
-
-RISC-V known issue: gcc-7.3.0 and gcc-7.3.1 result in a broken `test_bitcoin` executable (see https://github.com/bitcoin/bitcoin/pull/13543),
-this is apparently fixed in gcc-8.1.0.
 
 For linux S390X cross compilation:
 

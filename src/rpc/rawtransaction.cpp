@@ -1,5 +1,5 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-// Copyright (c) 2009-2020 The Bitcoin Core developers
+// Copyright (c) 2009-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -44,6 +44,15 @@
 #include <stdint.h>
 
 #include <univalue.h>
+
+using node::AnalyzePSBT;
+using node::BroadcastTransaction;
+using node::DEFAULT_MAX_RAW_TX_FEE_RATE;
+using node::FindCoins;
+using node::GetTransaction;
+using node::NodeContext;
+using node::PSBTAnalysis;
+using node::ReadBlockFromDisk;
 
 static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry, CChainState& active_chainstate)
 {
@@ -170,6 +179,7 @@ static RPCHelpMan getrawtransaction()
                                      {RPCResult::Type::OBJ, "scriptPubKey", "",
                                      {
                                          {RPCResult::Type::STR, "asm", "the asm"},
+                                         {RPCResult::Type::STR, "desc", "Inferred descriptor for the output"},
                                          {RPCResult::Type::STR, "hex", "the hex"},
                                          {RPCResult::Type::STR, "type", "The type, eg 'pubkeyhash'"},
                                          {RPCResult::Type::STR, "address", /*optional=*/true, "The Bitcoin address (only if a well-defined address exists)"},
@@ -231,7 +241,8 @@ static RPCHelpMan getrawtransaction()
     if (!tx) {
         std::string errmsg;
         if (blockindex) {
-            if (!(blockindex->nStatus & BLOCK_HAVE_DATA)) {
+            const bool block_has_data = WITH_LOCK(::cs_main, return blockindex->nStatus & BLOCK_HAVE_DATA);
+            if (!block_has_data) {
                 throw JSONRPCError(RPC_MISC_ERROR, "Block not available");
             }
             errmsg = "No such transaction found in the provided block";
@@ -497,6 +508,7 @@ static RPCHelpMan decoderawtransaction()
                                 {RPCResult::Type::OBJ, "scriptPubKey", "",
                                 {
                                     {RPCResult::Type::STR, "asm", "the asm"},
+                                    {RPCResult::Type::STR, "desc", "Inferred descriptor for the output"},
                                     {RPCResult::Type::STR_HEX, "hex", "the hex"},
                                     {RPCResult::Type::STR, "type", "The type, eg 'pubkeyhash'"},
                                     {RPCResult::Type::STR, "address", /*optional=*/true, "The Bitcoin address (only if a well-defined address exists)"},
@@ -552,6 +564,7 @@ static RPCHelpMan decodescript()
             RPCResult::Type::OBJ, "", "",
             {
                 {RPCResult::Type::STR, "asm", "Script public key"},
+                {RPCResult::Type::STR, "desc", "Inferred descriptor for the script"},
                 {RPCResult::Type::STR, "type", "The output type (e.g. " + GetAllOutputTypes() + ")"},
                 {RPCResult::Type::STR, "address", /*optional=*/true, "The Bitcoin address (only if a well-defined address exists)"},
                 {RPCResult::Type::STR, "p2sh", /*optional=*/true,
@@ -563,6 +576,7 @@ static RPCHelpMan decodescript()
                      {RPCResult::Type::STR_HEX, "hex", "Hex string of the script public key"},
                      {RPCResult::Type::STR, "type", "The type of the script public key (e.g. witness_v0_keyhash or witness_v0_scripthash)"},
                      {RPCResult::Type::STR, "address", /*optional=*/true, "The Bitcoin address (only if a well-defined address exists)"},
+                     {RPCResult::Type::STR, "desc", "Inferred descriptor for the script"},
                      {RPCResult::Type::STR, "p2sh-segwit", "address of the P2SH script wrapping this witness redeem script"},
                  }},
             },
@@ -1028,6 +1042,8 @@ static RPCHelpMan testmempoolaccept()
             continue;
         }
         const auto& tx_result = it->second;
+        // Package testmempoolaccept doesn't allow transactions to already be in the mempool.
+        CHECK_NONFATAL(tx_result.m_result_type != MempoolAcceptResult::ResultType::MEMPOOL_ENTRY);
         if (tx_result.m_result_type == MempoolAcceptResult::ResultType::VALID) {
             const CAmount fee = tx_result.m_base_fees.value();
             // Check that fee does not exceed maximum fee
@@ -1064,8 +1080,9 @@ static RPCHelpMan testmempoolaccept()
 
 static RPCHelpMan decodepsbt()
 {
-    return RPCHelpMan{"decodepsbt",
-                "\nReturn a JSON object representing the serialized, base64-encoded partially signed Bitcoin transaction.\n",
+    return RPCHelpMan{
+        "decodepsbt",
+        "Return a JSON object representing the serialized, base64-encoded partially signed Bitcoin transaction.",
                 {
                     {"psbt", RPCArg::Type::STR, RPCArg::Optional::NO, "The PSBT base64 string"},
                 },
@@ -1154,11 +1171,27 @@ static RPCHelpMan decodepsbt()
                                 {
                                     {RPCResult::Type::STR_HEX, "", "hex-encoded witness data (if any)"},
                                 }},
-                                {RPCResult::Type::OBJ_DYN, "unknown", /*optional=*/true, "The unknown global fields",
+                                {RPCResult::Type::OBJ_DYN, "ripemd160_preimages", /*optional=*/ true, "",
+                                {
+                                    {RPCResult::Type::STR, "hash", "The hash and preimage that corresponds to it."},
+                                }},
+                                {RPCResult::Type::OBJ_DYN, "sha256_preimages", /*optional=*/ true, "",
+                                {
+                                    {RPCResult::Type::STR, "hash", "The hash and preimage that corresponds to it."},
+                                }},
+                                {RPCResult::Type::OBJ_DYN, "hash160_preimages", /*optional=*/ true, "",
+                                {
+                                    {RPCResult::Type::STR, "hash", "The hash and preimage that corresponds to it."},
+                                }},
+                                {RPCResult::Type::OBJ_DYN, "hash256_preimages", /*optional=*/ true, "",
+                                {
+                                    {RPCResult::Type::STR, "hash", "The hash and preimage that corresponds to it."},
+                                }},
+                                {RPCResult::Type::OBJ_DYN, "unknown", /*optional=*/ true, "The unknown input fields",
                                 {
                                     {RPCResult::Type::STR_HEX, "key", "(key-value pair) An unknown key-value pair"},
                                 }},
-                                {RPCResult::Type::ARR, "proprietary", "The input proprietary map",
+                                {RPCResult::Type::ARR, "proprietary", /*optional=*/true, "The input proprietary map",
                                 {
                                     {RPCResult::Type::OBJ, "", "",
                                     {
@@ -1199,7 +1232,7 @@ static RPCHelpMan decodepsbt()
                                 {
                                     {RPCResult::Type::STR_HEX, "key", "(key-value pair) An unknown key-value pair"},
                                 }},
-                                {RPCResult::Type::ARR, "proprietary", "The output proprietary map",
+                                {RPCResult::Type::ARR, "proprietary", /*optional=*/true, "The output proprietary map",
                                 {
                                     {RPCResult::Type::OBJ, "", "",
                                     {
@@ -1371,6 +1404,42 @@ static RPCHelpMan decodepsbt()
                 txinwitness.push_back(HexStr(item));
             }
             in.pushKV("final_scriptwitness", txinwitness);
+        }
+
+        // Ripemd160 hash preimages
+        if (!input.ripemd160_preimages.empty()) {
+            UniValue ripemd160_preimages(UniValue::VOBJ);
+            for (const auto& [hash, preimage] : input.ripemd160_preimages) {
+                ripemd160_preimages.pushKV(HexStr(hash), HexStr(preimage));
+            }
+            in.pushKV("ripemd160_preimages", ripemd160_preimages);
+        }
+
+        // Sha256 hash preimages
+        if (!input.sha256_preimages.empty()) {
+            UniValue sha256_preimages(UniValue::VOBJ);
+            for (const auto& [hash, preimage] : input.sha256_preimages) {
+                sha256_preimages.pushKV(HexStr(hash), HexStr(preimage));
+            }
+            in.pushKV("sha256_preimages", sha256_preimages);
+        }
+
+        // Hash160 hash preimages
+        if (!input.hash160_preimages.empty()) {
+            UniValue hash160_preimages(UniValue::VOBJ);
+            for (const auto& [hash, preimage] : input.hash160_preimages) {
+                hash160_preimages.pushKV(HexStr(hash), HexStr(preimage));
+            }
+            in.pushKV("hash160_preimages", hash160_preimages);
+        }
+
+        // Hash256 hash preimages
+        if (!input.hash256_preimages.empty()) {
+            UniValue hash256_preimages(UniValue::VOBJ);
+            for (const auto& [hash, preimage] : input.hash256_preimages) {
+                hash256_preimages.pushKV(HexStr(hash), HexStr(preimage));
+            }
+            in.pushKV("hash256_preimages", hash256_preimages);
         }
 
         // Proprietary

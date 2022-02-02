@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 The Bitcoin Core developers
+// Copyright (c) 2019-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -26,6 +26,7 @@
 #include <univalue.h>
 #include <util/check.h>
 #include <util/moneystr.h>
+#include <util/overflow.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/system.h>
@@ -204,11 +205,6 @@ FUZZ_TARGET_INIT(integer, initialize_integer)
         stream << i8;
         stream >> deserialized_i8;
         assert(i8 == deserialized_i8 && stream.empty());
-
-        char deserialized_ch;
-        stream << ch;
-        stream >> deserialized_ch;
-        assert(ch == deserialized_ch && stream.empty());
 
         bool deserialized_b;
         stream << b;

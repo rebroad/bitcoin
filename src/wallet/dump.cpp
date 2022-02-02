@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Bitcoin Core developers
+// Copyright (c) 2020-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +7,7 @@
 #include <util/translation.h>
 #include <wallet/wallet.h>
 
+namespace wallet {
 static const std::string DUMP_MAGIC = "BITCOIN_CORE_WALLET_DUMP";
 uint32_t DUMP_VERSION = 1;
 
@@ -46,12 +47,12 @@ bool DumpWallet(CWallet& wallet, bilingual_str& error)
     // Write out a magic string with version
     std::string line = strprintf("%s,%u\n", DUMP_MAGIC, DUMP_VERSION);
     dump_file.write(line.data(), line.size());
-    hasher.write(line.data(), line.size());
+    hasher.write(MakeByteSpan(line));
 
     // Write out the file format
     line = strprintf("%s,%s\n", "format", db.Format());
     dump_file.write(line.data(), line.size());
-    hasher.write(line.data(), line.size());
+    hasher.write(MakeByteSpan(line));
 
     if (ret) {
 
@@ -72,7 +73,7 @@ bool DumpWallet(CWallet& wallet, bilingual_str& error)
             std::string value_str = HexStr(ss_value);
             line = strprintf("%s,%s\n", key_str, value_str);
             dump_file.write(line.data(), line.size());
-            hasher.write(line.data(), line.size());
+            hasher.write(MakeByteSpan(line));
         }
     }
 
@@ -149,7 +150,7 @@ bool CreateFromDump(const std::string& name, const fs::path& wallet_path, biling
         return false;
     }
     std::string magic_hasher_line = strprintf("%s,%s\n", magic_key, version_value);
-    hasher.write(magic_hasher_line.data(), magic_hasher_line.size());
+    hasher.write(MakeByteSpan(magic_hasher_line));
 
     // Get the stored file format
     std::string format_key;
@@ -180,7 +181,7 @@ bool CreateFromDump(const std::string& name, const fs::path& wallet_path, biling
         warnings.push_back(strprintf(_("Warning: Dumpfile wallet format \"%s\" does not match command line specified format \"%s\"."), format_value, file_format));
     }
     std::string format_hasher_line = strprintf("%s,%s\n", format_key, format_value);
-    hasher.write(format_hasher_line.data(), format_hasher_line.size());
+    hasher.write(MakeByteSpan(format_hasher_line));
 
     DatabaseOptions options;
     DatabaseStatus status;
@@ -214,12 +215,17 @@ bool CreateFromDump(const std::string& name, const fs::path& wallet_path, biling
 
             if (key == "checksum") {
                 std::vector<unsigned char> parsed_checksum = ParseHex(value);
+                if (parsed_checksum.size() != checksum.size()) {
+                    error = Untranslated("Error: Checksum is not the correct size");
+                    ret = false;
+                    break;
+                }
                 std::copy(parsed_checksum.begin(), parsed_checksum.end(), checksum.begin());
                 break;
             }
 
             std::string line = strprintf("%s,%s\n", key, value);
-            hasher.write(line.data(), line.size());
+            hasher.write(MakeByteSpan(line));
 
             if (key.empty() || value.empty()) {
                 continue;
@@ -279,3 +285,4 @@ bool CreateFromDump(const std::string& name, const fs::path& wallet_path, biling
 
     return ret;
 }
+} // namespace wallet

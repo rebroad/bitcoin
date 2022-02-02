@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2020 The Bitcoin Core developers
+// Copyright (c) 2009-2021 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,6 +16,7 @@
 #include <charconv>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -93,8 +94,12 @@ void SplitHostPort(std::string in, uint16_t& portOut, std::string& hostOut);
 // New code should use ToIntegral or the ParseInt* functions
 // which provide parse error feedback.
 //
-// The goal of LocaleIndependentAtoi is to replicate the exact defined behaviour
-// of atoi and atoi64 as they behave under the "C" locale.
+// The goal of LocaleIndependentAtoi is to replicate the defined behaviour of
+// std::atoi as it behaves under the "C" locale, and remove some undefined
+// behavior. If the parsed value is bigger than the integer type's maximum
+// value, or smaller than the integer type's minimum value, std::atoi has
+// undefined behavior, while this function returns the maximum or minimum
+// values, respectively.
 template <typename T>
 T LocaleIndependentAtoi(const std::string& str)
 {
@@ -109,7 +114,15 @@ T LocaleIndependentAtoi(const std::string& str)
         s = s.substr(1);
     }
     auto [_, error_condition] = std::from_chars(s.data(), s.data() + s.size(), result);
-    if (error_condition != std::errc{}) {
+    if (error_condition == std::errc::result_out_of_range) {
+        if (s.length() >= 1 && s[0] == '-') {
+            // Saturate underflow, per strtoll's behavior.
+            return std::numeric_limits<T>::min();
+        } else {
+            // Saturate overflow, per strtoll's behavior.
+            return std::numeric_limits<T>::max();
+        }
+    } else if (error_condition != std::errc{}) {
         return 0;
     }
     return result;
@@ -233,7 +246,7 @@ bool TimingResistantEqual(const T& a, const T& b)
     if (b.size() == 0) return a.size() == 0;
     size_t accumulator = a.size() ^ b.size();
     for (size_t i = 0; i < a.size(); i++)
-        accumulator |= a[i] ^ b[i%b.size()];
+        accumulator |= size_t(a[i] ^ b[i%b.size()]);
     return accumulator == 0;
 }
 
