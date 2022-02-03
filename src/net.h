@@ -437,9 +437,9 @@ public:
     std::atomic<unsigned int> nBlockTXs{0};
     std::atomic<uint64_t> nRecvBytes1stTx{0};
     std::atomic<int64_t> nTime1stTx{0};
+    int64_t nLastBlock{0};
     //! Unix epoch time at peer connection
     const std::chrono::seconds m_connected;
-    int64_t nLastBlock{0};
     std::atomic<int64_t> nTimeOffset{0};
     // Address of this peer
     const CAddress addr;

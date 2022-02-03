@@ -260,8 +260,8 @@ void TrafficGraphWidget::updateDisplay()
                 LogPrintf("%s: InVisible. Setting ttpoint = -1. age=%d Call update()\n", __func__, GetTime() - tt_time);
             } else
                 LogPrintf("%s: InVisible but toggled. Call update()\n", __func__);
-            fUpdate = true;
             last_fToggle = fToggle;
+            fUpdate = true;
         }
     } else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
         LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);

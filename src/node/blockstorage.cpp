@@ -5,13 +5,13 @@
 #include <node/blockstorage.h>
 
 #include <chain.h>
-#include <node/ui_interface.h>
 #include <chainparams.h>
 #include <clientversion.h>
 #include <consensus/validation.h>
 #include <flatfile.h>
 #include <fs.h>
 #include <hash.h>
+#include <node/ui_interface.h>
 #include <pow.h>
 #include <reverse_iterator.h>
 #include <shutdown.h>
@@ -196,6 +196,15 @@ void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPr
 
 CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
 {
+    static int nExisting = 0;
+    static int nNew = 0;
+    static int nNull = 0;
+    static int64_t nLast = 0;
+    int64_t nTime = GetTime();
+    if (nTime > nLast) {
+        LogPrintf("%s: Existing=%d New=%d Null=%d\n", __func__, nExisting, nNew, nNull);
+        nLast = nTime;
+    }
     AssertLockHeld(cs_main);
 
     if (hash.IsNull()) {

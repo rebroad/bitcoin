@@ -1595,11 +1595,7 @@ std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBl
         return true;
     });
 
-    if (!success) {
-        LogPrint(BCLog::BLOCK, "Failed to request block %s from peer=%d\n",
-                 stripZeros(hash.ToString()), peer_id);
-        return "Peer not fully connected";
-    }
+    if (!success) return "Peer not fully connected";
 
     LogPrint(BCLog::BLOCK, "Requesting block %s from peer=%d\n",
                  stripZeros(hash.ToString()), peer_id);
@@ -4052,6 +4048,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, invs));
                 LogPrint(BCLog::BLOCK, "blocktxn %s FAILED. send getdata block peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
             } else {
+                if (fWrongPeer)
+                    LogPrint(BCLog::BLOCK, "blocktxn %s FAILED. wrong peer=%d\n", strBlkHeight(pindex), pfrom.GetId());
                 // Block is either okay, or possibly we received
                 // READ_STATUS_CHECKBLOCK_FAILED.
                 // Note that CheckBlock can only fail for one of a few reasons:
