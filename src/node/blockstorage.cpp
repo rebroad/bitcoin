@@ -198,22 +198,39 @@ void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPr
 
 CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
 {
+    static int nExisting = 0;
+    static int nNew = 0;
+    static int nNull = 0;
+    static int nHighest = 0;
+    int64_t nTime = GetTime();
+    static int64_t nLast = nTime;
+    if (nTime > nLast && nHighest) {
+        LogPrintf("%s: Existing=%d%% New=%d%% Avg=%d%% Null=%d\n", __func__, 100*nExisting/nHighest, 100*nNew/nHighest, 100*(nExisting+nNew)/nHighest/2, nNull);
+        nLast = nTime;
+    }
     AssertLockHeld(cs_main);
 
     if (hash.IsNull()) {
+        nNull++;
         return nullptr;
     }
 
     // Return existing
     BlockMap::iterator mi = m_block_index.find(hash);
     if (mi != m_block_index.end()) {
+        nExisting++;
+        int nHeight = (*mi).second->nHeight;
+        if (nHeight > nHighest) nHighest = nHeight;
         return (*mi).second;
     }
 
     // Create new
+    nNew++;
     CBlockIndex* pindexNew = new CBlockIndex();
     mi = m_block_index.insert(std::make_pair(hash, pindexNew)).first;
     pindexNew->phashBlock = &((*mi).first);
+    int nHeight = pindexNew->nHeight;
+    if (nHeight > nHighest) nHighest = nHeight;
 
     return pindexNew;
 }
