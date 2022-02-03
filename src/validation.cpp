@@ -3625,7 +3625,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     CBlockIndex *pindexDummy = nullptr;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
 
-    bool accepted_header{m_chainman.AcceptBlockHeader(block, state, m_params, &pindex)};
+    int accepted_header{m_chainman.AcceptBlockHeader(block, state, m_params, &pindex)};
     CheckBlockIndex();
 
     if (!accepted_header)
