@@ -22,7 +22,7 @@ class ClickableTextItemOld : public QGraphicsTextItem
 public:
     void setEnabled(bool state);
 protected:
-    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mousePressEvent(QGraphicsSceneMouseEvent *event);
 Q_SIGNALS:
     void objectClicked(QGraphicsItem*);
 };
@@ -49,8 +49,8 @@ public Q_SLOTS:
 private:
     ClientModel *clientModel;
 
-    virtual void resizeEvent(QResizeEvent *event) override;
-    virtual void showEvent(QShowEvent *event) override;
+    virtual void resizeEvent(QResizeEvent *event);
+    virtual void showEvent(QShowEvent *event);
 
     QGraphicsTextItem *titleItem;
     QGraphicsLineItem *titleLine;
