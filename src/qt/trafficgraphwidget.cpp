@@ -276,6 +276,7 @@ void TrafficGraphWidget::updateRates()
 {
     if(!clientModel) return;
 
+    static int nBlanks = 0;
     int64_t nTime = GetTimeMillis();
     int nRealInterval = nTime - nLastTime;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
@@ -284,6 +285,14 @@ void TrafficGraphWidget::updateRates()
     if (nRealInterval < nInterval * 0.5) return;
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
+    if (!in_rate_kilobytes_per_sec && !out_rate_kilobytes_per_sec) {
+        nBlanks++;
+        int w = width() - XMARGIN * 2;
+        if (nBlanks * w / DESIRED_SAMPLES >= 3) {
+            nLastTime = nTime;
+            return;
+        }
+    } else nBlanks = 0;
     vSamplesIn.push_front(in_rate_kilobytes_per_sec);
     vSamplesOut.push_front(out_rate_kilobytes_per_sec);
     vTimeStamp.push_front(nLastTime);
