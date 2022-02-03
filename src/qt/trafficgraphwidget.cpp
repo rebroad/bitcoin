@@ -100,8 +100,8 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     if (last_x == x && last_y == y) return; // Do nothing if mouse hasn't moved
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
-    unsigned int smallest_distance = 50; int closest_i = -1;
     int sampleSize = vTimeStamp.size();
+    unsigned int smallest_distance = 50; int closest_i = (i >= 0 && i < sampleSize) ? i : -1;
     if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
         for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
             float val = floatmax(vSamplesIn.at(test_i), vSamplesOut.at(test_i));
