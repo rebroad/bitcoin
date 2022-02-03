@@ -4661,12 +4661,12 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
             if (node_state == nullptr ||
                 (now - pnode->m_connected >= MINIMUM_CONNECT_TIME && node_state->nBlocksInFlight == 0)) {
                 pnode->fDisconnect = true;
-                LogPrintf("disconnecting extra block-relay-only peer=%d (last block received at time %d)\n",
-                         pnode->GetId(), count_seconds(pnode->m_last_block_time));
+                LogPrintf("disconnecting extra block-relay-only peer=%d (last block received %s ago)\n",
+                         pnode->GetId(), strAge(count_seconds(now) - count_seconds(pnode->m_last_block_time)));
                 return true;
             } else {
-                LogPrint(BCLog::CONN, "keeping block-relay-only peer=%d chosen for eviction (connect time: %d, blocks_in_flight: %d)\n",
-                         pnode->GetId(), strAge(count_seconds(now) - count_seconds(pnode->m_connected)), node_state->nBlocksInFlight);
+                LogPrint(BCLog::CONN, "keeping block-relay-only peer=%d chosen for eviction (connect time: %s, blocks_in_flight: %d)\n",
+                         pnode->GetId(), strAge(count_seconds(now - pnode->m_connected)), node_state->nBlocksInFlight);
             }
             return false;
         });
