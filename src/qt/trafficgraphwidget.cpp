@@ -16,7 +16,7 @@
 
 #include <cmath>
 
-#define DESIRED_SAMPLES         800
+#define DESIRED_SAMPLES         600
 
 #define XMARGIN                 10
 #define YMARGIN                 10
@@ -333,6 +333,7 @@ void TrafficGraphWidget::updateRates()
 
 void TrafficGraphWidget::setGraphRangeMins(int mins)
 {
+    LogPrintf("%s: mins: %d -> %d\n", __func__, nMins, mins);
     nMins = mins;
     int msecsPerSample = nMins * 60 * 1000 / DESIRED_SAMPLES;
     timer->stop();
