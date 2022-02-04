@@ -114,7 +114,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
         }
     }
     if (ttpoint != closest_i || closest_i != -1)
-        LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
+        LogPrintf("i=%d x=%d y=%d smdist=%d cl_i=%d\n", i, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
     if (ttpoint != closest_i) {
         ttpoint = closest_i;
         update(); // Calls paintEvent() to draw or delete the highlighted point
@@ -137,10 +137,16 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
+    int h = height() - YMARGIN * 2; int w = width() - XMARGIN * 2;
+    static int last_h = 0; static int last_w = 0;
+    if (last_h != h || last_w != w) {
+        LogPrintf("%s: w=%d h=%d\n", __func__, w, h);
+        last_w = w; last_h = h;
+    }
+
     if(fMax <= 0.0f) return;
 
     QColor axisCol(Qt::gray);
-    int h = height() - YMARGIN * 2;
     painter.setPen(axisCol);
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
@@ -213,7 +219,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp.at(ttpoint-1) - sampleTime));
         if (ttpoint + 1 < sampleCount)
             milliseconds_between_samples = std::min(milliseconds_between_samples, int(sampleTime - vTimeStamp.at(ttpoint+1)));
-        if (milliseconds_between_samples < 1000)
+        if (milliseconds_between_samples < 750)
             strTime += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn.at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut.at(ttpoint)*1000);
         // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
