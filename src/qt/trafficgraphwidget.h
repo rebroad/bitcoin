@@ -34,6 +34,8 @@ protected:
     int64_t tt_time = 0;
     void mousePressEvent(QMouseEvent *event) override;
     bool fToggle = true;
+    void focusInEvent(QFocusEvent *evt) override;
+    void focusOutEvent(QFocusEvent *evt) override;
 
 public Q_SLOTS:
     void updateRates();

@@ -208,16 +208,19 @@ CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
     AssertLockHeld(cs_main);
 
     if (hash.IsNull()) {
+        nNull++;
         return nullptr;
     }
 
     // Return existing
     BlockMap::iterator mi = m_block_index.find(hash);
     if (mi != m_block_index.end()) {
+        nExisting++;
         return (*mi).second;
     }
 
     // Create new
+    nNew++;
     CBlockIndex* pindexNew = new CBlockIndex();
     mi = m_block_index.insert(std::make_pair(hash, pindexNew)).first;
     pindexNew->phashBlock = &((*mi).first);

@@ -88,6 +88,18 @@ float floatmax(float a, float b)
     else return b;
 }
 
+void TrafficGraphWidget::focusInEvent(QFocusEvent *evt)
+{
+    LogPrintf("%s\n", __func__);
+    QWidget::focusInEvent(evt);
+}
+
+void TrafficGraphWidget::focusOutEvent(QFocusEvent *evt)
+{
+    LogPrintf("%s\n", __func__);
+    QWidget::focusOutEvent(evt);
+}
+
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
 {
     QWidget::mouseMoveEvent(event);
