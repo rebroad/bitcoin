@@ -292,8 +292,8 @@ public:
          if (adjusting > 0) {
              adjusting--;
              // REBTODO - set adjusting based on how fast approaching maxmempool
-             if (utilized >= 100) ratio = newratio;
          }
+         if (utilized >= 100) ratio = newratio;
          if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0
                  || utilized > 95) {
              getMempoolDynamicUsage(true);
