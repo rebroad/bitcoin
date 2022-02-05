@@ -40,7 +40,9 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     disp_timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
     connect(disp_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateDisplay);
-    disp_timer->setInterval(100);
+    timer->setInterval(100);
+    disp_timer->setInterval(100); // REBTODO combine these two timers
+    timer->start();
     disp_timer->start();
     setMouseTracking(true);
 }
@@ -295,12 +297,24 @@ void TrafficGraphWidget::updateRates()
 {
     if(!clientModel) return;
 
-    static int nBlanks = 0;
+    int msecsPerSample = nMins * 60 * 1000 / DESIRED_SAMPLES;
+
+    static int nInterval = timer->interval();
     int64_t nTime = GetTimeMillis();
-    int nRealInterval = nTime - nLastTime;
+
+    static int nSkipCount = 0;
+    if (nTime < (nLastTime + msecsPerSample - nInterval/2)) {
+        nSkipCount++;
+        return;
+    } else {
+        LogPrintf("%s: DO Skip=%d ratio=%d\n", __func__, nSkipCount, msecsPerSample/nInterval);
+        nSkipCount=0;
+    }
+
+    static int nBlanks = 0;
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
-    int nInterval = timer->interval();
+    int nRealInterval = nTime - nLastTime;
     if (nRealInterval < nInterval * 0.5) return;
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
@@ -353,10 +367,6 @@ void TrafficGraphWidget::setGraphRangeMins(int mins)
 {
     LogPrintf("%s: mins: %d -> %d\n", __func__, nMins, mins);
     nMins = mins;
-    int msecsPerSample = nMins * 60 * 1000 / DESIRED_SAMPLES;
-    timer->stop();
-    timer->setInterval(msecsPerSample);
-    timer->start();
 }
 
 void TrafficGraphWidget::clear()
