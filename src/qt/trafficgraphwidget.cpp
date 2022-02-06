@@ -321,11 +321,12 @@ void TrafficGraphWidget::updateRates()
     if (!in_rate_kilobytes_per_sec && !out_rate_kilobytes_per_sec) {
         nBlanks++;
         int w = width() - XMARGIN * 2;
-        if (nBlanks * w / DESIRED_SAMPLES >= 3) {
+        if (nBlanks >= 5) {
             nLastTime = nTime;
             return;
         }
-    } else nBlanks = 0;
+    } else
+        nBlanks = 0;
     vSamplesIn.push_front(in_rate_kilobytes_per_sec);
     vSamplesOut.push_front(out_rate_kilobytes_per_sec);
     vTimeStamp.push_front(nLastTime);
@@ -363,10 +364,15 @@ void TrafficGraphWidget::updateRates()
     update();
 }
 
-void TrafficGraphWidget::setGraphRangeMins(int mins)
+int TrafficGraphWidget::setGraphRangeMins(int value)
 {
+    static const std::vector<int> values{1, 2, 5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 7*24*60, 28*24*60};
+    int mins = values[value-1];
     LogPrintf("%s: mins: %d -> %d\n", __func__, nMins, mins);
     nMins = mins;
+    nValue = value;
+
+    return mins;
 }
 
 void TrafficGraphWidget::clear()

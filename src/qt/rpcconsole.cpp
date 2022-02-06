@@ -1134,14 +1134,7 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
-    static const std::vector<int> values{1, 2, 5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60};
-    int mins = values[value-1];
-    setTrafficGraphRange(mins);
-}
-
-void RPCConsole::setTrafficGraphRange(int mins)
-{
-    ui->trafficGraph->setGraphRangeMins(mins);
+    int mins = ui->trafficGraph->setGraphRangeMins(value);
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{mins}));
 }
 

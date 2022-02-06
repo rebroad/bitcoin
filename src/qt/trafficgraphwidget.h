@@ -40,7 +40,7 @@ protected:
 public Q_SLOTS:
     void updateRates();
     void updateDisplay();
-    void setGraphRangeMins(int mins);
+    int setGraphRangeMins(int value);
     void clear();
 
 private:
