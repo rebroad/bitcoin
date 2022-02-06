@@ -28,6 +28,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     fMax(0.0f),
     new_fMax(0.0f),
     nMins(0),
+    nValue(0),
     vSamplesIn(),
     vSamplesOut(),
     vTimeStamp(),
@@ -55,11 +56,6 @@ void TrafficGraphWidget::setClientModel(ClientModel *model)
         nLastBytesOut = model->node().getTotalBytesSent();
         nLastTime = GetTimeMillis();
     }
-}
-
-int TrafficGraphWidget::getGraphRangeMins() const
-{
-    return nMins;
 }
 
 int TrafficGraphWidget::y_value(float value)
@@ -320,7 +316,6 @@ void TrafficGraphWidget::updateRates()
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
     if (!in_rate_kilobytes_per_sec && !out_rate_kilobytes_per_sec) {
         nBlanks++;
-        int w = width() - XMARGIN * 2;
         if (nBlanks >= 5) {
             nLastTime = nTime;
             return;

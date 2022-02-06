@@ -51,6 +51,7 @@ private:
     float fMax;
     float new_fMax;
     int nMins;
+    int nValue;
     QQueue<float> vSamplesIn;
     QQueue<float> vSamplesOut;
     QQueue<int64_t> vTimeStamp;
