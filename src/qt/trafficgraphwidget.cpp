@@ -303,7 +303,7 @@ void TrafficGraphWidget::updateStuff()
                         increment = increment * 2;
                 }
             }
-        }
+        } // REBTODO - something tells me the above code could be shorter
         if (abs((h * fMax / new_fMax) - h) > 1) {
             LogPrintf("%s: fMax=%f new_fMax=%f increment=%d\n", __func__, fMax, new_fMax, increment);
             fMax += increment;
