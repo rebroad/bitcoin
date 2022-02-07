@@ -285,10 +285,9 @@ void TrafficGraphWidget::updateStuff()
     if (new_fMax && fMax != new_fMax) {
         fUpdate = true;
         int h = height() - YMARGIN * 2;
-        if (!increment) {
-            if (fMax) increment = fMax / h;
-            else increment = new_fMax / 2;
-        } else {
+        if (abs(increment) < abs((new_fMax - fMax) / h))
+            increment = (new_fMax - fMax) / h;
+        else {
             if (increment > 0) {
                 if (fMax + increment * 2 > new_fMax)
                     increment = increment / 2;
@@ -305,9 +304,10 @@ void TrafficGraphWidget::updateStuff()
                 }
             }
         }
-        if (abs((h * fMax / new_fMax) - h) > 1)
+        if (abs((h * fMax / new_fMax) - h) > 1) {
+            LogPrintf("%s: fMax=%f new_fMax=%f increment=%d\n", __func__, fMax, new_fMax, increment);
             fMax += increment;
-        else
+        } else
             fMax = new_fMax;
     } else increment = 0;
     static bool last_fToggle = fToggle;
