@@ -15,8 +15,6 @@ class QPaintEvent;
 class QTimer;
 QT_END_NAMESPACE
 
-// REBTODO - can this be in the class?
-static const std::vector<int> values{1, 2, 5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 7*24*60, 28*24*60};
 #define VALUES_SIZE 14
 
 class TrafficGraphWidget : public QWidget

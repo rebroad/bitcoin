@@ -290,6 +290,24 @@ void TrafficGraphWidget::updateDisplay()
         update();
 }
 
+static const std::vector<int> values{1, 2, 5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 7*24*60, 28*24*60};
+
+void updatefMax()
+{
+    float tmax = 0.0f;
+    for (const float f : vSamplesIn[nValue]) {
+        if(f > tmax) tmax = f;
+    }
+    for (const float f : vSamplesOut[nValue]) {
+        if(f > tmax) tmax = f;
+    }
+    static float last_fMax = -1;
+    new_fMax = tmax;
+    if (new_fMax != last_fMax) {
+        LogPrintf("%s: new_fMax = %d -> %d\n", __func__, last_fMax, new_fMax);
+        last_fMax = new_fMax;
+    }
+}
 
 void TrafficGraphWidget::updateRates()
 {
@@ -299,15 +317,24 @@ void TrafficGraphWidget::updateRates()
     int64_t nTime = GetTimeMillis();
 
     bool fUpdate = false;
-    for (int i = 0; i < VALUES_SIZE; i++) {
+    for (int i = 0; i < VALUES_SIZE-1; i++) {
         int msecsPerSample = values[i] * 60 * 1000 / DESIRED_SAMPLES;
         if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) {
             updateRateStep(i);
-            fUpdate = true;
+            if (i == nValue) {
+                fUpdate = true;
+            }
         }
     }
-    if (fUpdate)
+
+    if (fUpdate) {
+        if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
+            ttpoint++; // Move the selected point to the left
+            if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
+        }
+        updatefMax();
         update();
+    }
 }
 
 void TrafficGraphWidget::updateRateStep(int i)
@@ -338,29 +365,12 @@ void TrafficGraphWidget::updateRateStep(int i)
         vSamplesOut[i].pop_back();
         vTimeStamp[i].pop_back();
     }
-
-    float tmax = 0.0f;
-    for (const float f : vSamplesIn[i]) {
-        if(f > tmax) tmax = f;
-    }
-    for (const float f : vSamplesOut[i]) {
-        if(f > tmax) tmax = f;
-    }
-    static float last_fMax = -1;
-    new_fMax = tmax;
-    if (new_fMax != last_fMax) {
-        LogPrintf("%s: new_fMax = %d -> %d\n", __func__, last_fMax, new_fMax);
-        last_fMax = new_fMax;
-    }
-    if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
-        ttpoint++; // Move the selected point to the left
-        if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
-    }
 }
 
 int TrafficGraphWidget::setGraphRangeMins(int value)
 {
     nValue = std::min(value, VALUES_SIZE) - 1;
+    updatefMax();
     update();
 
     return values[nValue];
