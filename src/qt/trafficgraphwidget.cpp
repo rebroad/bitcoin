@@ -27,6 +27,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     disp_timer(nullptr),
     fMax(0.0f),
     new_fMax(0.0f),
+    new_fMins(0.0f),
     nValue(0),
     vSamplesIn(),
     vSamplesOut(),
@@ -39,12 +40,9 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 {
     timer = new QTimer(this);
     disp_timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateRates);
-    connect(disp_timer, &QTimer::timeout, this, &TrafficGraphWidget::updateDisplay);
+    connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateStuff);
     timer->setInterval(100);
-    disp_timer->setInterval(100); // REBTODO combine these two timers
     timer->start();
-    disp_timer->start();
     setMouseTracking(true);
 }
 
@@ -244,9 +242,47 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
 void TrafficGraphWidget::updateDisplay()
 {
-    // This function refreshes or deletes the ToolTip. Also used for smooth Y scaling changes.
+}
+
+static const std::vector<int> values{1, 2, 5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 7*24*60, 28*24*60};
+
+void TrafficGraphWidget::updatefMax()
+{
+    float tmax = 0.0f;
+    for (const float f : vSamplesIn[nValue]) {
+        if(f > tmax) tmax = f;
+    }
+    for (const float f : vSamplesOut[nValue]) {
+        if(f > tmax) tmax = f;
+    }
+    static float last_fMax = -1;
+    new_fMax = tmax;
+    if (new_fMax != last_fMax) {
+        LogPrintf("%s: new_fMax = %d -> %d\n", __func__, last_fMax, new_fMax);
+        last_fMax = new_fMax;
+    }
+}
+
+void TrafficGraphWidget::updateStuff()
+{
+    if(!clientModel) return;
+
+    static int nInterval = timer->interval();
+    int64_t nTime = GetTimeMillis();
 
     bool fUpdate = false;
+    for (int i = 0; i < VALUES_SIZE-1; i++) {
+        int msecsPerSample = values[i] * 60 * 1000 / DESIRED_SAMPLES;
+        if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) {
+            updateRates(i);
+            if (i == nValue) {
+                fUpdate = true;
+            }
+        }
+    }
+    if (fUpdate)
+        updatefMax();
+
     static float increment = 0;
     static float old_fMax = 0;
     if (new_fMax && fMax != new_fMax) {
@@ -286,53 +322,12 @@ void TrafficGraphWidget::updateDisplay()
         LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
         fUpdate = true;
     }
-    if (fUpdate)
-        update();
-}
-
-static const std::vector<int> values{1, 2, 5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 7*24*60, 28*24*60};
-
-void TrafficGraphWidget::updatefMax()
-{
-    float tmax = 0.0f;
-    for (const float f : vSamplesIn[nValue]) {
-        if(f > tmax) tmax = f;
-    }
-    for (const float f : vSamplesOut[nValue]) {
-        if(f > tmax) tmax = f;
-    }
-    static float last_fMax = -1;
-    new_fMax = tmax;
-    if (new_fMax != last_fMax) {
-        LogPrintf("%s: new_fMax = %d -> %d\n", __func__, last_fMax, new_fMax);
-        last_fMax = new_fMax;
-    }
-}
-
-void TrafficGraphWidget::updateRates()
-{
-    if(!clientModel) return;
-
-    static int nInterval = timer->interval();
-    int64_t nTime = GetTimeMillis();
-
-    bool fUpdate = false;
-    for (int i = 0; i < VALUES_SIZE-1; i++) {
-        int msecsPerSample = values[i] * 60 * 1000 / DESIRED_SAMPLES;
-        if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) {
-            updateRateStep(i);
-            if (i == nValue) {
-                fUpdate = true;
-            }
-        }
-    }
 
     if (fUpdate) {
         if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
             ttpoint++; // Move the selected point to the left
             if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
         }
-        updatefMax();
         update();
     }
 }

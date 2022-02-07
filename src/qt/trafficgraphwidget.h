@@ -40,7 +40,7 @@ protected:
     void focusOutEvent(QFocusEvent *evt) override;
 
 public Q_SLOTS:
-    void updateRates();
+    void updateStuff();
     void updateDisplay();
     int setGraphRangeMins(int value);
     void clear();
@@ -48,12 +48,12 @@ public Q_SLOTS:
 private:
     void updatefMax();
     void paintPath(QPainterPath &path, QQueue<float> &samples);
-    void updateRateStep(int value);
+    void updateRates(int value);
 
     QTimer *timer;
-    QTimer *disp_timer;
     float fMax;
     float new_fMax;
+    float new_fMins;
     int nValue;
     QQueue<float> vSamplesIn[VALUES_SIZE];
     QQueue<float> vSamplesOut[VALUES_SIZE];
