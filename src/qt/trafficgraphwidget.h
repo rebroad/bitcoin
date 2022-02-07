@@ -41,7 +41,6 @@ protected:
 
 public Q_SLOTS:
     void updateStuff();
-    void updateDisplay();
     int setGraphRangeMins(int value);
     void clear();
 
