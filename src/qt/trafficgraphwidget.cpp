@@ -24,7 +24,6 @@
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
-    disp_timer(nullptr),
     fMax(0.0f),
     new_fMax(0.0f),
     new_fMins(0.0f),
@@ -39,7 +38,6 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     clientModel(nullptr)
 {
     timer = new QTimer(this);
-    disp_timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateStuff);
     timer->setInterval(100);
     timer->start();
@@ -295,16 +293,12 @@ void TrafficGraphWidget::updateStuff()
         } else if (abs(old_fMax - fMax) + increment * 2 < abs(new_fMax - old_fMax) / 2) {
             increment = increment * 2;
         } else {
-            increment = abs(new_fMax - fMax) / 2;
+            increment = (new_fMax - fMax) / 2;
         }
-        if (abs((h * fMax / new_fMax) - h) > 1) {
-            if (new_fMax > fMax)
-                fMax += increment;
-            else
-                fMax -= increment;
-        } else {
+        if (abs((h * fMax / new_fMax) - h) > 1)
+            fMax += increment;
+        else
             fMax = new_fMax;
-        }
     } else increment = 0;
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
@@ -332,7 +326,7 @@ void TrafficGraphWidget::updateStuff()
     }
 }
 
-void TrafficGraphWidget::updateRateStep(int i)
+void TrafficGraphWidget::updateRates(int i)
 {
     int64_t nTime = GetTimeMillis();
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
