@@ -282,18 +282,28 @@ void TrafficGraphWidget::updateStuff()
         updatefMax();
 
     static float increment = 0;
-    static float old_fMax = 0;
     if (new_fMax && fMax != new_fMax) {
         fUpdate = true;
         int h = height() - YMARGIN * 2;
         if (!increment) {
-            old_fMax = fMax;
             if (fMax) increment = fMax / h;
             else increment = new_fMax / 2;
-        } else if (abs(old_fMax - fMax) + increment * 2 < abs(new_fMax - old_fMax) / 2) {
-            increment = increment * 2;
         } else {
-            increment = (new_fMax - fMax) / 2;
+            if (increment > 0) {
+                if (fMax + increment * 2 > new_fMax)
+                    increment = increment / 2;
+                else {
+                    if (fMax + increment * 4 < new_fMax)
+                        increment = increment * 2;
+                }
+            } else {
+                if (fMax + increment * 2 < new_fMax)
+                    increment = increment / 2;
+                else {
+                    if (fMax + increment * 4 > new_fMax)
+                        increment = increment * 2;
+                }
+            }
         }
         if (abs((h * fMax / new_fMax) - h) > 1)
             fMax += increment;
