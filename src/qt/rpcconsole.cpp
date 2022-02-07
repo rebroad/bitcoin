@@ -55,7 +55,7 @@
 #include <QVariant>
 
 const int CONSOLE_HISTORY = 50;
-const int INITIAL_TRAFFIC_GRAPH_VALUE = 9;
+const int INITIAL_TRAFFIC_GRAPH_VALUE = 6;
 const QSize FONT_RANGE(4, 40);
 const char fontSizeSettingsKey[] = "consoleFontSize";
 
