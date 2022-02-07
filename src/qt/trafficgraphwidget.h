@@ -49,6 +49,7 @@ public Q_SLOTS:
 
 private:
     void paintPath(QPainterPath &path, QQueue<float> &samples);
+    void updateRateStep(int value);
 
     QTimer *timer;
     QTimer *disp_timer;
@@ -61,6 +62,7 @@ private:
     quint64 nLastBytesIn[VALUES_SIZE];
     quint64 nLastBytesOut[VALUES_SIZE];
     int64_t nLastTime[VALUES_SIZE];
+    int nBlanks[VALUES_SIZE];
     ClientModel *clientModel;
 };
 
