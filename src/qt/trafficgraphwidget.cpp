@@ -27,14 +27,13 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     disp_timer(nullptr),
     fMax(0.0f),
     new_fMax(0.0f),
-    nMins(0),
     nValue(0),
     vSamplesIn(),
     vSamplesOut(),
     vTimeStamp(),
-    nLastBytesIn(0),
-    nLastBytesOut(0),
-    nLastTime(0),
+    nLastBytesIn(),
+    nLastBytesOut(),
+    nLastTime(),
     clientModel(nullptr)
 {
     timer = new QTimer(this);
@@ -52,9 +51,11 @@ void TrafficGraphWidget::setClientModel(ClientModel *model)
 {
     clientModel = model;
     if(model) {
-        nLastBytesIn = model->node().getTotalBytesRecv();
-        nLastBytesOut = model->node().getTotalBytesSent();
-        nLastTime = GetTimeMillis();
+        for (int i = 0; i < VALUES_SIZE; i++) {
+            nLastBytesIn[i] = model->node().getTotalBytesRecv();
+            nLastBytesOut[i] = model->node().getTotalBytesSent();
+            nLastTime[i] = GetTimeMillis();
+        }
     }
 }
 
@@ -289,39 +290,39 @@ void TrafficGraphWidget::updateDisplay()
     }
 }
 
+
 void TrafficGraphWidget::updateRates()
 {
     if(!clientModel) return;
 
-    int msecsPerSample = nMins * 60 * 1000 / DESIRED_SAMPLES;
-
     static int nInterval = timer->interval();
     int64_t nTime = GetTimeMillis();
 
-    static int nSkipCount = 0;
-    if (nTime < (nLastTime + msecsPerSample - nInterval/2)) {
-        nSkipCount++;
-        return;
-    } else {
-        LogPrintf("%s: DO Skip=%d ratio=%d\n", __func__, nSkipCount, msecsPerSample/nInterval);
-        nSkipCount=0;
+    for (int i = 0; i < values.size(); i++) {
+        int msecsPerSample = values[i] * 60 * 1000 / DESIRED_SAMPLES;
+        if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2))
+            updateRateStep(i);
     }
+}
 
-    static int nBlanks = 0;
+std::vector<int> nBlanks(values.size(), 0);
+
+void TrafficGraphWidget::updateRateStep(int value)
+{
+    int64_t nTime = GetTimeMillis();
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
-    int nRealInterval = nTime - nLastTime;
-    if (nRealInterval < nInterval * 0.5) return;
+    int nRealInterval = nTime - nLastTime[i];
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut) / nRealInterval;
     if (!in_rate_kilobytes_per_sec && !out_rate_kilobytes_per_sec) {
-        nBlanks++;
-        if (nBlanks >= 5) {
+        nBlanks[i]++;
+        if (nBlanks[i] >= 5) {
             nLastTime = nTime;
             return;
         }
     } else
-        nBlanks = 0;
+        nBlanks[i] = 0;
     vSamplesIn.push_front(in_rate_kilobytes_per_sec);
     vSamplesOut.push_front(out_rate_kilobytes_per_sec);
     vTimeStamp.push_front(nLastTime);
@@ -361,13 +362,9 @@ void TrafficGraphWidget::updateRates()
 
 int TrafficGraphWidget::setGraphRangeMins(int value)
 {
-    static const std::vector<int> values{1, 2, 5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 7*24*60, 28*24*60};
-    int mins = values[value-1];
-    LogPrintf("%s: mins: %d -> %d\n", __func__, nMins, mins);
-    nMins = mins;
     nValue = value;
 
-    return mins;
+    return values[std::min(value,values.size())-1];
 }
 
 void TrafficGraphWidget::clear()
