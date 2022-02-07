@@ -292,7 +292,7 @@ void TrafficGraphWidget::updateDisplay()
 
 static const std::vector<int> values{1, 2, 5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 7*24*60, 28*24*60};
 
-void updatefMax()
+void TrafficGraphWidget::updatefMax()
 {
     float tmax = 0.0f;
     for (const float f : vSamplesIn[nValue]) {

@@ -46,6 +46,7 @@ public Q_SLOTS:
     void clear();
 
 private:
+    void updatefMax();
     void paintPath(QPainterPath &path, QQueue<float> &samples);
     void updateRateStep(int value);
 
