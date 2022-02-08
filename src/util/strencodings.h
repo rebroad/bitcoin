@@ -131,7 +131,7 @@ T LocaleIndependentAtoi(const std::string& str)
 std::string strUnit(float value, std::string strUnit, int dp);
 std::string strBps(float bits);
 std::string strBytesps(float bytes);
-std::string strAge(const int64_t nAge);
+std::string strAge(float nAge);
 std::string stripZeros(std::string input);
 std::string strBinary(int byte);
 

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <interfaces/node.h>
+#include <util/strencodings.h>
 #include <qt/trafficgraphwidget.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
@@ -38,7 +39,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 {
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateStuff);
-    timer->setInterval(100);
+    timer->setInterval(75);
     timer->start();
     setMouseTracking(true);
 }
@@ -51,6 +52,9 @@ void TrafficGraphWidget::setClientModel(ClientModel *model)
             nLastBytesIn[i] = model->node().getTotalBytesRecv();
             nLastBytesOut[i] = model->node().getTotalBytesSent();
             nLastTime[i] = GetTimeMillis();
+            vSamplesIn[i].push_front(nLastBytesIn[i]);
+            vSamplesOut[i].push_front(nLastBytesOut[i]);
+            vTimeStamp[i].push_front(nLastTime[i]);
         }
     }
 }
@@ -215,19 +219,21 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int y = y_value(floatmax(vSamplesIn[nValue].at(ttpoint), vSamplesOut[nValue].at(ttpoint)));
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
-        int64_t sampleTime = vTimeStamp[nValue].at(ttpoint);
+        int64_t sampleTime = 0;
+        if (ttpoint + 1 < sampleCount)
+            sampleTime = vTimeStamp[nValue].at(ttpoint+1);
+        else {
+            strTime = "to ";
+            sampleTime = vTimeStamp[nValue].at(ttpoint);
+        }
         int age = GetTime() - sampleTime/1000;
         if (age < 60*60*23)
-            strTime = QString::fromStdString(FormatISO8601Time(sampleTime/1000));
+            strTime += QString::fromStdString(FormatISO8601Time(sampleTime/1000));
         else
-            strTime = QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
-        int milliseconds_between_samples = 1000;
-        if (ttpoint > 0)
-            milliseconds_between_samples = std::min(milliseconds_between_samples, int(vTimeStamp[nValue].at(ttpoint-1) - sampleTime));
-        if (ttpoint + 1 < sampleCount)
-            milliseconds_between_samples = std::min(milliseconds_between_samples, int(sampleTime - vTimeStamp[nValue].at(ttpoint+1)));
-        if (milliseconds_between_samples < 750)
-            strTime += QString::fromStdString(strprintf(".%03d", (sampleTime%1000)));
+            strTime += QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
+        int nDuration = sampleTime - vTimeStamp[nValue].at(ttpoint);
+        if (nDuration > 0)
+            strTime += QString::fromStdString(strprintf(" +%s", strAge(nDuration * .001)));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn[nValue].at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut[nValue].at(ttpoint)*1000);
         // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
@@ -269,12 +275,15 @@ void TrafficGraphWidget::updateStuff()
         if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) {
             updateRates(i);
             if (i == nValue) {
+                if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
+                    ttpoint++; // Move the selected point to the left
+                    if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
+                }
                 fUpdate = true;
+                updatefMax();
             }
         }
     }
-    if (fUpdate)
-        updatefMax();
 
     static float increment = 0;
     if (new_fMax && fMax != new_fMax) {
@@ -319,16 +328,11 @@ void TrafficGraphWidget::updateStuff()
         }
     } else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
         LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
-        fUpdate = true;
+        fUpdate = true; // REBTODO - technically it's only the ToolTip that needs to be refreshed
     }
 
-    if (fUpdate) {
-        if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
-            ttpoint++; // Move the selected point to the left
-            if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
-        }
+    if (fUpdate)
         update();
-    }
 }
 
 void TrafficGraphWidget::updateRates(int i)
