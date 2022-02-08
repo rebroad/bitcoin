@@ -34,7 +34,6 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     nLastBytesIn(),
     nLastBytesOut(),
     nLastTime(),
-    nBlanks(),
     clientModel(nullptr)
 {
     timer = new QTimer(this);
@@ -340,17 +339,9 @@ void TrafficGraphWidget::updateRates(int i)
     int nRealInterval = nTime - nLastTime[i];
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
-    if (!in_rate_kilobytes_per_sec && !out_rate_kilobytes_per_sec) {
-        nBlanks[i]++;
-        if (nBlanks[i] >= 5) {
-            nLastTime[i] = nTime;
-            return;
-        }
-    } else
-        nBlanks[i] = 0;
     vSamplesIn[i].push_front(in_rate_kilobytes_per_sec);
     vSamplesOut[i].push_front(out_rate_kilobytes_per_sec);
-    vTimeStamp[i].push_front(nLastTime[i]);
+    vTimeStamp[i].push_front(nTime);
     nLastTime[i] = nTime;
     nLastBytesIn[i] = bytesIn;
     nLastBytesOut[i] = bytesOut;

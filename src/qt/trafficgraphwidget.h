@@ -60,7 +60,6 @@ private:
     quint64 nLastBytesIn[VALUES_SIZE];
     quint64 nLastBytesOut[VALUES_SIZE];
     int64_t nLastTime[VALUES_SIZE];
-    int nBlanks[VALUES_SIZE];
     ClientModel *clientModel;
 };
 
