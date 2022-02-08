@@ -138,7 +138,6 @@ private:
     QAction* historyAction = nullptr;
     QAction* quitAction = nullptr;
     QAction* sendCoinsAction = nullptr;
-    QAction* sendCoinsMenuAction = nullptr;
     QAction* usedSendingAddressesAction = nullptr;
     QAction* usedReceivingAddressesAction = nullptr;
     QAction* signMessageAction = nullptr;
@@ -147,7 +146,6 @@ private:
     QAction* m_load_psbt_clipboard_action = nullptr;
     QAction* aboutAction = nullptr;
     QAction* receiveCoinsAction = nullptr;
-    QAction* receiveCoinsMenuAction = nullptr;
     QAction* optionsAction = nullptr;
     QAction* encryptWalletAction = nullptr;
     QAction* backupWalletAction = nullptr;
