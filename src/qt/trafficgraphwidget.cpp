@@ -16,7 +16,7 @@
 
 #include <cmath>
 
-#define DESIRED_SAMPLES         600
+#define DESIRED_SAMPLES         800
 
 #define XMARGIN                 10
 #define YMARGIN                 10
