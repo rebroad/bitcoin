@@ -113,6 +113,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
     int sampleSize = vTimeStamp[nValue].size();
     unsigned int smallest_distance = 50; int closest_i = (i >= 0 && i < sampleSize) ? i : -1;
+    LogPrintf("x=%d y=%d h=%d i=%d cl_i=%d ss=%d\n", x, y, h, i, closest_i, sampleSize);
     if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
         for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
             float val = floatmax(vSamplesIn[nValue].at(test_i), vSamplesOut[nValue].at(test_i));
@@ -124,8 +125,6 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             }
         }
     }
-    if (ttpoint != closest_i || closest_i != -1)
-        LogPrintf("i=%d x=%d y=%d smdist=%d cl_i=%d\n", i, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
     if (ttpoint != closest_i) {
         ttpoint = closest_i;
         update(); // Calls paintEvent() to draw or delete the highlighted point
@@ -270,7 +269,7 @@ void TrafficGraphWidget::updateStuff()
     int64_t nTime = GetTimeMillis();
 
     bool fUpdate = false;
-    for (int i = 0; i < VALUES_SIZE-1; i++) {
+    for (int i = 0; i < VALUES_SIZE-1; i++) { // REBTODO - why do we need the -1?!
         int msecsPerSample = values[i] * 60 * 1000 / DESIRED_SAMPLES;
         if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) {
             updateRates(i);
