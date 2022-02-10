@@ -357,13 +357,15 @@ void TrafficGraphWidget::updateRates(int i)
     }
 }
 
-int TrafficGraphWidget::setGraphRangeMins(int value)
+int TrafficGraphWidget::setGraphRange(int value)
 {
+    float fMins = pow(float(value)/80, 4) * 5;
     nValue = std::min(value, VALUES_SIZE) - 1;
     updatefMax();
     update();
 
-    return values[nValue];
+    //return values[nValue];
+    return int(fMins); // temp
 }
 
 void TrafficGraphWidget::clear()

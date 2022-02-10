@@ -55,7 +55,7 @@
 #include <QVariant>
 
 const int CONSOLE_HISTORY = 50;
-const int INITIAL_TRAFFIC_GRAPH_VALUE = 6;
+const int INITIAL_TRAFFIC_GRAPH_VALUE = 7;
 const QSize FONT_RANGE(4, 40);
 const char fontSizeSettingsKey[] = "consoleFontSize";
 
@@ -1134,7 +1134,7 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
-    int mins = ui->trafficGraph->setGraphRangeMins(value);
+    int mins = ui->trafficGraph->setGraphRange(value);
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{mins}));
 }
 
