@@ -51,6 +51,7 @@ private:
     QTimer *timer;
     float fMax;
     float new_fMax;
+    float fMins;
     float new_fMins;
     int nValue;
     QQueue<float> vSamplesIn[VALUES_SIZE];

@@ -27,8 +27,9 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     timer(nullptr),
     fMax(0.0f),
     new_fMax(0.0f),
-    new_fMins(0.0f),
-    nValue(0),
+    fMins(189),
+    new_fMins(180),
+    nValue(7),
     vSamplesIn(),
     vSamplesOut(),
     vTimeStamp(),
@@ -270,7 +271,7 @@ void TrafficGraphWidget::updateStuff()
     int64_t nTime = GetTimeMillis();
 
     bool fUpdate = false;
-    for (int i = 0; i < VALUES_SIZE-1; i++) { // REBTODO - why do we need the -1?!
+    for (int i = 0; i < VALUES_SIZE; i++) { // REBTODO - why do we need the -1?!
         int msecsPerSample = values[i] * 60 * 1000 / DESIRED_SAMPLES;
         if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) {
             updateRates(i);
@@ -360,12 +361,22 @@ void TrafficGraphWidget::updateRates(int i)
 int TrafficGraphWidget::setGraphRange(int value)
 {
     float fMins = pow(float(value)/80, 4) * 5;
-    nValue = std::min(value, VALUES_SIZE) - 1;
+    unsigned int smallest_distance = values[VALUES_SIZE-1];
+    int closest_i = 0;
+    for (int i = 0; i < VALUES_SIZE; i++) {
+        unsigned int distance = abs(int(fMins) - values[i]);
+        if (distance < smallest_distance) {
+            smallest_distance = distance;
+            closest_i = i;
+        }
+    }
+    new_fMins = values[closest_i];
+    nValue = closest_i; // REBTODO - set nValue somewhere in the smoothing logic
     updatefMax();
     update();
 
     //return values[nValue];
-    return int(fMins); // temp
+    return new_fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
 }
 
 void TrafficGraphWidget::clear()
