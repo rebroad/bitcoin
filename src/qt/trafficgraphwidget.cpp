@@ -272,7 +272,7 @@ void TrafficGraphWidget::updateStuff()
 
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) { // REBTODO - why do we need the -1?!
-        int msecsPerSample = values[i] * 60 * 1000 / DESIRED_SAMPLES;
+        int64_t msecsPerSample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
         if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) {
             updateRates(i);
             if (i == nValue) {
@@ -360,7 +360,7 @@ void TrafficGraphWidget::updateRates(int i)
 
 int TrafficGraphWidget::setGraphRange(int value)
 {
-    float fMins = pow(float(value)/80, 4) * 5;
+    float fMins = pow(float(value)/2000, 8) * 5;
     unsigned int smallest_distance = values[VALUES_SIZE-1];
     int closest_i = 0;
     for (int i = 0; i < VALUES_SIZE; i++) {
@@ -375,7 +375,6 @@ int TrafficGraphWidget::setGraphRange(int value)
     updatefMax();
     update();
 
-    //return values[nValue];
     return new_fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
 }
 
