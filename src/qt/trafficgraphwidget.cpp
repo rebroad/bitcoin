@@ -102,6 +102,7 @@ void TrafficGraphWidget::focusOutEvent(QFocusEvent *evt)
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
 {
     QWidget::mouseMoveEvent(event);
+    if (fMax <= 0.0f) return;
     static int last_x = -1;
     static int last_y = -1;
     int x = event->x();
