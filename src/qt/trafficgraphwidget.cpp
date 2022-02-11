@@ -234,7 +234,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
             strTime += QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
         int nDuration = sampleTime - vTimeStamp[nValue].at(ttpoint);
         if (nDuration > 0)
-            strTime += QString::fromStdString(strprintf(" +%s", strAge(nDuration * .001)));
+            //strTime += QString::fromStdString(strprintf(" +%s", strAge(nDuration * .001)));
+            strTime += " +" + GUIUtil::formatDurationStr(std::chrono::microseconds{nDuration});
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn[nValue].at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut[nValue].at(ttpoint)*1000);
         // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
@@ -352,7 +353,7 @@ void TrafficGraphWidget::updateRates(int i)
     nLastBytesOut[i] = bytesOut;
 
     while(vTimeStamp[i].size() > DESIRED_SAMPLES) {
-        vSamplesIn[i].pop_back();
+        vSamplesIn[i].pop_back(); // REBTODO - if this is the first pop_back and we're viewing it, switch the display scale
         vSamplesOut[i].pop_back();
         vTimeStamp[i].pop_back();
     }
