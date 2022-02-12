@@ -55,7 +55,6 @@
 #include <QVariant>
 
 const int CONSOLE_HISTORY = 50;
-const int INITIAL_TRAFFIC_GRAPH_VALUE = 3130;
 const QSize FONT_RANGE(4, 40);
 const char fontSizeSettingsKey[] = "consoleFontSize";
 
@@ -570,7 +569,7 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     // based timer interface
     m_node.rpcSetTimerInterfaceIfUnset(rpcTimerInterface);
 
-    on_sldGraphRange_valueChanged(INITIAL_TRAFFIC_GRAPH_VALUE);
+    on_sldGraphRange_valueChanged(0); // Cause the minimum duration to be displayed
     updateDetailWidget();
 
     consoleFontSize = settings.value(fontSizeSettingsKey, QFont().pointSize()).toInt();

@@ -370,7 +370,7 @@ void TrafficGraphWidget::updateRates(int i)
 
 int TrafficGraphWidget::setGraphRange(int value)
 {
-    float fMins = pow(float(value)/2000, 8) * 5;
+    float fMins = pow((value+2000) * .0005, 8) * 5;
     unsigned int smallest_distance = values[VALUES_SIZE-1];
     int closest_i = 0;
     for (int i = 0; i < VALUES_SIZE; i++) {
@@ -384,6 +384,7 @@ int TrafficGraphWidget::setGraphRange(int value)
     nValue = closest_i; // REBTODO - set nValue somewhere in the smoothing logic
     updatefMax();
     update();
+    LogPrintf("%s: value=%d fMins=%d new_fMins=%d\n", __func__, value, fMins, new_fMins);
 
     return fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
 }
