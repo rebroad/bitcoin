@@ -267,7 +267,7 @@ void TrafficGraphWidget::updatefMax()
     }
 }
 
-bool update_num(float new_val, float current, float increment, int length)
+bool update_num(float new_val, float &current, float &increment, int length)
 {
     if (new_val == 0 || current == new_val)
         return false;
@@ -327,9 +327,9 @@ void TrafficGraphWidget::updateStuff()
 
     static float y_increment = 0;
     static float x_increment = 0;
-    if (update_num(new_fMax, &fMax, &y_increment, height() - YMARGIN * 2))
+    if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    if (update_num(new_fMin, &fMin, &x_increment, width() - XMARGIN * 2))
+    if (update_num(new_fMins, fMins, x_increment, width() - XMARGIN * 2))
         fUpdate = true;
 
     static bool last_fToggle = fToggle;
@@ -404,7 +404,7 @@ int TrafficGraphWidget::setGraphRange(int value)
     return fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
 }
 
-int TrafficGraphWidget::getGraphRange()
+int TrafficGraphWidget::getGraphRange() const
 {
     return fMins;
 }

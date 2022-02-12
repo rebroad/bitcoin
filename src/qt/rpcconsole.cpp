@@ -1148,7 +1148,7 @@ void RPCConsole::on_sldGraphRange_valueChanged(int value)
         fMins = ui->trafficGraph->getGraphRange();
         if (fMins != old_fMins) {
             value = pow(fMins/5, .125)*2000-2000;
-            ui->lblGraphRange->setValue(value);
+            ui->sldGraphRange->setValue(value);
         } else
             fContinue = false;
     }
