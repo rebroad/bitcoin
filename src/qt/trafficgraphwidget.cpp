@@ -237,7 +237,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
                 strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{nDuration/1000});
             else
                 strTime += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{nDuration});
-        }
+        } else // REBTEMP
+            strTime += QString::fromStdString(strprintf(" i=%d ttp=%d nDur=%d", nValue, ttpoint, nDuration));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn[nValue].at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut[nValue].at(ttpoint)*1000);
         // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
@@ -345,6 +346,12 @@ void TrafficGraphWidget::updateRates(int i)
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
     int nRealInterval = nTime - nLastTime[i];
+    static int nDebugI = 0;
+    if (nRealInterval >= 10000) {
+        if (!nDebugI) nDebugI = i;
+        if (nDebugI == i)
+            LogPrintf("%s: i=%d nRI=%d\n", __func__, i, nRealInterval);
+    }
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
     vSamplesIn[i].push_front(in_rate_kilobytes_per_sec);
@@ -378,7 +385,7 @@ int TrafficGraphWidget::setGraphRange(int value)
     updatefMax();
     update();
 
-    return new_fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
+    return fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
 }
 
 void TrafficGraphWidget::clear()
