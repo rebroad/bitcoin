@@ -329,8 +329,10 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    if (update_num(new_fMins, fMins, x_increment, width() - XMARGIN * 2))
+    if (update_num(new_fMins, fMins, x_increment, width() - XMARGIN * 2)) {
+        LogPrintf("%s: new_fMins=%d fMins=%d increment=%d\n", __func__, new_fMins, fMins, x_increment);
         fUpdate = true;
+    }
 
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
@@ -381,11 +383,11 @@ void TrafficGraphWidget::updateRates(int i)
     }
 }
 
-int TrafficGraphWidget::setGraphRange(int value)
+int TrafficGraphWidget::setGraphRange(float fMinutes)
 {
-    float fMins = pow((value+2000) * .0005, 8) * 5;
+    fMins = fMinutes;
     unsigned int smallest_distance = values[VALUES_SIZE-1];
-    int closest_i = 0;
+    int closest_i = -1;
     for (int i = 0; i < VALUES_SIZE; i++) {
         unsigned int distance = abs(int(fMins) - values[i]);
         if (distance < smallest_distance) {
@@ -393,13 +395,14 @@ int TrafficGraphWidget::setGraphRange(int value)
             closest_i = i;
         }
     }
-    new_fMins = values[closest_i];
     int old_nValue = nValue;
-    nValue = closest_i; // REBTODO - set nValue somewhere in the smoothing logic
-    if (nValue != old_nValue)
+    nValue = std::max(0, closest_i); // REBTODO - set nValue somewhere in the smoothing logic
+    LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, closest_i, fMins, new_fMins);
+    if (nValue != old_nValue) {
+        new_fMins = values[nValue];
         updatefMax();
+    }
     update();
-    LogPrintf("%s: value=%d fMins=%d new_fMins=%d\n", __func__, value, fMins, new_fMins);
 
     return fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
 }

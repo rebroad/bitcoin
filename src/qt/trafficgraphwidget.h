@@ -41,7 +41,7 @@ protected:
 
 public Q_SLOTS:
     void updateStuff();
-    int setGraphRange(int value);
+    int setGraphRange(float nMins);
     int getGraphRange() const;
     void clear();
 
