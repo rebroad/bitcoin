@@ -267,6 +267,41 @@ void TrafficGraphWidget::updatefMax()
     }
 }
 
+bool update_num(float new_val, float current, float increment, int length)
+{
+    if (new_val == 0 || current == new_val)
+        return false;
+
+    if (abs(increment) < abs((new_val - current) / length))
+        increment = (new_val - current) / length;
+    else {
+        if (increment > 0) {
+            if (current + increment * 2 > new_val)
+                increment = increment / 2;
+            else {
+                if (current + increment * 4 < new_val)
+                    increment = increment * 2;
+            }
+        } else {
+            if (current + increment * 2 < new_val)
+                increment = increment / 2;
+            else {
+                if (current + increment * 4 > new_val)
+                    increment = increment * 2;
+            }
+        }
+    } // REBTODO - something tells me the above code could be shorter
+    if (abs((length * current / new_val) - length) > 1) {
+        LogPrintf("%s: length=%d cur=%f new_val=%f increment=%d\n", __func__, length, current, new_val, increment);
+        current += increment;
+    } else {
+        current = new_val;
+        increment = 0;
+    }
+
+    return true;
+}
+
 void TrafficGraphWidget::updateStuff()
 {
     if(!clientModel) return;
@@ -290,35 +325,13 @@ void TrafficGraphWidget::updateStuff()
         }
     }
 
-    static float increment = 0;
-    if (new_fMax && fMax != new_fMax) {
+    static float y_increment = 0;
+    static float x_increment = 0;
+    if (update_num(new_fMax, &fMax, &y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-        int h = height() - YMARGIN * 2;
-        if (abs(increment) < abs((new_fMax - fMax) / h))
-            increment = (new_fMax - fMax) / h;
-        else {
-            if (increment > 0) {
-                if (fMax + increment * 2 > new_fMax)
-                    increment = increment / 2;
-                else {
-                    if (fMax + increment * 4 < new_fMax)
-                        increment = increment * 2;
-                }
-            } else {
-                if (fMax + increment * 2 < new_fMax)
-                    increment = increment / 2;
-                else {
-                    if (fMax + increment * 4 > new_fMax)
-                        increment = increment * 2;
-                }
-            }
-        } // REBTODO - something tells me the above code could be shorter
-        if (abs((h * fMax / new_fMax) - h) > 1) {
-            LogPrintf("%s: fMax=%f new_fMax=%f increment=%d\n", __func__, fMax, new_fMax, increment);
-            fMax += increment;
-        } else
-            fMax = new_fMax;
-    } else increment = 0;
+    if (update_num(new_fMin, &fMin, &x_increment, width() - XMARGIN * 2))
+        fUpdate = true;
+
     static bool last_fToggle = fToggle;
     if (!QToolTip::isVisible()) {
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
@@ -381,12 +394,19 @@ int TrafficGraphWidget::setGraphRange(int value)
         }
     }
     new_fMins = values[closest_i];
+    int old_nValue = nValue;
     nValue = closest_i; // REBTODO - set nValue somewhere in the smoothing logic
-    updatefMax();
+    if (nValue != old_nValue)
+        updatefMax();
     update();
     LogPrintf("%s: value=%d fMins=%d new_fMins=%d\n", __func__, value, fMins, new_fMins);
 
     return fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
+}
+
+int TrafficGraphWidget::getGraphRange()
+{
+    return fMins;
 }
 
 void TrafficGraphWidget::clear()

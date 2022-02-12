@@ -54,6 +54,8 @@
 #include <QTimer>
 #include <QVariant>
 
+#include <cmath>
+
 const int CONSOLE_HISTORY = 50;
 const QSize FONT_RANGE(4, 40);
 const char fontSizeSettingsKey[] = "consoleFontSize";
@@ -557,7 +559,6 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     connect(ui->clearButton, &QAbstractButton::clicked, [this] { clear(); });
     connect(ui->fontBiggerButton, &QAbstractButton::clicked, this, &RPCConsole::fontBigger);
     connect(ui->fontSmallerButton, &QAbstractButton::clicked, this, &RPCConsole::fontSmaller);
-    connect(ui->btnClearTrafficGraph, &QPushButton::clicked, ui->trafficGraph, &TrafficGraphWidget::clear);
 
     // disable the wallet selector by default
     ui->WalletSelector->setVisible(false);
@@ -1133,9 +1134,24 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
-    int mins = ui->trafficGraph->setGraphRange(value);
-    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{mins}));
-    // REBTODO - Sleep and then getGraphRange and setValue
+    float fMins = pow((value+2000) * .0005, 8) * 5;
+    int old_value = value;
+    value = pow(fMins/5, .125)*2000-2000;
+    LogPrintf("value=%d value=%d\n", old_value, value);
+    ui->trafficGraph->setGraphRange(fMins);
+
+    bool fContinue = true;
+    while (fContinue) {
+        ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
+        std::this_thread::sleep_for(std::chrono::milliseconds(125));
+        int old_fMins = fMins;
+        fMins = ui->trafficGraph->getGraphRange();
+        if (fMins != old_fMins) {
+            value = pow(fMins/5, .125)*2000-2000;
+            ui->lblGraphRange->setValue(value);
+        } else
+            fContinue = false;
+    }
 }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
