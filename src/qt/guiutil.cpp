@@ -707,9 +707,9 @@ QString ConnectionTypeToQString(ConnectionType conn_type, bool fErlay, bool prep
     assert(false);
 }
 
-QString formatDurationStr(std::chrono::microseconds dur)
+QString formatDurationStr(std::chrono::seconds dur)
 {
-    const auto secs = dur / 1000;
+    const auto secs = count_seconds(dur);
     QStringList strList;
     int days = secs / 86400;
     int hours = (secs % 86400) / 3600;
@@ -724,10 +724,6 @@ QString formatDurationStr(std::chrono::microseconds dur)
         strList.append(QObject::tr("%1 m").arg(mins));
     if (seconds || (!days && !hours && !mins))
         strList.append(QObject::tr("%1 s").arg(seconds));
-    if (seconds <= 1) {
-        const auto ms = count_microseconds(dur);
-        strList.append(QObject::tr("%1 ms").arg(ms));
-    }
 
     return strList.join(" ");
 }

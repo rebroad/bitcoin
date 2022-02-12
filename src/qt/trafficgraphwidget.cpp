@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <interfaces/node.h>
-#include <util/strencodings.h>
 #include <qt/trafficgraphwidget.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
@@ -27,9 +26,9 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     timer(nullptr),
     fMax(0.0f),
     new_fMax(0.0f),
-    fMins(189),
-    new_fMins(180),
-    nValue(7),
+    fMins(5),
+    new_fMins(5),
+    nValue(1),
     vSamplesIn(),
     vSamplesOut(),
     vTimeStamp(),

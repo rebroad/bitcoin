@@ -639,7 +639,7 @@
               <number>320</number>
              </property>
              <property name="value">
-              <number>3130</number>
+              <number>2000</number>
              </property>
              <property name="orientation">
               <enum>Qt::Horizontal</enum>

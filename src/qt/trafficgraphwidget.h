@@ -24,6 +24,7 @@ class TrafficGraphWidget : public QWidget
 public:
     explicit TrafficGraphWidget(QWidget *parent = nullptr);
     void setClientModel(ClientModel *model);
+    int getIdealGraphRangeMins() const;
 
 protected:
     void paintEvent(QPaintEvent *) override;
