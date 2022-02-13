@@ -327,13 +327,7 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    static bool last_fSlider = fSlider_active;
-    if (last_fSlider != fSlider_active) {
-        LogPrintf("%s: fSlider_active now %s new_fMins=%d fMins=%d\n", __func__, fSlider_active ? "TRUE":"FALSE",
-            new_fMins, fMins);
-        last_fSlider = fSlider_active;
-    }
-    if (!fSlider_active && update_num(new_fMins, fMins, x_increment, width() - XMARGIN * 2)) {
+    if (update_num(new_fMins, fMins, x_increment, width() - XMARGIN * 2)) {
         fUpdate = true;
         LogPrintf("%s: new_fMins=%d fMins=%d increment=%d\n", __func__, new_fMins, fMins, x_increment);
     }
@@ -401,9 +395,10 @@ void TrafficGraphWidget::updateRates(int i)
         vTimeStamp[i].pop_back();
     }
     if (nValue == i) {
-        if (i == nStretch)
-            new_fMins = values[i] * vTimeStamp[i].size() / DESIRED_SAMPLES;
-        else
+        if (i == nStretch) {
+            new_fMins = 1.0 * values[i] * vTimeStamp[i].size() / DESIRED_SAMPLES;
+            LogPrintf("%s: new_fMins=%d values[%d]=%d ss=%d\n", __func__, new_fMins, i, values[i], vTimeStamp[i].size());
+        } else
             nStretch = 0;
     }
 }
@@ -412,8 +407,7 @@ bool TrafficGraphWidget::setGraphRange(float fMinutes)
 {
     if (fMins == fMinutes) return false;
 
-    fMins = fMinutes;
-    fSlider_active = true;
+    new_fMins = fMinutes; // Start scaling towards the irratic value set by the slider in use.
     unsigned int smallest_distance = values[VALUES_SIZE-1];
     int closest_i = -1;
     for (int i = 0; i < VALUES_SIZE; i++) {
@@ -427,15 +421,15 @@ bool TrafficGraphWidget::setGraphRange(float fMinutes)
     nValue = std::max(0, closest_i); // REBTODO - set nValue somewhere in the smoothing logic
     if (nValue != old_nValue)
         update_fMax();
-    new_fMins = values[nValue]; // REBTODO - make more granular - values to become powers of 2
     LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, closest_i, fMins, new_fMins);
     update();
 
     return true;
 }
 
-float TrafficGraphWidget::getGraphRange()
+float TrafficGraphWidget::getGraphRange(bool update_fMins)
 {
-    fSlider_active = false;
+    if (update_fMins)
+        new_fMins = values[nValue]; // Start scaling to the value to settle on.
     return fMins;
 }
