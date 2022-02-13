@@ -1134,16 +1134,17 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
-    slider_in_use = true;
     float fMins = pow((value+2000) * .0005, 8) * 5;
-    LogPrintf("%s: value=%d fMins=%d\n", __func__, value, fMins);
-    ui->trafficGraph->setGraphRange(fMins);
+    if (ui->trafficGraph->setGraphRange(fMins))
+        slider_in_use = true;
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
+    LogPrintf("%s: value=%d fMins=%d %s\n", __func__, value, fMins, slider_in_use ? "CHANGED":"");
 }
 
 void RPCConsole::on_sldGraphRange_sliderReleased()
 {
     slider_in_use = false;
+    LogPrintf("%s: Calling getGraphRange()\n", __func__);
     ui->trafficGraph->getGraphRange(); // Start fMins smoothing
 }
 
@@ -1158,7 +1159,8 @@ void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
             ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
             LogPrintf("%s: value=%d fMins=%d->%d\n", __func__, value, last_fMins, fMins);
             last_fMins = fMins;
-        }
+        } else
+            LogPrintf("%s: fMins=%d\n", __func__, fMins);
     }
 
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));

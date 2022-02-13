@@ -327,9 +327,15 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
+    static bool last_fSlider = fSlider_active;
+    if (last_fSlider != fSlider_active) {
+        LogPrintf("%s: fSlider_active now %s new_fMins=%d fMins=%d\n", __func__, fSlider_active ? "TRUE":"FALSE",
+            new_fMins, fMins);
+        last_fSlider = fSlider_active;
+    }
     if (!fSlider_active && update_num(new_fMins, fMins, x_increment, width() - XMARGIN * 2)) {
-        LogPrintf("%s: new_fMins=%d fMins=%d increment=%d\n", __func__, new_fMins, fMins, x_increment);
         fUpdate = true;
+        LogPrintf("%s: new_fMins=%d fMins=%d increment=%d\n", __func__, new_fMins, fMins, x_increment);
     }
 
     static bool last_fToggle = fToggle;
@@ -381,8 +387,10 @@ void TrafficGraphWidget::updateRates(int i)
     }
 }
 
-void TrafficGraphWidget::setGraphRange(float fMinutes)
+bool TrafficGraphWidget::setGraphRange(float fMinutes)
 {
+    if (fMins == fMinutes) return false;
+
     fMins = fMinutes;
     fSlider_active = true;
     unsigned int smallest_distance = values[VALUES_SIZE-1];
@@ -401,12 +409,13 @@ void TrafficGraphWidget::setGraphRange(float fMinutes)
     new_fMins = values[nValue]; // REBTODO - make more granular - values to become powers of 2
     LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, closest_i, fMins, new_fMins);
     update();
+
+    return true;
 }
 
-int TrafficGraphWidget::getGraphRange()
+float TrafficGraphWidget::getGraphRange()
 {
     fSlider_active = false;
-    LogPrintf("%s: fMins=%d new_fMins=%d\n", __func__, fMins, new_fMins);
     return fMins;
 }
 
