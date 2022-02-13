@@ -15,7 +15,7 @@ class QPaintEvent;
 class QTimer;
 QT_END_NAMESPACE
 
-#define VALUES_SIZE 14
+#define VALUES_SIZE 15
 
 class TrafficGraphWidget : public QWidget
 {

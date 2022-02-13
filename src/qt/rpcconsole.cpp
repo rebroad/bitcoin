@@ -1134,7 +1134,7 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
-    float fMins = pow((value+2000) * .0005, 8) * 5;
+    float fMins = pow((value + 2000) * .0005, 8) * 5 - 4;
     ui->trafficGraph->setGraphRange(fMins); // Signal mouse in use. REBTODO use smoothing if !slider_in_use
     if (!slider_in_use) // PageStep was used, it was not dragged
         ui->trafficGraph->getGraphRange(true); // Signal mouse is free and find new fMins value
@@ -1161,7 +1161,7 @@ void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
         float fMins = ui->trafficGraph->getGraphRange(false); // Don't set a new fMins
         static float last_fMins = fMins;
         if (fMins != last_fMins) {
-            int value = pow(fMins/5, .125) * 2000 - 2000 + 0.5;
+            int value = pow((fMins + 4) * .2, .125) * 2000 - 2000 + 0.5;
             ui->sldGraphRange->blockSignals(true);
             ui->sldGraphRange->setValue(value);
             ui->sldGraphRange->blockSignals(false);
