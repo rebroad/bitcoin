@@ -363,7 +363,7 @@ void TrafficGraphWidget::updateRates(int i)
     int nRealInterval = nTime - nLastTime[i];
     static int nDebugI = 0;
     if (nRealInterval >= 10000) {
-        if (!nDebugI) nDebugI = i;
+        if (i > nDebugI) nDebugI = i;
         if (nDebugI == i)
             LogPrintf("%s: i=%d nRI=%d\n", __func__, i, nRealInterval);
     }
@@ -397,11 +397,10 @@ int TrafficGraphWidget::setGraphRange(float fMinutes)
     }
     int old_nValue = nValue;
     nValue = std::max(0, closest_i); // REBTODO - set nValue somewhere in the smoothing logic
+    new_fMins = values[nValue];
     LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, closest_i, fMins, new_fMins);
-    if (nValue != old_nValue) {
-        new_fMins = values[nValue];
+    if (nValue != old_nValue)
         updatefMax();
-    }
     update();
 
     return fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)

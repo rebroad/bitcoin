@@ -199,10 +199,11 @@ CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
     static int nExisting = 0;
     static int nNew = 0;
     static int nNull = 0;
+    static int nHighest = 0;
     static int64_t nLast = 0;
     int64_t nTime = GetTime();
     if (nTime > nLast) {
-        LogPrintf("%s: Existing=%d New=%d Null=%d\n", __func__, nExisting, nNew, nNull);
+        LogPrintf("%s: Existing=%d New=%d Null=%d Highest=%d\n", __func__, nExisting, nNew, nNull, nHighest);
         nLast = nTime;
     }
     AssertLockHeld(cs_main);
@@ -216,6 +217,8 @@ CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
     BlockMap::iterator mi = m_block_index.find(hash);
     if (mi != m_block_index.end()) {
         nExisting++;
+        int nHeight = (*mi).second->nHeight;
+        if (nHeight > nHighest) nHighest = nHeight;
         return (*mi).second;
     }
 
@@ -224,6 +227,8 @@ CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
     CBlockIndex* pindexNew = new CBlockIndex();
     mi = m_block_index.insert(std::make_pair(hash, pindexNew)).first;
     pindexNew->phashBlock = &((*mi).first);
+    int nHeight = pindexNew->nHeight;
+    if (nHeight > nHighest) nHighest = nHeight;
 
     return pindexNew;
 }
