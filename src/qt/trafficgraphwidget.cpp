@@ -381,7 +381,7 @@ void TrafficGraphWidget::updateRates(int i)
     }
 }
 
-int TrafficGraphWidget::setGraphRange(float fMinutes)
+void TrafficGraphWidget::setGraphRange(float fMinutes)
 {
     fMins = fMinutes;
     unsigned int smallest_distance = values[VALUES_SIZE-1];
@@ -395,19 +395,17 @@ int TrafficGraphWidget::setGraphRange(float fMinutes)
     }
     int old_nValue = nValue;
     nValue = std::max(0, closest_i); // REBTODO - set nValue somewhere in the smoothing logic
-    new_fMins = values[nValue];
-    LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, closest_i, fMins, new_fMins);
     if (nValue != old_nValue)
         updatefMax();
+    new_fMins = values[nValue]; // REBTODO - make more granular - values to become powers of 2
+    LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, closest_i, fMins, new_fMins);
     update();
-
-    return fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
 }
 
 float TrafficGraphWidget::getGraphRange() const
 {
     LogPrintf("%s: fMins=%d new_fMins=%d\n", __func__, fMins, new_fMins);
-    return fMins;
+    return new_fMins;
 }
 
 void TrafficGraphWidget::clear()

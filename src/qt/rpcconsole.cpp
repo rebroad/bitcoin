@@ -1140,8 +1140,20 @@ void RPCConsole::on_sldGraphRange_valueChanged(int value)
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
 }
 
+void RPCConsole::on_sldGraphRange_sliderReleased()
+{
+    int fMins = ui->trafficGraph->getGraphRange(fMins);
+    int value = pow(fMins/5, .125) * 2000 - 2000 + 0.5;
+    ui->sldGraphRange->setValue(value);
+}
+
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
+    static quint64 last_totalBytesIn = 0;
+    static quint64 last_totalBytesOut = 0;
+    LogPrintf("%s: BytesIn %d->%d BytesOut %d->%d\n", __func__, last_totalBytesIn, totalBytesIn,
+        last_totalBytesOut, totalBytesOut);
+    last_totalBytesIn = totalBytesIn; last_totalBytesOut = totalBytesOut;
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
     ui->lblBytesOut->setText(GUIUtil::formatBytes(totalBytesOut));
 }
