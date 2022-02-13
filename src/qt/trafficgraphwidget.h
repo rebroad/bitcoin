@@ -53,7 +53,7 @@ private:
     float fMax;
     float new_fMax;
     float fMins;
-    int new_fMins;
+    float new_fMins;
     int nValue;
     QQueue<float> vSamplesIn[VALUES_SIZE];
     QQueue<float> vSamplesOut[VALUES_SIZE];
