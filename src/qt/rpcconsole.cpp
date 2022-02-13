@@ -1137,24 +1137,7 @@ void RPCConsole::on_sldGraphRange_valueChanged(int value)
     float fMins = pow((value+2000) * .0005, 8) * 5;
     LogPrintf("%s: value=%d fMins=%d\n", __func__, value, fMins);
     ui->trafficGraph->setGraphRange(fMins);
-
-    bool fContinue = true;
-    int nCount = 0;
-    while (fContinue) {
-        ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
-        std::this_thread::sleep_for(std::chrono::milliseconds(125));
-        int old_fMins = fMins;
-        fMins = ui->trafficGraph->getGraphRange();
-        if (fMins != old_fMins) {
-            value = pow(fMins/5, .125) * 2000 - 2000 + 0.5;
-            ui->sldGraphRange->setValue(value);
-            nCount++;
-            LogPrintf("%s: setValue(%d) fMins %d->%d\n", __func__, value, old_fMins, fMins);
-        } else {
-            fContinue = false;
-            LogPrintf("%s: Stopped updating value. fMins=%d count=%d\n", __func__, fMins, nCount);
-        }
-    }
+    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
 }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)

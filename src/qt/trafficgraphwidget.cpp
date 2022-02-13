@@ -114,7 +114,6 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
     int sampleSize = vTimeStamp[nValue].size();
     unsigned int smallest_distance = 50; int closest_i = (i >= 0 && i < sampleSize) ? i : -1;
-    LogPrintf("x=%d y=%d h=%d i=%d cl_i=%d ss=%d\n", x, y, h, i, closest_i, sampleSize);
     if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
         for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
             float val = floatmax(vSamplesIn[nValue].at(test_i), vSamplesOut[nValue].at(test_i));
@@ -292,7 +291,6 @@ bool update_num(float new_val, float &current, float &increment, int length)
         }
     } // REBTODO - something tells me the above code could be shorter
     if (abs((length * current / new_val) - length) > 1) {
-        LogPrintf("%s: length=%d cur=%f new_val=%f increment=%d\n", __func__, length, current, new_val, increment);
         current += increment;
     } else {
         current = new_val;
@@ -365,7 +363,7 @@ void TrafficGraphWidget::updateRates(int i)
     if (nRealInterval >= 10000) {
         if (i > nDebugI) nDebugI = i;
         if (nDebugI == i)
-            LogPrintf("%s: i=%d nRI=%d\n", __func__, i, nRealInterval);
+            LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
     }
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
@@ -408,6 +406,7 @@ int TrafficGraphWidget::setGraphRange(float fMinutes)
 
 float TrafficGraphWidget::getGraphRange() const
 {
+    LogPrintf("%s: fMins=%d new_fMins=%d\n", __func__, fMins, new_fMins);
     return fMins;
 }
 
