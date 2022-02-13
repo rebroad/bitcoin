@@ -310,7 +310,7 @@ void TrafficGraphWidget::updateStuff()
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
         int64_t msecsPerSample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
-        if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) {
+        if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) { // REBTODO - fix bad timing
             updateRates(i);
             if (i == nValue) {
                 if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
@@ -396,8 +396,7 @@ void TrafficGraphWidget::updateRates(int i)
     }
     if (i && nValue == i) {
         if (i == nStretch) {
-            new_fMins = 1.0 * values[i] * vTimeStamp[i].size() / DESIRED_SAMPLES;
-            fMins = new_fMins;
+            new_fMins = int(0.5 + 1.0 * values[i] * vTimeStamp[i].size() / DESIRED_SAMPLES);
             //LogPrintf("%s: new_fMins=%d values[%d]=%d ss=%d\n", __func__, new_fMins, i, values[i], vTimeStamp[i].size());
         } else
             nStretch = 0;
@@ -406,13 +405,13 @@ void TrafficGraphWidget::updateRates(int i)
 
 bool TrafficGraphWidget::setGraphRange(float fMinutes)
 {
-    if (fMins == fMinutes) return false;
+    if (new_fMins == fMinutes) return false;
 
     new_fMins = fMinutes; // Start scaling towards the irratic value set by the slider in use.
     unsigned int smallest_distance = values[VALUES_SIZE-1];
     int closest_i = -1;
     for (int i = 0; i < VALUES_SIZE; i++) {
-        unsigned int distance = abs(int(fMins) - values[i]);
+        unsigned int distance = abs(int(new_fMins + 0.5) - values[i]);
         if (distance < smallest_distance) {
             smallest_distance = distance;
             closest_i = i;
