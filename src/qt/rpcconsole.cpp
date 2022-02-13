@@ -1135,8 +1135,9 @@ void RPCConsole::scrollToEnd()
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
     float fMins = pow((value+2000) * .0005, 8) * 5;
-    if (ui->trafficGraph->setGraphRange(fMins))
-        slider_in_use = true;
+    ui->trafficGraph->setGraphRange(fMins); // Signal mouse in use. REBTODO use smoothing if !slider_in_use
+    if (!slider_in_use) // PageStep was used, it was not dragged
+        ui->trafficGraph->getGraphRange(); // Signal mouse is free
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
     LogPrintf("%s: value=%d fMins=%d %s\n", __func__, value, fMins, slider_in_use ? "CHANGED":"");
 }
@@ -1146,6 +1147,12 @@ void RPCConsole::on_sldGraphRange_sliderReleased()
     slider_in_use = false;
     LogPrintf("%s: Calling getGraphRange()\n", __func__);
     ui->trafficGraph->getGraphRange(); // Start fMins smoothing
+}
+
+void RPCConsole::on_sldGraphRange_sliderPressed()
+{
+    LogPrintf("%s: hello\n", __func__);
+    slider_in_use = true;
 }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
