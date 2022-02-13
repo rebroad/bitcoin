@@ -402,7 +402,7 @@ void TrafficGraphWidget::updateRates(int i)
     }
     if (nValue == i) {
         if (i == nStretch)
-            fMax_new = values[i] * vTimeStamp[i].size() / DESIRED_SAMPLES;
+            new_fMins = values[i] * vTimeStamp[i].size() / DESIRED_SAMPLES;
         else
             nStretch = 0;
     }

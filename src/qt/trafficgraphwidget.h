@@ -43,7 +43,6 @@ public Q_SLOTS:
     void updateStuff();
     bool setGraphRange(float nMins);
     float getGraphRange();
-    void clear();
 
 private:
     void update_fMax();
