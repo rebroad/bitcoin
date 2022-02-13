@@ -1155,12 +1155,13 @@ void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
         static float last_fMins = fMins;
         if (fMins != last_fMins) {
             int value = pow(fMins/5, .125) * 2000 - 2000 + 0.5;
+            ui->sldGraphRange->blockSignals(true);
             ui->sldGraphRange->setValue(value);
+            ui->sldGraphRange->blockSignals(false);
             ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
             LogPrintf("%s: value=%d fMins=%d->%d\n", __func__, value, last_fMins, fMins);
             last_fMins = fMins;
-        } else
-            LogPrintf("%s: fMins=%d\n", __func__, fMins);
+        }
     }
 
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
