@@ -406,7 +406,7 @@ int TrafficGraphWidget::setGraphRange(float fMinutes)
     return fMins; // REBTODO - we'll need to update the value (in rpcconsole?) once fMins has caught up (or during?)
 }
 
-int TrafficGraphWidget::getGraphRange() const
+float TrafficGraphWidget::getGraphRange() const
 {
     return fMins;
 }
