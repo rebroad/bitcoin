@@ -1145,6 +1145,8 @@ void RPCConsole::on_sldGraphRange_sliderReleased()
     int fMins = ui->trafficGraph->getGraphRange();
     int value = pow(fMins/5, .125) * 2000 - 2000 + 0.5;
     ui->sldGraphRange->setValue(value);
+    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
+    LogPrintf("%s: value=%d fMins=%d\n", __func__, value, fMins);
 }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
