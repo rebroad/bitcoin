@@ -1149,11 +1149,8 @@ void RPCConsole::on_sldGraphRange_sliderReleased()
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
-    static quint64 last_totalBytesIn = 0;
-    static quint64 last_totalBytesOut = 0;
-    LogPrintf("%s: BytesIn %d->%d BytesOut %d->%d\n", __func__, last_totalBytesIn, totalBytesIn,
-        last_totalBytesOut, totalBytesOut);
-    last_totalBytesIn = totalBytesIn; last_totalBytesOut = totalBytesOut;
+    // REBTODO this runs every 250ms - use to check if network traffic scale needs changing (due to graph full)
+
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
     ui->lblBytesOut->setText(GUIUtil::formatBytes(totalBytesOut));
 }
