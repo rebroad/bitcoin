@@ -1152,8 +1152,7 @@ void RPCConsole::on_sldGraphRange_valueChanged(int value)
             LogPrintf("%s: setValue(%d) fMins %d->%d\n", __func__, value, old_fMins, fMins);
         } else {
             fContinue = false;
-            if (nCount)
-                LogPrintf("%s: Stopped updating value. count=%d\n", __func__, nCount);
+            LogPrintf("%s: Stopped updating value. fMins=%d count=%d\n", __func__, fMins, nCount);
         }
     }
 }
