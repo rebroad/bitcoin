@@ -308,7 +308,7 @@ void TrafficGraphWidget::updateStuff()
     int64_t nTime = GetTimeMillis();
 
     bool fUpdate = false;
-    for (int i = 0; i < VALUES_SIZE; i++) { // REBTODO - why do we need the -1?!
+    for (int i = 0; i < VALUES_SIZE; i++) {
         int64_t msecsPerSample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
         if (nTime > (nLastTime[i] + msecsPerSample - nInterval/2)) {
             updateRates(i);
@@ -381,6 +381,22 @@ void TrafficGraphWidget::updateRates(int i)
     nLastBytesOut[i] = bytesOut;
 
     while(vTimeStamp[i].size() > DESIRED_SAMPLES) {
+        static bool nFull[VALUES_SIZE];
+        if (i == 0) {
+            static bool fReported = false;
+            if (!fReported) {
+                LogPrintf("%s: nFull[0]=%s\n", __func__, nFull[0]);
+                fReported = true;
+            }
+        }
+        if (!nFull[i]) {
+            nFull[i] = true;
+            if (nValue == i && i < VALUES_SIZE -1) {
+                nValue++;
+                fMax = (nTime - vTimeStamp[nValue].at(vTimeStamp[nValue].size()-1)) * 0.001;
+                new_fMax = fMax;
+            }
+        }
         vSamplesIn[i].pop_back(); // REBTODO - if this is the first pop_back and we're viewing it, switch the display scale
         vSamplesOut[i].pop_back();
         vTimeStamp[i].pop_back();
