@@ -40,8 +40,8 @@ protected:
 
 public Q_SLOTS:
     void updateStuff();
-    int setGraphRange(float nMins);
-    float getGraphRange() const;
+    void setGraphRange(float nMins);
+    int getGraphRange() const;
     void clear();
 
 private:
@@ -53,7 +53,7 @@ private:
     float fMax;
     float new_fMax;
     float fMins;
-    float new_fMins;
+    int new_fMins;
     int nValue;
     QQueue<float> vSamplesIn[VALUES_SIZE];
     QQueue<float> vSamplesOut[VALUES_SIZE];

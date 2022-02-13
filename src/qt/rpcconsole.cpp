@@ -1142,7 +1142,7 @@ void RPCConsole::on_sldGraphRange_valueChanged(int value)
 
 void RPCConsole::on_sldGraphRange_sliderReleased()
 {
-    int fMins = ui->trafficGraph->getGraphRange(fMins);
+    int fMins = ui->trafficGraph->getGraphRange();
     int value = pow(fMins/5, .125) * 2000 - 2000 + 0.5;
     ui->sldGraphRange->setValue(value);
 }

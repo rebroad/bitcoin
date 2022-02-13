@@ -402,7 +402,7 @@ void TrafficGraphWidget::setGraphRange(float fMinutes)
     update();
 }
 
-float TrafficGraphWidget::getGraphRange() const
+int TrafficGraphWidget::getGraphRange() const
 {
     LogPrintf("%s: fMins=%d new_fMins=%d\n", __func__, fMins, new_fMins);
     return new_fMins;
