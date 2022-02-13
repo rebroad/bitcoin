@@ -397,7 +397,8 @@ void TrafficGraphWidget::updateRates(int i)
     if (i && nValue == i) {
         if (i == nStretch) {
             new_fMins = 1.0 * values[i] * vTimeStamp[i].size() / DESIRED_SAMPLES;
-            LogPrintf("%s: new_fMins=%d values[%d]=%d ss=%d\n", __func__, new_fMins, i, values[i], vTimeStamp[i].size());
+            fMins = new_fMins;
+            //LogPrintf("%s: new_fMins=%d values[%d]=%d ss=%d\n", __func__, new_fMins, i, values[i], vTimeStamp[i].size());
         } else
             nStretch = 0;
     }
