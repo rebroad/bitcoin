@@ -1134,6 +1134,7 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
+    slider_in_use = true;
     float fMins = pow((value+2000) * .0005, 8) * 5;
     LogPrintf("%s: value=%d fMins=%d\n", __func__, value, fMins);
     ui->trafficGraph->setGraphRange(fMins);
@@ -1142,16 +1143,23 @@ void RPCConsole::on_sldGraphRange_valueChanged(int value)
 
 void RPCConsole::on_sldGraphRange_sliderReleased()
 {
-    int fMins = ui->trafficGraph->getGraphRange();
-    int value = pow(fMins/5, .125) * 2000 - 2000 + 0.5;
-    ui->sldGraphRange->setValue(value);
-    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
-    LogPrintf("%s: value=%d fMins=%d\n", __func__, value, fMins);
+    slider_in_use = false;
+    ui->trafficGraph->getGraphRange(); // Start fMins smoothing
 }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
-    // REBTODO this runs every 250ms - use to check if network traffic scale needs changing (due to graph full)
+    if (!slider_in_use) {
+        float fMins = ui->trafficGraph->getGraphRange();
+        static float last_fMins = fMins;
+        if (fMins != last_fMins) {
+            int value = pow(fMins/5, .125) * 2000 - 2000 + 0.5;
+            ui->sldGraphRange->setValue(value);
+            ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
+            LogPrintf("%s: value=%d fMins=%d->%d\n", __func__, value, last_fMins, fMins);
+            last_fMins = fMins;
+        }
+    }
 
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
     ui->lblBytesOut->setText(GUIUtil::formatBytes(totalBytesOut));

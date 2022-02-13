@@ -35,17 +35,18 @@ protected:
     int64_t tt_time = 0;
     void mousePressEvent(QMouseEvent *event) override;
     bool fToggle = true;
+    bool fSlider_active = false;
     void focusInEvent(QFocusEvent *evt) override;
     void focusOutEvent(QFocusEvent *evt) override;
 
 public Q_SLOTS:
     void updateStuff();
     void setGraphRange(float nMins);
-    int getGraphRange() const;
+    int getGraphRange();
     void clear();
 
 private:
-    void updatefMax();
+    void update_fMax();
     void paintPath(QPainterPath &path, QQueue<float> &samples);
     void updateRates(int value);
 

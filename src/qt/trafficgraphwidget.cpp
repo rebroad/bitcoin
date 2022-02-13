@@ -249,7 +249,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
 static const std::vector<int> values{5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
 
-void TrafficGraphWidget::updatefMax()
+void TrafficGraphWidget::update_fMax()
 {
     float tmax = 0.0f;
     for (const float f : vSamplesIn[nValue]) {
@@ -318,7 +318,7 @@ void TrafficGraphWidget::updateStuff()
                     if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
                 }
                 fUpdate = true;
-                updatefMax();
+                update_fMax();
             }
         }
     }
@@ -327,7 +327,7 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    if (update_num(new_fMins, fMins, x_increment, width() - XMARGIN * 2)) {
+    if (!fSlider_active && update_num(new_fMins, fMins, x_increment, width() - XMARGIN * 2)) {
         LogPrintf("%s: new_fMins=%d fMins=%d increment=%d\n", __func__, new_fMins, fMins, x_increment);
         fUpdate = true;
     }
@@ -384,6 +384,7 @@ void TrafficGraphWidget::updateRates(int i)
 void TrafficGraphWidget::setGraphRange(float fMinutes)
 {
     fMins = fMinutes;
+    fSlider_active = true;
     unsigned int smallest_distance = values[VALUES_SIZE-1];
     int closest_i = -1;
     for (int i = 0; i < VALUES_SIZE; i++) {
@@ -396,16 +397,17 @@ void TrafficGraphWidget::setGraphRange(float fMinutes)
     int old_nValue = nValue;
     nValue = std::max(0, closest_i); // REBTODO - set nValue somewhere in the smoothing logic
     if (nValue != old_nValue)
-        updatefMax();
+        update_fMax();
     new_fMins = values[nValue]; // REBTODO - make more granular - values to become powers of 2
     LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, closest_i, fMins, new_fMins);
     update();
 }
 
-int TrafficGraphWidget::getGraphRange() const
+int TrafficGraphWidget::getGraphRange()
 {
+    fSlider_active = false;
     LogPrintf("%s: fMins=%d new_fMins=%d\n", __func__, fMins, new_fMins);
-    return new_fMins;
+    return fMins;
 }
 
 void TrafficGraphWidget::clear()
