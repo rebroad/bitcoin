@@ -28,7 +28,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     new_fMax(0.0f),
     fMins(5),
     new_fMins(5),
-    nValue(1),
+    nValue(0),
     vSamplesIn(),
     vSamplesOut(),
     vTimeStamp(),
