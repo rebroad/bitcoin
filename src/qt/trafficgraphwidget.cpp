@@ -230,7 +230,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
             strTime += QString::fromStdString(FormatISO8601Time(sampleTime/1000));
         else
             strTime += QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
-        int nDuration = sampleTime - vTimeStamp[nValue].at(ttpoint);
+        int nDuration = vTimeStamp[nValue].at(ttpoint) - sampleTime;
         if (nDuration > 0) {
             if (nDuration > 9999)
                 strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{nDuration/1000});
