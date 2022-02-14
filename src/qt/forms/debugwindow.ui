@@ -633,10 +633,10 @@
               <number>0</number>
              </property>
              <property name="maximum">
-              <number>4161</number>
+              <number>2800</number>
              </property>
              <property name="pageStep">
-              <number>320</number>
+              <number>200</number>
              </property>
              <property name="value">
               <number>0</number>
