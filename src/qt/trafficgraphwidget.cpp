@@ -247,7 +247,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         QToolTip::hideText();
 }
 
-static const std::vector<int> values{1, 5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60}; // REBTODO - 3 hours ideally to be in the middle of the slider
+static const std::vector<int> values{5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
 
 void TrafficGraphWidget::update_fMax()
 {
@@ -403,45 +403,33 @@ void TrafficGraphWidget::updateRates(int i)
     }
 }
 
-int TrafficGraphWidget::setGraphRange(int slider_value)
+bool TrafficGraphWidget::setGraphRange(float fMinutes)
 {
-    // 0:     0 - 200  =     1 - 5
-    // 1:   200 - 400  =     5 - 10
-    // 2:   400 - 600  =    10 - 20
-    // 3:   600 - 800  =    20 - 30
-    // 4:   800 - 1000 =    30 - 60
-    // 5:  1000 - 1200 =    60 - 120
-    // 6:  1200 - 1400 =   120 - 180
-    // 7:  1400 - 1600 =   180 - 360
-    // 8:  1600 - 1800 =   360 - 720
-    // 9:  1800 - 2000 =   720 - 1440
-    // 10: 2000 - 2200 =  1440 - 4320
-    // 11: 2200 - 2400 =  4320 - 10080
-    // 12: 2400 - 2600 = 10080 - 20160
-    // 13: 2600 - 2800 = 20160 - 40320
-    int lower_value = values[slider_value / 200];
-    int upper_value = values[std::min(VALUES_SIZE-1,(slider_value / 200) + 1)];
-    float fMinutes = lower_value + (slider_value % 200) / 200.0 * (upper_value - lower_value);
+    if (fMins == fMinutes) return false;
 
     new_fMins = fMinutes; // Start scaling towards the irratic value set by the slider in use.
+    unsigned int smallest_distance = values[VALUES_SIZE-1];
+    int closest_i = -1;
+    for (int i = 0; i < VALUES_SIZE; i++) {
+        unsigned int distance = abs(int(fMins) - values[i]);
+        if (distance < smallest_distance) {
+            smallest_distance = distance;
+            closest_i = i;
+        }
+    }
     int old_nValue = nValue;
-    nValue = upper_value; // REBTODO - set nValue somewhere in the smoothing logic
+    nValue = std::max(0, closest_i); // REBTODO - set nValue somewhere in the smoothing logic
     if (nValue != old_nValue)
         update_fMax();
-    LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, nValue, fMins, new_fMins);
+    LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, closest_i, fMins, new_fMins);
     update();
 
-    return int(fMinutes + 0.5);
+    return true;
 }
 
-float TrafficGraphWidget::getGraphRange(int &value, bool update_fMins)
+float TrafficGraphWidget::getGraphRange(bool update_fMins)
 {
     if (update_fMins)
         new_fMins = values[nValue]; // Start scaling to the value to settle on.
-
-    for (int i = 0; i < VALUES_SIZE-1; i++) {
-        if (fMins >= values[i] && fMins < values[i+1]) {
-        // WIP - TODO avoid this loop if fMins hasn't changed
-
     return fMins;
 }
