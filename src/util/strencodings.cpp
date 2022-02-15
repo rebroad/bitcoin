@@ -398,10 +398,8 @@ std::string strBytesps(float bytes) {
     return strUnit(bytes, "B/s", 3);
 }
 
-std::string strAge(float nAge) {
-    if (nAge < 1 && nAge > -1)
-        return strprintf("%sms", nAge*1000);
-    else if (nAge < 360 && nAge > -360)
+std::string strAge(const int64_t nAge) {
+    if (nAge < 360 && nAge > -360)
         return strprintf("%ds", nAge);
     else if (nAge < 3600 && nAge > -3600)
         return strprintf("%dm", nAge/60);
