@@ -800,7 +800,7 @@ void BitcoinGUI::createTrayIconMenu()
     QAction* options_action = trayIconMenu->addAction(optionsAction->text(), optionsAction, &QAction::trigger);
     options_action->setMenuRole(QAction::PreferencesRole);
     QAction* node_window_action = trayIconMenu->addAction(openRPCConsoleAction->text(), openRPCConsoleAction, &QAction::trigger);
-    QAction* mempool_action = trayIconMenu->addAction(showMempoolStatsAction->text(), showMempoolStatsAction, &QAction::trigger);
+    QAction* mempool_stats_action = trayIconMenu->addAction(showMempoolStatsAction->text(), showMempoolStatsAction, &QAction::trigger);
     QAction* quit_action{nullptr};
 #ifndef Q_OS_MAC
     // Note: On macOS, the Dock icon's menu already has Quit action.
