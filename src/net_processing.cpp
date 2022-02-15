@@ -1724,6 +1724,10 @@ void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::sha
         CNodeState &state = *State(pnode->GetId());
         // If the peer has, or we announced to them the previous block already,
         // but we don't think they have this one, go ahead and announce it
+        if (!state) {
+            LogPrint("%s: State(%d) MISSING!\n", __func__, pnode->GetId());
+            continue;
+        }
         if (state.fPreferHeaderAndIDs && (!fWitnessEnabled || state.fWantsCmpctWitness) &&
                 !PeerHasHeader(&state, pindex) && PeerHasHeader(&state, pindex->pprev)) {
 

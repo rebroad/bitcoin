@@ -203,7 +203,7 @@ CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)
     int64_t nTime = GetTime();
     static int64_t nLast = nTime;
     if (nTime > nLast && nHighest) {
-        LogPrintf("%s: Existing=%d%% New=%d%% Null=%d\n", __func__, 100*nExisting/nHighest, 100*nNew/nHighest, nNull);
+        LogPrintf("%s: Existing=%d%% New=%d%% Avg=%d%% Null=%d\n", __func__, 100*nExisting/nHighest, 100*nNew/nHighest, 100*(nExisting+nNew)/nHighest/2, nNull);
         nLast = nTime;
     }
     AssertLockHeld(cs_main);
