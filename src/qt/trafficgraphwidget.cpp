@@ -58,13 +58,13 @@ void TrafficGraphWidget::setClientModel(ClientModel *model)
     }
 }
 
+std::chrono::minutes TrafficGraphWidget::getGraphRange() const { return m_new_range; }
+
 int TrafficGraphWidget::y_value(float value)
 {
     int h = height() - YMARGIN * 2;
     return YMARGIN + h - (h * 1.0 * (fToggle ? (pow(value, 0.30102) / pow(fMax, 0.30102)) : (value / fMax)));
 }
-
-std::chrono::minutes TrafficGraphWidget::getGraphRange() const { return m_range; }
 
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
@@ -86,18 +86,6 @@ float floatmax(float a, float b)
 {
     if (a > b) return a;
     else return b;
-}
-
-void TrafficGraphWidget::focusInEvent(QFocusEvent *evt)
-{
-    LogPrintf("%s\n", __func__);
-    QWidget::focusInEvent(evt);
-}
-
-void TrafficGraphWidget::focusOutEvent(QFocusEvent *evt)
-{
-    LogPrintf("%s\n", __func__);
-    QWidget::focusOutEvent(evt);
 }
 
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
@@ -326,9 +314,9 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    if (update_num(new_fMins, fMins, x_increment, width() - XMARGIN * 2)) {
+    if (update_num(m_new_range, m_range, x_increment, width() - XMARGIN * 2)) {
         fUpdate = true;
-        LogPrintf("%s: new_fMins=%d fMins=%d increment=%d\n", __func__, new_fMins, fMins, x_increment);
+        LogPrintf("%s: new_range=%d range=%d increment=%d\n", __func__, m_new_range, m_range, x_increment);
     }
 
     static bool last_fToggle = fToggle;
@@ -372,8 +360,6 @@ void TrafficGraphWidget::updateRates(int i)
     nLastTime[i] = nTime;
     nLastBytesIn[i] = bytesIn;
     nLastBytesOut[i] = bytesOut;
-
-    static int nStretch = 0;
     while(vTimeStamp[i].size() > DESIRED_SAMPLES) {
         static bool fFull[VALUES_SIZE];
         if (i == 0) {
@@ -383,43 +369,24 @@ void TrafficGraphWidget::updateRates(int i)
                 fReported = true;
             }
         }
-        if (nValue == i && i < VALUES_SIZE - 1 && !fFull[i]) {
-            nValue++; // REBTODO - do we need to do this or just change new_fMax?
-            nStretch = nValue;
-        }
+        if (nValue == i && i < VALUES_SIZE - 1 && !fFull[i])
+            m_new_range++; // This will get picked up by rpcconsole::UpdateTraffic()
         fFull[i] = true;
 
         vSamplesIn[i].pop_back(); // REBTODO - if this is the first pop_back and we're viewing it, switch the display scale
         vSamplesOut[i].pop_back();
         vTimeStamp[i].pop_back();
     }
-    if (i && nValue == i) {
-        if (i == nStretch) {
-            new_fMins = int(0.5 + 1.0 * values[i] * vTimeStamp[i].size() / DESIRED_SAMPLES);
-            //LogPrintf("%s: new_fMins=%d values[%d]=%d ss=%d\n", __func__, new_fMins, i, values[i], vTimeStamp[i].size());
-        } else
-            nStretch = 0;
-    }
 }
 
-std::chrono::minutes TrafficGraphWidget::setGraphRange(std::chrono::minutes new_range)
+void TrafficGraphWidget::setGraphRange(int value, std::chrono::minutes new_range)
 {
-    unsigned int smallest_distance = values[VALUES_SIZE-1];
-    int closest_i = 0;
-    for (int i = 0; i < VALUES_SIZE; i++) {
-        unsigned int distance = abs(new_range - values[i]);
-        if (distance < smallest_distance) {
-            smallest_distance = distance;
-            closest_i = i;
-        }
-    }
+    m_new_range = new_range;
     int old_nValue = nValue;
-    nValue = closest_i; // REBTODO - set nValue somewhere in the smoothing logic
-    m_new_range = values[nValue];
+    nValue = value; // REBTODO - set nValue somewhere in the smoothing logic
     if (nValue != old_nValue)
         update_fMax();
     LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, old_nValue, nValue, m_range, m_new_range);
     update();
 
-    return m_new_range;
 }
