@@ -54,7 +54,6 @@
 #include <QTimer>
 #include <QVariant>
 
-#include <cmath>
 #include <chrono>
 
 const int CONSOLE_HISTORY = 50;
@@ -1133,15 +1132,23 @@ void RPCConsole::scrollToEnd()
     scrollbar->setValue(scrollbar->maximum());
 }
 
-void RPCConsole::on_sldGraphRange_valueChanged(int value)
+void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
 {
-    int mins = pow((value+2000) * .0005, 8) * 5;
-    int new_mins = ui->trafficGraph->setGraphRange(std::chrono::minutes{mins});
-    snap_slider_value = pow(new_fMins/5, .125) * 2000 - 2000 + 0.5;
+    unsigned int value = (slider_value+100)/200;
+    LogPrint("%s: slider_val=%d value=%d\n", __func__, slider_value, value);
+    setTrafficGraphRange(value);
+}
+
+void RPCConsole::setTrafficGraphRange(unsigned int value)
+{
+    static const std::vector<std::chrono::minutes> values{5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
+    std::chrono::minutes mins = values[std::max(value, values.size()-1)];
+    ui->trafficGraph->setGraphRange(value, mins);
+    snap_slider_value = value * 200;
     if (!slider_in_use) // PageStep was used, slider was not dragged
         ui->sldGraphRange->setValue(snap_slider_value); // Snap the slider to where this value is
-    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{new_mins}));
-    LogPrintf("%s: value=%d fMins=%d %s\n", __func__, value, fMins, slider_in_use ? "":"SNAP");
+    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(mins));
+    LogPrintf("%s: value=%d mins=%d %s\n", __func__, value, mins.count(), slider_in_use ? "":"SNAP");
 }
 
 void RPCConsole::on_sldGraphRange_sliderReleased()
