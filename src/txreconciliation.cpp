@@ -91,7 +91,7 @@ class TxReconciliationTracker::Impl {
         }
 
         uint64_t m_local_recon_salt(GetRand(UINT64_MAX));
-        bool added = WITH_LOCK(m_mutex, return m_local_salts.emplace(peer_id, m_local_recon_salt).second);
+        WITH_LOCK(m_mutex, return m_local_salts.emplace(peer_id, m_local_recon_salt).second);
         // We do this exactly once per peer (which are unique by NodeId, see GetNewNodeId) so it's
         // safe to assume we don't have this record yet.
         //assert(added);
