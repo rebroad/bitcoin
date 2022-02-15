@@ -26,7 +26,7 @@ class TrafficGraphWidget : public QWidget
 public:
     explicit TrafficGraphWidget(QWidget *parent = nullptr);
     void setClientModel(ClientModel *model);
-    std::chrono::minutes getGraphRange(bool update_mins) const;
+    std::chrono::minutes getGraphRange() const;
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -38,12 +38,10 @@ protected:
     int64_t tt_time = 0;
     void mousePressEvent(QMouseEvent *event) override;
     bool fToggle = true;
-    void focusInEvent(QFocusEvent *evt) override;
-    void focusOutEvent(QFocusEvent *evt) override;
 
 public Q_SLOTS:
     void updateStuff();
-    std::chrono::minutes setGraphRange(std::chrono::minutes new_range);
+    void setGraphRange(std::chrono::minutes new_range);
 
 private:
     void update_fMax();
@@ -58,7 +56,7 @@ private:
     int nValue;
     QQueue<float> vSamplesIn[VALUES_SIZE];
     QQueue<float> vSamplesOut[VALUES_SIZE];
-    QQueue<float> vTimeStamp[VALUES_SIZE];
+    QQueue<int64_t> vTimeStamp[VALUES_SIZE];
     quint64 nLastBytesIn[VALUES_SIZE];
     quint64 nLastBytesOut[VALUES_SIZE];
     int64_t nLastTime[VALUES_SIZE];
