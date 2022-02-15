@@ -403,13 +403,10 @@ void TrafficGraphWidget::updateRates(int i)
     }
 }
 
-bool TrafficGraphWidget::setGraphRange(float fMinutes)
+int TrafficGraphWidget::setGraphRange(float fMinutes)
 {
-    if (fMins == fMinutes) return false;
-
-    new_fMins = fMinutes; // Start scaling towards the irratic value set by the slider in use.
     unsigned int smallest_distance = values[VALUES_SIZE-1];
-    int closest_i = -1;
+    int closest_i = 0;
     for (int i = 0; i < VALUES_SIZE; i++) {
         unsigned int distance = abs(int(fMins) - values[i]);
         if (distance < smallest_distance) {
@@ -418,13 +415,14 @@ bool TrafficGraphWidget::setGraphRange(float fMinutes)
         }
     }
     int old_nValue = nValue;
-    nValue = std::max(0, closest_i); // REBTODO - set nValue somewhere in the smoothing logic
+    nValue = closest_i; // REBTODO - set nValue somewhere in the smoothing logic
+    new_fMins = values[nValue];
     if (nValue != old_nValue)
         update_fMax();
-    LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, closest_i, fMins, new_fMins);
+    LogPrintf("%s: cl_i=%d->%d fMins=%d new_fMins=%d\n", __func__, old_nValue, nValue, fMins, new_fMins);
     update();
 
-    return true;
+    return new_fMins;
 }
 
 float TrafficGraphWidget::getGraphRange(bool update_fMins)

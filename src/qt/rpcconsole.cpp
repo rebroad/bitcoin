@@ -1134,19 +1134,20 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
-    float fMins = pow((value+2000) * .0005, 8) * 5;
-    ui->trafficGraph->setGraphRange(fMins); // Signal mouse in use. REBTODO use smoothing if !slider_in_use
-    if (!slider_in_use) // PageStep was used, it was not dragged
-        ui->trafficGraph->getGraphRange(true); // Signal mouse is free and find new fMins value
-    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
-    LogPrintf("%s: value=%d fMins=%d %s\n", __func__, value, fMins, slider_in_use ? "CHANGED":"");
+    int fMins = pow((value+2000) * .0005, 8) * 5;
+    int new_fMins = ui->trafficGraph->setGraphRange(fMins);
+    snap_slider_value = pow(new_fMins/5, .125) * 2000 - 2000 + 0.5;
+    if (!slider_in_use) // PageStep was used, slider was not dragged
+        ui->sldGraphRange->setValue(snap_slider_value); // Snap the slider to where this value is
+    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{new_fMins}));
+    LogPrintf("%s: value=%d fMins=%d %s\n", __func__, value, fMins, slider_in_use ? "":"SNAP");
 }
 
 void RPCConsole::on_sldGraphRange_sliderReleased()
 {
+    LogPrintf("%s: hello\n", __func__);
+    ui->sldGraphRange->setValue(snap_slider_value); // Snap the slider to where this value is
     slider_in_use = false;
-    LogPrintf("%s: Calling getGraphRange()\n", __func__);
-    ui->trafficGraph->getGraphRange(true); // Signal mouse is free and find new fMins value
 }
 
 void RPCConsole::on_sldGraphRange_sliderPressed()
@@ -1157,20 +1158,6 @@ void RPCConsole::on_sldGraphRange_sliderPressed()
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
-    if (!slider_in_use) {
-        float fMins = ui->trafficGraph->getGraphRange(false); // Don't set a new fMins
-        static float last_fMins = fMins;
-        if (fMins != last_fMins) {
-            int value = pow(fMins/5, .125) * 2000 - 2000 + 0.5;
-            ui->sldGraphRange->blockSignals(true);
-            ui->sldGraphRange->setValue(value);
-            ui->sldGraphRange->blockSignals(false);
-            ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{int(fMins)}));
-            LogPrintf("%s: value=%d fMins=%d->%d\n", __func__, value, last_fMins, fMins);
-            last_fMins = fMins;
-        }
-    }
-
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
     ui->lblBytesOut->setText(GUIUtil::formatBytes(totalBytesOut));
 }
