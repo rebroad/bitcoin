@@ -41,7 +41,7 @@ protected:
 
 public Q_SLOTS:
     void updateStuff();
-    void setGraphRange(std::chrono::minutes new_range);
+    std::chrono::minutes setGraphRange(unsigned int value);
 
 private:
     void update_fMax();
@@ -51,15 +51,30 @@ private:
     QTimer *timer;
     float fMax;
     float new_fMax;
-    std::chrono::minutes m_range{0};
+    float m_range{0};
     std::chrono::minutes m_new_range{0};
     int nValue;
     QQueue<float> vSamplesIn[VALUES_SIZE];
     QQueue<float> vSamplesOut[VALUES_SIZE];
-    QQueue<int64_t> vTimeStamp[VALUES_SIZE];
+    QQueue<std::chrono::milliseconds> vTimeStamp[VALUES_SIZE];
     quint64 nLastBytesIn[VALUES_SIZE];
     quint64 nLastBytesOut[VALUES_SIZE];
-    int64_t nLastTime[VALUES_SIZE];
+    std::chrono::milliseconds nLastTime[VALUES_SIZE];
+    std::chrono::minutes values[VALUES_SIZE] = {
+        std::chrono::minutes{5},
+        std::chrono::minutes{10},
+        std::chrono::minutes{20},
+        std::chrono::minutes{30},
+        std::chrono::minutes{60},
+        std::chrono::minutes{2*60},
+        std::chrono::minutes{3*60},
+        std::chrono::minutes{6*60},
+        std::chrono::minutes{12*60},
+        std::chrono::minutes{24*60},
+        std::chrono::minutes{3*24*60},
+        std::chrono::minutes{7*24*60},
+        std::chrono::minutes{14*24*60},
+        std::chrono::minutes{28*24*60}};
     ClientModel *clientModel;
 };
 

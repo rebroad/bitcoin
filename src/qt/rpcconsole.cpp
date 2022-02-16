@@ -1134,19 +1134,22 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
 {
-    unsigned int value = (slider_value+100)/200;
-    LogPrint("%s: slider_val=%d value=%d\n", __func__, slider_value, value);
+    unsigned int value = (slider_value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
+    LogPrintf("%s: slider_val=%d value=%d\n", __func__, slider_value, value);
     setTrafficGraphRange(value);
 }
 
 void RPCConsole::setTrafficGraphRange(unsigned int value)
 {
-    static const std::vector<std::chrono::minutes> values{5, 10, 20, 30, 60, 2*60, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
-    std::chrono::minutes mins = values[std::max(value, values.size()-1)];
-    ui->trafficGraph->setGraphRange(value, mins);
-    snap_slider_value = value * 200;
-    if (!slider_in_use) // PageStep was used, slider was not dragged
-        ui->sldGraphRange->setValue(snap_slider_value); // Snap the slider to where this value is
+    std::chrono::minutes mins = ui->trafficGraph->setGraphRange(value);
+    if (value)
+        snap_slider_value = (value - 1) * 200;
+    else {
+        snap_slider_value += 200;
+        ui->sldGraphRange->setValue(snap_slider_value);
+    }
+    //if (!slider_in_use) // PageStep was used, slider was not dragged
+    //    ui->sldGraphRange->setValue(snap_slider_value); // Snap the slider to where this value is
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(mins));
     LogPrintf("%s: value=%d mins=%d %s\n", __func__, value, mins.count(), slider_in_use ? "":"SNAP");
 }
@@ -1166,6 +1169,16 @@ void RPCConsole::on_sldGraphRange_sliderPressed()
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
+    if (!slider_in_use) {
+        std::chrono::minutes mins = ui->trafficGraph->getGraphRange();
+        static std::chrono::minutes last_mins = mins;
+        if (mins != last_mins) {
+            LogPrintf("%s: Bump it up! mins: %d->%d\n", __func__, last_mins.count(), mins.count());
+            setTrafficGraphRange(0); // bump it up
+            last_mins = mins;
+        }
+    }
+
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
     ui->lblBytesOut->setText(GUIUtil::formatBytes(totalBytesOut));
 }

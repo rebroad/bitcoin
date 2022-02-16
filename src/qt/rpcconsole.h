@@ -144,7 +144,7 @@ private:
     } const ts;
 
     void startExecutor();
-    void setTrafficGraphRange(int mins);
+    void setTrafficGraphRange(unsigned int value);
 
     enum ColumnWidths
     {

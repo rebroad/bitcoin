@@ -46,11 +46,12 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 void TrafficGraphWidget::setClientModel(ClientModel *model)
 {
     clientModel = model;
+    int64_t nTime = GetTimeMillis();
     if(model) {
         for (int i = 0; i < VALUES_SIZE; i++) {
             nLastBytesIn[i] = model->node().getTotalBytesRecv();
             nLastBytesOut[i] = model->node().getTotalBytesSent();
-            nLastTime[i] = GetTimeMillis();
+            nLastTime[i] = std::chrono::milliseconds{nTime};
             vSamplesIn[i].push_front(nLastBytesIn[i]);
             vSamplesOut[i].push_front(nLastBytesOut[i]);
             vTimeStamp[i].push_front(nLastTime[i]);
@@ -207,24 +208,24 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int y = y_value(floatmax(vSamplesIn[nValue].at(ttpoint), vSamplesOut[nValue].at(ttpoint)));
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
-        int64_t sampleTime = 0;
+        std::chrono::milliseconds sampleTime{0};
         if (ttpoint + 1 < sampleCount)
             sampleTime = vTimeStamp[nValue].at(ttpoint+1);
         else {
             strTime = "to ";
             sampleTime = vTimeStamp[nValue].at(ttpoint);
         }
-        int age = GetTime() - sampleTime/1000;
+        int age = GetTime() - sampleTime.count() / 1000;
         if (age < 60*60*23)
-            strTime += QString::fromStdString(FormatISO8601Time(sampleTime/1000));
+            strTime += QString::fromStdString(FormatISO8601Time(sampleTime.count() / 1000));
         else
-            strTime += QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
-        int nDuration = vTimeStamp[nValue].at(ttpoint) - sampleTime;
+            strTime += QString::fromStdString(FormatISO8601DateTime(sampleTime.count() / 1000));
+        int nDuration = (vTimeStamp[nValue].at(ttpoint) - sampleTime).count();
         if (nDuration > 0) {
             if (nDuration > 9999)
                 strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{nDuration/1000});
             else
-                strTime += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{nDuration});
+                strTime += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{nDuration*1000});
         } else // REBTEMP
             strTime += QString::fromStdString(strprintf(" i=%d ttp=%d nDur=%d", nValue, ttpoint, nDuration));
         QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn[nValue].at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut[nValue].at(ttpoint)*1000);
@@ -291,13 +292,13 @@ void TrafficGraphWidget::updateStuff()
 {
     if(!clientModel) return;
 
-    static int nInterval = timer->interval();
-    int64_t nTime = GetTimeMillis();
+    static int nInterval{timer->interval()};
+    std::chrono::milliseconds nTime{GetTimeMillis()};
 
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
-        const auto msecs_per_sample{std::chrono::duration_case<std::chrono::milliseconds>(values[i] / DESIRED_SAMPLES};
-        if (nTime > (nLastTime[i] + msecs_per_sample - nInterval/2)) { // REBTODO - fix bad timing
+        const auto msecs_per_sample{std::chrono::duration_cast<std::chrono::milliseconds>(values[i] / DESIRED_SAMPLES)};
+        if (nTime > (nLastTime[i] + msecs_per_sample - std::chrono::milliseconds{nInterval/2})) { // REBTODO - fix bad timing
             updateRates(i);
             if (i == nValue) {
                 if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
@@ -314,7 +315,7 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    if (update_num(m_new_range, m_range, x_increment, width() - XMARGIN * 2)) {
+    if (update_num(m_new_range.count(), m_range, x_increment, width() - XMARGIN * 2)) {
         fUpdate = true;
         LogPrintf("%s: new_range=%d range=%d increment=%d\n", __func__, m_new_range, m_range, x_increment);
     }
@@ -342,10 +343,10 @@ void TrafficGraphWidget::updateStuff()
 
 void TrafficGraphWidget::updateRates(int i)
 {
-    int64_t nTime = GetTimeMillis();
+    std::chrono::milliseconds nTime{GetTimeMillis()};
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
-    int nRealInterval = nTime - nLastTime[i];
+    int nRealInterval = (nTime - nLastTime[i]).count();
     static int nDebugI = 0;
     if (nRealInterval >= 10000) {
         if (i > nDebugI) nDebugI = i;
@@ -379,9 +380,14 @@ void TrafficGraphWidget::updateRates(int i)
     }
 }
 
-void TrafficGraphWidget::setGraphRange(int value, std::chrono::minutes new_range)
+std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
 {
-    m_new_range = new_range;
+    // value is the array marker plus 1 (as zero is reserved for bumping up)
+    if (!value) // bump
+        value = std::min(nValue + 1, values.size()-1);
+    else
+        value--; // get the array marker
+    m_new_range = values[std::min(values.size()-1, value)];
     int old_nValue = nValue;
     nValue = value; // REBTODO - set nValue somewhere in the smoothing logic
     if (nValue != old_nValue)
@@ -389,4 +395,5 @@ void TrafficGraphWidget::setGraphRange(int value, std::chrono::minutes new_range
     LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, old_nValue, nValue, m_range, m_new_range);
     update();
 
+    return m_new_range;
 }
