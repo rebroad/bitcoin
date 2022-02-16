@@ -259,22 +259,16 @@ bool update_num(float new_val, float &current, float &increment, int length)
     if (abs(increment) < abs((new_val - current) * 2/ length))
         increment = (new_val - current) * 2/ length;
     else {
-        if (increment > 0) {
-            if (current + increment * 2 > new_val)
-                increment = increment / 2;
-            else {
-                if (current + increment * 4 < new_val)
-                    increment = increment * 2;
-            }
+        if (((increment > 0) && (current + increment * 2 > new_val)) ||
+                ((increment < 0) && (current + increment * 2 < new_val))) {
+            increment = (new_val - current) / 2;
         } else {
-            if (current + increment * 2 < new_val)
-                increment = increment / 2;
-            else {
-                if (current + increment * 4 > new_val)
-                    increment = increment * 2;
+            if (((increment > 0) && (current + increment * 4 < new_val)) ||
+                    ((increment < 0) && (current + increment * 4 > new_val))) {
+                increment = increment * 2;
             }
         }
-    } // REBTODO - something tells me the above code could be shorter
+    }
     if (abs((length * current / new_val) - length) > 1) {
         current += increment;
     } else {
