@@ -339,7 +339,7 @@ void TrafficGraphWidget::updateStuff()
         }
     } else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
         LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
-        fUpdate = true; // REBTODO - technically it's only the ToolTip that needs to be refreshed
+        fUpdate = true; // TODO - technically it's only the ToolTip that needs to be refreshed
     }
 
     if (fUpdate)
@@ -374,11 +374,11 @@ void TrafficGraphWidget::updateRates(int i)
             }
         }
         if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i])
-            m_bump_value = true; // This will get to rpcconsole::UpdateTraffic() in GraphRangeBump()
+            m_bump_value = true;
 
         fFull[i] = true;
 
-        vSamplesIn[i].pop_back(); // REBTODO - if this is the first pop_back and we're viewing it, switch the display scale
+        vSamplesIn[i].pop_back();
         vSamplesOut[i].pop_back();
         vTimeStamp[i].pop_back();
     }
@@ -394,10 +394,10 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
         value--; // get the array marker
     int old_value = m_new_value;
     m_new_value = std::min((int)value, VALUES_SIZE - 1);
-    if (m_new_value != old_value)
+    if (m_new_value != old_value) {
         update_fMax();
-    //LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, m_value, m_new_value, m_range, values[m_new_value].count());
-    update();
+        update();
+    }
 
     return values[m_new_value];
 }

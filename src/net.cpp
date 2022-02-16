@@ -1308,7 +1308,7 @@ void CConnman::DisconnectNodes()
         }
 
         // Disconnect unused nodes
-        std::vector<CNode*> nodes_copy = m_nodes; // REBTODO - why do we work with a copy?
+        std::vector<CNode*> nodes_copy = m_nodes;
         for (CNode* pnode : nodes_copy)
         {
             if (pnode->fDisconnect)
@@ -1330,8 +1330,8 @@ void CConnman::DisconnectNodes()
                 m_nodes_disconnected.push_back(pnode);
             }
         }
-    } // LOCK m_nodes_mutex
-    std::list<CNode*> nodes_disconnected_copy = m_nodes_disconnected; // REBTODO - why do we nede to copy this?
+    }
+    std::list<CNode*> nodes_disconnected_copy = m_nodes_disconnected;
     {
         // Delete disconnected nodes
         for (CNode* pnode : nodes_disconnected_copy)
@@ -3038,7 +3038,6 @@ void CConnman::DeleteNode(CNode* pnode)
     assert(pnode);
     m_msgproc->FinalizeNode(*pnode);
     delete pnode;
-    if (pnode) LogPrintf("%s: pnode STILL EXISTS! peer=%d\n", __func__, pnode->GetId());
 }
 
 CConnman::~CConnman()
