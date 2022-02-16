@@ -319,12 +319,12 @@ void TrafficGraphWidget::updateStuff()
     }
     if (update_num(int(values[m_new_value].count()), m_range, x_increment, width() - XMARGIN * 2)) {
         int old_value = m_value;
-        if (values[m_new_value].count() > m_range && values[m_value+1].count() < m_range) {
-            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range\n", __func__, m_value, m_value+1,
+        if (values[m_new_value].count() > m_range && values[m_value].count() < m_range) {
+            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
                 values[m_value].count(), values[m_value+1].count(), m_range);
             m_value++;
         } else if (values[m_new_value].count() < m_range && values[m_value-1].count() > m_range) {
-            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range\n", __func__, m_value, m_value-1,
+            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
                 values[m_value].count(), values[m_value-1].count(), m_range);
             m_value--;
         }
