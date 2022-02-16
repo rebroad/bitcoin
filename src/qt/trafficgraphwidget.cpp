@@ -384,14 +384,14 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
 {
     // value is the array marker plus 1 (as zero is reserved for bumping up)
     if (!value) // bump
-        value = std::min(nValue + 1, values.size()-1);
+        value = nValue + 1;
     else
         value--; // get the array marker
-    m_new_range = values[std::min(values.size()-1, value)];
     int old_nValue = nValue;
-    nValue = value; // REBTODO - set nValue somewhere in the smoothing logic
+    nValue = std::min(value, VALUES_SIZE - 1); // REBTODO - set nValue somewhere in the smoothing logic
     if (nValue != old_nValue)
         update_fMax();
+    m_new_range = values[nValue];
     LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, old_nValue, nValue, m_range, m_new_range);
     update();
 
