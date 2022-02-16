@@ -570,7 +570,7 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     // based timer interface
     m_node.rpcSetTimerInterfaceIfUnset(rpcTimerInterface);
 
-    on_sldGraphRange_valueChanged(0); // Cause the minimum duration to be displayed
+    setTrafficGraphRange(1); // 1 is the lowest setting (0 bumps up)
     updateDetailWidget();
 
     consoleFontSize = settings.value(fontSizeSettingsKey, QFont().pointSize()).toInt();
@@ -1134,14 +1134,32 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
 {
-    // if we're the same value as last time AND not 200 away, then ignore
-    static int last_slider_value = -200;
+    static int64_t last_click_time = 0;
+    bool last_click_was_up = false;
+    static int last_slider_value = 0;
     if (!slider_in_use && slider_value == last_slider_value && abs(snap_slider_value - slider_value) < 200) {
-        LogPrintf("%s: ignoring snap slider_val=%d last_snap=%d\n", __func__, slider_value, snap_slider_value);
         return;
     }
     unsigned int value = (slider_value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
-    if (!slider_in_use) LogPrintf("%s: snap slider_val=%d value=%d\n", __func__, slider_value, value);
+    if (!slider_in_use) {
+        // Avoid accidental boucing of direction
+        int64_t now = GetTimeMillis();
+        bool this_click_is_up = false;
+        bool bouncing = false;
+        if (slider_value > last_slider_value)
+            this_click_is_up = true;
+        if (now - last_click_time < 250 && this_click_is_up != last_click_was_up) {
+            LogPrintf("%s: ignoring snap %s (last was %s %dms ago)\n", __func__, this_click_is_up ? "UP":"DOWN",
+                last_click_was_up ? "UP":"DOWN", now - last_click_time);
+            bouncing = true;
+        }
+        last_click_time = now;
+        last_click_was_up = this_click_is_up;
+        last_slider_value = slider_value;
+        if (bouncing) return;
+        LogPrintf("%s: snap last_slider_val=%d slider_val=%d %s value=%d\n", __func__, last_slider_value, slider_value, last_click_was_up ? "UP":"DOWN", value);
+    }
+    last_slider_value = slider_value;
     setTrafficGraphRange(value);
 }
 
