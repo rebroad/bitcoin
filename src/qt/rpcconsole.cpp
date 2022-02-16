@@ -1146,12 +1146,14 @@ void RPCConsole::setTrafficGraphRange(unsigned int value)
         snap_slider_value = (value - 1) * 200;
     else {
         snap_slider_value += 200;
+        ui->sldGraphRange->blockSignals(true);
         ui->sldGraphRange->setValue(snap_slider_value);
+        ui->sldGraphRange->blockSignals(false);
     }
     //if (!slider_in_use) // PageStep was used, slider was not dragged
     //    ui->sldGraphRange->setValue(snap_slider_value); // Snap the slider to where this value is
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(mins));
-    LogPrintf("%s: value=%d mins=%d %s\n", __func__, value, mins.count(), slider_in_use ? "":"SNAP");
+    LogPrintf("%s: value=%d slider=%d mins=%d %s\n", __func__, value, snap_slider_value, mins.count(), slider_in_use ? "":"SNAP");
 }
 
 void RPCConsole::on_sldGraphRange_sliderReleased()
@@ -1172,7 +1174,7 @@ void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
     if (!slider_in_use) {
         std::chrono::minutes mins = ui->trafficGraph->getGraphRange();
         static std::chrono::minutes last_mins = mins;
-        if (mins != last_mins) {
+        if (mins == last_mins + 1) {
             LogPrintf("%s: Bump it up! mins: %d->%d\n", __func__, last_mins.count(), mins.count());
             setTrafficGraphRange(0); // bump it up
             last_mins = mins;
