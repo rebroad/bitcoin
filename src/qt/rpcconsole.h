@@ -175,7 +175,7 @@ private:
     QByteArray m_peer_widget_header_state;
     QByteArray m_banlist_widget_header_state;
     bool slider_in_use{false};
-    int snap_slider_value{0};
+    int set_slider_value{0};
 
     /** Update UI with latest network info from model. */
     void updateNetworkState();
