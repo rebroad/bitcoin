@@ -237,16 +237,16 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 void TrafficGraphWidget::update_fMax()
 {
     float tmax = 0.0f;
-    for (const float f : vSamplesIn[m_value]) {
+    for (const float f : vSamplesIn[m_new_value]) {
         if(f > tmax) tmax = f;
     }
-    for (const float f : vSamplesOut[m_value]) {
+    for (const float f : vSamplesOut[m_new_value]) {
         if(f > tmax) tmax = f;
     }
     static float last_fMax = -1;
     new_fMax = tmax;
     if (new_fMax != last_fMax) {
-        LogPrintf("%s: new_fMax = %d -> %d\n", __func__, last_fMax, new_fMax);
+        LogPrintf("%s: i=%d new_fMax = %d -> %d\n", __func__, m_new_value, last_fMax, new_fMax);
         last_fMax = new_fMax;
     }
 }
@@ -303,8 +303,9 @@ void TrafficGraphWidget::updateStuff()
                     if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
                 }
                 fUpdate = true;
-                update_fMax();
             }
+            if (i == m_new_value)
+                update_fMax();
         }
     }
 
@@ -328,8 +329,6 @@ void TrafficGraphWidget::updateStuff()
                 values[m_value].count(), values[m_value-1].count(), m_range);
             m_value--;
         }
-        if (m_value != old_value)
-            update_fMax(); // REBTODO - maybe do this in setGraphRange taking i as an argument
         fUpdate = true;
         LogPrintf("%s: new_range=%d range=%d val=%d increment=%d\n", __func__, values[m_new_value].count(), m_range, m_value, x_increment);
     } else if (m_value != m_new_value) {
