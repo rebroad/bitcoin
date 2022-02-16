@@ -395,5 +395,5 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
     LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, m_value, m_new_value, m_range, values[m_new_value].count());
     update();
 
-    return m_new_range;
+    return values[m_new_value];
 }

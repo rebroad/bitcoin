@@ -54,6 +54,7 @@ private:
     float m_range{0};
     int m_value{0};
     int m_new_value{0};
+    bool m_bump_value{false};
     QQueue<float> vSamplesIn[VALUES_SIZE];
     QQueue<float> vSamplesOut[VALUES_SIZE];
     QQueue<std::chrono::milliseconds> vTimeStamp[VALUES_SIZE];
