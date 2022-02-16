@@ -332,6 +332,9 @@ void TrafficGraphWidget::updateStuff()
             update_fMax(); // REBTODO - maybe do this in setGraphRange taking i as an argument
         fUpdate = true;
         LogPrintf("%s: new_range=%d range=%d val=%d increment=%d\n", __func__, values[m_new_value].count(), m_range, m_value, x_increment);
+    } else if (m_value != m_new_value) {
+        LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, m_new_value);
+        m_value = m_new_value;
     }
 
     static bool last_fToggle = fToggle;
