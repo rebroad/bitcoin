@@ -261,7 +261,7 @@ bool update_num(float new_val, float &current, float &increment, int length)
     else {
         if (((increment > 0) && (current + increment * 2 > new_val)) ||
                 ((increment < 0) && (current + increment * 2 < new_val))) {
-            increment = (new_val - current) / 2;
+            increment = increment / 2; // Keep the momentum going even if new_val is elsewhere.
         } else {
             if (((increment > 0) && (current + increment * 4 < new_val)) ||
                     ((increment < 0) && (current + increment * 4 > new_val))) {
