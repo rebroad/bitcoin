@@ -312,7 +312,12 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    if (update_num(values[m_new_value].count(), m_range, x_increment, width() - XMARGIN * 2)) {
+    static int last_m_new_value = -1;
+    if (last_m_new_value != m_new_value) {
+        LogPrintf("%s: m_new_value = %d -> %d\n", __func__, last_m_new_value, m_new_value);
+        last_m_new_value = m_new_value;
+    }
+    if (update_num(int(values[m_new_value].count()), m_range, x_increment, width() - XMARGIN * 2)) {
         int old_value = m_value;
         if (values[m_new_value].count() > m_range && values[m_value].count() < m_range)
             m_value++;
@@ -372,7 +377,7 @@ void TrafficGraphWidget::updateRates(int i)
                 fReported = true;
             }
         }
-        if (ttpoint >= 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i])
+        if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i])
             m_bump_value = true; // This will get to rpcconsole::UpdateTraffic() in GraphRangeBump()
 
         fFull[i] = true;
@@ -391,7 +396,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
         value = m_value + 1;
     } else
         value--; // get the array marker
-    int m_new_value = std::min((int)value, VALUES_SIZE - 1);
+    m_new_value = std::min((int)value, VALUES_SIZE - 1);
     LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, m_value, m_new_value, m_range, values[m_new_value].count());
     update();
 

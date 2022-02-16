@@ -1172,7 +1172,7 @@ void RPCConsole::on_sldGraphRange_sliderPressed()
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
     if (!slider_in_use && ui->trafficGraph->GraphRangeBump()) {
-        LogPrintf("%s: Bump it up! mins:\n", __func__);
+        LogPrintf("%s: Bump it up!\n", __func__);
         setTrafficGraphRange(0); // bump it up
     }
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
