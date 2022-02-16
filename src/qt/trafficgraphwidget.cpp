@@ -72,7 +72,7 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
-            x = XMARGIN + w - w * i * values[m_new_value].count() / m_range / DESIRED_SAMPLES;
+            x = XMARGIN + w - w * i * values[m_value].count() / m_range / DESIRED_SAMPLES;
             int y = y_value(samples.at(i));
             path.lineTo(x, y);
         }
@@ -319,10 +319,13 @@ void TrafficGraphWidget::updateStuff()
     }
     if (update_num(int(values[m_new_value].count()), m_range, x_increment, width() - XMARGIN * 2)) {
         int old_value = m_value;
-        if (values[m_new_value].count() > m_range && values[m_value].count() < m_range)
+        if (values[m_new_value].count() > m_range && values[m_value].count() < m_range) {
+            LogPrintf("%s: m_value %d -> %d\n", __func__, m_value, m_value+1);
             m_value++;
-        else if (values[m_new_value].count() == m_range && values[m_value].count() > m_range)
+        } else if (values[m_new_value].count() == m_range && values[m_value].count() > m_range) {
+            LogPrintf("%s: m_value %d -> %d\n", __func__, m_value, m_value-1);
             m_value--;
+        }
         if (m_value != old_value)
             update_fMax(); // REBTODO - maybe do this in setGraphRange taking i as an argument
         fUpdate = true;
