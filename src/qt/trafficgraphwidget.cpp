@@ -317,7 +317,7 @@ void TrafficGraphWidget::updateStuff()
         fUpdate = true;
     if (update_num(m_new_range.count(), m_range, x_increment, width() - XMARGIN * 2)) {
         fUpdate = true;
-        LogPrintf("%s: new_range=%d range=%d increment=%d\n", __func__, m_new_range, m_range, x_increment);
+        LogPrintf("%s: new_range=%d range=%d increment=%d\n", __func__, m_new_range.count(), m_range, x_increment);
     }
 
     static bool last_fToggle = fToggle;
@@ -351,7 +351,7 @@ void TrafficGraphWidget::updateRates(int i)
     if (nRealInterval >= 10000) {
         if (i > nDebugI) nDebugI = i;
         if (nDebugI == i)
-            LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
+            LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i].count(), nRealInterval);
     }
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
@@ -392,7 +392,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
     if (nValue != old_nValue)
         update_fMax();
     m_new_range = values[nValue];
-    LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, old_nValue, nValue, m_range, m_new_range);
+    LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, old_nValue, nValue, m_range, m_new_range.count());
     update();
 
     return m_new_range;
