@@ -25,9 +25,6 @@
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
-    fMax(0.0f),
-    new_fMax(0.0f),
-    nValue(0),
     vSamplesIn(),
     vSamplesOut(),
     vTimeStamp(),
@@ -59,7 +56,7 @@ void TrafficGraphWidget::setClientModel(ClientModel *model)
     }
 }
 
-std::chrono::minutes TrafficGraphWidget::getGraphRange() const { return m_new_range; }
+bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
 
 int TrafficGraphWidget::y_value(float value)
 {
@@ -75,7 +72,7 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
-            x = XMARGIN + w - w * i * m_new_range.count() / m_range / DESIRED_SAMPLES;
+            x = XMARGIN + w - w * i * values[m_new_value].count() / m_range / DESIRED_SAMPLES;
             int y = y_value(samples.at(i));
             path.lineTo(x, y);
         }
@@ -102,11 +99,11 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     if (last_x == x && last_y == y) return; // Do nothing if mouse hasn't moved
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
-    int sampleSize = vTimeStamp[nValue].size();
+    int sampleSize = vTimeStamp[m_value].size();
     unsigned int smallest_distance = 50; int closest_i = (i >= 0 && i < sampleSize) ? i : -1;
     if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
         for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
-            float val = floatmax(vSamplesIn[nValue].at(test_i), vSamplesOut[nValue].at(test_i));
+            float val = floatmax(vSamplesIn[m_value].at(test_i), vSamplesOut[m_value].at(test_i));
             int y_data = y_value(val);
             unsigned int distance = abs(y - y_data);
             if (distance < smallest_distance) {
@@ -186,49 +183,49 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.drawText(XMARGIN, y_value(val)-yMarginText, GUIUtil::formatBytesps(val*1000));
 
     painter.setRenderHint(QPainter::Antialiasing);
-    if(!vSamplesIn[nValue].empty()) {
+    if(!vSamplesIn[m_value].empty()) {
         QPainterPath p;
-        paintPath(p, vSamplesIn[nValue]);
+        paintPath(p, vSamplesIn[m_value]);
         painter.fillPath(p, QColor(0, 255, 0, 128));
         painter.setPen(Qt::green);
         painter.drawPath(p);
     }
-    if(!vSamplesOut[nValue].empty()) {
+    if(!vSamplesOut[m_value].empty()) {
         QPainterPath p;
-        paintPath(p, vSamplesOut[nValue]);
+        paintPath(p, vSamplesOut[m_value]);
         painter.fillPath(p, QColor(255, 0, 0, 128));
         painter.setPen(Qt::red);
         painter.drawPath(p);
     }
-    int sampleCount = vTimeStamp[nValue].size();
+    int sampleCount = vTimeStamp[m_value].size();
     if (ttpoint >= 0 && ttpoint < sampleCount) {
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
         int x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
-        int y = y_value(floatmax(vSamplesIn[nValue].at(ttpoint), vSamplesOut[nValue].at(ttpoint)));
+        int y = y_value(floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint)));
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
         std::chrono::milliseconds sampleTime{0};
         if (ttpoint + 1 < sampleCount)
-            sampleTime = vTimeStamp[nValue].at(ttpoint+1);
+            sampleTime = vTimeStamp[m_value].at(ttpoint+1);
         else {
             strTime = "to ";
-            sampleTime = vTimeStamp[nValue].at(ttpoint);
+            sampleTime = vTimeStamp[m_value].at(ttpoint);
         }
         int age = GetTime() - sampleTime.count() / 1000;
         if (age < 60*60*23)
             strTime += QString::fromStdString(FormatISO8601Time(sampleTime.count() / 1000));
         else
             strTime += QString::fromStdString(FormatISO8601DateTime(sampleTime.count() / 1000));
-        int nDuration = (vTimeStamp[nValue].at(ttpoint) - sampleTime).count();
+        int nDuration = (vTimeStamp[m_value].at(ttpoint) - sampleTime).count();
         if (nDuration > 0) {
             if (nDuration > 9999)
                 strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{nDuration/1000});
             else
                 strTime += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{nDuration*1000});
         } else // REBTEMP
-            strTime += QString::fromStdString(strprintf(" i=%d ttp=%d nDur=%d", nValue, ttpoint, nDuration));
-        QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn[nValue].at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut[nValue].at(ttpoint)*1000);
+            strTime += QString::fromStdString(strprintf(" i=%d ttp=%d nDur=%d", m_value, ttpoint, nDuration));
+        QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn[m_value].at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut[m_value].at(ttpoint)*1000);
         // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n  " + strData);
@@ -240,10 +237,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 void TrafficGraphWidget::update_fMax()
 {
     float tmax = 0.0f;
-    for (const float f : vSamplesIn[nValue]) {
+    for (const float f : vSamplesIn[m_value]) {
         if(f > tmax) tmax = f;
     }
-    for (const float f : vSamplesOut[nValue]) {
+    for (const float f : vSamplesOut[m_value]) {
         if(f > tmax) tmax = f;
     }
     static float last_fMax = -1;
@@ -300,7 +297,7 @@ void TrafficGraphWidget::updateStuff()
         int64_t msecs_per_sample = int64_t(values[i].count()) * int64_t(60000) / DESIRED_SAMPLES;
         if (nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // REBTODO - fix bad timing
             updateRates(i);
-            if (i == nValue) {
+            if (i == m_value) {
                 if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
                     ttpoint++; // Move the selected point to the left
                     if (ttpoint >= DESIRED_SAMPLES) ttpoint = -1;
@@ -315,9 +312,16 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    if (update_num(m_new_range.count(), m_range, x_increment, width() - XMARGIN * 2)) {
+    if (update_num(values[m_new_value].count(), m_range, x_increment, width() - XMARGIN * 2)) {
+        int old_value = m_value;
+        if (values[m_new_value].count() > m_range && values[m_value].count() < m_range)
+            m_value++;
+        else if (values[m_new_value].count() == m_range && values[m_value].count() > m_range)
+            m_value--;
+        if (m_value != old_value)
+            update_fMax(); // REBTODO - maybe do this in setGraphRange taking i as an argument
         fUpdate = true;
-        LogPrintf("%s: new_range=%d range=%d increment=%d\n", __func__, m_new_range.count(), m_range, x_increment);
+        LogPrintf("%s: new_range=%d range=%d val=%d increment=%d\n", __func__, values[m_new_value].count(), m_range, m_value, x_increment);
     }
 
     static bool last_fToggle = fToggle;
@@ -368,8 +372,9 @@ void TrafficGraphWidget::updateRates(int i)
                 fReported = true;
             }
         }
-        if (nValue == i && i < VALUES_SIZE - 1 && !fFull[i])
-            m_new_range++; // This will get picked up by rpcconsole::UpdateTraffic()
+        if (ttpoint >= 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i])
+            m_bump_value = true; // This will get to rpcconsole::UpdateTraffic() in GraphRangeBump()
+
         fFull[i] = true;
 
         vSamplesIn[i].pop_back(); // REBTODO - if this is the first pop_back and we're viewing it, switch the display scale
@@ -381,16 +386,13 @@ void TrafficGraphWidget::updateRates(int i)
 std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
 {
     // value is the array marker plus 1 (as zero is reserved for bumping up)
-    if (!value) // bump
-        value = nValue + 1;
-    else
+    if (!value) { // bump
+        m_bump_value = false;
+        value = m_value + 1;
+    } else
         value--; // get the array marker
-    int old_nValue = nValue;
-    nValue = std::min((int)value, VALUES_SIZE - 1); // REBTODO - set nValue somewhere in the smoothing logic
-    if (nValue != old_nValue)
-        update_fMax();
-    m_new_range = values[nValue];
-    LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, old_nValue, nValue, m_range, m_new_range.count());
+    int m_new_value = std::min((int)value, VALUES_SIZE - 1);
+    LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, m_value, m_new_value, m_range, values[m_new_value].count());
     update();
 
     return m_new_range;

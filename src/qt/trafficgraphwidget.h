@@ -26,7 +26,7 @@ class TrafficGraphWidget : public QWidget
 public:
     explicit TrafficGraphWidget(QWidget *parent = nullptr);
     void setClientModel(ClientModel *model);
-    std::chrono::minutes getGraphRange() const;
+    bool GraphRangeBump() const;
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -49,11 +49,11 @@ private:
     void updateRates(int value);
 
     QTimer *timer;
-    float fMax;
-    float new_fMax;
+    float fMax{0};
+    float new_fMax{0};
     float m_range{0};
-    std::chrono::minutes m_new_range{0};
-    int nValue;
+    int m_value{0};
+    int m_new_value{0};
     QQueue<float> vSamplesIn[VALUES_SIZE];
     QQueue<float> vSamplesOut[VALUES_SIZE];
     QQueue<std::chrono::milliseconds> vTimeStamp[VALUES_SIZE];
