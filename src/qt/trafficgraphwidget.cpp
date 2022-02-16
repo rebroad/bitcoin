@@ -319,11 +319,13 @@ void TrafficGraphWidget::updateStuff()
     }
     if (update_num(int(values[m_new_value].count()), m_range, x_increment, width() - XMARGIN * 2)) {
         int old_value = m_value;
-        if (values[m_new_value].count() > m_range && values[m_value].count() < m_range) {
-            LogPrintf("%s: m_value %d -> %d\n", __func__, m_value, m_value+1);
+        if (values[m_new_value].count() > m_range && values[m_value+1].count() < m_range) {
+            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range\n", __func__, m_value, m_value+1,
+                values[m_value].count(), values[m_value+1].count(), m_range);
             m_value++;
-        } else if (values[m_new_value].count() == m_range && values[m_value].count() > m_range) {
-            LogPrintf("%s: m_value %d -> %d\n", __func__, m_value, m_value-1);
+        } else if (values[m_new_value].count() < m_range && values[m_value-1].count() > m_range) {
+            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range\n", __func__, m_value, m_value-1,
+                values[m_value].count(), values[m_value-1].count(), m_range);
             m_value--;
         }
         if (m_value != old_value)
@@ -400,7 +402,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
     } else
         value--; // get the array marker
     m_new_value = std::min((int)value, VALUES_SIZE - 1);
-    LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, m_value, m_new_value, m_range, values[m_new_value].count());
+    //LogPrintf("%s: cl_i=%d->%d m_range=%d m_new_range=%d\n", __func__, m_value, m_new_value, m_range, values[m_new_value].count());
     update();
 
     return values[m_new_value];

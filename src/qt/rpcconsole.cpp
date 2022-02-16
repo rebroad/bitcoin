@@ -1135,7 +1135,7 @@ void RPCConsole::scrollToEnd()
 void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
 {
     unsigned int value = (slider_value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
-    LogPrintf("%s: slider_val=%d value=%d\n", __func__, slider_value, value);
+    //LogPrintf("%s: slider_val=%d value=%d\n", __func__, slider_value, value);
     setTrafficGraphRange(value);
 }
 
