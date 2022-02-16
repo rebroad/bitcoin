@@ -1341,7 +1341,7 @@ void CConnman::DisconnectNodes()
                 m_nodes_disconnected.remove(pnode);
                 LogPrint(BCLog::CONN, "%s: Calling DeleteNode GRC=%d from m_nodes_disconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
                 DeleteNode(pnode);
-                if (pnode) LogPrint("%s: pnode STILL EXISTS! peer=%d\n", __func__, pnode->GetId());
+                if (pnode) LogPrintf("%s: pnode STILL EXISTS! peer=%d\n", __func__, pnode->GetId());
             }
         }
     }
@@ -3039,7 +3039,7 @@ void CConnman::DeleteNode(CNode* pnode)
     assert(pnode);
     m_msgproc->FinalizeNode(*pnode);
     delete pnode;
-    if (pnode) LogPrint("%s: pnode STILL EXISTS! peer=%d\n", __func__, pnode->GetId());
+    if (pnode) LogPrintf("%s: pnode STILL EXISTS! peer=%d\n", __func__, pnode->GetId());
 }
 
 CConnman::~CConnman()
