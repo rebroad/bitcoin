@@ -388,7 +388,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
     else
         value--; // get the array marker
     int old_nValue = nValue;
-    nValue = std::min(value, VALUES_SIZE - 1); // REBTODO - set nValue somewhere in the smoothing logic
+    nValue = std::min((int)value, VALUES_SIZE - 1); // REBTODO - set nValue somewhere in the smoothing logic
     if (nValue != old_nValue)
         update_fMax();
     m_new_range = values[nValue];
