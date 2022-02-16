@@ -259,8 +259,8 @@ bool update_num(float new_val, float &current, float &increment, int length)
     if (new_val == 0 || current == new_val)
         return false;
 
-    if (abs(increment) < abs((new_val - current) * 4 / length))
-        increment = (new_val - current) * 4 / length;
+    if (abs(increment) < abs((new_val - current) / length))
+        increment = (new_val - current) / length;
     else {
         if (increment > 0) {
             if (current + increment * 2 > new_val)
@@ -293,12 +293,12 @@ void TrafficGraphWidget::updateStuff()
     if(!clientModel) return;
 
     static int nInterval{timer->interval()};
-    std::chrono::milliseconds nTime{GetTimeMillis()};
+    int64_t nTime{GetTimeMillis()};
 
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
-        const auto msecs_per_sample{std::chrono::duration_cast<std::chrono::milliseconds>(values[i] / DESIRED_SAMPLES)};
-        if (nTime > (nLastTime[i] + msecs_per_sample - std::chrono::milliseconds{nInterval/2})) { // REBTODO - fix bad timing
+        int64_t msecs_per_sample = int64_t(values[i].count()) * int64_t(60000) / DESIRED_SAMPLES;
+        if (nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // REBTODO - fix bad timing
             updateRates(i);
             if (i == nValue) {
                 if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
@@ -348,11 +348,9 @@ void TrafficGraphWidget::updateRates(int i)
             bytesOut = clientModel->node().getTotalBytesSent();
     int nRealInterval = (nTime - nLastTime[i]).count();
     static int nDebugI = 0;
-    if (nRealInterval >= 10000) {
-        if (i > nDebugI) nDebugI = i;
-        if (nDebugI == i)
-            LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i].count(), nRealInterval);
-    }
+    if (i > nDebugI) nDebugI = i;
+    if (nDebugI == i)
+        LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i].count(), nRealInterval);
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
     vSamplesIn[i].push_front(in_rate_kilobytes_per_sec);
