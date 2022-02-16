@@ -313,12 +313,7 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    static int last_m_new_value = -1;
-    if (last_m_new_value != m_new_value) {
-        LogPrintf("%s: m_new_value = %d -> %d\n", __func__, last_m_new_value, m_new_value);
-        last_m_new_value = m_new_value;
-    }
-    if (update_num(int(values[m_new_value].count()), m_range, x_increment, width() - XMARGIN * 2)) {
+    if (update_num(values[m_new_value].count(), m_range, x_increment, width() - XMARGIN * 2)) {
         if (values[m_new_value].count() > m_range && values[m_value].count() < m_range) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
                 values[m_value].count(), values[m_value+1].count(), m_range);
