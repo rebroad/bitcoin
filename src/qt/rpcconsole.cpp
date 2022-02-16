@@ -1135,7 +1135,7 @@ void RPCConsole::scrollToEnd()
 void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
 {
     static int64_t last_click_time = 0;
-    bool last_click_was_up = false;
+    static bool last_click_was_up = false;
     unsigned int value = (slider_value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
     if (!slider_in_use) {
         // Avoid accidental boucing of direction
