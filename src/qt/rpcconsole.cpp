@@ -1134,8 +1134,14 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
 {
+    // if we're the same value as last time AND not 200 away, then ignore
+    static int last_slider_value = -200;
+    if (!slider_in_use && slider_value == last_slider_value && abs(snap_slider_value - slider_value) < 200) {
+        LogPrintf("%s: ignoring snap slider_val=%d last_snap=%d\n", __func__, slider_value, snap_slider_value);
+        return;
+    }
     unsigned int value = (slider_value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
-    //LogPrintf("%s: slider_val=%d value=%d\n", __func__, slider_value, value);
+    if (!slider_in_use) LogPrintf("%s: snap slider_val=%d value=%d\n", __func__, slider_value, value);
     setTrafficGraphRange(value);
 }
 
