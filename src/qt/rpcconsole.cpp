@@ -1174,7 +1174,7 @@ void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
     if (!slider_in_use) {
         std::chrono::minutes mins = ui->trafficGraph->getGraphRange();
         static std::chrono::minutes last_mins = mins;
-        if (mins == last_mins + 1) {
+        if (mins.count() == last_mins.count() + 1) {
             LogPrintf("%s: Bump it up! mins: %d->%d\n", __func__, last_mins.count(), mins.count());
             setTrafficGraphRange(0); // bump it up
             last_mins = mins;
