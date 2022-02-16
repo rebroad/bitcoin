@@ -1341,7 +1341,6 @@ void CConnman::DisconnectNodes()
                 m_nodes_disconnected.remove(pnode);
                 LogPrint(BCLog::CONN, "%s: Calling DeleteNode GRC=%d from m_nodes_disconnected loop. peer=%d\n", __func__, pnode->GetRefCount(), pnode->GetId());
                 DeleteNode(pnode);
-                if (pnode) LogPrintf("%s: pnode STILL EXISTS! peer=%d\n", __func__, pnode->GetId());
             }
         }
     }

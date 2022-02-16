@@ -1177,8 +1177,8 @@ void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
         if (mins.count() == last_mins.count() + 1) {
             LogPrintf("%s: Bump it up! mins: %d->%d\n", __func__, last_mins.count(), mins.count());
             setTrafficGraphRange(0); // bump it up
-            last_mins = mins;
         }
+        last_mins = mins;
     }
 
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));

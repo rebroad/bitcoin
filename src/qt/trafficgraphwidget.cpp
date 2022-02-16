@@ -75,7 +75,7 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
-            x = XMARGIN + w - w * i / DESIRED_SAMPLES;
+            x = XMARGIN + w - w * i * m_new_range.count() / m_range / DESIRED_SAMPLES;
             int y = y_value(samples.at(i));
             path.lineTo(x, y);
         }
