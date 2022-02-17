@@ -256,11 +256,11 @@ bool update_num(float new_val, float &current, float &increment, int length)
     if (new_val == 0 || current == new_val)
         return false;
 
-    if (abs(increment) < abs(current / length)) {
+    if (abs(increment) < abs(1.0 * (current+1) / length)) { // +1 to get it started even if current is zero
         if (new_val > current)
-            increment = current / length;
+            increment = 1.0 * (current+1) / length;
         else
-            increment = -current / length;
+            increment = -1.0 * (current+1) / length;
     } else {
         if (((increment > 0) && (current + increment * 2 > new_val)) ||
                 ((increment < 0) && (current + increment * 2 < new_val))) {
@@ -272,7 +272,7 @@ bool update_num(float new_val, float &current, float &increment, int length)
             }
         }
     }
-    if (abs(increment) >= current / length)
+    if (abs(increment) >= 1.0 * current / length)
         current += increment;
     else {
         current = new_val;
