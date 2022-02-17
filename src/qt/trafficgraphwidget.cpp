@@ -256,9 +256,12 @@ bool update_num(float new_val, float &current, float &increment, int length)
     if (new_val == 0 || current == new_val)
         return false;
 
-    if (abs(increment) < abs((new_val - current) * 2/ length))
-        increment = (new_val - current) * 2/ length;
-    else {
+    if (abs(increment) < abs(current / length)) {
+        if (new_val > current)
+            increment = current / length;
+        else
+            increment = -current / length;
+    } else {
         if (((increment > 0) && (current + increment * 2 > new_val)) ||
                 ((increment < 0) && (current + increment * 2 < new_val))) {
             increment = increment / 2; // Keep the momentum going even if new_val is elsewhere.
@@ -269,9 +272,9 @@ bool update_num(float new_val, float &current, float &increment, int length)
             }
         }
     }
-    if (abs((length * current / new_val) - length) > 1) {
+    if (abs(increment) >= current / length)
         current += increment;
-    } else {
+    else {
         current = new_val;
         increment = 0;
     }
