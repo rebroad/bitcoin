@@ -1178,7 +1178,8 @@ void RPCConsole::setTrafficGraphRange(unsigned int value)
     //if (!slider_in_use) // PageStep was used, slider was not dragged
     //    ui->sldGraphRange->setValue(set_slider_value); // Snap the slider to where this value is
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(mins));
-    LogPrintf("%s: value=%d slider=%d mins=%d %s\n", __func__, value, set_slider_value, mins.count(), slider_in_use ? "":"SNAP");
+    if (!slider_in_use) // As too much debug otherwise
+        LogPrintf("%s: value=%d slider=%d mins=%d %s\n", __func__, value, set_slider_value, mins.count(), slider_in_use ? "":"SNAP");
 }
 
 void RPCConsole::on_sldGraphRange_sliderReleased()

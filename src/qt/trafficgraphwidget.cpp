@@ -365,17 +365,12 @@ void TrafficGraphWidget::updateRates(int i)
     vSamplesOut[i].push_front(out_rate_kilobytes_per_sec);
     vTimeStamp[i].push_front(nTime);
     nLastTime[i] = nTime;
-    nLastBytesIn[i] = bytesIn;
+    nLastBytesIn[i] = bytesIn; // TODO - These could also be local
     nLastBytesOut[i] = bytesOut;
+    static bool fFull[VALUES_SIZE];
+    if (!Full[i] && vTimeStamp[i].size()+5 > DESIRED_SAMPLES)
+        LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES - vTimeStamp[i].size());
     while(vTimeStamp[i].size() > DESIRED_SAMPLES) {
-        static bool fFull[VALUES_SIZE];
-        if (i == 0) {
-            static bool fReported = false;
-            if (!fReported) {
-                LogPrintf("%s: fFull[0]=%s\n", __func__, fFull[0]);
-                fReported = true;
-            }
-        }
         if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i])
             m_bump_value = true;
 
