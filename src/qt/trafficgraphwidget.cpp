@@ -262,6 +262,8 @@ bool update_num(float new_val, float &current, float &increment, int length)
             increment = 1.0 * (current+1) / length; // +1s are to get it started even if current is zero
         else
             increment = -1.0 * (current+1) / length;
+        if (abs(increment) > abs(new_val - current)) // Only check this when creating an increment
+            increment = 0; // Nothing to do!
         LogPrintf("%s: new increment: %d+1 / %d = %d->%d\n", __func__, current, length, old_increment, increment);
     } else {
         if (((increment > 0) && (current + increment * 2 > new_val)) ||
@@ -275,8 +277,9 @@ bool update_num(float new_val, float &current, float &increment, int length)
         }
     }
     if (abs(increment) < 0.8 * current / length) {
-        if ((increment > 0 && new_val > current) || (increment < 0 && new_val < current)) {
-            LogPrintf("%s: final jump. inc=%d < 0.8 * %d / %d\n", __func__, abs(increment), current, length);
+        if ((increment >= 0 && new_val > current) || (increment <= 0 && new_val < current)) {
+            if (increment)
+                LogPrintf("%s: final jump. inc=%d < 0.8 * %d / %d\n", __func__, abs(increment), current, length);
             current = new_val;
         }
         increment = 0;
