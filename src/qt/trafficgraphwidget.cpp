@@ -274,13 +274,14 @@ bool update_num(float new_val, float &current, float &increment, int length)
             }
         }
     }
-    if (abs(increment) >= 0.8 * current / length)
-        current += increment;
-    else {
-        LogPrintf("%s: final jump. inc=%d > 0.8 * %d / %d\n", __func__, abs(increment), current, length);
-        current = new_val;
+    if (abs(increment) < 0.8 * current / length) {
+        if ((increment > 0 && new_val > current) || (increment < 0 && new_val < current)) {
+            LogPrintf("%s: final jump. inc=%d < 0.8 * %d / %d\n", __func__, abs(increment), current, length);
+            current = new_val;
+        }
         increment = 0;
-    }
+    } else
+        current += increment;
 
     return true;
 }
