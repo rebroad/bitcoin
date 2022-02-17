@@ -256,11 +256,13 @@ bool update_num(float new_val, float &current, float &increment, int length)
     if (new_val == 0 || current == new_val)
         return false;
 
-    if (abs(increment) <= abs(1.0 * current) / length) { // allow equal to as current and increment could be zero
+    if (abs(increment) <= abs(0.8 * current) / length) { // allow equal to as current and increment could be zero
+        int old_increment = increment;
         if (new_val > current)
             increment = 1.0 * (current+1) / length; // +1s are to get it started even if current is zero
         else
             increment = -1.0 * (current+1) / length;
+        LogPrintf("%s: new increment: %d+1 / %d = %d->%d\n", __func__, current, length, old_increment, increment);
     } else {
         if (((increment > 0) && (current + increment * 2 > new_val)) ||
                 ((increment < 0) && (current + increment * 2 < new_val))) {
@@ -272,7 +274,7 @@ bool update_num(float new_val, float &current, float &increment, int length)
             }
         }
     }
-    if (abs(increment) >= 1.0 * current / length)
+    if (abs(increment) >= 0.8 * current / length)
         current += increment;
     else {
         current = new_val;
@@ -368,7 +370,7 @@ void TrafficGraphWidget::updateRates(int i)
     nLastBytesIn[i] = bytesIn; // TODO - These could also be local
     nLastBytesOut[i] = bytesOut;
     static bool fFull[VALUES_SIZE];
-    if (!Full[i] && vTimeStamp[i].size()+5 > DESIRED_SAMPLES)
+    if (!fFull[i] && vTimeStamp[i].size()+5 > DESIRED_SAMPLES)
         LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES - vTimeStamp[i].size());
     while(vTimeStamp[i].size() > DESIRED_SAMPLES) {
         if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i])
