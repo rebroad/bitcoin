@@ -2158,9 +2158,10 @@ void PeerManagerImpl::ProcessGetData(CNode& pfrom, Peer& peer, const std::atomic
 
     // Only process one BLOCK item per call, since they're uncommon and can be
     // expensive to process.
+    bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
     if (it != peer.m_getdata_requests.end() && !pfrom.fPauseSend) {
         const CInv &inv = *it++;
-        if (inv.IsGenBlkMsg()) {
+        if (inv.IsGenBlkMsg() && fDownloadBlocks) {
             ProcessGetBlockData(pfrom, peer, inv);
         }
         // else: If the first item on the queue is an unknown type, we erase it
@@ -2354,7 +2355,8 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
-        if ((CanDirectFetch() || !fUpdateChain) && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if ((CanDirectFetch() || !fUpdateChain) && fDownloadBlocks && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
             if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
                 LogPrintf("CURIOUS: COMPETING BLOCK\n");
             std::vector<const CBlockIndex*> vToFetch;
@@ -2421,7 +2423,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 }
             }
         } else if (received_new_header)
-            LogPrint(BCLog::BLOCK, "%s%s\n", CanDirectFetch() ? "" : "!CanDirectFetch() ", pindexLast->IsValid(BLOCK_VALID_TREE) ? "" : "!IsValid(BLOCK_VALID_TREE)");
+            LogPrint(BCLog::BLOCK, "%s%s%s\n", fDownloadBlocks ? "" : "!fDownloadBlocks ", CanDirectFetch() ? "" : "!CanDirectFetch() ", pindexLast->IsValid(BLOCK_VALID_TREE) ? "" : "!IsValid(BLOCK_VALID_TREE)");
         // If we're in IBD, we want outbound peers that will serve us a useful
         // chain. Disconnect peers that are on chains with insufficient work.
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && nCount != MAX_HEADERS_RESULTS) {
@@ -3012,6 +3014,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::SENDCMPCT) {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (!fDownloadBlocks) return;
         bool fAnnounceUsingCMPCTBLOCK = false;
         uint64_t nCMPCTBLOCKVersion = 0;
         vRecv >> fAnnounceUsingCMPCTBLOCK >> nCMPCTBLOCKVersion;
@@ -3328,6 +3332,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::GETBLOCKS) {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (!fDownloadBlocks) return;
         CBlockLocator locator;
         uint256 hashStop;
         vRecv >> locator >> hashStop;
@@ -3395,6 +3401,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::GETBLOCKTXN) {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (!fDownloadBlocks) return;
         BlockTransactionsRequest req;
         vRecv >> req;
 
@@ -3449,6 +3457,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::GETHEADERS) {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (!fDownloadBlocks) return;
         CBlockLocator locator;
         uint256 hashStop;
         vRecv >> locator >> hashStop;
@@ -3751,6 +3761,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::CMPCTBLOCK)
     {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (!fDownloadBlocks) return;
         // Ignore cmpctblock received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::BLOCK, "Unexpected cmpctblock message received from peer=%d\n", pfrom.GetId());
@@ -3878,12 +3890,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 PartiallyDownloadedBlock& partialBlock = *(*queuedBlockIt)->partialBlock;
                 LogPrintf("before 1st InitData. peer=%d\n", pfrom.GetId());
                 ReadStatus status = partialBlock.InitData(cmpctblock, vExtraTxnForCompact);
+                bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
                 if (status == READ_STATUS_INVALID) {
                     LogPrint(BCLog::BLOCK, "cmpctblock %s INVALID peer=%d\n", strBlkHeight(pindex), pfrom.GetId());
                     RemoveBlockRequest(pindex->GetBlockHash()); // Reset in-flight state in case Misbehaving does not result in a disconnect
                     Misbehaving(pfrom.GetId(), 100, "invalid compact block");
                     return;
-                } else if (status == READ_STATUS_FAILED) {
+                } else if (status == READ_STATUS_FAILED && fDownloadBlocks) {
                     // Duplicate txindexes, the block is now in-flight, so just request it
                     LogPrint(BCLog::BLOCK, "cmpctblock failed. send getdata block %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
                     std::vector<CInv> vInv(1);
@@ -3956,7 +3969,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
             } // if a cmpctblock that we can process
         } else {
-            if (fAlreadyInFlight) { // REBTODO - probably don't do this
+            bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+            if (fAlreadyInFlight && fDownloadBlocks) { // REBTODO - probably don't do this
                 // We requested this block, but its far into the future, so our
                 // mempool will probably be useless - request the block normally
                 LogPrint(BCLog::BLOCK, "resend getdata block %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
@@ -3993,6 +4007,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::BLOCKTXN)
     {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (!fDownloadBlocks) return;
         // Ignore blocktxn received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::NET, "Unexpected blocktxn message received from peer=%d\n", pfrom.GetId());
@@ -4038,6 +4054,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             }
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
+            bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
             if (status == READ_STATUS_INVALID) {
                 if (!fWrongPeer) {
                     LogPrint(BCLog::BLOCK, "blocktxn %s INVALID peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
@@ -4046,7 +4063,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 } else
                     LogPrint(BCLog::BLOCK, "blocktxn %s INVALID wrong peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
                 return; // This return isn't needed as it'll hit the one later on
-            } else if (status == READ_STATUS_FAILED && !fWrongPeer) {
+            } else if (status == READ_STATUS_FAILED && !fWrongPeer && fDownloadBlocks) {
                 // Might have collided, fall back to getdata now :(
                 std::vector<CInv> invs;
                 invs.push_back(CInv(MSG_BLOCK | GetFetchFlags(pfrom), resp.blockhash));
@@ -4099,6 +4116,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::HEADERS)
     {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (!fDownloadBlocks) return;
         // Ignore headers received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::NET, "Unexpected headers message received from peer %d\n", pfrom.GetId());
@@ -4124,6 +4143,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::BLOCK)
     {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (!fDownloadBlocks) return;
         // Ignore block received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::NET, "Unexpected block message received from peer %d\n", pfrom.GetId());
@@ -4215,6 +4236,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::MEMPOOL) {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (!fDownloadBlocks) return;
         if (!(pfrom.GetLocalServices() & NODE_BLOOM) && !pfrom.HasPermission(NetPermissionFlags::Mempool))
         {
             if (!pfrom.HasPermission(NetPermissionFlags::NoBan))
@@ -5424,12 +5447,13 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     cached_cmpctblock = &last_recved_cmpctblock1;
                 if (pindex->GetBlockHash() == last_recved_cmpctblock2.header.GetHash())
                     cached_cmpctblock = &last_recved_cmpctblock2;
+                bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
                 if (CanDirectFetch() && cached_cmpctblock) {
                     LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) %s peer=%d\n", pto->GetId(), strBlkInfo(pindex));
                     CDataStream cmpctblkMsg(SER_NETWORK, PROTOCOL_VERSION);
                     cmpctblkMsg << *cached_cmpctblock;
                     ProcessMessage(*pto, NetMsgType::CMPCTBLOCK, cmpctblkMsg, std::chrono::seconds{2}, false);
-                } else {
+                } else if (fDownloadBlocks) {
                     uint32_t nFetchFlags = GetFetchFlags(*pto);
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                     LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());

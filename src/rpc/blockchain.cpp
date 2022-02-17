@@ -622,6 +622,28 @@ static RPCHelpMan updatechain()
     };
 }
 
+static RPCHelpMan downloadblocks()
+{
+    return RPCHelpMan{"downloadblocks",
+                "\nEnables/disables block downloading.\n",
+                {
+                    {"enabled", RPCArg::Type::BOOL, RPCArg::Optional::NO, "whether to download blocks"},
+                },
+                RPCResult{
+                    RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+                    HelpExampleCli("downloadblocks", "1") + HelpExampleRpc("downloadblocks", "1")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::string strEnabled = request.params[0].get_str();
+    gArgs.ForceSetArg("-downloadblocks", strEnabled);
+
+    return NullUniValue;
+}
+    };
+}
+
 static RPCHelpMan getrawmempool()
 {
     return RPCHelpMan{"getrawmempool",
@@ -2902,6 +2924,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         &savemempool,                        },
     { "blockchain",         &maxmempool,                         },
     { "blockchain",         &updatechain,                        },
+    { "blockchain",         &downloadblocks,                     },
     { "blockchain",         &verifychain,                        },
 
     { "blockchain",         &preciousblock,                      },

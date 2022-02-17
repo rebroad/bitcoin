@@ -1477,16 +1477,16 @@ void CChainState::InitCoinsCache(size_t cache_size_bytes)
 bool CChainState::IsInitialBlockDownload() const
 {
     static bool fPrev = true;
-
+    bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
     bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
     bool fNew = false;
     if (fImporting || fReindex)
         fNew = true;
     else if (m_chain.Tip() == nullptr)
         fNew = true;
-    else if (fUpdateChain && m_chain.Tip()->nChainWork < nMinimumChainWork)
+    else if (fDownloadBlocks && fUpdateChain && m_chain.Tip()->nChainWork < nMinimumChainWork)
         fNew = true;
-    else if (fUpdateChain && m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge)) {
+    else if (fDownloadBlocks && fUpdateChain && m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge)) {
         if (!fPrev) LogPrintf("%s: Setting to true as tip age is over %s old.\n", __func__, strAge(nMaxTipAge));
         fNew = true;
     }
