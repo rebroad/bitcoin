@@ -66,13 +66,13 @@ int TrafficGraphWidget::y_value(float value)
 
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
 {
-    int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / values[m_value].count()), int(samples.size()));
+    int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / values[m_value]), int(samples.size()));
     if(sampleCount > 0) {
         int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
         int x = XMARGIN + w;
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
-            x = XMARGIN + w - w * i * values[m_value].count() / m_range / DESIRED_SAMPLES;
+            x = XMARGIN + w - w * i * values[m_value] / m_range / DESIRED_SAMPLES;
             int y = y_value(samples.at(i));
             path.lineTo(x, y);
         }
@@ -298,7 +298,7 @@ void TrafficGraphWidget::updateStuff()
 
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
-        int64_t msecs_per_sample = int64_t(values[i].count()) * int64_t(60000) / DESIRED_SAMPLES;
+        int64_t msecs_per_sample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
         if (nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // REBTODO - fix bad timing
             updateRates(i);
             if (i == m_value) {
@@ -317,15 +317,15 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    int new_range{(values[m_new_value/2] + values[(m_new_value+1)/2])/2};
-    if (new_range, m_range, x_increment, width() - XMARGIN * 2) {
-        if (new_range > m_range && values[m_value].count() < m_range * 0.99) {
+    int new_range = (values[m_new_value/2] + values[(m_new_value+1)/2])/2;
+    if (update_num(new_range, m_range, x_increment, width() - XMARGIN * 2)) {
+        if (new_range > m_range && values[m_value] < m_range * 0.99) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
-                values[m_value].count(), values[m_value+1].count(), m_range);
+                values[m_value], values[m_value+1], m_range);
             m_value++;
-        } else if (m_value > 0 && new_range <= m_range && values[m_value-1].count() > m_range * 0.99) {
+        } else if (m_value > 0 && new_range <= m_range && values[m_value-1] > m_range * 0.99) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
-                values[m_value].count(), values[m_value-1].count(), m_range);
+                values[m_value], values[m_value-1], m_range);
             m_value--;
         }
         fUpdate = true;
@@ -366,7 +366,7 @@ void TrafficGraphWidget::updateRates(int i)
     static int nDebugI = 0;
     if (i > nDebugI) nDebugI = i;
     if (nDebugI == i)
-        LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i].count(), nRealInterval);
+        LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
     float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
     float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
     vSamplesIn[i].push_front(in_rate_kilobytes_per_sec);
