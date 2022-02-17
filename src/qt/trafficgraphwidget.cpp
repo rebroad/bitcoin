@@ -256,9 +256,9 @@ bool update_num(float new_val, float &current, float &increment, int length)
     if (new_val == 0 || current == new_val)
         return false;
 
-    if (abs(increment) < abs(1.0 * (current+1) / length)) { // +1 to get it started even if current is zero
+    if (abs(increment) <= abs(1.0 * current) / length) { // allow equal to as current and increment could be zero
         if (new_val > current)
-            increment = 1.0 * (current+1) / length;
+            increment = 1.0 * (current+1) / length; // +1s are to get it started even if current is zero
         else
             increment = -1.0 * (current+1) / length;
     } else {
