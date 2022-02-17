@@ -17,7 +17,7 @@ class QPaintEvent;
 class QTimer;
 QT_END_NAMESPACE
 
-#define VALUES_SIZE 14
+#define VALUES_SIZE 13
 
 class TrafficGraphWidget : public QWidget
 {
@@ -63,8 +63,7 @@ private:
     std::chrono::milliseconds nLastTime[VALUES_SIZE];
     std::chrono::minutes values[VALUES_SIZE] = {
         std::chrono::minutes{5},
-        std::chrono::minutes{10},
-        std::chrono::minutes{20},
+        std::chrono::minutes{15},
         std::chrono::minutes{30},
         std::chrono::minutes{60},
         std::chrono::minutes{2*60},

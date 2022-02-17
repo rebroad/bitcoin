@@ -1138,30 +1138,41 @@ void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
 {
     static int64_t last_click_time = 0;
     static bool last_click_was_up = false;
-    unsigned int value = (slider_value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
+    unsigned int value = (slider_value + 50) / 100 + 1; // minimum of 1, 0 reserve for scale bump
     if (!slider_in_use) {
         // Avoid accidental boucing of direction
         int64_t now = GetTimeMillis();
         bool this_click_is_up = false;
         bool bouncing = false;
-        if (slider_value > set_slider_value)
+        if (slider_value > set_slider_value) {
             this_click_is_up = true;
+            if (slider_value - set_slider_value == 1) {
+                value++; // Go to the next half-notch up
+                slider_value += 99;
+            }
+        } else {
+            if (slider_value - set_slider_value == 1) {
+                value--; // Go to the next half-notch up
+                slider_value -= 99;
+            }
+        }
         if (now - last_click_time < 250 && this_click_is_up != last_click_was_up) {
             LogPrintf("%s: ignoring snap %s (last was %s %dms ago)\n", __func__, this_click_is_up ? "UP":"DOWN",
                 last_click_was_up ? "UP":"DOWN", now - last_click_time);
             bouncing = true;
-            ui->sldGraphRange->blockSignals(true);
-            ui->sldGraphRange->setValue(set_slider_value);
-            ui->sldGraphRange->blockSignals(false);
+            slider_value = set_slider_value; // revert back to previous value
         } else
             LogPrintf("%s: snap slider_val=%d->%d %s (last:%s) value=%d\n", __func__, set_slider_value, slider_value, this_click_is_up ? "UP":"DOWN", last_click_was_up ? "UP":"DOWN", value);
+        ui->sldGraphRange->blockSignals(true);
+        ui->sldGraphRange->setValue(slider_value); // This will either revert the slider, or +/- 99, or neither.
+        ui->sldGraphRange->blockSignals(false);
         last_click_time = now;
         last_click_was_up = this_click_is_up;
         set_slider_value = slider_value;
-        if (bouncing) return;
+        if (bouncing) return; // We returned the slider to previous value, nothing else to do.
     }
     set_slider_value = slider_value;
-    setTrafficGraphRange(value);
+    setTrafficGraphRange(value); // each value is half a notch (0 reserved for scale bump up)
 }
 
 void RPCConsole::setTrafficGraphRange(unsigned int value)

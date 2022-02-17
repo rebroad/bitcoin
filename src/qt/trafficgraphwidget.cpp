@@ -237,16 +237,16 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 void TrafficGraphWidget::update_fMax()
 {
     float tmax = 0.0f;
-    for (const float f : vSamplesIn[m_new_value]) {
+    for (const float f : vSamplesIn[(m_new_value+1)/2]) {
         if(f > tmax) tmax = f;
     }
-    for (const float f : vSamplesOut[m_new_value]) {
+    for (const float f : vSamplesOut[(m_new_value+1)/2]) {
         if(f > tmax) tmax = f;
     }
     static float last_fMax = -1;
     new_fMax = tmax;
     if (new_fMax != last_fMax) {
-        LogPrintf("%s: i=%d new_fMax = %d -> %d\n", __func__, m_new_value, last_fMax, new_fMax);
+        LogPrintf("%s: i=%d new_fMax = %d -> %d\n", __func__, (m_new_value+1)/2, last_fMax, new_fMax);
         last_fMax = new_fMax;
     }
 }
@@ -305,7 +305,7 @@ void TrafficGraphWidget::updateStuff()
                 }
                 fUpdate = true;
             }
-            if (i == m_new_value)
+            if (i == (m_new_value+1)/2)
                 update_fMax();
         }
     }
@@ -314,22 +314,23 @@ void TrafficGraphWidget::updateStuff()
     static float x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
-    if (update_num(values[m_new_value].count(), m_range, x_increment, width() - XMARGIN * 2)) {
-        if (values[m_new_value].count() > m_range && values[m_value].count() < m_range * 0.99) {
+    int new_range{(values[m_new_value/2] + values[(m_new_value+1)/2])/2};
+    if (new_range, m_range, x_increment, width() - XMARGIN * 2) {
+        if (new_range > m_range && values[m_value].count() < m_range * 0.99) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
                 values[m_value].count(), values[m_value+1].count(), m_range);
             m_value++;
-        } else if (m_value > 0 && values[m_new_value].count() <= m_range && values[m_value-1].count() > m_range * 0.99) {
+        } else if (m_value > 0 && new_range <= m_range && values[m_value-1].count() > m_range * 0.99) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
                 values[m_value].count(), values[m_value-1].count(), m_range);
             m_value--;
         }
         fUpdate = true;
-        LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value].count(), m_range, m_new_value, m_value, x_increment);
-    } else if (m_value != m_new_value) {
-        LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, m_new_value);
+        LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, new_range, m_range, (m_new_value+1)/2, m_value, x_increment);
+    } else if (m_value != (m_new_value+1)/2) {
+        LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, (m_new_value+1)/2);
         fUpdate = true;
-        m_value = m_new_value;
+        m_value = (m_new_value+1)/2;
     }
 
     static bool last_fToggle = fToggle;
@@ -393,13 +394,12 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
         m_bump_value = false;
         value = m_value + 1;
     } else
-        value--; // get the array marker
+        value--; // get half the array marker
     int old_value = m_new_value;
-    m_new_value = std::min((int)value, VALUES_SIZE - 1);
-    if (m_new_value != old_value) {
+    m_new_value = std::min((int)value, VALUES_SIZE * 2 - 2);
+    if ((m_new_value+1)/2 != (old_value+1)/2)
         update_fMax();
-        update();
-    }
 
-    return values[m_new_value];
+    std::chrono::minutes new_range{(values[m_new_value/2] + values[(m_new_value+1)/2])/2};
+    return new_range;
 }
