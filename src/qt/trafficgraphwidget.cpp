@@ -328,7 +328,7 @@ void TrafficGraphWidget::updateStuff()
             m_value--;
         }
         fUpdate = true;
-        LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value].count(), m_range, m_new_value, m_value, x_increment);
+        LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
     } else if (m_value != m_new_value) {
         LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, m_new_value);
         fUpdate = true;
@@ -404,5 +404,5 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
         update();
     }
 
-    return values[m_new_value];
+    return std::chrono::minutes{values[m_new_value]};
 }
