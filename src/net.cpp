@@ -1719,7 +1719,8 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
         } else if (nPeersIBD) IsIBD = true;
     } // if (now != lastnow)
 
-    int nTechnique = (now / 5400) % 2; // 0 = Pct, 1 = TXpm
+    bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+    int nTechnique = fDownloadBlocks ? (now / 10800) % 2 : 0; // 0 = Pct, 1 = TXpm
     bool fLatestNodePctDegrading = false;
     bool fLatestNodeTXpmDegrading = false;
     if (!IsIBD && lastnow != now) {
