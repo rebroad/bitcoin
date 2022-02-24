@@ -1071,9 +1071,20 @@ void ArgsManager::LogArgs() const
 
 bool RenameOver(fs::path src, fs::path dest)
 {
+#ifdef __MINGW64__
+    // This is a workaround for a bug in libstdc++ which
+    // implements std::filesystem::rename with _wrename function.
+    // This bug has been fixed in upstream:
+    //  - GCC 10.3: 8dd1c1085587c9f8a21bb5e588dfe1e8cdbba79e
+    //  - GCC 11.1: 1dfd95f0a0ca1d9e6cbc00e6cbfd1fa20a98f312
+    // For more details see the commits mentioned above.
+    return MoveFileExW(src.wstring().c_str(), dest.wstring().c_str(),
+                       MOVEFILE_REPLACE_EXISTING) != 0;
+#else
     std::error_code error;
     fs::rename(src, dest, error);
     return !error;
+#endif
 }
 
 /**
@@ -1338,18 +1349,6 @@ bool SetupNetworking()
 int GetNumCores()
 {
     return std::thread::hardware_concurrency();
-}
-
-std::string CopyrightHolders(const std::string& strPrefix)
-{
-    const auto copyright_devs = strprintf(_(COPYRIGHT_HOLDERS).translated, COPYRIGHT_HOLDERS_SUBSTITUTION);
-    std::string strCopyrightHolders = strPrefix + copyright_devs;
-
-    // Make sure Bitcoin Core copyright is not removed by accident
-    if (copyright_devs.find("Bitcoin Core") == std::string::npos) {
-        strCopyrightHolders += "\n" + strPrefix + "The Bitcoin Core developers";
-    }
-    return strCopyrightHolders;
 }
 
 // Obtain the application startup time (used for uptime calculation)
