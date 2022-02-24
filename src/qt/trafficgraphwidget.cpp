@@ -112,6 +112,8 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
             }
         }
     }
+    //if (ttpoint != closest_i || closest_i != -1)
+    //    LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
     if (ttpoint != closest_i) {
         ttpoint = closest_i;
         update(); // Calls paintEvent() to draw or delete the highlighted point
@@ -243,8 +245,8 @@ void TrafficGraphWidget::update_fMax()
     for (const float f : vSamplesOut[m_new_value]) {
         if(f > tmax) tmax = f;
     }
-    static float last_fMax = -1;
     new_fMax = tmax;
+    static float last_fMax = -1;
     if (new_fMax != last_fMax) {
         LogPrintf("%s: i=%d new_fMax = %d -> %d\n", __func__, m_new_value, last_fMax, new_fMax);
         last_fMax = new_fMax;
