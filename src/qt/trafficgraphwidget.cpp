@@ -372,7 +372,7 @@ void TrafficGraphWidget::updateRates(int i)
     vSamplesOut[i].push_front(out_rate_kilobytes_per_sec);
     vTimeStamp[i].push_front(nTime);
     nLastTime[i] = nTime;
-    nLastBytesIn[i] = bytesIn; // TODO - These could also be local
+    nLastBytesIn[i] = bytesIn;
     nLastBytesOut[i] = bytesOut;
     static bool fFull[VALUES_SIZE];
     if (!fFull[i] && vTimeStamp[i].size()+5 > DESIRED_SAMPLES)
