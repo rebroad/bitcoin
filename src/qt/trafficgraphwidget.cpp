@@ -222,7 +222,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int nDuration = (vTimeStamp[m_value].at(ttpoint) - sampleTime).count();
         if (nDuration > 0) {
             if (nDuration > 9999)
-                strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{nDuration/1000});
+                strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{(nDuration+500)/1000});
             else
                 strTime += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{nDuration*1000});
         } else // REBTEMP
