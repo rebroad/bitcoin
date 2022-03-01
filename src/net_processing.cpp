@@ -2268,6 +2268,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // Nothing interesting. Stop asking this peers for more headers.
         return;
     }
+    bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
 
     bool received_new_header = false;
     const CBlockIndex *pindexLast = nullptr;
@@ -2283,7 +2284,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         //   don't connect before giving DoS points
         // - Once a headers message is received that is valid and does connect,
         //   nUnconnectingHeaders gets reset back to 0.
-        if (!m_chainman.m_blockman.LookupBlockIndex(headers[0].hashPrevBlock) && nCount < MAX_BLOCKS_TO_ANNOUNCE) {
+        if (fDownloadBlocks && !m_chainman.m_blockman.LookupBlockIndex(headers[0].hashPrevBlock) && nCount < MAX_BLOCKS_TO_ANNOUNCE) {
             nodestate->nUnconnectingHeaders++;
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), uint256()));
             LogPrint(BCLog::BLOCK, "received header %s: missing prev block %s, sending getheaders (%d) to end (peer=%d, nUnconnectingHeaders=%d)\n",
@@ -2343,7 +2344,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
             nodestate->m_last_block_announcement = GetTime();
         }
 
-        if (nCount == MAX_HEADERS_RESULTS) {
+        if (fDownloadBlocks && nCount == MAX_HEADERS_RESULTS) {
             // Headers message had its maximum size; the peer may have more headers.
             // TODO: optimize: if pindexLast is an ancestor of m_chainman.ActiveChain().Tip or pindexBestHeader, continue
             // from there instead.
@@ -2355,7 +2356,6 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
-        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
         if ((CanDirectFetch() || !fUpdateChain) && fDownloadBlocks && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
             if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
                 LogPrintf("CURIOUS: COMPETING BLOCK\n");
@@ -3014,8 +3014,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     }
 
     if (msg_type == NetMsgType::SENDCMPCT) {
-        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
-        if (!fDownloadBlocks) return;
         bool fAnnounceUsingCMPCTBLOCK = false;
         uint64_t nCMPCTBLOCKVersion = 0;
         vRecv >> fAnnounceUsingCMPCTBLOCK >> nCMPCTBLOCKVersion;
@@ -3762,7 +3760,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     if (msg_type == NetMsgType::CMPCTBLOCK)
     {
         bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
-        if (!fDownloadBlocks) return;
+        //if (!fDownloadBlocks) return;
         // Ignore cmpctblock received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::BLOCK, "Unexpected cmpctblock message received from peer=%d\n", pfrom.GetId());
@@ -3890,7 +3888,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 PartiallyDownloadedBlock& partialBlock = *(*queuedBlockIt)->partialBlock;
                 LogPrintf("before 1st InitData. peer=%d\n", pfrom.GetId());
                 ReadStatus status = partialBlock.InitData(cmpctblock, vExtraTxnForCompact);
-                bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
                 if (status == READ_STATUS_INVALID) {
                     LogPrint(BCLog::BLOCK, "cmpctblock %s INVALID peer=%d\n", strBlkHeight(pindex), pfrom.GetId());
                     RemoveBlockRequest(pindex->GetBlockHash()); // Reset in-flight state in case Misbehaving does not result in a disconnect
@@ -3969,7 +3966,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 }
             } // if a cmpctblock that we can process
         } else {
-            bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
             if (fAlreadyInFlight && fDownloadBlocks) { // REBTODO - probably don't do this
                 // We requested this block, but its far into the future, so our
                 // mempool will probably be useless - request the block normally
@@ -4007,8 +4003,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::BLOCKTXN)
     {
-        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
-        if (!fDownloadBlocks) return;
         // Ignore blocktxn received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::NET, "Unexpected blocktxn message received from peer=%d\n", pfrom.GetId());
@@ -4116,8 +4110,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::HEADERS)
     {
-        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
-        if (!fDownloadBlocks) return;
         // Ignore headers received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::NET, "Unexpected headers message received from peer %d\n", pfrom.GetId());
@@ -4143,8 +4135,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::BLOCK)
     {
-        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
-        if (!fDownloadBlocks) return;
         // Ignore block received while importing
         if (fImporting || fReindex) {
             LogPrint(BCLog::NET, "Unexpected block message received from peer %d\n", pfrom.GetId());
