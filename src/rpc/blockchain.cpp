@@ -617,6 +617,10 @@ static RPCHelpMan updatechain()
     std::string strEnabled = request.params[0].get_str();
     gArgs.ForceSetArg("-updatechain", strEnabled);
 
+    ChainstateManager& chainman = EnsureAnyChainman(request.context);
+    BlockValidationState state;
+    chainman.ActiveChainstate().ActivateBestChain(state);
+
     return NullUniValue;
 }
     };
