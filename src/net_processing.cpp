@@ -4022,8 +4022,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             CNodeState *state = State(pfrom.GetId());
             int nTooHigh = state->nBlockAfterTXs - 2;
             if (nTooHigh > 0) {
-                LogPrintf("nTxInFlight was too high by %d. Resetting. peer=%d\n", nTooHigh, pfrom.GetId());
-                state->nBlocksInFlight -= nTooHigh;
+                LogPrintf("nTxInFlight was too high by %d. peer=%d\n", nTooHigh, pfrom.GetId());
+                state->nTxInFlight -= nTooHigh;
             }
             state->nBlockAfterTXs = 0;
 
