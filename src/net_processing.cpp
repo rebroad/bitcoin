@@ -5368,7 +5368,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
             int nOtherPeersWithValidatedDownloads = m_peers_downloading_from - 1;
             if (current_time > state.m_downloading_since + std::chrono::seconds{consensusParams.nPowTargetSpacing} * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
-                LogPrintf("Timeout downloading block %s. DLS=%s nPTS=%d BDTB=%d nOPWVD=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), strAge((current_time.count() - state.m_downloading_since.count()) / 1000000), consensusParams.nPowTargetSpacing, BLOCK_DOWNLOAD_TIMEOUT_BASE, nOtherPeersWithValidatedDownloads, pto->GetId());
+                LogPrintf("Timeout downloading block %s. DLS=%s nPTS=%d BDTB=%d nOPWVD=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), strAge((current_time - state.m_downloading_since).count() / 1000000), consensusParams.nPowTargetSpacing, BLOCK_DOWNLOAD_TIMEOUT_BASE, nOtherPeersWithValidatedDownloads, pto->GetId());
                 pto->fDisconnect = true; // REBTODO - this logic really needs improving!
                 return true;
             }
@@ -5381,7 +5381,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             }
             if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
                 current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1) && nNow - count_seconds(pto->m_last_block_time) > 10) {
-                LogPrintf("Timeout downloading block %s nLastRecv=%ds nOPWVD=%d nLBT=%s disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNow - count_seconds(pto->m_last_recv), nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->m_last_block_time)), pto->GetId());
+                LogPrintf("Timeout downloading block %s clicks=%d nLastRecv=%ds DLS=%s nOPWVD=%d nLBT=%s disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNetClicks - state.m_download_report_clicks, nNow - count_seconds(pto->m_last_recv), strAge((current_time - state.m_downloading_since).count() / 1000000), nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->m_last_block_time)), pto->GetId());
                 pto->fDisconnect = true;
                 return true;
             }
