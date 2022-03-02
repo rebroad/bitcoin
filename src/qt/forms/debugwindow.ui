@@ -635,8 +635,11 @@
              <property name="maximum">
               <number>2400</number>
              </property>
-             <property name="pageStep">
+             <property name="singleStep">
               <number>200</number>
+             </property>
+             <property name="pageStep">
+              <number>400</number>
              </property>
              <property name="value">
               <number>0</number>
