@@ -183,10 +183,10 @@ static void InitMessage(SplashScreen *splash, const std::string &message)
 
 static void ShowProgress(SplashScreen *splash, const std::string &title, int nProgress, bool resume_possible)
 {
-    InitMessage(splash, title + std::string("\n") +
-            (resume_possible ? SplashScreen::tr("(press q to shutdown and continue later)").toStdString()
-                                : SplashScreen::tr("press q to shutdown").toStdString()) +
-            strprintf("\n%d", nProgress) + "%");
+    InitMessage(splash, title +
+            (resume_possible ? std::string("\n") + SplashScreen::tr("(press q to shutdown and continue later)").toStdString() + std::string("\n")
+                                : std::string("")) +
+            strprintf(" %d%%", nProgress));
 }
 
 void SplashScreen::subscribeToCoreSignals()

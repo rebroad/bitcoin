@@ -306,14 +306,15 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
     int nLastPercent = -1;
     // Load m_block_index
     while (pcursor->Valid()) {
-        nNow = GetTime();
-        if (nNow >= nLastNow + 5) {
-            int nPercent = 100 * nCount / nHighest;
-            if (nPercent > nLastPercent) {
-                uiInterface.InitMessage(strprintf(_("Loading blocks... %d%%").translated, (100 * nCount) / nHighest));
-                nLastPercent = nPercent;
+        int nPercent = 100 * nCount / nHighest;
+        if (nPercent > nLastPercent) {
+            nNow = GetTime();
+            if (nNow >= nLastNow + 60) {
+                LogPrintf("%s: Loading blocks... %d%%\n", __func__, (100 * nCount) / nHighest);
+                nLastNow = nNow;
             }
-            nLastNow = nNow;
+            uiInterface.ShowProgress(_("Loading blocks…").translated, (100 * nCount) / nHighest, false);
+            nLastPercent = nPercent;
         }
         nCount++;
         if (ShutdownRequested()) return false;
