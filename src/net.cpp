@@ -1724,11 +1724,11 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     bool fLatestNodeTXpmDegrading = false;
     if (!IsIBD && lastnow != now) {
         bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
-        int nRuntToggle = gArgs.GetIntArg("-runttoggle", 180) * 60;
+        int nRuntToggle = gArgs.GetIntArg("-runttoggle", fDownloadBlocks ? 180 : 0) * 60;
         if (nRuntToggle < 2)
             nTechnique = nRuntToggle;
         else
-            nTechnique = fDownloadBlocks ? (now / nRuntToggle) % 2 : 0; // 0 = Pct, 1 = TXpm
+            nTechnique = (now / nRuntToggle) % 2; // 0 = Pct, 1 = TXpm
 
         if (worstNodeTXpmBTXpm > nLowestBTXpm) {
             worstNodeTXpm = worstNodeBTXpm;
