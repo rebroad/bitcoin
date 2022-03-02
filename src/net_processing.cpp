@@ -5427,7 +5427,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         // Message: getdata (blocks)
         //
         std::vector<CInv> vGetData;
-        if (!pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
+        if (fDownloadBlocks && !pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             std::vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
@@ -5437,13 +5438,12 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     cached_cmpctblock = &last_recved_cmpctblock1;
                 if (pindex->GetBlockHash() == last_recved_cmpctblock2.header.GetHash())
                     cached_cmpctblock = &last_recved_cmpctblock2;
-                bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
                 if (CanDirectFetch() && cached_cmpctblock) {
                     LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) %s peer=%d\n", pto->GetId(), strBlkInfo(pindex));
                     CDataStream cmpctblkMsg(SER_NETWORK, PROTOCOL_VERSION);
                     cmpctblkMsg << *cached_cmpctblock;
                     ProcessMessage(*pto, NetMsgType::CMPCTBLOCK, cmpctblkMsg, std::chrono::seconds{2}, false);
-                } else if (fDownloadBlocks) {
+                } else {
                     uint32_t nFetchFlags = GetFetchFlags(*pto);
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
                     LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
