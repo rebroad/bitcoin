@@ -320,7 +320,7 @@ void TrafficGraphWidget::updateStuff()
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
         fUpdate = true;
     if (update_num(values[m_new_value], m_range, x_increment, width() - XMARGIN * 2)) {
-        if (values[m_new_value] > m_range && values[m_value] < m_range * 0.99) {
+        if (values[m_new_value] > m_range && values[m_value] < m_range) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
                 values[m_value], values[m_value+1], m_range);
             m_value++;
