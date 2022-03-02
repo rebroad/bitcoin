@@ -323,11 +323,11 @@ void TrafficGraphWidget::updateStuff()
         if (values[m_new_value] > m_range && values[m_value] < m_range) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
                 values[m_value], values[m_value+1], m_range);
-            m_value++;
+            m_value++; // REBTODO - re-assess the tooltip
         } else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
                 values[m_value], values[m_value-1], m_range);
-            m_value--;
+            m_value--; // REBTODO - re-assess the tooltip
         }
         fUpdate = true;
         LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
