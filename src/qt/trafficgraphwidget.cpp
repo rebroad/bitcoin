@@ -203,7 +203,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     if (ttpoint >= 0 && ttpoint < sampleCount) {
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
-        int x = XMARGIN + w - w * ttpoint / DESIRED_SAMPLES;
+        int x = XMARGIN + w - w * ttpoint * values[m_value] / m_range / DESIRED_SAMPLES;
         int y = y_value(floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint)));
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
