@@ -65,6 +65,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "maxmempool", 0, "megabytes" },
     { "updatechain", 1, "boolean" },
     { "downloadblocks", 1, "boolean" },
+    { "runttoggle", 1, "minutes" },
     { "bitnodeprotocolversion", 0, "number" },
     { "waitforblockheight", 0, "height" },
     { "waitforblockheight", 1, "timeout" },

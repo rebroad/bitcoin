@@ -825,6 +825,31 @@ static RPCHelpMan bitnodeprotocolversion()
     };
 }
 
+static RPCHelpMan runttoggle()
+{
+    return RPCHelpMan{"runttoggle",
+                "\nSets the duration between runt toggles.\n",
+                {
+                    {"minutes", RPCArg::Type::NUM, RPCArg::Optional::NO, "minutes between runt toggle"},
+                },
+                RPCResult{
+                    RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+                    HelpExampleCli("runttoggle", "180") + HelpExampleRpc("runttoggle", "180")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    int nNumber = request.params[0].get_int();
+    if (nNumber < 0)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("runttoggle %d is invalid", nNumber));
+    gArgs.ForceSetArg("-runttoggle", strprintf("%d", nNumber));
+    LogPrintf("Update runttoggle to %d\n", nNumber);
+
+    return NullUniValue;
+}
+    };
+}
+
 void RegisterMiscRPCCommands(CRPCTable &t)
 {
 // clang-format off
@@ -851,6 +876,7 @@ static const CRPCCommand commands[] =
     { "hidden",             &invokedisallowedsyscall, },
 #endif // USE_SYSCALL_SANDBOX
     { "hidden",             &bitnodeprotocolversion,  },
+    { "hidden",             &runttoggle,              },
 };
 // clang-format on
     for (const auto& c : commands) {

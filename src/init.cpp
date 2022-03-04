@@ -392,7 +392,7 @@ void SetupServerArgs(ArgsManager& argsman)
 
     // Hidden Options
     std::vector<std::string> hidden_args = {
-        "-dbcrashratio", "-forcecompactdb", "-updatechain", "-downloadblocks",
+        "-dbcrashratio", "-forcecompactdb", "-updatechain", "-downloadblocks", "-runttoggle",
         // GUI args. These will be overwritten by SetupUIArgs for the GUI
         "-choosedatadir", "-lang=<lang>", "-min", "-resetguisettings", "-splash", "-uiplatform"};
 
