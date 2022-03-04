@@ -1,15 +1,14 @@
-#include <node/validation_thread.h>
-#include <validation.h>
-
-namespace node {
+#include "validation_thread.h"
+#include "validation.h"
+#include "net.h"
 
 class ChainstateManager;
 
-void ThreadValidation()
+void CConnman::ThreadValidation()
 {
     LogPrintf("%s: Starting\n", __func__);
     int nSleep = 0;
-    while (true) {
+    while (!interruptNet) {
         if (fActivateChain) {
             if (!fActivatingChain) {
 	        if (nSleep != 100)
@@ -22,8 +21,8 @@ void ThreadValidation()
             nSleep = 0;
         else
             nSleep = 100;
-        std::this_thread::sleep_for(std::chrono::milliseconds(nSleep));
+        if (!interruptNet.sleep_for(std::chrono::milliseconds(nSleep)))
+            return;
     }
     LogPrintf("%s: Exiting\n", __func__);
 }
-} // namespace node
