@@ -989,6 +989,7 @@ private:
     void ProcessAddrFetch();
     void ThreadOpenConnections(std::vector<std::string> connect);
     void ThreadMessageHandler();
+    void ThreadValidation();
     void ThreadI2PAcceptIncoming();
     void AcceptConnection(const ListenSocket& hListenSocket);
 
@@ -1235,6 +1236,7 @@ private:
     std::thread threadOpenAddedConnections;
     std::thread threadOpenConnections;
     std::thread threadMessageHandler;
+    std::thread threadValidation;
     std::thread threadI2PAcceptIncoming;
 
     /** flag for deciding to connect to an extra outbound peer,

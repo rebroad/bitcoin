@@ -34,7 +34,6 @@
 #include <net_processing.h>
 #include <netbase.h>
 #include <node/blockstorage.h>
-#include <node/validation_thread.h>
 #include <node/caches.h>
 #include <node/chainstate.h>
 #include <node/context.h>
@@ -110,7 +109,6 @@ using node::DEFAULT_STOPAFTERBLOCKIMPORT;
 using node::LoadChainstate;
 using node::NodeContext;
 using node::ThreadImport;
-using node::ThreadValidation;
 using node::VerifyLoadedChainstate;
 using node::fHavePruned;
 using node::fPruneMode;
@@ -200,8 +198,6 @@ void Interrupt(NodeContext& node)
     }
 }
 
-std::thread threadValidation;
-
 void Shutdown(NodeContext& node)
 {
     static Mutex g_shutdown_mutex;
@@ -237,7 +233,6 @@ void Shutdown(NodeContext& node)
     // CScheduler/checkqueue, scheduler and load block thread.
     if (node.scheduler) node.scheduler->stop();
     if (node.chainman && node.chainman->m_load_block.joinable()) node.chainman->m_load_block.join();
-    if (threadValidation.joinable()) threadValidation.join();
     StopScriptCheckWorkerThreads();
 
     // After the threads that potentially access these pointers have been stopped,
@@ -1635,9 +1630,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     chainman.m_load_block = std::thread(&util::TraceThread, "loadblk", [=, &chainman, &args] {
         ThreadImport(chainman, vImportFiles, args);
     });
-
-    // Validate blocks
-    threadValidation = std::thread(&util::TraceThread, "validate", [=] { ThreadValidation(); });
 
     uiInterface.InitMessage(_("Wait for genesis block…").translated);
 

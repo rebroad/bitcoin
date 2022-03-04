@@ -178,7 +178,6 @@ BITCOIN_CORE_H = \
   netbase.h \
   netmessagemaker.h \
   node/blockstorage.h \
-  node/validation_thread.h \
   node/caches.h \
   node/chainstate.h \
   node/coin.h \
@@ -278,6 +277,7 @@ BITCOIN_CORE_H = \
   util/url.h \
   util/vector.h \
   validation.h \
+  validation_thread.h \
   validationinterface.h \
   versionbits.h \
   wallet/bdb.h \
@@ -361,7 +361,6 @@ libbitcoin_node_a_SOURCES = \
   node/psbt.cpp \
   node/transaction.cpp \
   node/ui_interface.cpp \
-  node/validation_thread.cpp \
   noui.cpp \
   policy/fees.cpp \
   policy/packages.cpp \
@@ -389,6 +388,7 @@ libbitcoin_node_a_SOURCES = \
   txreconciliation.cpp \
   txrequest.cpp \
   validation.cpp \
+  validation_thread.cpp \
   validationinterface.cpp \
   versionbits.cpp \
   $(BITCOIN_CORE_H)

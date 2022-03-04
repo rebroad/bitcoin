@@ -26,7 +26,6 @@
 #include <node/blockstorage.h>
 #include <node/coinstats.h>
 #include <node/ui_interface.h>
-#include <node/validation_thread.h>
 #include <node/utxo_snapshot.h>
 #include <policy/policy.h>
 #include <policy/rbf.h>
@@ -56,6 +55,7 @@
 #include <util/trace.h>
 #include <util/translation.h>
 #include <validationinterface.h>
+#include <validation_thread.h>
 #include <warnings.h>
 
 #include <algorithm>
@@ -2304,12 +2304,8 @@ bool CChainState::FlushStateToDisk(
             // make sure we don't prune above the blockfilterindexes bestblocks
             // pruning is height-based
             int last_prune = m_chain.Height(); // last height we can prune
-            LogPrintf("%s: last_prune = %d\n", __func__, last_prune);
             ForEachBlockFilterIndex([&](BlockFilterIndex& index) {
-               int old_last_prune = last_prune;
                last_prune = std::max(1, std::min(last_prune, index.GetSummary().best_block_height));
-               if (old_last_prune != last_prune)
-                   LogPrintf("%s: last_prune = %d -> %d\n", __func__, old_last_prune, last_prune);
             });
 
             if (nManualPruneHeight > 0) {
@@ -2323,7 +2319,6 @@ bool CChainState::FlushStateToDisk(
                 m_blockman.m_check_for_pruning = false;
             }
             if (!setFilesToPrune.empty()) {
-                LogPrintf("%s: setFilesToPrune.size() = %d\n", __func__, setFilesToPrune.size());
                 fFlushForPrune = true;
                 if (!fHavePruned) {
                     m_blockman.m_block_tree_db->WriteFlag("prunedblockfiles", true);
@@ -2359,7 +2354,6 @@ bool CChainState::FlushStateToDisk(
                 LOG_TIME_MILLIS_WITH_CATEGORY("write block and undo data to disk", BCLog::BENCH);
 
                 // First make sure all block and undo data is flushed to disk.
-                LogPrintf("%s: FlushBlockFile()\n", __func__);
                 m_blockman.FlushBlockFile();
             }
 
@@ -2367,7 +2361,6 @@ bool CChainState::FlushStateToDisk(
             {
                 LOG_TIME_MILLIS_WITH_CATEGORY("write block index to disk", BCLog::BENCH);
 
-                LogPrintf("%s: WriteBlockIndexDB()\n", __func__);
                 if (!m_blockman.WriteBlockIndexDB()) {
                     return AbortNode(state, "Failed to write to block index database");
                 }
@@ -2384,7 +2377,6 @@ bool CChainState::FlushStateToDisk(
         if (fDoFullFlush && !CoinsTip().GetBestBlock().IsNull()) {
             LOG_TIME_MILLIS_WITH_CATEGORY(strprintf("write coins cache to disk (%d coins, %.2fkB)",
                 coins_count, coins_mem_usage / 1000), BCLog::BENCH);
-            LogPrintf("%s: About to CoinsTip().Flush()\n", __func__);
 
             // Typical Coin structures on disk are around 48 bytes in size.
             // Pushing a new one to the database can cause it to be written
@@ -2427,13 +2419,11 @@ void CChainState::ForceFlushStateToDisk()
 
 void CChainState::PruneAndFlush()
 {
-    LogPrintf("%s: Start\n", __func__);
     BlockValidationState state;
     m_blockman.m_check_for_pruning = true;
     if (!this->FlushStateToDisk(state, FlushStateMode::NONE)) {
         LogPrintf("%s: failed to flush state (%s)\n", __func__, state.ToString());
     }
-    LogPrintf("%s: End\n", __func__);
 }
 
 static void DoWarning(const bilingual_str& warning)
@@ -3775,7 +3765,7 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
     // If tip is within 2 blocks of best header, activate best chain within message handler thread to avoid the 100ms delay, and to avoid breaking the miner tests.
     // REBTODO - Change logic to run in separate thread when we requested several blocks together (i.e. it was IBD)
     if (fActivatingChain || pindexBestHeader->nChainWork > ActiveChainstate().m_chain.Tip()->nChainWork + GetBlockProof(*ActiveChainstate().m_chain.Tip()) * 2) {
-        node::fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
+        fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
     } else {
         BlockValidationState state; // Only used to report errors, not invalidity - ignore it
         if (!ActiveChainstate().ActivateBestChain(state, block))
