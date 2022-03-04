@@ -4147,14 +4147,17 @@ bool ChainstateManager::LoadBlockIndex()
 
 bool CChainState::LoadGenesisBlock()
 {
+    LogPrintf("%s: Start\n", __func__);
     LOCK(cs_main);
 
     // Check whether we're already initialized by checking for genesis in
     // m_blockman.m_block_index. Note that we can't use m_chain here, since it is
     // set based on the coins db, not the block index db, which is the only
     // thing loaded at this point.
-    if (m_blockman.m_block_index.count(m_params.GenesisBlock().GetHash()))
+    if (m_blockman.m_block_index.count(m_params.GenesisBlock().GetHash())) {
+        LogPrintf("%s: Return true as count > 0\n", __func__);
         return true;
+    }
 
     try {
         const CBlock& block = m_params.GenesisBlock();
@@ -4168,6 +4171,7 @@ bool CChainState::LoadGenesisBlock()
         return error("%s: failed to write genesis block: %s", __func__, e.what());
     }
 
+    LogPrintf("%s: Return true at end\n", __func__);
     return true;
 }
 
