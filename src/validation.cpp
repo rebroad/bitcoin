@@ -26,6 +26,7 @@
 #include <node/blockstorage.h>
 #include <node/coinstats.h>
 #include <node/ui_interface.h>
+#include <node/validation_thread.h>
 #include <node/utxo_snapshot.h>
 #include <policy/policy.h>
 #include <policy/rbf.h>
@@ -55,7 +56,6 @@
 #include <util/trace.h>
 #include <util/translation.h>
 #include <validationinterface.h>
-#include <validation_thread.h>
 #include <warnings.h>
 
 #include <algorithm>
@@ -3775,7 +3775,7 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
     // If tip is within 2 blocks of best header, activate best chain within message handler thread to avoid the 100ms delay, and to avoid breaking the miner tests.
     // REBTODO - Change logic to run in separate thread when we requested several blocks together (i.e. it was IBD)
     if (fActivatingChain || pindexBestHeader->nChainWork > ActiveChainstate().m_chain.Tip()->nChainWork + GetBlockProof(*ActiveChainstate().m_chain.Tip()) * 2) {
-        fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
+        node::fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
     } else {
         BlockValidationState state; // Only used to report errors, not invalidity - ignore it
         if (!ActiveChainstate().ActivateBestChain(state, block))

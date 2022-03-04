@@ -34,6 +34,7 @@
 #include <net_processing.h>
 #include <netbase.h>
 #include <node/blockstorage.h>
+#include <node/validation_thread.h>
 #include <node/caches.h>
 #include <node/chainstate.h>
 #include <node/context.h>
@@ -109,6 +110,7 @@ using node::DEFAULT_STOPAFTERBLOCKIMPORT;
 using node::LoadChainstate;
 using node::NodeContext;
 using node::ThreadImport;
+using node::ThreadValidation;
 using node::VerifyLoadedChainstate;
 using node::fHavePruned;
 using node::fPruneMode;
@@ -198,6 +200,8 @@ void Interrupt(NodeContext& node)
     }
 }
 
+std::thread threadValidation;
+
 void Shutdown(NodeContext& node)
 {
     static Mutex g_shutdown_mutex;
@@ -233,6 +237,7 @@ void Shutdown(NodeContext& node)
     // CScheduler/checkqueue, scheduler and load block thread.
     if (node.scheduler) node.scheduler->stop();
     if (node.chainman && node.chainman->m_load_block.joinable()) node.chainman->m_load_block.join();
+    if (threadValidation.joinable()) threadValidation.join();
     StopScriptCheckWorkerThreads();
 
     // After the threads that potentially access these pointers have been stopped,
@@ -1588,6 +1593,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // ********************************************************* Step 11: import blocks
 
+    uiInterface.InitMessage(_("Importing blocks…").translated);
     if (!CheckDiskSpace(gArgs.GetDataDirNet())) {
         InitError(strprintf(_("Error: Disk space is low for %s"), fs::quoted(fs::PathToString(gArgs.GetDataDirNet()))));
         return false;
@@ -1600,6 +1606,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // Either install a handler to notify us when genesis activates, or set fHaveGenesis directly.
     // No locking, as this happens before any background thread is started.
     boost::signals2::connection block_notify_genesis_wait_connection;
+    uiInterface.InitMessage(_("Activating chain tip…").translated);
     if (chainman.ActiveChain().Tip() == nullptr) {
         block_notify_genesis_wait_connection = uiInterface.NotifyBlockTip_connect(std::bind(BlockNotifyGenesisWait, std::placeholders::_2));
     } else {
@@ -1624,9 +1631,15 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         vImportFiles.push_back(fs::PathFromString(strFile));
     }
 
+    uiInterface.InitMessage(_("Fork loadblk…").translated);
     chainman.m_load_block = std::thread(&util::TraceThread, "loadblk", [=, &chainman, &args] {
         ThreadImport(chainman, vImportFiles, args);
     });
+
+    // Validate blocks
+    threadValidation = std::thread(&util::TraceThread, "validate", [=] { ThreadValidation(); });
+
+    uiInterface.InitMessage(_("Wait for genesis block…").translated);
 
     // Wait for genesis block to be processed
     {
@@ -1646,6 +1659,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     // ********************************************************* Step 12: start node
 
+    uiInterface.InitMessage(_("Starting node…").translated);
     int chain_active_height;
 
     //// debug print

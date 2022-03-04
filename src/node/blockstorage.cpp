@@ -12,6 +12,7 @@
 #include <fs.h>
 #include <hash.h>
 #include <node/ui_interface.h>
+#include <node/validation_thread.h>
 #include <pow.h>
 #include <reverse_iterator.h>
 #include <shutdown.h>
@@ -21,10 +22,9 @@
 #include <util/syscall_sandbox.h>
 #include <util/system.h>
 #include <validation.h>
-#include <validation_thread.h>
 
-std::atomic_bool fActivateChain(false);
 namespace node {
+std::atomic_bool fActivateChain(false);
 std::atomic_bool fImporting(false);
 std::atomic_bool fReindex(false);
 bool fHavePruned = false;
@@ -894,6 +894,7 @@ struct CImportingNow {
 
 void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFiles, const ArgsManager& args)
 {
+    LogPrintf("%s: Start\n", __func__);
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::INITIALIZATION_LOAD_BLOCKS);
     ScheduleBatchPriority();
 
@@ -948,6 +949,7 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
         // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
         // the relevant pointers before the ABC call.
         chainman.ActiveChainstate().LoadGenesisBlock();
+        LogPrintf("%s: Set fActivateChain to true and don't run it from here\n", __func__);
         fActivateChain = true;
         //for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
         //    BlockValidationState state;
@@ -966,6 +968,7 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
     } // End scope of CImportingNow
     if (!ShutdownRequested())
         chainman.ActiveChainstate().LoadMempool(args);
+    LogPrintf("%s: Start LoadMempoolCache loop\n", __func__);
     while(!ShutdownRequested()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         chainman.ActiveChainstate().LoadMempoolCache(args);
