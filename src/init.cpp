@@ -609,6 +609,7 @@ static void BlockNotifyGenesisWait(const CBlockIndex* pBlockIndex)
     if (pBlockIndex != nullptr) {
         {
             LOCK(g_genesis_wait_mutex);
+            LogPrintf("%s: fHaveGenesis = true\n", __func__);
             fHaveGenesis = true;
         }
         g_genesis_wait_cv.notify_all();
@@ -1603,8 +1604,10 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     boost::signals2::connection block_notify_genesis_wait_connection;
     uiInterface.InitMessage(_("Activating chain tip…").translated);
     if (chainman.ActiveChain().Tip() == nullptr) {
+        LogPrintf("%s: Tip() == nullptr\n", __func__);
         block_notify_genesis_wait_connection = uiInterface.NotifyBlockTip_connect(std::bind(BlockNotifyGenesisWait, std::placeholders::_2));
     } else {
+        LogPrintf("%s: Set fHaveGenesis to true\n", __func__);
         fHaveGenesis = true;
     }
 
@@ -1640,7 +1643,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         // ThreadImport getting started, so instead we just wait on a timer to
         // check ShutdownRequested() regularly.
         while (!fHaveGenesis && !ShutdownRequested()) {
-            g_genesis_wait_cv.wait_for(lock, std::chrono::milliseconds(500));
+            LogPrintf("%s: fHaveGenesis = false\n", __func__);
+            g_genesis_wait_cv.wait_for(lock, std::chrono::milliseconds(1000));
         }
         block_notify_genesis_wait_connection.disconnect();
     }
