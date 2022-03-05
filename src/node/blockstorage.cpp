@@ -956,6 +956,7 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
                 return;
             }
         }
+        LogPrintf("%s: Set tActivateChain to true\n", __func__);
         fActivateChain = true;
 
         if (args.GetBoolArg("-stopafterblockimport", DEFAULT_STOPAFTERBLOCKIMPORT)) {
