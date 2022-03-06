@@ -23,9 +23,9 @@
 #include <validation.h>
 #include <validation_thread.h>
 
-// Chain activation starts in loadblk then gets passed to validation thread. This allows blocks to be downloaded
-// (as fImporting becomes false), and also makes the GUI more responsive.
-std::atomic_bool fActivateChain(true);
+// If true (below), hain activation starts in loadblk then gets passed to validation thread. This allows blocks to be
+// downloaded (as fImporting becomes false), and also makes the GUI more responsive.
+std::atomic_bool fActivateChain(false);
 namespace node {
 std::atomic_bool fImporting(false);
 std::atomic_bool fReindex(false);

@@ -2446,6 +2446,7 @@ static void AppendWarning(bilingual_str& res, const bilingual_str& warn)
 static void UpdateTipLog(
     const CCoinsViewCache& coins_tip,
     const CBlockIndex* tip,
+    const CBlockIndex* mostwork,
     const CChainParams& params,
     const std::string& func_name,
     const std::string& prefix,
@@ -2453,7 +2454,7 @@ static void UpdateTipLog(
 {
 
     AssertLockHeld(::cs_main);
-    int nBehind = pindexBestHeader->nHeight - tip->nHeight;
+    int nBehind = mostwork ? mostwork->nHeight - tip->nHeight : 0;
     LogPrintf("%s%s: new best=%s (%d) ver=0x%x age=%s%s work=%.8g tx=%lu%s\n",
         prefix, func_name,
         tip->GetBlockHash().ToString(), tip->nHeight, tip->nVersion,
@@ -2473,7 +2474,7 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
         // Only log every so often so that we don't bury log messages at the tip.
         constexpr int BACKGROUND_LOG_INTERVAL = 2000;
         if (pindexNew->nHeight % BACKGROUND_LOG_INTERVAL == 0) {
-            UpdateTipLog(coins_tip, pindexNew, m_params, __func__, "[background validation] ", "");
+            UpdateTipLog(coins_tip, pindexNew, FindMostWorkChain(), m_params, __func__, "[background validation] ", "");
         }
         return;
     }
@@ -2505,7 +2506,7 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
-    UpdateTipLog(coins_tip, pindexNew, m_params, __func__, "", warning_messages.original);
+    UpdateTipLog(coins_tip, pindexNew, FindMostWorkChain(), m_params, __func__, "", warning_messages.original);
 }
 
 /** Disconnect m_chain's tip.
