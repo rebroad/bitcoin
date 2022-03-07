@@ -141,6 +141,7 @@ bool CBlockIndexWorkComparator::operator()(const CBlockIndex *pa, const CBlockIn
 RecursiveMutex cs_main;
 
 CBlockIndex *pindexBestHeader = nullptr;
+int g_tiptowards = 0;
 Mutex g_best_block_mutex;
 std::condition_variable g_best_block_cv;
 uint256 g_best_block;
@@ -2446,7 +2447,6 @@ static void AppendWarning(bilingual_str& res, const bilingual_str& warn)
 static void UpdateTipLog(
     const CCoinsViewCache& coins_tip,
     const CBlockIndex* tip,
-    const CBlockIndex* mostwork,
     const CChainParams& params,
     const std::string& func_name,
     const std::string& prefix,
@@ -2454,7 +2454,13 @@ static void UpdateTipLog(
 {
 
     AssertLockHeld(::cs_main);
-    int nBehind = mostwork ? mostwork->nHeight - tip->nHeight : 0;
+    int nBehind = g_tiptowards ? g_tiptowards - tip->nHeight : 0;
+    static int old_tiptowards = 0;
+    if (old_tiptowards != g_tiptowards) {
+        int old_behind = old_tiptowards ? old_tiptowards - tip->nHeight : 0;
+        LogPrintf("%s: g_tiptowards %d -> %d  behind %d -> %d\n", __func__, old_tiptowards, g_tiptowards, old_behind, nBehind);
+        old_tiptowards = g_tiptowards;
+    }
     LogPrintf("%s%s: new best=%s (%d) ver=0x%x age=%s%s work=%.8g tx=%lu%s\n",
         prefix, func_name,
         tip->GetBlockHash().ToString(), tip->nHeight, tip->nVersion,
@@ -2474,7 +2480,7 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
         // Only log every so often so that we don't bury log messages at the tip.
         constexpr int BACKGROUND_LOG_INTERVAL = 2000;
         if (pindexNew->nHeight % BACKGROUND_LOG_INTERVAL == 0) {
-            UpdateTipLog(coins_tip, pindexNew, FindMostWorkChain(), m_params, __func__, "[background validation] ", "");
+            UpdateTipLog(coins_tip, pindexNew, m_params, __func__, "[background validation] ", "");
         }
         return;
     }
@@ -2506,7 +2512,7 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
-    UpdateTipLog(coins_tip, pindexNew, FindMostWorkChain(), m_params, __func__, "", warning_messages.original);
+    UpdateTipLog(coins_tip, pindexNew, m_params, __func__, "", warning_messages.original);
 }
 
 /** Disconnect m_chain's tip.
@@ -2562,6 +2568,10 @@ bool CChainState::DisconnectTip(BlockValidationState& state, DisconnectedBlockTr
     }
 
     m_chain.SetTip(pindexDelete->pprev);
+    if (!g_tiptowards || !fActivatingChain) {
+        g_tiptowards = m_chain.Tip()->nHeight;
+        LogPrintf("%s: g_tiptowards = %d\n", __func__, g_tiptowards);
+    }
 
     UpdateTip(pindexDelete->pprev);
     // Let wallets know transactions went from 1-confirmed to
@@ -2677,6 +2687,10 @@ bool CChainState::ConnectTip(BlockValidationState& state, CBlockIndex* pindexNew
     }
     // Update m_chain & related variables.
     m_chain.SetTip(pindexNew);
+    if (!g_tiptowards || !fActivatingChain) {
+        g_tiptowards = m_chain.Tip()->nHeight;
+        LogPrintf("%s: g_tiptowards = %d\n", __func__, g_tiptowards);
+    }
     UpdateTip(pindexNew);
 
     // add mempool stats sample
@@ -2835,7 +2849,7 @@ bool CChainState::ActivateBestChainStep(BlockValidationState& state, CBlockIndex
                 }
             } else {
                 PruneBlockIndexCandidates();
-                if (!pindexOldTip || m_chain.Tip()->nChainWork > pindexOldTip->nChainWork || ShutdownRequested() || fActivateChain) {
+                if (!pindexOldTip || m_chain.Tip()->nChainWork > pindexOldTip->nChainWork || ShutdownRequested()) {
                     // We're in a better position than we were. Return temporarily to release the lock.
                     fContinue = false;
                     break;
@@ -2948,14 +2962,16 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 // (with the exception of shutdown due to hardware issues, low disk space, etc).
                 ConnectTrace connectTrace; // Destructed before cs_main is unlocked
 
-                if (pindexMostWork == nullptr) {
+                if (pindexMostWork == nullptr || fActivateChain) {
                     pindexMostWork = FindMostWorkChain();
+                    fActivateChain = false;
                 }
 
                 // Whether we have anything to do at all.
                 if (pindexMostWork == nullptr || pindexMostWork == m_chain.Tip()) {
                     break;
                 }
+                g_tiptowards = pindexMostWork->nHeight;
 
                 bool fInvalidFound = false;
                 std::shared_ptr<const CBlock> nullBlockPtr;
@@ -3736,8 +3752,8 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
 {
     AssertLockNotHeld(cs_main);
 
+    CBlockIndex *pindex = nullptr;
     { // REBTODO: Calculate the lowest Sat/B TX still in the mempool after the TXs in this block have removed the TXs
-        CBlockIndex *pindex = nullptr;
         if (new_block) *new_block = false;
         BlockValidationState state;
 
@@ -3764,9 +3780,9 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
     NotifyHeaderTip(ActiveChainstate());
 
     // If tip is within 2 blocks of best header, activate best chain within message handler thread to avoid the 100ms delay, and to avoid breaking the miner tests.
-    // REBTODO - Change logic to run in separate thread when we requested several blocks together (i.e. it was IBD)
     if (fActivatingChain || pindexBestHeader->nChainWork > ActiveChainstate().m_chain.Tip()->nChainWork + GetBlockProof(*ActiveChainstate().m_chain.Tip()) * 2) {
-        fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
+        if (pindex && pindex->nHeight == g_tiptowards + 1)
+            fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
     } else {
         BlockValidationState state; // Only used to report errors, not invalidity - ignore it
         if (!ActiveChainstate().ActivateBestChain(state, block))
@@ -3872,6 +3888,10 @@ bool CChainState::LoadChainTip()
         return false;
     }
     m_chain.SetTip(pindex);
+    if (!g_tiptowards || !fActivatingChain) {
+        g_tiptowards = m_chain.Tip()->nHeight;
+        LogPrintf("%s: g_tiptowards = %d\n", __func__, g_tiptowards);
+    }
     PruneBlockIndexCandidates();
 
     g_chainstate = this;
