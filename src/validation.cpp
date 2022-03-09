@@ -2687,10 +2687,6 @@ bool CChainState::ConnectTip(BlockValidationState& state, CBlockIndex* pindexNew
     }
     // Update m_chain & related variables.
     m_chain.SetTip(pindexNew);
-    if (!g_tiptowards || !fActivatingChain) {
-        g_tiptowards = m_chain.Tip()->nHeight;
-        LogPrintf("%s: g_tiptowards = %d\n", __func__, g_tiptowards);
-    }
     UpdateTip(pindexNew);
 
     // add mempool stats sample

@@ -264,8 +264,11 @@ bool update_num(float new_val, float &current, float &increment, int length)
             increment = 1.0 * (current+1) / length; // +1s are to get it started even if current is zero
         else
             increment = -1.0 * (current+1) / length;
-        if (abs(increment) > abs(new_val - current)) // Only check this when creating an increment
+        if (abs(increment) > abs(new_val - current)) { // Only check this when creating an increment
             increment = 0; // Nothing to do!
+            current = new_val;
+            return true;
+        }
         LogPrintf("%s: new increment: %d+1 / %d = %d->%d\n", __func__, current, length, old_increment, increment);
     } else {
         if (((increment > 0) && (current + increment * 2 > new_val)) ||
