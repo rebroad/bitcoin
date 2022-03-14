@@ -34,6 +34,7 @@ struct Params;
 
 namespace node {
 static constexpr bool DEFAULT_STOPAFTERBLOCKIMPORT{false};
+static constexpr bool DEFAULT_STOPAFTERIBD{false};
 
 /** The pre-allocation chunk size for blk?????.dat files (since 0.8) */
 static const unsigned int BLOCKFILE_CHUNK_SIZE = 0x1000000; // 16 MiB

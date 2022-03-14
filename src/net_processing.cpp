@@ -3915,7 +3915,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
                                 pnode->nBlockBytes += nSize;
-                                pnode->nBlockTXs++; // REBTODO - move this to State and apply only when block added to Tip? i.e. can we fake headers?
+                                pnode->nBlockTXs++; // REBTODO - move this (and above) to State and apply only when block added to Tip? i.e. can we fake headers?
                                 return true;
                             });
                             nFromConPeers++;
