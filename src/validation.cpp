@@ -1510,15 +1510,14 @@ bool CChainState::IsInitialBlockDownload() const
         fNew = true;
     }
 
+    if (m_chain.Tip()->nChainWork >= pindexBestHeader->nChainWork && gArgs.GetBoolArg("-stopafteribd", node::DEFAULT_STOPAFTERIBD)) {
+        LogPrintf("Stopping after IBD\n");
+        StartShutdown();
+    }
+
     if (fNew != fPrev) {
         LogPrintf("%s: Setting to %s\n", __func__, fNew ? "true" : "false");
         fPrev = fNew;
-        if (!fNew) {
-            if (gArgs.GetBoolArg("-stopafteribd", node::DEFAULT_STOPAFTERIBD)) {
-                LogPrintf("Stopping after IBD\n");
-                StartShutdown();
-            }
-        }
     }
     return fNew;
 }
