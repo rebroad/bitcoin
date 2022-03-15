@@ -1510,11 +1510,6 @@ bool CChainState::IsInitialBlockDownload() const
         fNew = true;
     }
 
-    if (m_chain.Tip()->nChainWork >= pindexBestHeader->nChainWork && gArgs.GetBoolArg("-stopafteribd", node::DEFAULT_STOPAFTERIBD)) {
-        LogPrintf("Stopping after IBD\n");
-        StartShutdown();
-    }
-
     if (fNew != fPrev) {
         LogPrintf("%s: Setting to %s\n", __func__, fNew ? "true" : "false");
         fPrev = fNew;
@@ -2460,12 +2455,6 @@ static void UpdateTipLog(
 
     AssertLockHeld(::cs_main);
     int nBehind = g_tiptowards ? g_tiptowards - tip->nHeight : 0;
-    static int old_tiptowards = 0;
-    if (old_tiptowards != g_tiptowards) {
-        int old_behind = old_tiptowards ? old_tiptowards - tip->nHeight : 0;
-        LogPrintf("%s: g_tiptowards %d -> %d  behind %d -> %d\n", __func__, old_tiptowards, g_tiptowards, old_behind, nBehind);
-        old_tiptowards = g_tiptowards;
-    }
     LogPrintf("%s%s: new best=%s (%d) ver=0x%x age=%s%s work=%.8g tx=%lu%s\n",
         prefix, func_name,
         tip->GetBlockHash().ToString(), tip->nHeight, tip->nVersion,
@@ -2518,6 +2507,12 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
         }
     }
     UpdateTipLog(coins_tip, pindexNew, m_params, __func__, "", warning_messages.original);
+
+    if (pindexNew->nChainWork >= pindexBestHeader->nChainWork && gArgs.GetBoolArg("-stopafteribd", node::DEFAULT_STOPAFTERIBD)) {
+        LogPrintf("Stopping after IBD\n");
+        StartShutdown();
+    }
+
 }
 
 /** Disconnect m_chain's tip.
@@ -2973,6 +2968,13 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                     break;
                 }
                 g_tiptowards = pindexMostWork->nHeight;
+                static int old_tiptowards = 0;
+                if (old_tiptowards != g_tiptowards) {
+                    int old_behind = old_tiptowards ? old_tiptowards - m_chain.Tip()->nHeight : 0;
+                    int nBehind = g_tiptowards ? g_tiptowards - m_chain.Tip()->nHeight : 0;
+                    LogPrintf("%s: g_tiptowards %d -> %d  behind %d -> %d\n", __func__, old_tiptowards, g_tiptowards, old_behind, nBehind);
+                    old_tiptowards = g_tiptowards;
+                }
 
                 bool fInvalidFound = false;
                 std::shared_ptr<const CBlock> nullBlockPtr;
