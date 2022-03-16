@@ -279,14 +279,14 @@ bool BlockManager::LoadBlockIndex(
     int nLastPercent = -1;
     for (const std::pair<int, CBlockIndex*>& item : vSortedByHeight) {
         if (ShutdownRequested()) return false;
-        int nPercent = 100 * nHeight / nHighest;
+        int nPercent = (int)(100.0 * nHeight / nHighest + 0.5);
         if (nPercent > nLastPercent) {
             nNow = GetTime();
-            if (nNow >= nLastNow + 5) {
-                LogPrintf("%s: Indexing blocks... %d%%\n", __func__, (100 * nHeight) / nHighest);
+            if (nNow >= nLastNow + 5 || nPercent == 100) {
+                LogPrintf("%s: Indexing blocks... %d%%\n", __func__, nPercent);
                 nLastNow = nNow;
             }
-            uiInterface.ShowProgress(_("Indexing blocks…").translated, (100.5 * nHeight) / nHighest, false);
+            uiInterface.ShowProgress(_("Indexing blocks…").translated, nPercent, false);
             nLastPercent = nPercent;
         }
         CBlockIndex* pindex = item.second;
