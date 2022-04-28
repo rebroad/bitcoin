@@ -4043,8 +4043,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (resp.txn.size()) {
                 // Don't log where we were called from cmpctblock
                 LogPrint(BCLog::BLOCK, "recv blocktxn %s indexes=%d size=%d %speer=%d\n", strBlkHeight(pindex), resp.txn.size(), nSize, fWrongPeer ? "wrong " : "", pfrom.GetId());
-                pfrom.nMempoolTXs += resp.txn.size();
-                pfrom.nMempoolBytes += nSize;
             }
             PartiallyDownloadedBlock& partialBlock = *it->second.second->partialBlock;
             ReadStatus status = partialBlock.FillBlock(*pblock, resp.txn);
@@ -4103,6 +4101,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // in compact block optimistic reconstruction handling.
             if (fWrongPeer)
                 LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessBlock() wrong peer=%d\n", pfrom.GetId());
+            if (resp.txn.size())
+                pfrom.nBlockBytes += nSize;
             ProcessBlock(pfrom, pblock, /*force_processing=*/true);
         }
         return;
