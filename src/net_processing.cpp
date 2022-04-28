@@ -5382,6 +5382,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
                 current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1) && nNow - count_seconds(pto->m_last_block_time) > 10) {
                 LogPrintf("Timeout downloading block %s clicks=%d nLastRecv=%ds DLS=%s nOPWVD=%d nLBT=%s disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNetClicks - state.m_download_report_clicks, nNow - count_seconds(pto->m_last_recv), strAge((current_time - state.m_downloading_since).count() / 1000000), nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->m_last_block_time)), pto->GetId());
+                m_longest_delay = m_longest_delay / 2;
                 pto->fDisconnect = true;
                 return true;
             }
