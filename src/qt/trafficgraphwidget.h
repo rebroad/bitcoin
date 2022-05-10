@@ -61,7 +61,7 @@ private:
     quint64 nLastBytesIn[VALUES_SIZE];
     quint64 nLastBytesOut[VALUES_SIZE];
     std::chrono::milliseconds nLastTime[VALUES_SIZE];
-    unsigned int values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 28*24*60};
+    unsigned int values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
     //unsigned int values[VALUES_SIZE] = {5, 15, 60, 3*60, 12*60, 2*24*60, 7*24*60, 28*24*60};
     ClientModel *clientModel;
 };

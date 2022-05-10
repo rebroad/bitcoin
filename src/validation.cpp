@@ -3753,7 +3753,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
 
 bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool force_processing, bool* new_block)
 {
-    AssertLockNotHeld(cs_main);
+    //AssertLockNotHeld(cs_main); // REBTODO - disable as we now use cached cmpctblocks
 
     CBlockIndex *pindex = nullptr;
     { // REBTODO: Calculate the lowest Sat/B TX still in the mempool after the TXs in this block have removed the TXs

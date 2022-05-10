@@ -5440,10 +5440,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 if (pindex->GetBlockHash() == last_recved_cmpctblock2.header.GetHash())
                     cached_cmpctblock = &last_recved_cmpctblock2;
                 if (CanDirectFetch() && cached_cmpctblock) {
-                    LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) %s peer=%d\n", pto->GetId(), strBlkInfo(pindex));
+                    LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) %s peer=%d\n", strBlkInfo(pindex), pto->GetId());
                     CDataStream cmpctblkMsg(SER_NETWORK, PROTOCOL_VERSION);
                     cmpctblkMsg << *cached_cmpctblock;
-                    ProcessMessage(*pto, NetMsgType::CMPCTBLOCK, cmpctblkMsg, std::chrono::seconds{2}, false);
+                    ProcessMessage(*pto, NetMsgType::CMPCTBLOCK, cmpctblkMsg, std::chrono::seconds{2}, false); // REBTODO - need to release cs_main first or find another way
                 } else {
                     uint32_t nFetchFlags = GetFetchFlags(*pto);
                     vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
