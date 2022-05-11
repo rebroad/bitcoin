@@ -333,7 +333,7 @@ void TrafficGraphWidget::updateStuff()
             m_value--; // TODO - re-assess the tooltip
         }
         fUpdate = true;
-        LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
+        //LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
     } else if (m_value != m_new_value) {
         LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, m_new_value);
         fUpdate = true;
