@@ -4101,8 +4101,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // in compact block optimistic reconstruction handling.
             if (fWrongPeer)
                 LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessBlock() wrong peer=%d\n", pfrom.GetId());
-            if (resp.txn.size())
+            if (resp.txn.size()) { // REBTODO - the below should only be done if ProcessBlock is successful
                 pfrom.nBlockBytes += nSize;
+                pfrom.nMempoolBytes += nSize;
+                pfrom.nBlockTXs += resp.txn.size();
+                pfrom.nMempoolTXs += resp.txn.size();
+            }
             ProcessBlock(pfrom, pblock, /*force_processing=*/true);
         }
         return;
