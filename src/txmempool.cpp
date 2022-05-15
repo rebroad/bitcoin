@@ -1148,8 +1148,7 @@ CFeeRate CTxMemPool::GetMinFee(size_t sizelimit) const {
             rollingMinimumFeeRate = rollingMinimumFeeRate / fraction + newrolling * ((fraction - 1) / fraction);
             if (rollingMinimumFeeRate < 0)
                 rollingMinimumFeeRate = 0;
-        } else if (bumpedMinimumFeeRate > rollingMinimumFeeRate && newrolling >= bumpedMinimumFeeRate)
-            bumpedMinimumFeeRate = rollingMinimumFeeRate;
+        }
         lastRollingFeeUpdate = time;
     }
     return CFeeRate(llround(rollingMinimumFeeRate));
