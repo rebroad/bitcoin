@@ -737,6 +737,10 @@ struct CNodeState {
     unsigned int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
     int nBlockAfterTXs{0};
+    //! BlockBytes for this node if we process the BLOCKTXN
+    int nBlockBytes{0};
+    //! BlockTXs for this node if we process the BLOCKTXN
+    int nBlockTXs{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2724,6 +2728,10 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
     m_chainman.ProcessNewBlock(m_chainparams, block, force_processing, &new_block);
     if (new_block) {
         node.m_last_block_time = GetTime<std::chrono::seconds>();
+        node.nBlockBytes += State(node.GetId())->nBlockBytes;
+        State(node.GetId())->nBlockBytes = 0;
+        node.nBlockTXs += State(node.GetId())->nBlockTXs;
+        State(node.GetId())->nBlockTXs = 0;
     } else {
         LOCK(cs_main);
         mapBlockSource.erase(block->GetHash());
@@ -3914,8 +3922,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     else if (!fSeenBefore) {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-                                pnode->nBlockBytes += nSize;
-                                pnode->nBlockTXs++; // REBTODO - move this (and above) to State and apply only when block added to Tip? i.e. can we fake headers?
+                                State(pnode->GetId())->nBlockBytes += nSize;
+                                State(pnode->GetId())->nBlockTXs++; // REBTODO - move this (and above) to State and apply only when block added to Tip? i.e. can we fake headers?
                                 return true;
                             });
                             nFromConPeers++;
