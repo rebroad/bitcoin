@@ -221,6 +221,7 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer, ServiceFlags nLocalServices)
 
 extern bool fDiscover;
 extern bool fListen;
+extern std::atomic<int> nBlocksToBeProcessed;
 
 /** Subversion as sent to the P2P network in `version` messages */
 extern std::string strSubVersion;
@@ -451,6 +452,7 @@ public:
     //! Unix epoch time at peer connection
     const std::chrono::seconds m_connected;
     std::atomic<int64_t> nTimeOffset{0};
+    std::atomic<int> nBlocksToBeProcessed{0}; // blocks received but not yet processed
     // Address of this peer
     const CAddress addr;
     // Bind address of our side of the connection

@@ -1318,6 +1318,8 @@ void PeerManagerImpl::ReattemptInitialBroadcast(CScheduler& scheduler)
 
 void PeerManagerImpl::FinalizeNode(const CNode& node)
 {
+    if (ShutdownRequested()) return;
+
     NodeId nodeid = node.GetId();
     int misbehavior{0};
     {
@@ -4587,6 +4589,10 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
     msg.SetVersion(pfrom->GetCommonVersion());
 
     try {
+        if (msg.m_type == NetMsgType::BLOCK || msg.m_type == NetMsgType::BLOCKTXN) {
+            pfrom->nBlocksToBeProcessed--;
+            nBlocksToBeProcessed--;
+        }
         ProcessMessage(*pfrom, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
         if (interruptMsgProc) return false;
         {
@@ -5391,7 +5397,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 m_longest_delay = nDelay;
                 state.m_download_report_clicks = nNetClicks;
             }
-            if (nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
+            if (pto->vProcessMsg.size() < 1 && nDelay > 10 * (nOtherPeersWithValidatedDownloads + 1) &&
                 current_time > state.m_downloading_since + std::chrono::seconds{10} * (nOtherPeersWithValidatedDownloads +1) && nNow - count_seconds(pto->m_last_block_time) > 10) {
                 LogPrintf("Timeout downloading block %s clicks=%d nLastRecv=%ds DLS=%s nOPWVD=%d nLBT=%s disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), nNetClicks - state.m_download_report_clicks, nNow - count_seconds(pto->m_last_recv), strAge((current_time - state.m_downloading_since).count() / 1000000), nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->m_last_block_time)), pto->GetId());
                 m_longest_delay = m_longest_delay / 2;

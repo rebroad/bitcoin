@@ -117,6 +117,7 @@ Mutex g_maplocalhost_mutex;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost GUARDED_BY(g_maplocalhost_mutex);
 static bool vfLimited[NET_MAX] GUARDED_BY(g_maplocalhost_mutex) = {};
 std::string strSubVersion;
+std::atomic<int> nBlocksToBeProcessed(0);
 static int nAnchorTryAgain = -1; // -1 so that we skip the sleeps on the first ReadAnchor
 
 void CConnman::AddAddrFetch(const std::string& strDest)
@@ -686,7 +687,11 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                 nTime1stTx = count_seconds(m_last_recv);
                 LogPrintf("%s: 1stTx %s t=%d size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, msg.m_type, nTime1stTx - count_seconds(m_connected), msg.m_raw_message_size, nRecvBytes1stTx, nRecvBytes, handled, msg_bytes.size(), GetId());
             }
-            if (msg.m_type == NetMsgType::BLOCK) nLastBlock = count_seconds(m_last_recv);
+            if (msg.m_type == NetMsgType::BLOCK || msg.m_type == NetMsgType::BLOCKTXN) {
+                nBlocksToBeProcessed++;
+                ::nBlocksToBeProcessed++;
+                nLastBlock = count_seconds(m_last_recv);
+            }
 
             // Store received bytes per message command
             // to prevent a memory DOS, only allow valid commands
@@ -1311,7 +1316,7 @@ void CConnman::DisconnectNodes()
         std::vector<CNode*> nodes_copy = m_nodes;
         for (CNode* pnode : nodes_copy)
         {
-            if (pnode->fDisconnect)
+            if (pnode->fDisconnect && pnode->nBlocksToBeProcessed < 1)
             {
                 // remove from m_nodes
                 int m_nodesSizeBefore = m_nodes.size();
@@ -1328,6 +1333,11 @@ void CConnman::DisconnectNodes()
                 LogPrint(BCLog::CONN, "%s: Add to m_nodes_disconnected m_nodes.size %d->%d GRC=%d %speer=%d\n", __func__, m_nodesSizeBefore, m_nodesSizeAfter, pnode->GetRefCount(), pnode->IsFeelerConn() ? "feel " : pnode->IsInboundConn() ? "incoming ":"", pnode->GetId());
                 pnode->Release(1); // REB - deletion
                 m_nodes_disconnected.push_back(pnode);
+            } else if (pnode->fDisconnect && pnode->fSuccessfullyConnected) {
+                LogPrint(BCLog::CONN, "%s: fDisconnect but %d blocks still to process. peer=%d\n", __func__,
+                    pnode->nBlocksToBeProcessed, pnode->id);
+                pnode->fSuccessfullyConnected = false; // Allow space for new nodes to be connected
+                pnode->CloseSocketDisconnect();
             }
         }
     }
@@ -2591,7 +2601,7 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
 void CConnman::ThreadMessageHandler()
 {
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::MESSAGE_HANDLER);
-    while (!flagInterruptMsgProc)
+    while (!flagInterruptMsgProc || nBlocksToBeProcessed > 0)
     {
         bool fMoreWork = false;
 
@@ -2603,8 +2613,12 @@ void CConnman::ThreadMessageHandler()
 
             static bool fToggle = false; // So that net_processing can see this loop
             for (CNode* pnode : snap.Nodes()) {
-                if (pnode->fDisconnect)
-                    continue;
+                if (pnode->fDisconnect) {
+                    if (pnode->nBlocksToBeProcessed < 1)
+                        continue;
+                    else
+                        LogPrintf("%s: Force ProcessMessages() as blks2b=%d vProcessMsgs=%d fDisconnect=%s peer=%d\n", __func__, pnode->nBlocksToBeProcessed, pnode->vProcessMsg.size(), pnode->fDisconnect, pnode->GetId());
+                }
 
                 // Receive messages
                 bool fMoreNodeWork = m_msgproc->ProcessMessages(pnode, flagInterruptMsgProc, fToggle);
