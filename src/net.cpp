@@ -689,6 +689,8 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
             }
             if (msg.m_type == NetMsgType::BLOCK || msg.m_type == NetMsgType::BLOCKTXN) {
                 nBlocksToBeProcessed++;
+                if (nBlocksToBeProcessed == 1)
+                    LogPrintf("%s: BlockToBeProcessed peer=%d\n", __func__, GetId());
                 ::nBlocksToBeProcessed++;
                 nLastBlock = count_seconds(m_last_recv);
             }

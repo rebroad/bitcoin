@@ -1371,7 +1371,7 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     if (nBlocksInFlight || nErasedOrphans) {
         unsigned int nMaxOrphans = (unsigned int)std::max((int64_t)0, gArgs.GetIntArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
         int64_t nNow = GetTime();
-        LogPrintf("%s: %s%sfDisc=%d LastRecv=%s LastSend=%s DLsince=%s peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight. ", nBlocksInFlight) : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, strAge(nNow - count_seconds(node.m_last_recv)), strAge(nNow - count_seconds(node.m_last_send)), strAge(nNow - DLsince), nodeid);
+        LogPrintf("%s: %s%sfDisc=%d LastRecv=%s LastSend=%s DLsince=%s peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight%s. ", nBlocksInFlight, node.nBlocksToBeProcessed ? strprintf(" (%d ToBe)", node.nBlocksToBeProcessed) : "") : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, strAge(nNow - count_seconds(node.m_last_recv)), strAge(nNow - count_seconds(node.m_last_send)), strAge(nNow - DLsince), nodeid);
     }
 
     if (mapNodeState.empty()) {
@@ -4743,7 +4743,7 @@ void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
                 // block from.
                 CNodeState &state = *State(pnode->GetId());
                 if (now - pnode->m_connected > MINIMUM_CONNECT_TIME && state.nBlocksInFlight == 0) {
-                    LogPrintf("disconnecting extra outbound peer=%d (last block announcement received at time %d)\n", pnode->GetId(), oldest_block_announcement);
+                    LogPrintf("disconnecting (NOT!) extra outbound peer=%d (last block announcement received at time %d)\n", pnode->GetId(), oldest_block_announcement);
                     //pnode->fDisconnect = true;
                     return true;
                 } else {
