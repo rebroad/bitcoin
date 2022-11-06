@@ -1803,11 +1803,11 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                         strDetails += strprintf("Changed=%d", now - tWorstChanged);
                         DoIt = true;
                     }
-                }
-                // Disconnect any nodes where out TX input is zero and connected over 3 minutes
-                if (now - m_connected >= 180 && nLowest == 0) {
-                    strReason += "R3";
-                    DoIt = true;
+                    // Disconnect any nodes where out TX input is zero and connected over 3 minutes
+                    if (now - m_connected >= 180 && nLowest == 0) {
+                        strReason += "R3";
+                        DoIt = true;
+                    }
                 }
             }
             if (DoIt) {
