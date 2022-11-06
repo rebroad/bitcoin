@@ -2352,7 +2352,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 anchor = 0;
             } // m_anchor not empty but anchor != 0
 
-            if (m_anchors.empty() && ((nAnchorTryAgain == 1 && nOutboundCount > 0) ||
+            if (m_anchors.empty() && ((nAnchorTryAgain == 1 && m_nodes.size() > 0) ||
                     (nAnchorTryAgain > 1 && nPeersIBD <= 1 && nOutboundCount >= 2) ||
                     (nOutboundCount < (nLastOutboundCount+1)*2/3))) { // or a sudden drop in connections
                 if (nOutboundCount < (nLastOutboundCount+1)*2/3)
