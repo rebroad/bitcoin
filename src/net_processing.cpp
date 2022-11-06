@@ -2730,10 +2730,12 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
     m_chainman.ProcessNewBlock(m_chainparams, block, force_processing, &new_block);
     if (new_block) {
         node.m_last_block_time = GetTime<std::chrono::seconds>();
+        LOCK(cs_main);
         node.nBlockBytes += State(node.GetId())->nBlockBytes;
-        State(node.GetId())->nBlockBytes = 0;
         node.nBlockTXs += State(node.GetId())->nBlockTXs;
+        State(node.GetId())->nBlockBytes = 0;
         State(node.GetId())->nBlockTXs = 0;
+        MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
     } else {
         LOCK(cs_main);
         mapBlockSource.erase(block->GetHash());
