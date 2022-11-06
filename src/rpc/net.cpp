@@ -1010,6 +1010,7 @@ static const CRPCCommand commands[] =
     { "network",             &getaddednodeinfo,        },
     { "network",             &getnettotals,            },
     { "network",             &getnetworkinfo,          },
+    { "network",             &getmempoolfrompeer,      },
     { "network",             &setban,                  },
     { "network",             &listbanned,              },
     { "network",             &clearbanned,             },

@@ -2749,12 +2749,11 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
     m_chainman.ProcessNewBlock(m_chainparams, block, force_processing, &new_block);
     if (new_block) {
         node.m_last_block_time = GetTime<std::chrono::seconds>();
-        LOCK(cs_main);
-        node.nBlockBytes += State(node.GetId())->nBlockBytes;
-        node.nBlockTXs += State(node.GetId())->nBlockTXs;
-        State(node.GetId())->nBlockBytes = 0;
-        State(node.GetId())->nBlockTXs = 0;
         MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
+        m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
+            pnode->nBlockBytes += State(pnode->GetId())->nBlockBytes;
+            pnode->nBlockTXs += State(pnode->GetId())->nBlockTXs;
+        });
     } else {
         LOCK(cs_main);
         mapBlockSource.erase(block->GetHash());
@@ -2861,7 +2860,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (fLogIPs)
             remoteAddr = " peeraddr=" + pfrom.addr.ToString();
 
-        bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsOutboundOrBlockRelayConn() || cleanSubVer.find("bitnodes") != std::string::npos || pfrom.IsInboundConn());
+        //bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsOutboundOrBlockRelayConn() || cleanSubVer.find("bitnodes") != std::string::npos || pfrom.IsInboundConn());
+        bool fLoggy = true;
         LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s v=%d s=%s relay=%d%s %speer=%d\n",
                   cleanSubVer, pfrom.nVersion, strBinary(nServices), fRelay, remoteAddr,
                   pfrom.IsInboundConn() ? "inbound " : "", pfrom.GetId());
@@ -3938,6 +3938,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 int nFromReorg = 0; int nFromRecycledPeers = 0;
                 bool fSeenBefore = (cmpctblock.header.GetHash() == last_recved_cmpctblock1.header.GetHash() ||
                     cmpctblock.header.GetHash() == last_recved_cmpctblock2.header.GetHash());
+                m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
+                    State(pnode->GetId())->nBlockBytes = 0;
+                    State(pnode->GetId())->nBlockTXs = 0;
+                });
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize))
@@ -3946,7 +3950,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
                                 State(pnode->GetId())->nBlockBytes += nSize;
-                                State(pnode->GetId())->nBlockTXs++; // REBTODO - move this (and above) to State and apply only when block added to Tip? i.e. can we fake headers?
+                                State(pnode->GetId())->nBlockTXs++;
                                 return true;
                             });
                             nFromConPeers++;
@@ -4132,7 +4136,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // in compact block optimistic reconstruction handling.
             if (fWrongPeer)
                 LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessBlock() wrong peer=%d\n", pfrom.GetId());
-            if (resp.txn.size()) { // REBTODO - the below should only be done if ProcessBlock is successful
+            if (resp.txn.size()) { // Only add these when an actual BLOCKTXN has been received
                 pfrom.nBlockBytes += nSize;
                 pfrom.nMempoolBytes += nSize;
                 pfrom.nBlockTXs += resp.txn.size();
