@@ -380,8 +380,8 @@ void TrafficGraphWidget::updateRates(int i)
     nLastBytesIn[i] = bytesIn;
     nLastBytesOut[i] = bytesOut;
     static bool fFull[VALUES_SIZE];
-    if (!fFull[i] && vTimeStamp[i].size()+5 > DESIRED_SAMPLES)
-        LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES - vTimeStamp[i].size());
+    if (!fFull[i] && vTimeStamp[i].size()+4 > DESIRED_SAMPLES)
+        LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
     while(vTimeStamp[i].size() > DESIRED_SAMPLES) {
         if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i])
             m_bump_value = true;
