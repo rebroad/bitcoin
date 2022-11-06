@@ -323,6 +323,7 @@ public:
     void StartScheduledTasks(CScheduler& scheduler) override;
     void CheckForStaleTipAndEvictPeers() override;
     std::optional<std::string> FetchBlock(NodeId peer_id, const CBlockIndex& block_index) override;
+    std::optional<std::string> FetchMempool(NodeId peer_id) override;
     bool GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) const override;
     bool IgnoresIncomingTxs() override { return m_ignore_incoming_txs; }
     void SendPings() override;
@@ -1571,6 +1572,24 @@ bool PeerManagerImpl::BlockRequestAllowed(const CBlockIndex* pindex)
     return pindex->IsValid(BLOCK_VALID_SCRIPTS) && (pindexBestHeader != nullptr) &&
            (pindexBestHeader->GetBlockTime() - pindex->GetBlockTime() < STALE_RELAY_AGE_LIMIT) &&
            (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, m_chainparams.GetConsensus()) < STALE_RELAY_AGE_LIMIT);
+}
+
+std::optional<std::string> PeerManagerImpl::FetchMempool(NodeId peer_id)
+{
+    LOCK(cs_main);
+    CNodeState* state = State(peer_id);
+    if (state == nullptr) return "Peer does not exist";
+
+    bool success = m_connman.ForNode(peer_id, [this](CNode* node) {
+        const CNetMsgMaker msgMaker(node->GetCommonVersion());
+        this->m_connman.PushMessage(node, msgMaker.Make(NetMsgType::MEMPOOL));
+        return true;
+    });
+
+    if (!success) return "Peer not fully connected";
+
+    LogPrintf("Requesting mempool from peer=%d\n", peer_id);
+    return std::nullopt;
 }
 
 std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBlockIndex& block_index)

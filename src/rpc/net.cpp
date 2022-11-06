@@ -266,6 +266,35 @@ static RPCHelpMan getpeerinfo()
     };
 }
 
+static RPCHelpMan getmempoolfrompeer()
+{
+    return RPCHelpMan{
+        "getmempoolfrompeer",
+        "Attempt to fetch the mempool from a given peer.\n\n"
+        "Returns an empty JSON object if the request was successfully scheduled.",
+        {
+            {"peer_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "The peer to fetch it from (see getpeerinfo for peer IDs)"},
+        },
+        RPCResult{RPCResult::Type::OBJ, "", /*optional=*/false, "", {}},
+        RPCExamples{
+            HelpExampleCli("getmempoolfrompeer", "0")
+            + HelpExampleRpc("getmempoolfrompeer", "0")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    const NodeContext& node = EnsureAnyNodeContext(request.context);
+    PeerManager& peerman = EnsurePeerman(node);
+
+    const NodeId peer_id{request.params[0].get_int64()};
+
+    if (const auto err{peerman.FetchMempool(peer_id)}) {
+        throw JSONRPCError(RPC_MISC_ERROR, err.value());
+    }
+    return UniValue::VOBJ;
+},
+    };
+}
+
 static RPCHelpMan addnode()
 {
     return RPCHelpMan{"addnode",

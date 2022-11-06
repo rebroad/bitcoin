@@ -42,6 +42,8 @@ public:
                                              CTxMemPool& pool, bool ignore_incoming_txs);
     virtual ~PeerManager() { }
 
+    virtual std::optional<std::string> FetchMempool(NodeId peer_id) = 0;
+
     /**
      * Attempt to manually fetch block from a given peer. We must already have the header.
      *
