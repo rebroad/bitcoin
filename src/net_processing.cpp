@@ -2749,10 +2749,13 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
     m_chainman.ProcessNewBlock(m_chainparams, block, force_processing, &new_block);
     if (new_block) {
         node.m_last_block_time = GetTime<std::chrono::seconds>();
+        LOCK(cs_main);
         MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
         m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
             pnode->nBlockBytes += State(pnode->GetId())->nBlockBytes;
+            int nBefore = pnode->nBlockTXs;
             pnode->nBlockTXs += State(pnode->GetId())->nBlockTXs;
+            LogPrintf("%s: BlockTXs %d -> %d peer=%d\n", __func__, nBefore, pnode->nBlockTXs, pnode->GetId());
         });
     } else {
         LOCK(cs_main);
