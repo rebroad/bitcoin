@@ -2753,8 +2753,10 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
         MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
         m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
             pnode->nBlockBytes += State(pnode->GetId())->nBlockBytes;
+            State(pnode->GetId())->nBlockBytes = 0;
             int nBefore = pnode->nBlockTXs;
             pnode->nBlockTXs += State(pnode->GetId())->nBlockTXs;
+            State(pnode->GetId())->nBlockTXs = 0;
             LogPrintf("%s: BlockTXs %d -> %d peer=%d\n", __func__, nBefore, pnode->nBlockTXs, pnode->GetId());
         });
     } else {
