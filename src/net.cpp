@@ -638,6 +638,8 @@ void CNode::CopyStats(CNodeStats& stats)
     X(nBlockTXs);
     X(nRecvBytes1stTx);
     X(nTime1stTx);
+    X(nBTxBpsPct);
+    X(nBTXpm);
     X(m_permissionFlags);
     if (m_tx_relay != nullptr) {
         stats.minFeeFilter = m_tx_relay->minFeeFilter;
@@ -1663,8 +1665,6 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             }
             int nMempoolBytes = pnode->nMempoolBytes;
             int nMempoolTXs = pnode->nMempoolTXs;
-            int nBlockBytes = pnode->nBlockBytes;
-            int nBlockTXs = pnode->nBlockTXs;
             if ((pnode->nLastBlock >= now - 60) || (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000)) nPeersIBD++;
             if (count_seconds(pnode->m_last_block_time) > m_last_block_time) m_last_block_time = count_seconds(pnode->m_last_block_time);
             double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
@@ -1676,7 +1676,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 nOutboundFullRelay++;
                 if (pnode->nTime1stTx > latest1stTx) latest1stTx = pnode->nTime1stTx;
                 if (m_connected > latestOutboundConn) latestOutboundConn = m_connected;
-                double nBlockPct = 100.0 * nBlockBytes / (nRecvBytes - pnode->nRecvBytes1stTx + 1);
+                double nBlockPct = pnode->nBTxBpsPct;
                 nLatestNodePct = nMempoolPct;
                 if (nMempoolPct < nLowestPct) {
                     nSecondLowestPct = nLowestPct;
@@ -1696,7 +1696,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 double nMempoolBps = nMempoolBytes * 8.0 / (now - pnode->nTime1stTx + 1);
                 nGlobalBps += (int)nMempoolBps;
                 float nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTime1stTx + 1);
-                float nBTXpm = 60.0 * nBlockTXs / (now - pnode->nTime1stTx + 1);
+                float nBTXpm = pnode->nBTXpm;
                 nLatestNodeTXpm = nTXpm;
                 nGlobalTXpm += (int)nTXpm;
                 if (nTXpm < nLowestTXpm) {

@@ -249,6 +249,8 @@ public:
     std::chrono::seconds m_last_block_time;
     std::chrono::seconds m_connected;
     int64_t nTime1stTx;
+    float nBTxBpsPct;
+    float nBTXpm;
     int64_t nTimeOffset;
     std::string m_addr_name;
     int nVersion;
@@ -448,6 +450,8 @@ public:
     std::atomic<unsigned int> nBlockTXs{0};
     std::atomic<uint64_t> nRecvBytes1stTx{0};
     std::atomic<int64_t> nTime1stTx{0};
+    std::atomic<float> nBTxBpsPct{0};
+    std::atomic<float> nBTXpm{0};
     int64_t nLastBlock{0};
     //! Unix epoch time at peer connection
     const std::chrono::seconds m_connected;

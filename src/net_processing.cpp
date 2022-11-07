@@ -2751,13 +2751,16 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
         node.m_last_block_time = GetTime<std::chrono::seconds>();
         LOCK(cs_main);
         MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
+        int64_t now = GetTimeSeconds();
         m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
             pnode->nBlockBytes += State(pnode->GetId())->nBlockBytes;
-            State(pnode->GetId())->nBlockBytes = 0;
-            int nBefore = pnode->nBlockTXs;
+            if (pnode->nBlockBytes && pnode->nRecvBytes1stTx != pnode->nRecvBytes)
+                pnode->nBTxBpsPct = 100.0 * pnode->nBlockBytes / (pnode->nRecvBytes - pnode->nRecvBytes1stTx);
             pnode->nBlockTXs += State(pnode->GetId())->nBlockTXs;
+            if (now != pnode->nTime1stTx)
+                pnode->nBTXpm = 60.0 * pnode->nBlockTXs / (now - pnode->nTime1stTx);
+            State(pnode->GetId())->nBlockBytes = 0;
             State(pnode->GetId())->nBlockTXs = 0;
-            LogPrintf("%s: BlockTXs %d -> %d peer=%d\n", __func__, nBefore, pnode->nBlockTXs, pnode->GetId());
         });
     } else {
         LOCK(cs_main);
