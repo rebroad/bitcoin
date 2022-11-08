@@ -4562,37 +4562,34 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
     PeerRef peer = GetPeerRef(pfrom->GetId());
     if (peer == nullptr) return false;
 
-    {
+    if (!pfrom->fDisconnect) {
         LOCK(peer->m_getdata_requests_mutex);
         if (!peer->m_getdata_requests.empty()) {
             ProcessGetData(*pfrom, *peer, interruptMsgProc);
         }
     }
 
-    {
+    if (!pfrom->fDisconnect) {
         LOCK2(cs_main, g_cs_orphans);
         if (!peer->m_orphan_work_set.empty()) {
             ProcessOrphanTx(peer->m_orphan_work_set);
         }
     }
 
-    if (pfrom->fDisconnect)
-        return false;
-
     // this maintains the order of responses
     // and prevents m_getdata_requests to grow unbounded
-    {
+    if (!pfrom->fDisconnect) {
         LOCK(peer->m_getdata_requests_mutex);
         if (!peer->m_getdata_requests.empty()) return true;
     }
 
-    {
+    if (!pfrom->fDisconnect) {
         LOCK(g_cs_orphans);
         if (!peer->m_orphan_work_set.empty()) return true;
     }
 
     // Don't bother if send buffer is too full to respond anyway
-    if (pfrom->fPauseSend) return false;
+    if (!pfrom->fDisconnect && pfrom->fPauseSend) return false;
 
     std::list<CNetMessage> msgs;
     {
@@ -4622,11 +4619,13 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
     msg.SetVersion(pfrom->GetCommonVersion());
 
     try {
+        bool doit = !pfrom->fDisconnect;
         if (msg.m_type == NetMsgType::BLOCK || msg.m_type == NetMsgType::BLOCKTXN) {
             pfrom->nBlocksToBeProcessed--;
             nBlocksToBeProcessed--;
+            doit = true;
         }
-        ProcessMessage(*pfrom, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
+        if (doit) ProcessMessage(*pfrom, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
         if (interruptMsgProc) return false;
         {
             LOCK(peer->m_getdata_requests_mutex);
