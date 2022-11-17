@@ -738,10 +738,16 @@ struct CNodeState {
     unsigned int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
     int nBlockAfterTXs{0};
-    //! BlockBytes for this node if we process the BLOCKTXN
+    //! BlockBytes for this node if we process the BLOCK
     int nBlockBytes{0};
-    //! BlockTXs for this node if we process the BLOCKTXN
+    //! BlockTXs for this node if we process the BLOCK
     int nBlockTXs{0};
+    //! Number of blocks received while this node has been connected
+    int nBlocksRecv{0};
+    //! Time of last snapshot
+    int64_t nBlockTimeSnap;
+    //! Time of oldest snapshot
+    int64_t nBlockTimeSnapOld;
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2754,13 +2760,23 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
         int64_t now = GetTimeSeconds();
         m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
             pnode->nBlockBytes += State(pnode->GetId())->nBlockBytes;
-            if (pnode->nBlockBytes && pnode->nRecvBytes1stTx != pnode->nRecvBytes)
-                pnode->nBTxBpsPct = 100.0 * pnode->nBlockBytes / (pnode->nRecvBytes - pnode->nRecvBytes1stTx);
+            if (pnode->nBlockBytes)
+                pnode->nBTxBpsPct = 100.0 * (pnode->nBlockBytes - pnode->nBlockBytesSnapOld) / (pnode->nRecvBytes - pnode->nRecvBytesSnapOld);
             pnode->nBlockTXs += State(pnode->GetId())->nBlockTXs;
-            if (now != pnode->nTime1stTx)
-                pnode->nBTXpm = 60.0 * pnode->nBlockTXs / (now - pnode->nTime1stTx);
+            if (!State(pnode->GetId())->nBlockTimeSnap)
+                State(pnode->GetId())->nBlockTimeSnap = State(pnode->GetId())->nBlockTimeSnapOld = count_seconds(pnode->m_connected) - 1;
+            pnode->nBTXpm = 60.0 * (pnode->nBlockTXs - pnode->nBlockTXsSnapOld) / (now - State(pnode->GetId())->nBlockTimeSnapOld);
             State(pnode->GetId())->nBlockBytes = 0;
             State(pnode->GetId())->nBlockTXs = 0;
+            State(pnode->GetId())->nBlocksRecv++;
+            if (State(pnode->GetId())->nBlocksRecv % 3 == 0) { // Every 3rd block
+                State(pnode->GetId())->nBlockTimeSnapOld = State(pnode->GetId())->nBlockTimeSnap;
+                State(pnode->GetId())->nBlockTimeSnap = now;
+                pnode->nBlockBytesSnapOld = pnode->nBlockBytesSnap;
+                pnode->nBlockBytesSnap = pnode->nBlockBytes;
+                pnode->nBlockTXsSnapOld = pnode->nBlockTXsSnap;
+                pnode->nBlockTXsSnap = pnode->nBlockTXs;
+            }
         });
     } else {
         LOCK(cs_main);
@@ -3314,7 +3330,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 if (m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
                     static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
                     static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
-                    LogPrintf("recv inv tx(%d) %sduring IBD peer=%d\n", pfrom.nRecvBytes1stTx ? 1:0, pfrom.m_tx_relay && pfrom.m_tx_relay->lastSentFeeFilter == MAX_FILTER ? "violation ":"", pfrom.GetId());
+                    LogPrintf("recv inv tx(%d) %sduring IBD peer=%d\n", pfrom.nRecvBytesSnapOld ? 1:0, pfrom.m_tx_relay && pfrom.m_tx_relay->lastSentFeeFilter == MAX_FILTER ? "violation ":"", pfrom.GetId());
                 }
                 // Ignore INVs that don't match wtxidrelay setting.
                 // Note that orphan parent fetching always uses MSG_TX GETDATAs regardless of the wtxidrelay setting.
@@ -3581,7 +3597,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
             static FeeFilterRounder g_filter_rounder{CFeeRate{DEFAULT_MIN_RELAY_TX_FEE}};
             static const CAmount MAX_FILTER{g_filter_rounder.round(MAX_MONEY)};
-            LogPrintf("recv tx(%d) %sduring IBD peer=%d\n", pfrom.nRecvBytes1stTx ? 1:0, pfrom.m_tx_relay && pfrom.m_tx_relay->lastSentFeeFilter == MAX_FILTER ? "violation ":"", pfrom.GetId());
+            LogPrintf("recv tx(%d) %sduring IBD peer=%d\n", pfrom.nRecvBytesSnapOld ? 1:0, pfrom.m_tx_relay && pfrom.m_tx_relay->lastSentFeeFilter == MAX_FILTER ? "violation ":"", pfrom.GetId());
             return;
         }
 
@@ -4213,15 +4229,15 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 strExtra += " UNSOLICITED";
         }
         LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
-        if (pfrom.nRecvBytes1stTx) {
+        if (pfrom.nRecvBytesSnapOld) {
             int nBIF;
             WITH_LOCK(cs_main, nBIF = State(pfrom.GetId())->nBlocksInFlight);
             int nLBT = int(GetTime() - count_seconds(pfrom.m_last_block_time));
             if (nBIF > 3 || nLBT < 60) {
-                pfrom.nRecvBytes1stTx = 0;
+                pfrom.nRecvBytesSnapOld = 0;
                 pfrom.nMempoolBytes = 0;
                 pfrom.nMempoolTXs = 0;
-                LogPrintf("Setting nRecvBytes1stTx=0 BIF=%d nLBT=%s peer=%d\n", nBIF, strAge(nLBT), pfrom.GetId());
+                LogPrintf("Setting nRecvBytesSnapOld=0 BIF=%d nLBT=%s peer=%d\n", nBIF, strAge(nLBT), pfrom.GetId());
             }
         }
         ProcessBlock(pfrom, pblock, forceProcessing);
@@ -4966,9 +4982,9 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
             // Send the current filter if we sent MAX_FILTER previously
             // and made it out of IBD.
             pto.m_tx_relay->m_next_send_feefilter = 0us;
-            if (pto.nRecvBytes1stTx) {
-                pto.nRecvBytes1stTx = 0;
-                LogPrintf("Setting nRecvBytes1stTx=0 peer=%d\n", pto.GetId());
+            if (pto.nRecvBytesSnapOld) {
+                pto.nRecvBytesSnapOld = 0;
+                LogPrintf("Setting nRecvBytesSnapOld=0 peer=%d\n", pto.GetId());
             }
         }
     }

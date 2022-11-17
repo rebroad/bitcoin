@@ -94,8 +94,8 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         }
         case Recv: {
             int64_t now = GetTimeSeconds();
-            if (rec->nodeStats.nRecvBytes1stTx && rec->nodeStats.nTime1stTx != now)
-                return GUIUtil::formatBps((rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx) * 8.0 / (now - rec->nodeStats.nTime1stTx));
+            if (rec->nodeStats.nRecvBytesSnapOld && rec->nodeStats.nTimeSnapOld != now)
+                return GUIUtil::formatBps((rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytesSnapOld) * 8.0 / (now - rec->nodeStats.nTimeSnapOld));
             else if (now != count_seconds(rec->nodeStats.m_connected))
                 return GUIUtil::formatBps(rec->nodeStats.nRecvBytes * 8.0 / (now - count_seconds(rec->nodeStats.m_connected)));
             else
@@ -107,8 +107,8 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             if (now - count_seconds(rec->nodeStats.m_connected) >= 120) dots="";
             else if (now - count_seconds(rec->nodeStats.m_connected) >= 60) dots=".";
             else dots="..";
-            if (rec->nodeStats.nRecvBytes1stTx && rec->nodeStats.nRecvBytes1stTx != rec->nodeStats.nRecvBytes) {
-                int nTxBpsPct = int((100.0 * rec->nodeStats.nMempoolBytes / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytes1stTx)) + 0.5);
+            if (rec->nodeStats.nRecvBytesSnapOld) {
+                int nTxBpsPct = int((100.0 * (rec->nodeStats.nMempoolBytes - rec->nodeStats.nMempoolBytesSnapOld) / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytesSnapOld)) + 0.5);
                 int nBTxBpsPct = int(rec->nodeStats.nBTxBpsPct + 0.5);
                 return QString::fromStdString(strprintf("%s%d%s", dots, nTxBpsPct, nBTxBpsPct ? strprintf("+%d", nBTxBpsPct) : ""));
             } else
@@ -116,8 +116,8 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         }
         case MPpm: {
             int64_t now = GetTimeSeconds();
-            if (rec->nodeStats.nRecvBytes1stTx && now != rec->nodeStats.nTime1stTx) {
-                float nMPpm = 60.0 * rec->nodeStats.nMempoolTXs / (now - rec->nodeStats.nTime1stTx);
+            if (rec->nodeStats.nRecvBytesSnapOld) {
+                float nMPpm = 60.0 * (rec->nodeStats.nMempoolTXs - rec->nodeStats.nMempoolTXsSnapOld) / (now - rec->nodeStats.nTimeSnapOld);
                 float nBTxpm = rec->nodeStats.nBTXpm;
                 std::string strMPpm; std::string strBTpm;
                 if (nMPpm < 1) strMPpm = strprintf("%d", 0.1 * (int)(nMPpm * 10));
