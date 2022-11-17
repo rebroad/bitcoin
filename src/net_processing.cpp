@@ -745,9 +745,9 @@ struct CNodeState {
     //! Number of blocks received while this node has been connected
     int nBlocksRecv{0};
     //! Time of last snapshot
-    int64_t nBlockTimeSnap;
+    int64_t nBlockTimeSnap{0};
     //! Time of oldest snapshot
-    int64_t nBlockTimeSnapOld;
+    int64_t nBlockTimeSnapOld{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -4464,7 +4464,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 int lastRecvFeeFilter = pfrom.m_tx_relay->lastRecvFeeFilter;
                 int minFeeFilter = pfrom.m_tx_relay->minFeeFilter;
                 if (newFeeFilter != minFeeFilter) {
-                    if (lastRecvFeeFilter == newFeeFilter && newFeeFilter < minFeeFilter)
+                    if (lastRecvFeeFilter == newFeeFilter)
                         fWobble = true;
                     pfrom.m_tx_relay->lastRecvFeeFilter = minFeeFilter;
                     pfrom.m_tx_relay->minFeeFilter = newFeeFilter;
