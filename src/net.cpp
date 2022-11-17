@@ -1682,11 +1682,11 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 LOCK(pnode->cs_vSend);
                 nSendBytes = pnode->nSendBytes;
             }
-            int nMempoolBytes = pnode->nMempoolBytes;
-            int nMempoolTXs = pnode->nMempoolTXs;
+            int nMempoolBytes = pnode->nMempoolBytes - pnode->nMempoolBytesSnapOld;
+            int nMempoolTXs = pnode->nMempoolTXs - pnode->nMempoolTXsSnapOld;
             if ((pnode->nLastBlock >= now - 60) || (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000)) nPeersIBD++;
             if (count_seconds(pnode->m_last_block_time) > m_last_block_time) m_last_block_time = count_seconds(pnode->m_last_block_time);
-            double nMempoolPct = 100.0 * (nMempoolBytes - pnode->nMempoolBytesSnapOld) / (nRecvBytes - pnode->nRecvBytesSnapOld + 1);
+            double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytesSnapOld + 1);
             int64_t m_connected = count_seconds(pnode->m_connected);
             if (pnode->IsFullOutboundConn()) {
                 nTotalBytesRecv += nRecvBytes - pnode->nRecvBytesSnapOld;
@@ -1712,9 +1712,9 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 } else if (nBlockPct && nBlockPct < nSecondLowestBPct)
                     nSecondLowestBPct = nBlockPct;
                 //int nMempoolBps = nMempoolPct * .08 * (nRecvBytes - pnode-nRecvBytesSnapOld) / (now - pnode->nTimeSnapOld);
-                double nMempoolBps = (nMempoolBytes - pnode->nMempoolBytesSnapOld) * 8.0 / (now - pnode->nTimeSnapOld);
+                double nMempoolBps = nMempoolBytes * 8.0 / (now - pnode->nTimeSnapOld);
                 nGlobalBps += (int)nMempoolBps;
-                float nTXpm = 60.0 * (nMempoolTXs - pnode->nMempoolTXsSnapOld) / (now - pnode->nTimeSnapOld);
+                float nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTimeSnapOld);
                 float nBTXpm = pnode->nBTXpm;
                 nLatestNodeTXpm = nTXpm;
                 nGlobalTXpm += (int)nTXpm;
