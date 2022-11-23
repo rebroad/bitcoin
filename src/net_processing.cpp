@@ -748,6 +748,10 @@ struct CNodeState {
     int64_t nBlockTimeSnap{0};
     //! Time of oldest snapshot
     int64_t nBlockTimeSnapOld{0};
+    //! Last snapshot of nRecvBytes
+    int64_t nRecvBytesSnap{0};
+    //! Oldest snapshot of nRecvBytes
+    int64_t nRecvBytesSnapOld{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2527,7 +2531,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             });
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
-		tx.GetTotalSize(), (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
+		nSize, (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
             _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
             m_orphanage.EraseTx(orphanHash);
@@ -2761,7 +2765,7 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
         m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
             pnode->nBlockBytes += State(pnode->GetId())->nBlockBytes;
             if (pnode->nBlockBytes)
-                pnode->nBTxBpsPct = 100.0 * (pnode->nBlockBytes - pnode->nBlockBytesSnapOld) / (pnode->nRecvBytes - pnode->nRecvBytesSnapOld);
+                pnode->nBTxBpsPct = 100.0 * (pnode->nBlockBytes - pnode->nBlockBytesSnapOld) / (pnode->nRecvBytes - State(pnode->GetId())->nRecvBytesSnapOld);
             pnode->nBlockTXs += State(pnode->GetId())->nBlockTXs;
             if (!State(pnode->GetId())->nBlockTimeSnap)
                 State(pnode->GetId())->nBlockTimeSnap = State(pnode->GetId())->nBlockTimeSnapOld = count_seconds(pnode->m_connected) - 1;
@@ -2770,6 +2774,8 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
             State(pnode->GetId())->nBlockTXs = 0;
             State(pnode->GetId())->nBlocksRecv++;
             if (State(pnode->GetId())->nBlocksRecv % 3 == 0) { // Every 3rd block
+                State(pnode->GetId())->nRecvBytesSnapOld = State(pnode->GetId())->nRecvBytesSnap;
+                State(pnode->GetId())->nRecvBytesSnap = pnode->nRecvBytes;
                 State(pnode->GetId())->nBlockTimeSnapOld = State(pnode->GetId())->nBlockTimeSnap;
                 State(pnode->GetId())->nBlockTimeSnap = now;
                 pnode->nBlockBytesSnapOld = pnode->nBlockBytesSnap;
