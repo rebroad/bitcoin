@@ -2763,21 +2763,22 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
         MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
         int64_t now = GetTimeSeconds();
         m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-            pnode->nBlockBytes += State(pnode->GetId())->nBlockBytes;
+            CNodeState *nodestate = State(pnode->GetId());
+            pnode->nBlockBytes += nodestate->nBlockBytes;
             if (pnode->nBlockBytes)
-                pnode->nBTxBpsPct = 100.0 * (pnode->nBlockBytes - pnode->nBlockBytesSnapOld) / (pnode->nRecvBytes - State(pnode->GetId())->nRecvBytesSnapOld);
-            pnode->nBlockTXs += State(pnode->GetId())->nBlockTXs;
-            if (!State(pnode->GetId())->nBlockTimeSnap)
-                State(pnode->GetId())->nBlockTimeSnap = State(pnode->GetId())->nBlockTimeSnapOld = count_seconds(pnode->m_connected) - 1;
-            pnode->nBTXpm = 60.0 * (pnode->nBlockTXs - pnode->nBlockTXsSnapOld) / (now - State(pnode->GetId())->nBlockTimeSnapOld);
-            State(pnode->GetId())->nBlockBytes = 0;
-            State(pnode->GetId())->nBlockTXs = 0;
-            State(pnode->GetId())->nBlocksRecv++;
-            if (State(pnode->GetId())->nBlocksRecv % 3 == 0) { // Every 3rd block
-                State(pnode->GetId())->nRecvBytesSnapOld = State(pnode->GetId())->nRecvBytesSnap;
-                State(pnode->GetId())->nRecvBytesSnap = pnode->nRecvBytes;
-                State(pnode->GetId())->nBlockTimeSnapOld = State(pnode->GetId())->nBlockTimeSnap;
-                State(pnode->GetId())->nBlockTimeSnap = now;
+                pnode->nBTxBpsPct = 100.0 * (pnode->nBlockBytes - pnode->nBlockBytesSnapOld) / (pnode->nRecvBytes - nodestate->nRecvBytesSnapOld);
+            pnode->nBlockTXs += nodestate->nBlockTXs;
+            if (!nodestate->nBlockTimeSnap)
+                nodestate->nBlockTimeSnap = nodestate->nBlockTimeSnapOld = count_seconds(pnode->m_connected) - 1;
+            pnode->nBTXpm = 60.0 * (pnode->nBlockTXs - pnode->nBlockTXsSnapOld) / (now - nodestate->nBlockTimeSnapOld);
+            nodestate->nBlockBytes = 0;
+            nodestate->nBlockTXs = 0;
+            nodestate->nBlocksRecv++;
+            if (nodestate->nBlocksRecv % 3 == 0) { // Every 3rd block
+                nodestate->nRecvBytesSnapOld = nodestate->nRecvBytesSnap;
+                nodestate->nRecvBytesSnap = pnode->nRecvBytes;
+                nodestate->nBlockTimeSnapOld = nodestate->nBlockTimeSnap;
+                nodestate->nBlockTimeSnap = now;
                 pnode->nBlockBytesSnapOld = pnode->nBlockBytesSnap;
                 pnode->nBlockBytesSnap = pnode->nBlockBytes;
                 pnode->nBlockTXsSnapOld = pnode->nBlockTXsSnap;
