@@ -269,15 +269,9 @@ public:
     uint64_t nMempoolBytes;
     uint64_t nMempoolBytesSnap;
     uint64_t nMempoolBytesSnapOld;
-    uint64_t nBlockBytes;
-    uint64_t nBlockBytesSnap;
-    uint64_t nBlockBytesSnapOld;
     unsigned int nMempoolTXs;
     unsigned int nMempoolTXsSnap;
     unsigned int nMempoolTXsSnapOld;
-    unsigned int nBlockTXs;
-    unsigned int nBlockTXsSnap;
-    unsigned int nBlockTXsSnapOld;
     mapMsgCmdSize mapRecvBytesPerMsgCmd;
     NetPermissionFlags m_permissionFlags;
     std::chrono::microseconds m_last_ping_time;

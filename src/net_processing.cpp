@@ -738,10 +738,22 @@ struct CNodeState {
     unsigned int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
     int nBlockAfterTXs{0};
-    //! BlockBytes for this node if we process the BLOCK
-    int nBlockBytes{0};
-    //! BlockTXs for this node if we process the BLOCK
+    //! BlockBytes for this node
+    int64_t nBlockBytes{0};
+    //! Last snapshot of nBlockBytes
+    int64_t nBlockBytesSnap{0};
+    //! Oldest snapshot of nBlockBytes
+    int64_t nBlockBytesSnapOld{0};
+    //! BlockTXs for this node
     int nBlockTXs{0};
+    //! Last snapshot of nBlockTXs
+    int64_t nBlockTXsSnap{0};
+    //! Oldest snapshot of nBlockTXs
+    int64_t nBlockTXsSnapOld{0};
+    //! BlockBytes for this node if we process the BLOCK
+    int nNextBlockBytes{0};
+    //! BlockTXs for this node if we process the BLOCK
+    int nNextBlockTXs{0};
     //! Number of blocks received while this node has been connected
     int nBlocksRecv{0};
     //! Time of last snapshot
@@ -2764,13 +2776,13 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
         int64_t now = GetTimeSeconds();
         m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
             CNodeState *nodestate = State(pnode->GetId());
-            pnode->nBlockBytes += nodestate->nBlockBytes;
+            nodestate->nBlockBytes += nodestate->nNextBlockBytes;
             if (pnode->nBlockBytes)
-                pnode->nBTxBpsPct = 100.0 * (pnode->nBlockBytes - pnode->nBlockBytesSnapOld) / (pnode->nRecvBytes - nodestate->nRecvBytesSnapOld);
-            pnode->nBlockTXs += nodestate->nBlockTXs;
+                pnode->nBTxBpsPct = 100.0 * (nodestate->nBlockBytes - nodestate->nBlockBytesSnapOld) / (pnode->nRecvBytes - nodestate->nRecvBytesSnapOld);
+            nodestate->nBlockTXs += nodestate->nNextBlockTXs;
             if (!nodestate->nBlockTimeSnap)
                 nodestate->nBlockTimeSnap = nodestate->nBlockTimeSnapOld = count_seconds(pnode->m_connected) - 1;
-            pnode->nBTXpm = 60.0 * (pnode->nBlockTXs - pnode->nBlockTXsSnapOld) / (now - nodestate->nBlockTimeSnapOld);
+            pnode->nBTXpm = 60.0 * (nodestate->nBlockTXs - nodestate->nBlockTXsSnapOld) / (now - nodestate->nBlockTimeSnapOld);
             nodestate->nBlockBytes = 0;
             nodestate->nBlockTXs = 0;
             nodestate->nBlocksRecv++;
@@ -2779,10 +2791,10 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
                 nodestate->nRecvBytesSnap = pnode->nRecvBytes;
                 nodestate->nBlockTimeSnapOld = nodestate->nBlockTimeSnap;
                 nodestate->nBlockTimeSnap = now;
-                pnode->nBlockBytesSnapOld = pnode->nBlockBytesSnap;
-                pnode->nBlockBytesSnap = pnode->nBlockBytes;
-                pnode->nBlockTXsSnapOld = pnode->nBlockTXsSnap;
-                pnode->nBlockTXsSnap = pnode->nBlockTXs;
+                nodestate->nBlockBytesSnapOld = nodestate->nBlockBytesSnap;
+                nodestate->nBlockBytesSnap = nodestate->nBlockBytes;
+                nodestate->nBlockTXsSnapOld = nodestate->nBlockTXsSnap;
+                nodestate->nBlockTXsSnap = nodestate->nBlockTXs;
             }
         });
     } else {
@@ -3970,8 +3982,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 bool fSeenBefore = (cmpctblock.header.GetHash() == last_recved_cmpctblock1.header.GetHash() ||
                     cmpctblock.header.GetHash() == last_recved_cmpctblock2.header.GetHash());
                 m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-                    State(pnode->GetId())->nBlockBytes = 0;
-                    State(pnode->GetId())->nBlockTXs = 0;
+                    State(pnode->GetId())->nNextBlockBytes = 0;
+                    State(pnode->GetId())->nNextBlockTXs = 0;
                 });
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
@@ -3980,8 +3992,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     else if (!fSeenBefore) {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-                                State(pnode->GetId())->nBlockBytes += nSize;
-                                State(pnode->GetId())->nBlockTXs++;
+                                State(pnode->GetId())->nNextBlockBytes += nSize;
+                                State(pnode->GetId())->nNextBlockTXs++;
                                 return true;
                             });
                             nFromConPeers++;

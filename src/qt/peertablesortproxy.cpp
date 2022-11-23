@@ -55,7 +55,7 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
     }
     case PeerTableModel::TxBpsPct: {
         double Right; double Left;
-        if (right_stats.nBlockTXs && left_stats.nBlockTXs) {
+        if (right_stats.nBTxBpsPct && left_stats.nBTxBpsPct) {
             Right = 1.0 * right_stats.nBTxBpsPct;
             Left = 1.0 * left_stats.nBTxBpsPct;
         } else {
@@ -67,7 +67,7 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
     case PeerTableModel::MPpm: {
         int64_t now = GetTimeSeconds();
         double Right; double Left;
-        if (right_stats.nBlockTXs && left_stats.nBlockTXs) {
+        if (right_stats.nBTXpm && left_stats.nBTXpm) {
             Right = right_stats.nBTXpm;
             Left = left_stats.nBTXpm;
         } else {
