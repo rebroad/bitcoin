@@ -2783,8 +2783,8 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
             if (!nodestate->nBlockTimeSnap)
                 nodestate->nBlockTimeSnap = nodestate->nBlockTimeSnapOld = count_seconds(pnode->m_connected) - 1;
             pnode->nBTXpm = 60.0 * (nodestate->nBlockTXs - nodestate->nBlockTXsSnapOld) / (now - nodestate->nBlockTimeSnapOld);
-            nodestate->nBlockBytes = 0;
-            nodestate->nBlockTXs = 0;
+            nodestate->nNextBlockBytes = 0;
+            nodestate->nNextBlockTXs = 0;
             nodestate->nBlocksRecv++;
             if (nodestate->nBlocksRecv % 3 == 0) { // Every 3rd block
                 nodestate->nRecvBytesSnapOld = nodestate->nRecvBytesSnap;
