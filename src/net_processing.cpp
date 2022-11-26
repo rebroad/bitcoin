@@ -2777,14 +2777,14 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
         m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
             CNodeState *nodestate = State(pnode->GetId());
             nodestate->nBlockBytes += nodestate->nNextBlockBytes;
+            nodestate->nNextBlockBytes = 0;
             if (pnode->nBlockBytes)
                 pnode->nBTxBpsPct = 100.0 * (nodestate->nBlockBytes - nodestate->nBlockBytesSnapOld) / (pnode->nRecvBytes - nodestate->nRecvBytesSnapOld);
             nodestate->nBlockTXs += nodestate->nNextBlockTXs;
+            nodestate->nNextBlockTXs = 0;
             if (!nodestate->nBlockTimeSnap)
                 nodestate->nBlockTimeSnap = nodestate->nBlockTimeSnapOld = count_seconds(pnode->m_connected) - 1;
             pnode->nBTXpm = 60.0 * (nodestate->nBlockTXs - nodestate->nBlockTXsSnapOld) / (now - nodestate->nBlockTimeSnapOld);
-            nodestate->nNextBlockBytes = 0;
-            nodestate->nNextBlockTXs = 0;
             nodestate->nBlocksRecv++;
             if (nodestate->nBlocksRecv % 3 == 0) { // Every 3rd block
                 nodestate->nRecvBytesSnapOld = nodestate->nRecvBytesSnap;
