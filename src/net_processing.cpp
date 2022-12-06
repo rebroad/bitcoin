@@ -2780,7 +2780,7 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
             nodestate->nNextBlockBytes = 0;
             if (nodestate->nBlockBytes) {
                 pnode->nBTxBpsPct = 100.0 * (nodestate->nBlockBytes - nodestate->nBlockBytesSnapOld) / (pnode->nRecvBytes - nodestate->nRecvBytesSnapOld);
-                LogPrintf("%s: Pct = (%d-%d) / %d = %d\n", __func__, nodestate->nBlockBytes, nodestate->nBlockBytesSnapOld, pnode->nRecvBytes - nodestate->nRecvBytesSnapOld, pnode->nBTxBpcPct);
+                LogPrintf("%s: Pct = (%d-%d) / %d = %d\n", __func__, nodestate->nBlockBytes, nodestate->nBlockBytesSnapOld, pnode->nRecvBytes - nodestate->nRecvBytesSnapOld, pnode->nBTxBpsPct);
             }
             nodestate->nBlockTXs += nodestate->nNextBlockTXs;
             nodestate->nNextBlockTXs = 0;
@@ -4063,7 +4063,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (fProcessBLOCKTXN) {
             pfrom.nMempoolBytes += nSize;
-            pfrom.nBlockBytes += nSize;
+            State(pfrom.GetId())->nBlockBytes += nSize; // REBTODO - maybe not needed once block provider logic added
             LogPrint(BCLog::BLOCK, "Calling ProcessMessage(BLOCKTXN) peer=%d\n", pfrom.GetId());
             return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, time_received, interruptMsgProc);
         }
@@ -4182,9 +4182,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (fWrongPeer)
                 LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessBlock() wrong peer=%d\n", pfrom.GetId());
             if (resp.txn.size()) { // Only add these when an actual BLOCKTXN has been received
-                pfrom.nBlockBytes += nSize;
+                State(pfrom.GetId())->nBlockBytes += nSize; // REBTODO - remove once block provider metrics added
                 pfrom.nMempoolBytes += nSize;
-                pfrom.nBlockTXs += resp.txn.size();
                 pfrom.nMempoolTXs += resp.txn.size();
             }
             ProcessBlock(pfrom, pblock, /*force_processing=*/true);

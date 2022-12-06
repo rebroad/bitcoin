@@ -1807,7 +1807,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             if (pnode->GetId() == worstNode) {
                 if (MaxedOut) {
                     // A block came in and so the lowest will always be the lowest - disconnect it
-                    if (m_last_block_time > latestOutboundConn && (pnode->nBlockTXs || (pnode->nBlockTXs == 0 && m_last_block_time - m_connected >= 120))) { // REBTODO - don't use nBlockTXs for checking if a block came in
+                    if (m_last_block_time > latestOutboundConn && (pnode->nBTXpm || (pnode->nBTXpm == 0 && m_last_block_time - m_connected >= 120))) {
                         strReason += "R1";
                         strDetails += strprintf("LastBlk=%d", now - m_last_block_time);
                         DoIt = true;
