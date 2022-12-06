@@ -451,9 +451,6 @@ public:
     uint64_t nMempoolBytes{0};
     uint64_t nMempoolBytesSnap{0};
     uint64_t nMempoolBytesSnapOld{0};
-    uint64_t nBlockBytes{0};
-    uint64_t nBlockBytesSnap{0};
-    uint64_t nBlockBytesSnapOld{0};
     unsigned int nMempoolTXs{0};
     unsigned int nMempoolTXsSnap{0};
     unsigned int nMempoolTXsSnapOld{0};

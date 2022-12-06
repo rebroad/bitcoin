@@ -731,39 +731,39 @@ struct CNodeState {
     std::list<QueuedBlock> vBlocksInFlight;
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     std::chrono::microseconds m_downloading_since{0us};
-    int64_t m_download_report_clicks{0};
-    int64_t tSipaDisconnect{0};
-    int nBlocksInFlight{0};
+    uint64_t m_download_report_clicks{0};
+    uint64_t tSipaDisconnect{0};
+    unsigned int nBlocksInFlight{0};
     //! How many TXs are currently in flight
     unsigned int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
-    int nBlockAfterTXs{0};
+    unsigned int nBlockAfterTXs{0};
     //! BlockBytes for this node
-    int64_t nBlockBytes{0};
+    uint64_t nBlockBytes{0};
     //! Last snapshot of nBlockBytes
-    int64_t nBlockBytesSnap{0};
+    uint64_t nBlockBytesSnap{0};
     //! Oldest snapshot of nBlockBytes
-    int64_t nBlockBytesSnapOld{0};
+    uint64_t nBlockBytesSnapOld{0};
     //! BlockTXs for this node
-    int nBlockTXs{0};
+    unsigned int nBlockTXs{0};
     //! Last snapshot of nBlockTXs
-    int64_t nBlockTXsSnap{0};
+    unsigned int nBlockTXsSnap{0};
     //! Oldest snapshot of nBlockTXs
-    int64_t nBlockTXsSnapOld{0};
+    unsigned int nBlockTXsSnapOld{0};
     //! BlockBytes for this node if we process the BLOCK
-    int nNextBlockBytes{0};
+    unsigned int nNextBlockBytes{0};
     //! BlockTXs for this node if we process the BLOCK
-    int nNextBlockTXs{0};
+    unsigned int nNextBlockTXs{0};
     //! Number of blocks received while this node has been connected
-    int nBlocksRecv{0};
+    unsigned int nBlocksRecv{0};
     //! Time of last snapshot
-    int64_t nBlockTimeSnap{0};
+    uint64_t nBlockTimeSnap{0};
     //! Time of oldest snapshot
-    int64_t nBlockTimeSnapOld{0};
+    uint64_t nBlockTimeSnapOld{0};
     //! Last snapshot of nRecvBytes
-    int64_t nRecvBytesSnap{0};
+    uint64_t nRecvBytesSnap{0};
     //! Oldest snapshot of nRecvBytes
-    int64_t nRecvBytesSnapOld{0};
+    uint64_t nRecvBytesSnapOld{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -2778,8 +2778,10 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
             CNodeState *nodestate = State(pnode->GetId());
             nodestate->nBlockBytes += nodestate->nNextBlockBytes;
             nodestate->nNextBlockBytes = 0;
-            if (pnode->nBlockBytes)
+            if (nodestate->nBlockBytes) {
                 pnode->nBTxBpsPct = 100.0 * (nodestate->nBlockBytes - nodestate->nBlockBytesSnapOld) / (pnode->nRecvBytes - nodestate->nRecvBytesSnapOld);
+                LogPrintf("%s: Pct = (%d-%d) / %d = %d\n", __func__, nodestate->nBlockBytes, nodestate->nBlockBytesSnapOld, pnode->nRecvBytes - nodestate->nRecvBytesSnapOld, pnode->nBTxBpcPct);
+            }
             nodestate->nBlockTXs += nodestate->nNextBlockTXs;
             nodestate->nNextBlockTXs = 0;
             if (!nodestate->nBlockTimeSnap)
