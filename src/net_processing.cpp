@@ -996,7 +996,7 @@ void PeerManagerImpl::MaybeSetPeerAsAnnouncingHeaderAndIDs(NodeId nodeid)
     // Never request high-bandwidth mode from peers if we're blocks-only. Our
     // mempool will not contain the transactions necessary to reconstruct the
     // compact block.
-    if (m_ignore_incoming_txs) return;
+    if (m_ignore_incoming_txs || !m_initial_sync_finished) return;
 
     CNodeState* nodestate = State(nodeid);
     if (!nodestate || !nodestate->fSupportsDesiredCmpctVersion) {
@@ -3910,15 +3910,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (pindex->nChainWork <= m_chainman.ActiveChain().Tip()->nChainWork || // We know something better
                 pindex->nTx != 0) { // We had this block at some point, but pruned it
-            if (fAlreadyInFlight) {
-                // We requested this block for some reason, but our mempool will probably be useless
-                // so we just grab the block via normal getdata
-                std::vector<CInv> vInv(1);
-                vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom), cmpctblock.header.GetHash());
-                m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
-                LogPrint(BCLog::BLOCK, "resend getdata %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
-            } else
-                LogPrint(BCLog::BLOCK, "Ignoring cmpctblock as not enough work. peer=%d\n", pfrom.GetId());
+            LogPrint(BCLog::BLOCK, "Ignoring cmpctblock as not enough work. peer=%d\n", pfrom.GetId());
             return;
         }
 
