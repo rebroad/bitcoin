@@ -1668,6 +1668,8 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     int nPeersIBD = 0;
     static bool IsIBD = true;
     if (now != lastnow) {
+        m_max_outbound_full_relay = std::min(nMaxConnections, (int)gArgs.GetIntArg("-maxoutboundrelay", MAX_OUTBOUND_FULL_RELAY_CONNECTIONS));
+        m_max_outbound = m_max_outbound_full_relay + m_max_outbound_block_relay + nMaxFeeler;
         for (CNode* pnode : nodes) {
             int nRecvBytes; int nSendBytes;
             {
@@ -2258,7 +2260,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
         auto now = GetTime<std::chrono::microseconds>();
         static int anchor = 0;
-        if (m_anchors.size() >= MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1)
+        if (m_anchors.size() >= MAX_BLOCK_RELAY_ONLY_ANCHORS + m_max_outbound_full_relay - 1)
             anchor = 0;
         bool fFeeler = false;
 
@@ -2325,7 +2327,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             int nOutboundCount = nOutboundFullRelay + nOutboundBlockRelay;
             if (nOutboundCount > nLastOutboundCount) {
                 int nLastLast = nLastOutboundCount;
-                nLastOutboundCount = std::min(nOutboundCount, (int)MAX_OUTBOUND_FULL_RELAY_CONNECTIONS +
+                nLastOutboundCount = std::min(nOutboundCount, m_max_outbound_full_relay +
                     (int)MAX_BLOCK_RELAY_ONLY_ANCHORS);
                 if (nLastLast != nLastOutboundCount)
                     LogPrintf("anchor LOC %d -> %d\n", nLastLast, nLastOutboundCount);
@@ -2379,9 +2381,6 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                         return;
                 // Load addresses from anchors.dat
                 m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
-                if (m_anchors.size() > MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1) {
-                    m_anchors.resize(MAX_BLOCK_RELAY_ONLY_ANCHORS + MAX_OUTBOUND_FULL_RELAY_CONNECTIONS - 1);
-                }
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                     return;
                 break;

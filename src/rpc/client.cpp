@@ -64,6 +64,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "getmempoolfrompeer", 0, "peer_id" },
     { "getblockhash", 0, "height" },
     { "maxmempool", 0, "megabytes" },
+    { "maxoutboundrelay", 0, "number" },
     { "updatechain", 1, "boolean" },
     { "downloadblocks", 1, "boolean" },
     { "runttoggle", 1, "minutes" },

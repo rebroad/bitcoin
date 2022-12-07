@@ -295,6 +295,30 @@ static RPCHelpMan getmempoolfrompeer()
     };
 }
 
+static RPCHelpMan maxoutboundrelay()
+{
+    return RPCHelpMan{"maxoutboundrelay",
+                "\nSets the allocated number of outbound relay connections.\n",
+                {
+                    {"number", RPCArg::Type::NUM, RPCArg::Optional::NO, "The number of connections permitted"},
+                },
+                RPCResult{
+                    RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+                    HelpExampleCli("maxoutboundrelay", "8") + HelpExampleRpc("maxoutboundrelay", "8")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    int nNumber = request.params[0].get_int();
+    if (nNumber < 0)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("MaxMempool size %d is too small", nNumber));
+    gArgs.ForceSetArg("-maxoutboundrelay", strprintf("%d", nNumber));
+
+    return NullUniValue;
+}
+    };
+}
+
 static RPCHelpMan addnode()
 {
     return RPCHelpMan{"addnode",
@@ -1011,6 +1035,7 @@ static const CRPCCommand commands[] =
     { "network",             &getnettotals,            },
     { "network",             &getnetworkinfo,          },
     { "network",             &getmempoolfrompeer,      },
+    { "network",             &maxoutboundrelay,        },
     { "network",             &setban,                  },
     { "network",             &listbanned,              },
     { "network",             &clearbanned,             },
