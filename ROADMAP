@@ -1,3 +1,5 @@
+If bps% below zero, show first decimal point
+
 Add option to not broadcast TXs (except to whitelisted nodes)
 
 Allow nMaxOutboundRelay to increase slowly. +1 it every time it saved anchor file until it reaches the GetIntArg
