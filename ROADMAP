@@ -1,3 +1,7 @@
+Allow nMaxOutboundRelay to increase slowly. +1 it every time it saved anchor file until it reaches the GetIntArg
+
+Logic to find the worst node faulty - not finding the 0% Bps.
+
 Evict (and sort) based on MempoolBytes not BlockBytes. Fix sorting of BlockTXs. Reduce BlockBytes/TXs when pruning due to full mempool.
 
 Add a loadmempool RPC (to reload the mempool.dat)
