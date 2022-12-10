@@ -1684,7 +1684,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             int nMempoolTXs = pnode->nMempoolTXs - pnode->nMempoolTXsSnapOld;
             if ((pnode->nLastBlock >= now - 60) || (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000)) nPeersIBD++;
             if (count_seconds(pnode->m_last_block_time) > m_last_block_time) m_last_block_time = count_seconds(pnode->m_last_block_time);
-            double nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytesSnapOld + 1);
+            float nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytesSnapOld + 1);
             int64_t m_connected = count_seconds(pnode->m_connected);
             if (pnode->IsFullOutboundConn()) {
                 nTotalBytesRecv += nRecvBytes - pnode->nRecvBytesSnapOld;
@@ -1693,7 +1693,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 nOutboundFullRelay++;
                 if (pnode->nTimeSnapOld > latestSnapOld) latestSnapOld = pnode->nTimeSnapOld;
                 if (m_connected > latestOutboundConn) latestOutboundConn = m_connected;
-                double nBlockPct = pnode->nBTxBpsPct;
+                float nBlockPct = pnode->nBTxBpsPct;
                 nLatestNodePct = nMempoolPct;
                 if (nMempoolPct < nLowestPct) {
                     nSecondLowestPct = nLowestPct;
@@ -1764,7 +1764,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             nLowestTXpm = nLowestBTXpm;
             nSecondLowestTXpm = nSecondLowestBTXpm;
         }
-        if (worstNodePctBPct > nLowestBPct) {
+        if (worstNodePctBPct > nLowestBPct) { // REBTODO - really not sure this is right
             worstNodePct = worstNodeBPct;
             nLowestPct = nLowestBPct;
             nSecondLowestPct = nSecondLowestBPct;
@@ -1829,7 +1829,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             }
             if (DoIt) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
-                LogPrintf("Evict%d: %s=%d,%d %s %s TimeConn=%d LastOut=%d LastSnapOld=%d disconnect peer=%d\n", nTechnique, nTechnique ? "TXpm":"TX%", nLowest, nSecondLowest, strReason, strDetails, now - m_connected, now - latestOutboundConn, now - latestSnapOld, pnode->GetId());
+                LogPrintf("Evict%d: %s=%d,%d %s %s TimeConn=%d LastOut=%d LastSnapOld=%d %sdisconnect peer=%d\n", nTechnique, nTechnique ? "TXpm":"TX%", nLowest, nSecondLowest, strReason, strDetails, now - m_connected, now - latestOutboundConn, now - latestSnapOld, MaxedOut ? "MO ":"", pnode->GetId());
                 if ((now - latestOutboundConn) >= 120 && MaxedOut
                         && !nAnchorTryAgain && (now - latestSnapOld) >= 120) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
