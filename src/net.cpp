@@ -1730,8 +1730,8 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 } else if (nBTXpm && nBTXpm < nSecondLowestBTXpm)
                     nSecondLowestBTXpm = nBTXpm;
             } else if (pnode->IsInboundConn()) {
-                int nRecvBps = 8 * nRecvBytes / std::min(now - m_connected, 1);
-                int nSendBps = 8 * nSendBytes / std::min(now - m_connected, 1);
+                int nRecvBps = 8 * nRecvBytes / std::min<int64_t>(now - m_connected, 1);
+                int nSendBps = 8 * nSendBytes / std::min<int64_t>(now - m_connected, 1);
                 if ((now - m_connected >= 120) && (nMempoolPct < 10) && ((nRecvBps > 120) || (nSendBps > 1200))) {
                     if (!pnode->HasPermission(NetPermissionFlags::NoBan)) {
                         pnode->fDisconnect = 1;
