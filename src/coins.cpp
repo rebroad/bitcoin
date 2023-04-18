@@ -258,19 +258,6 @@ unsigned int CCoinsViewCache::GetCacheSize() const {
     return cacheCoins.size();
 }
 
-unsigned int CCoinsViewCache::CountMissingInputs(const CTransaction& tx) const
-{
-    int missing = 0;
-    if (!tx.IsCoinBase()) {
-        for (unsigned int i = 0; i < tx.vin.size(); i++) {
-            if (!HaveCoin(tx.vin[i].prevout)) {
-                missing++;
-            }
-        }
-    }
-    return missing;
-}
-
 void CCoinsViewCache::ReallocateCache()
 {
     // Cache should be empty when we're calling this.

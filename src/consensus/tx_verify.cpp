@@ -136,7 +136,7 @@ unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& in
     {
         const Coin& coin = inputs.AccessCoin(tx.vin[i].prevout);
         if (coin.IsSpent()) {
-            LogPrintf("%s: %s, i=%d height:%d IsSpent!\n", __func__, tx.GetHash().ToString(), i+1, nSpendHeight);
+            LogPrintf("%s: %s, i=%d IsSpent!\n", __func__, tx.GetHash().ToString(), i+1);
             continue; // Probably pruned for being dust
         }
         assert(!coin.IsSpent());
@@ -161,6 +161,10 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     for (unsigned int i = 0; i < tx.vin.size(); i++)
     {
         const Coin& coin = inputs.AccessCoin(tx.vin[i].prevout);
+        if (coin.IsSpent()) {
+            LogPrintf("%s: %s, i=%d IsSpent!\n", __func__, tx.GetHash().ToString(), i+1);
+            continue; // Probably pruned for being dust
+        }
         assert(!coin.IsSpent());
         const CTxOut &prevout = coin.out;
         nSigOps += CountWitnessSigOps(tx.vin[i].scriptSig, prevout.scriptPubKey, &tx.vin[i].scriptWitness, flags);
