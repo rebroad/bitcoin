@@ -1924,7 +1924,7 @@ static unsigned int GetBlockScriptFlags(const CBlockIndex* pindex, const Consens
     return flags;
 }
 
-
+CChainState *g_chainstate;
 
 static int64_t nTimeCheck = 0;
 static int64_t nTimeForks = 0;
@@ -1945,6 +1945,8 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
 
     uint256 block_hash{block.GetHash()};
     assert(*pindex->phashBlock == block_hash);
+
+    if (!g_chainstate) g_chainstate = this;
 
     int64_t nTimeStart = GetTimeMicros();
 
@@ -3783,7 +3785,7 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
     NotifyHeaderTip(ActiveChainstate());
 
     // If tip is within 2 blocks of best header, activate best chain within message handler thread to avoid the 100ms delay, and to avoid breaking the miner tests.
-    if (fActivatingChain || pindexBestHeader->nChainWork > ActiveChainstate().m_chain.Tip()->nChainWork + GetBlockProof(*ActiveChainstate().m_chain.Tip()) * 2) {
+    if (g_chainstate && (fActivatingChain || pindexBestHeader->nChainWork > ActiveChainstate().m_chain.Tip()->nChainWork + GetBlockProof(*ActiveChainstate().m_chain.Tip()) * 2)) {
         if (pindex && pindex->nHeight == g_tiptowards + 1)
             fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
     } else {
@@ -3871,8 +3873,6 @@ void CChainState::LoadMempoolCache(const ArgsManager& args)
     if (args.GetBoolArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL))
         ::LoadMempoolCache(*m_mempool, *this);
 }
-
-CChainState *g_chainstate;
 
 bool CChainState::LoadChainTip()
 {
