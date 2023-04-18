@@ -105,7 +105,7 @@ void AddTimeData(const CNetAddr& ip, int64_t nOffsetSample)
                 log_message += strprintf("%+d  ", n);
             }
             log_message += strprintf("|  median offset = %+d  (%+d minutes)", nTimeOffset, nTimeOffset / 60);
-            LogPrint(fMatch ? BCLog::NET : BCLog:ALL, "%s\n", log_message);
+            LogPrint(fMatch ? BCLog::NET : BCLog::ALL, "%s\n", log_message);
         }
     }
 }
