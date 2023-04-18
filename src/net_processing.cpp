@@ -1505,7 +1505,7 @@ void PeerManagerImpl::Misbehaving(const NodeId pnode, const int howmuch, const s
         peer->m_should_discourage = true;
     }
 
-    LogPrint(BCLog::NET, "Misbehaving: peer=%d (%d -> %d)%s%s\n",
+    LogPrintf("Misbehaving: peer=%d (%d -> %d)%s%s\n",
              pnode, score_before, score_now, warning, message_prefixed);
 }
 
@@ -1552,9 +1552,6 @@ bool PeerManagerImpl::MaybePunishNodeForBlock(NodeId nodeid, const BlockValidati
     case BlockValidationResult::BLOCK_RECENT_CONSENSUS_CHANGE:
     case BlockValidationResult::BLOCK_TIME_FUTURE:
         break;
-    }
-    if (message != "") {
-        LogPrint(BCLog::BLOCK, "peer=%d: %s\n", nodeid, message);
     }
     return false;
 }
@@ -2368,6 +2365,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         LogRecv(nNew, pindexLast, "header", 0, pfrom.GetId());
     }
     if (state.IsInvalid()) {
+        LogPrint(BCLog::BLOCK, "INVALID header peer=%d\n", pfrom.GetId());
         MaybePunishNodeForBlock(pfrom.GetId(), state, via_compact_block, "invalid header received");
         return;
     }

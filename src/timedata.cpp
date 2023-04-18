@@ -76,6 +76,7 @@ void AddTimeData(const CNetAddr& ip, int64_t nOffsetSample)
         std::vector<int64_t> vSorted = vTimeOffsets.sorted();
         // Only let other nodes change our time by so much
         int64_t max_adjustment = std::max<int64_t>(0, gArgs.GetIntArg("-maxtimeadjustment", DEFAULT_MAX_TIME_ADJUSTMENT));
+        bool fMatch = true;
         if (nMedian >= -max_adjustment && nMedian <= max_adjustment) {
             nTimeOffset = nMedian;
         } else {
@@ -84,7 +85,7 @@ void AddTimeData(const CNetAddr& ip, int64_t nOffsetSample)
             static bool fDone;
             if (!fDone) {
                 // If nobody has a time different than ours but within 5 minutes of ours, give a warning
-                bool fMatch = false;
+                fMatch = false;
                 for (const int64_t nOffset : vSorted) {
                     if (nOffset != 0 && nOffset > -5 * 60 && nOffset < 5 * 60) fMatch = true;
                 }
@@ -98,13 +99,13 @@ void AddTimeData(const CNetAddr& ip, int64_t nOffsetSample)
             }
         }
 
-        if (LogAcceptCategory(BCLog::NET)) {
+        if (LogAcceptCategory(BCLog::NET) || !fMatch) {
             std::string log_message{"time data samples: "};
             for (const int64_t n : vSorted) {
                 log_message += strprintf("%+d  ", n);
             }
             log_message += strprintf("|  median offset = %+d  (%+d minutes)", nTimeOffset, nTimeOffset / 60);
-            LogPrint(BCLog::NET, "%s\n", log_message);
+            LogPrint(fMatch ? BCLog::NET : BCLog:ALL, "%s\n", log_message);
         }
     }
 }
