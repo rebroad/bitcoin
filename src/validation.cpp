@@ -3648,14 +3648,13 @@ int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& h
             int accepted{AcceptBlockHeader(header, state, chainparams, &pindex)};
             ActiveChainstate().CheckBlockIndex();
 
-            if (!accepted) {
-                return false;
-            }
             if (accepted == 2) nCount++;
 
             if (ppindex) {
                 *ppindex = pindex;
             }
+            if (!accepted)
+                return nCount;
         }
     }
     if (NotifyHeaderTip(ActiveChainstate())) {
