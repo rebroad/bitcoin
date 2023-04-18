@@ -135,6 +135,10 @@ unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& in
     for (unsigned int i = 0; i < tx.vin.size(); i++)
     {
         const Coin& coin = inputs.AccessCoin(tx.vin[i].prevout);
+        if (coin.IsSpent()) {
+            LogPrintf("%s: %s, i=%d height:%d IsSpent!\n", __func__, tx.GetHash().ToString(), i+1, nSpendHeight);
+            continue; // Probably pruned for being dust
+        }
         assert(!coin.IsSpent());
         const CTxOut &prevout = coin.out;
         if (prevout.scriptPubKey.IsPayToScriptHash())
@@ -173,7 +177,10 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
     for (unsigned int i = 0; i < tx.vin.size(); ++i) {
         const COutPoint &prevout = tx.vin[i].prevout;
         const Coin& coin = inputs.AccessCoin(prevout);
-        assert(!coin.IsSpent());
+        if (coin.IsSpent()) {
+            LogPrintf("%s: %s, i=%d height:%d IsSpent!\n", __func__, tx.GetHash().ToString(), i+1, nSpendHeight);
+            continue; // Probably pruned for being dust
+        }
 
         // If prev is coinbase, check that it's matured
         if (coin.IsCoinBase() && nSpendHeight - coin.nHeight < COINBASE_MATURITY) {
