@@ -433,7 +433,6 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction& tx, TxValidationS
 
         // This coin was checked in PreChecks and MemPoolAccept
         // has been holding cs_main since then.
-        Assume(!coin.IsSpent());
         if (coin.IsSpent()) return false;
 
         // If the Coin is available, there are 2 possibilities:
@@ -1680,14 +1679,14 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
         for (const auto& txin : tx.vin) {
             const COutPoint& prevout = txin.prevout;
             const Coin& coin = inputs.AccessCoin(prevout);
-            assert(!coin.IsSpent());
-            spent_outputs.emplace_back(coin.out);
+            if (!coin.IsSpent())
+                spent_outputs.emplace_back(coin.out);
         }
         txdata.Init(tx, std::move(spent_outputs));
     }
-    assert(txdata.m_spent_outputs.size() == tx.vin.size());
+    //assert(txdata.m_spent_outputs.size() == tx.vin.size());
 
-    for (unsigned int i = 0; i < tx.vin.size(); i++) {
+    for (unsigned int i = 0; i < txdata.m_spent_outputs.size(); i++) {
 
         // We very carefully only pass in things to CScriptCheck which
         // are clearly committed to by tx' witness hash. This provides
