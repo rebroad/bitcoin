@@ -1712,7 +1712,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
                 CScriptCheck check2(txdata.m_spent_outputs[i], tx, i,
                         flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS, cacheSigStore, &txdata);
                 if (check2())
-                    return state.Invalid(TxValidationResult::TX_NOT_STANDARD, strprintf("non-mandatory-script-verify-flag (%s)", ScriptErrorString(check.GetScriptError())));
+                    return state.Invalid(TxValidationResult::TX_NOT_STANDARD, strprintf("non-mandatory-script-verify-flag (i=%d %s)", i+1, ScriptErrorString(check.GetScriptError())));
             }
             // MANDATORY flag failures correspond to
             // TxValidationResult::TX_CONSENSUS. Because CONSENSUS
@@ -1723,7 +1723,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
             // support, to avoid splitting the network (but this
             // depends on the details of how net_processing handles
             // such errors).
-            return state.Invalid(TxValidationResult::TX_CONSENSUS, strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(check.GetScriptError())));
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, strprintf("mandatory-script-verify-flag-failed (i=%d %s)", i+1, ScriptErrorString(check.GetScriptError())));
         }
     }
 
@@ -2192,6 +2192,8 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
                 return error("ConnectBlock(): CheckInputScripts on %s failed with %s",
                     tx.GetHash().ToString(), state.ToString());
             }
+            if (pindex && pindex->nHeight == 83232)
+                LogPrintf("%s: control.Add() tx=%s\n", __func__, tx.GetHash().ToString());
             control.Add(vChecks);
         }
 
