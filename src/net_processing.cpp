@@ -1169,8 +1169,8 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
         // This peer has nothing interesting.
         state->BlockBlocked(1, strprintf("%s insufficient nChainWork (%s < %s)",
             strHeight(state->pindexBestKnownBlock),
-            state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nChainWork.GetHex() : "NULL",
-            std::max(nMinimumChainWork, m_chainman.ActiveChain().Tip()->nChainWork).GetHex()));
+            state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nChainWork.ToString() : "0",
+            std::max(nMinimumChainWork, m_chainman.ActiveChain().Tip()->nChainWork).ToString()));
         return;
     } else
         state->BlockUnblocked(1);
@@ -2301,25 +2301,30 @@ void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string s
     }
     bool fCheck = false;
     std::string strExtra;
-    bool fRecent = false;
+    bool fShow = false;
     if (pindex) {
-        if (pindex == m_chainman.ActiveChain().Tip())
+        if (pindex == m_chainman.ActiveChain().Tip()) {
+            fShow = true;
             strDesc += "tip "; // it's the current tip
-        else if (pindex == pindexBestHeader)
+        } else if (pindex == pindexBestHeader) {
+            fShow = true;
             strDesc += "best "; // it's the current best header
-        else if (pindex->nChainWork < m_chainman.ActiveChain().Tip()->nChainWork)
+        } else if (pindex->nChainWork < m_chainman.ActiveChain().Tip()->nChainWork)
             strDesc += "old "; // it's behind our current tip
         else if (pindex->nTx > 0)
             strDesc += "got "; // it's been downloaded
         strExtra = strprintf("%s ", strBlockInfo(pindex, &fCheck));
         if (pindex->nChainWork >= (pindexBestHeader->pprev ? (pindexBestHeader->pprev->pprev ? pindexBestHeader->pprev->pprev->nChainWork : 0) : 0))
-            fRecent = true;
-    } else
+        if (pindex->nHeight >= pindexBestHeader->nHeight - 3)
+            fShow = true;
+    } else {
         strDesc += "invalid "; // it's probably invalid
+        fShow = true;
+    }
     std::string strSize;
     if (nSize)
         strSize = strprintf("size=%d ", nSize);
-    LogPrint((nNew || fCheck || fRecent) ? BCLog::BLOCK : BCLog::NET, "recv %s%s%s %s%speer=%d\n", strNew, strDesc, strType, strExtra, strSize, node);
+    LogPrint((nNew || fCheck || fShow) ? BCLog::BLOCK : BCLog::NET, "recv %s%s%s %s%speer=%d\n", strNew, strDesc, strType, strExtra, strSize, node);
     if (fCheck && nNew) {
         const CBlockIndex *pindexTipFork = LastCommonAncestor(pindex, m_chainman.ActiveChain().Tip());
         if (pindexTipFork->nHeight < m_chainman.ActiveChain().Tip()->nHeight)
