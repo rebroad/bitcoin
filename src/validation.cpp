@@ -3210,6 +3210,8 @@ bool CChainState::InvalidateBlock(BlockValidationState& state, CBlockIndex* pind
 void CChainState::ResetBlockFailureFlags(CBlockIndex *pindex) {
     AssertLockHeld(cs_main);
 
+    LogPrint(BCLog::BLOCK, "%s: Reset %s (%s)\n", __func__, pindex->GetBlockHash().ToString(), strHeight(pindex));
+
     int nHeight = pindex->nHeight;
 
     // Remove the invalidity flag from this block and all its descendants.
