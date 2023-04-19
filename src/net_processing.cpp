@@ -734,6 +734,19 @@ struct CNodeState {
     std::chrono::microseconds m_downloading_since{0us};
     uint64_t m_download_report_clicks{0};
     uint64_t tSipaDisconnect{0};
+    uint16_t nBlockPaused{0};
+    void BlockBlocked(int flag, const std::string& reason) {
+        if (nBlockPaused & (1 << (flag - 1)))
+            return;
+        nBlockPaused != (1 << (flag - 1));
+        LogPrint(BCLog::BLOCKBLOCK, "BLOCKED - %s peer=%d\n", reason.c_str(), id);
+    }
+    void BlockUnblocked(int flag, const std::string& reason) {
+        if (!(nBlockPaused & (1 << (flag - 1))))
+            return;
+        nBlockPaused &= ~(1 << (flag - 1));
+        LogPrint(BCLog::BLOCKBLOCK, "UNBLOCKED - %s peer=%d\n", reason.c_str(), id);
+    }
     unsigned int nBlocksInFlight{0};
     //! How many TXs are currently in flight
     unsigned int nTxInFlight{0};
@@ -1140,11 +1153,14 @@ std::string PeerManagerImpl::strBlockInfo(const CBlockIndex* pindex, bool* fFork
 
 void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller)
 {
-    if (count == 0)
+    CNodeState *state = State(nodeid);
+    if (count == 0) {
+        state->BlockBlocked(0, "count==0");
         return;
+    } else
+        state->BlockUnblocked(0, "count!=0");
 
     vBlocks.reserve(vBlocks.size() + count);
-    CNodeState *state = State(nodeid);
     assert(state != nullptr);
 
     // Make sure pindexBestKnownBlock is up to date, we'll need it.
@@ -1152,8 +1168,10 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
 
     if (state->pindexBestKnownBlock == nullptr || state->pindexBestKnownBlock->nChainWork <= m_chainman.ActiveChain().Tip()->nChainWork || state->pindexBestKnownBlock->nChainWork < nMinimumChainWork) {
         // This peer has nothing interesting.
+        state->BlockBlocked(1, "insufficient nChainWork");
         return;
-    }
+    } else
+        state->BlockUnblocked(1, "sufficient nChainWork");
 
     if (state->pindexLastCommonBlock == nullptr) {
         // Bootstrap quickly by guessing a parent of our best tip is the forking point.

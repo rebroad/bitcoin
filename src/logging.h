@@ -66,6 +66,7 @@ namespace BCLog {
         BLOCKSTORE  = (1 << 26),
         CONN        = (1 << 27),
         BLOCKSEND   = (1 << 28),
+        BLOCKBLOCK  = (1 << 29),
         ALL         = ~(uint32_t)0,
     };
 
