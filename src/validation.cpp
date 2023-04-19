@@ -1679,7 +1679,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
         for (const auto& txin : tx.vin) {
             const COutPoint& prevout = txin.prevout;
             const Coin& coin = inputs.AccessCoin(prevout);
-            if (!coin.IsSpent())
+            //if (!coin.IsSpent())
                 spent_outputs.emplace_back(coin.out);
         }
         txdata.Init(tx, std::move(spent_outputs));
