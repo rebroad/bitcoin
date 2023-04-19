@@ -1167,7 +1167,10 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
 
     if (state->pindexBestKnownBlock == nullptr || state->pindexBestKnownBlock->nChainWork <= m_chainman.ActiveChain().Tip()->nChainWork || state->pindexBestKnownBlock->nChainWork < nMinimumChainWork) {
         // This peer has nothing interesting.
-        state->BlockBlocked(1, "insufficient nChainWork");
+        state->BlockBlocked(1, strprintf("%s insufficient nChainWork (%s < %s)",
+            strHeight(state->pindexBestKnownBlock),
+            state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nChainWork.GetHex() : "NULL",
+            std::max(nMinimumChainWork, m_chainman.ActiveChain().Tip()->nChainWork).GetHex()));
         return;
     } else
         state->BlockUnblocked(1);
@@ -2389,9 +2392,9 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
     }
     if (state.IsInvalid()) {
         static bool first_invalid = true;
-        if (first_invalid) {
+        if (first_invalid && pindexLast) {
             first_invalid = false;
-            /* Reconsider this block as we may have changed out consensus rules since last run */
+            /* Reconsider this block as we may have changed our consensus rules since last run */
             LOCK(cs_main);
             m_chainman.ActiveChainstate().ResetBlockFailureFlags(const_cast<CBlockIndex*>(pindexLast));
             fActivateChain = true;
