@@ -39,6 +39,7 @@
 #include <util/system.h>
 #include <util/trace.h>
 #include <validation.h>
+#include <validation_thread.h>
 
 #include <algorithm>
 #include <atomic>
@@ -2371,6 +2372,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
             /* Reconsider this block as we may have changed out consensus rules since last run */
             LOCK(cs_main);
             m_chainman.ActiveChainstate().ResetBlockFailureFlags(const_cast<CBlockIndex*>(pindexLast));
+            fActivateChain = true;
         } else
             MaybePunishNodeForBlock(pfrom.GetId(), state, via_compact_block, "invalid header received");
         return;

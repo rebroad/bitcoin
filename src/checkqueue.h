@@ -96,6 +96,7 @@ private:
                         // reset the status for new work later
                         fAllOk = true;
                         // return the current status
+                        if (!fRet) LogPrintf("%s: queue.empty && fMaster && !nTodo\n", __func__);
                         return fRet;
                     }
                     nIdle++;
@@ -103,6 +104,7 @@ private:
                     nIdle--;
                 }
                 if (m_request_stop) {
+                    LogPrintf("%s: m_request_stop\n", __func__);
                     return false;
                 }
 

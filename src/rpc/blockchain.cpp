@@ -44,6 +44,7 @@
 #include <util/string.h>
 #include <util/translation.h>
 #include <validation.h>
+#include <validation_thread.h>
 #include <validationinterface.h>
 #include <versionbits.h>
 #include <warnings.h>
@@ -617,9 +618,10 @@ static RPCHelpMan updatechain()
     std::string strEnabled = request.params[0].get_str();
     gArgs.ForceSetArg("-updatechain", strEnabled);
 
-    ChainstateManager& chainman = EnsureAnyChainman(request.context);
-    BlockValidationState state;
-    chainman.ActiveChainstate().ActivateBestChain(state);
+    //ChainstateManager& chainman = EnsureAnyChainman(request.context);
+    //BlockValidationState state;
+    //chainman.ActiveChainstate().ActivateBestChain(state);
+    fActivateChain = true;
 
     return NullUniValue;
 }
@@ -1999,7 +2001,8 @@ static RPCHelpMan invalidateblock()
     chainman.ActiveChainstate().InvalidateBlock(state, pblockindex);
 
     if (state.IsValid()) {
-        chainman.ActiveChainstate().ActivateBestChain(state);
+        //chainman.ActiveChainstate().ActivateBestChain(state);
+        fActivateChain = true;
     }
 
     if (!state.IsValid()) {
@@ -2039,12 +2042,13 @@ static RPCHelpMan reconsiderblock()
         chainman.ActiveChainstate().ResetBlockFailureFlags(pblockindex);
     }
 
-    BlockValidationState state;
-    chainman.ActiveChainstate().ActivateBestChain(state);
+    //BlockValidationState state;
+    //chainman.ActiveChainstate().ActivateBestChain(state);
+    fActivateChain = true;
 
-    if (!state.IsValid()) {
-        throw JSONRPCError(RPC_DATABASE_ERROR, state.ToString());
-    }
+    //if (!state.IsValid()) {
+    //    throw JSONRPCError(RPC_DATABASE_ERROR, state.ToString());
+    //}
 
     return NullUniValue;
 },
