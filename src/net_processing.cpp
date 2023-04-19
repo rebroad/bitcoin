@@ -1127,7 +1127,7 @@ std::string PeerManagerImpl::strBlkInfo(const CBlockIndex* pindex, bool* fFork /
     int nBehind = pindexBestHeader->nHeight - pindex->nHeight;
     int nAhead = pindex->nHeight - m_chainman.ActiveChain().Tip()->nHeight;
     return strprintf("(%s) age=%s%s", strHeight(pindex, fFork), strAge(GetAdjustedTime()-pindex->GetBlockTime()),
-            nBehind ? strprintf(" behind=%d", nBehind) : nAhead ? strprintf(" ahead=%d", nAhead) : "");
+            nAhead ? strprintf(" ahead=%d", nAhead) : nBehind ? strprintf(" behind=%d", nBehind) : "");
 }
 
 std::string PeerManagerImpl::strBlockInfo(const CBlockIndex* pindex, bool* fFork /*=nullptr*/)
@@ -2365,7 +2365,14 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         LogRecv(nNew, pindexLast, "header", 0, pfrom.GetId());
     }
     if (state.IsInvalid()) {
-        MaybePunishNodeForBlock(pfrom.GetId(), state, via_compact_block, "invalid header received");
+        static bool first_invalid = true;
+        if (first_invalid) {
+            first_invalid = false;
+            /* Reconsider this block as we may have changed out consensus rules since last run */
+            LOCK(cs_main);
+            m_chainman.ActiveChainstate().ResetBlockFailureFlags(const_cast<CBlockIndex*>(pindexLast));
+        } else
+            MaybePunishNodeForBlock(pfrom.GetId(), state, via_compact_block, "invalid header received");
         return;
     }
 

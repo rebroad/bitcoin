@@ -9,6 +9,7 @@
 #include <tinyformat.h>
 #include <util/syscall_sandbox.h>
 #include <util/threadnames.h>
+#include <logging.h>
 
 #include <algorithm>
 #include <vector>
@@ -161,7 +162,9 @@ public:
     //! Wait until execution finishes, and return whether all evaluations were successful.
     bool Wait()
     {
-        return Loop(true /* master thread */);
+        bool result = Loop(true); /* master thread */
+        if (!result) LogPrintf("%s: Loop failed\n", __func__);
+        return result;
     }
 
     //! Add a batch of checks to the queue
