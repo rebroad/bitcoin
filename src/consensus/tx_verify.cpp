@@ -172,7 +172,7 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     return nSigOps;
 }
 
-bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee)
+bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee, unsigned int *missing /* = nullptr */)
 {
     // are the actual inputs available?
     //int nMissingInputs = CountMissingInputs(tx);
@@ -183,6 +183,7 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
         const Coin& coin = inputs.AccessCoin(prevout);
         if (coin.IsSpent()) {
             LogPrintf("%s: %s, i=%d height:%d IsSpent!\n", __func__, tx.GetHash().ToString(), i+1, nSpendHeight);
+            if (missing) (*missing)++;
             continue; // Probably pruned for being dust
         }
 
