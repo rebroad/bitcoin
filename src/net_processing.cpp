@@ -5573,7 +5573,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     LogPrint(BCLog::BLOCK, "Stall started peer=%d\n", staller);
                 }
             }
-        } else state.BlockBlocked(6, "!IBD");
+        } else if (!fFetch) state.BlockBlocked(6, "!fFetch");
+        else state.BlockBlocked(6, "!IBD");
 
         //
         // Message: getdata (transactions)
