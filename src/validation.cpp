@@ -1672,6 +1672,8 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
         return true;
     }
 
+    std::vector<bool> spent_flags(tx.vin.size(), false);
+
     if (!txdata.m_spent_outputs_ready) {
         std::vector<CTxOut> spent_outputs;
         spent_outputs.reserve(tx.vin.size());
@@ -1681,12 +1683,14 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
             const Coin& coin = inputs.AccessCoin(prevout);
             //if (!coin.IsSpent())
                 spent_outputs.emplace_back(coin.out);
+            spent_flags.emplace_back(coin.IsSpent());
         }
         txdata.Init(tx, std::move(spent_outputs));
     }
     //assert(txdata.m_spent_outputs.size() == tx.vin.size());
 
     for (unsigned int i = 0; i < txdata.m_spent_outputs.size(); i++) {
+        if (!spent_flags[i]) continue; // Skip UTXO dust
 
         // We very carefully only pass in things to CScriptCheck which
         // are clearly committed to by tx' witness hash. This provides
