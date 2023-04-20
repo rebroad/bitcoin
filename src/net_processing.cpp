@@ -736,13 +736,20 @@ struct CNodeState {
     uint64_t tSipaDisconnect{0};
     uint16_t nBlockPaused{0};
     void BlockBlocked(int flag, const std::string& reason) {
-        if (nBlockPaused & (1 << (flag - 1)))
-            return;
-        nBlockPaused |= (1 << (flag - 1));
-        LogPrint(BCLog::BLOCKBLOCK, "BLOCKED - %s peer=%d\n", reason.c_str(), m_id);
+        int nBefore = nBlockPaused;
+        nBlockPaused |= (1 << flag);
+        if (!nBefore)
+            LogPrint(BCLog::BLOCKBLOCK, "BLOCKED %d - %s peer=%d\n", flag, reason, m_id);
     }
     void BlockUnblocked(int flag) {
-        nBlockPaused &= ~(1 << (flag - 1));
+        nBlockPaused &= ~(1 << flag);
+        if (nBlockPaused) {
+            std::string activeBlocks;
+            for (int i = 0; i < 16; i++)
+                if (nBlockPaused & (1 << i))
+                    activeBlocks += std::to_string(i) + " ";
+            LogPrint(BCLog::BLOCKBLOCK, "UNBLOCKED %d - active: %s peer=%d\n", flag, activeBlocks, m_id);
+        }
     }
     unsigned int nBlocksInFlight{0};
     //! How many TXs are currently in flight
