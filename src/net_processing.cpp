@@ -2013,10 +2013,11 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         }
     } // release cs_main before calling ActivateBestChain
     if (need_activate_chain) {
-        BlockValidationState state;
-        if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block)) {
-            LogPrint(BCLog::BLOCKSEND, "failed to activate chain (%s). peer=%d\n", state.ToString(), pfrom.GetId());
-        }
+        fActivateChain = true;
+    //    BlockValidationState state;
+    //    if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block)) {
+    //        LogPrint(BCLog::BLOCKSEND, "failed to activate chain (%s). peer=%d\n", state.ToString(), pfrom.GetId());
+    //    }
     }
 
     LOCK(cs_main);
@@ -3468,9 +3469,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 a_recent_block = most_recent_block;
             }
             BlockValidationState state;
-            if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block)) {
-                LogPrint(BCLog::NET, "failed to activate chain (%s)\n", state.ToString());
-            }
+            fActivateChain = true;
+            //if (!m_chainman.ActiveChainstate().ActivateBestChain(state, a_recent_block)) {
+            //    LogPrint(BCLog::NET, "failed to activate chain (%s)\n", state.ToString());
+            //}
         }
 
         LOCK(cs_main);
@@ -5135,8 +5137,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             pindexBestHeader = m_chainman.ActiveChain().Tip();
         bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->IsAddrFetchConn()); // Download if this is a nice peer, or we have no nice peers and this one might do.
         if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
+            state.BlockUnblocked(7);
             // Only actively request headers from a single peer, unless we're close to today.
             if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
+                state.BlockUnblocked(8);
                 state.fSyncStarted = true;
                 state.m_headers_sync_timeout = current_time + HEADERS_DOWNLOAD_TIMEOUT_BASE +
                     (
@@ -5158,8 +5162,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     pindexStart = pindexStart->pprev;
                 LogPrint(BCLog::BLOCK, "send getheaders (%d) peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->GetId(), peer->m_starting_height);
                 m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexStart), uint256()));
-            }
-        }
+            } else state.BlockBlocked(8, "nSyncStarted || !fFetch || pindexBestHeader too old");
+        } else state.BlockBlocked(7, "fSyncStarted || fClient || fImporting || fReIndex");
 
         //
         // Try sending block announcements via headers
