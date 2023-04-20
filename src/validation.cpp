@@ -3794,10 +3794,9 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
     NotifyHeaderTip(ActiveChainstate());
 
     // If tip is within 2 blocks of best header, activate best chain within message handler thread to avoid the 100ms delay, and to avoid breaking the miner tests.
-    if (g_chainstate && (fActivatingChain || pindexBestHeader->nChainWork > ActiveChainstate().m_chain.Tip()->nChainWork + GetBlockProof(*ActiveChainstate().m_chain.Tip()) * 2)) {
-        if (pindex && pindex->nHeight == g_tiptowards + 1)
-            fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
-    } else {
+    if (g_chainstate && (fActivatingChain || pindexBestHeader->nChainWork > ActiveChainstate().m_chain.Tip()->nChainWork + GetBlockProof(*ActiveChainstate().m_chain.Tip()) * 2))
+        fActivateChain = true; // REBTODO - can we interrupt the sleep in the validate thread?
+    else {
         BlockValidationState state; // Only used to report errors, not invalidity - ignore it
         if (!ActiveChainstate().ActivateBestChain(state, block))
             return error("%s: ActivateBestChain failed (%s)", __func__, state.ToString());
