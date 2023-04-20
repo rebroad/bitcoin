@@ -1169,8 +1169,8 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
         // This peer has nothing interesting.
         state->BlockBlocked(1, strprintf("%s insufficient nChainWork (%s < %s)",
             strHeight(state->pindexBestKnownBlock),
-            state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nChainWork.ToString() : "0",
-            std::max(nMinimumChainWork, m_chainman.ActiveChain().Tip()->nChainWork).ToString()));
+            state->pindexBestKnownBlock ? stripZeros(state->pindexBestKnownBlock->nChainWork.ToString()) : "0",
+            stripZeros(std::max(nMinimumChainWork, m_chainman.ActiveChain().Tip()->nChainWork).ToString())));
         return;
     } else
         state->BlockUnblocked(1);
@@ -2315,7 +2315,6 @@ void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string s
             strDesc += "got "; // it's been downloaded
         strExtra = strprintf("%s ", strBlockInfo(pindex, &fCheck));
         if (pindex->nChainWork >= (pindexBestHeader->pprev ? (pindexBestHeader->pprev->pprev ? pindexBestHeader->pprev->pprev->nChainWork : 0) : 0))
-        if (pindex->nHeight >= pindexBestHeader->nHeight - 3)
             fShow = true;
     } else {
         strDesc += "invalid "; // it's probably invalid
@@ -2324,7 +2323,8 @@ void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string s
     std::string strSize;
     if (nSize)
         strSize = strprintf("size=%d ", nSize);
-    LogPrint((nNew || fCheck || fShow) ? BCLog::BLOCK : BCLog::NET, "recv %s%s%s %s%speer=%d\n", strNew, strDesc, strType, strExtra, strSize, node);
+    //LogPrint((nNew || fCheck || fShow) ? BCLog::BLOCK : BCLog::NET, "recv %s%s%s %s%speer=%d\n", strNew, strDesc, strType, strExtra, strSize, node);
+    LogPrint(BCLog::BLOCK, "recv %s%s%s %s%speer=%d\n", strNew, strDesc, strType, strExtra, strSize, node);
     if (fCheck && nNew) {
         const CBlockIndex *pindexTipFork = LastCommonAncestor(pindex, m_chainman.ActiveChain().Tip());
         if (pindexTipFork->nHeight < m_chainman.ActiveChain().Tip()->nHeight)
