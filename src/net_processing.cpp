@@ -802,13 +802,15 @@ struct CNodeState {
     //! Whether this peer is an inbound connection
     const bool m_is_inbound;
 
+    const ::NodeId m_id;
+
     //! A rolling bloom filter of all announced tx CInvs to this peer.
     CRollingBloomFilter m_recently_announced_invs = CRollingBloomFilter{INVENTORY_MAX_RECENT_RELAY, 0.000001};
 
     //! Whether this peer relays txs via wtxid
     bool m_wtxid_relay{false};
 
-    CNodeState(bool is_inbound) : m_is_inbound(is_inbound) {}
+    CNodeState(bool is_inbound, int id) : m_is_inbound(is_inbound), m_id(id) {}
 };
 
 /** Map maintaining per-node state. */
@@ -1278,7 +1280,7 @@ void PeerManagerImpl::InitializeNode(CNode *pnode)
     NodeId nodeid = pnode->GetId();
     {
         LOCK(cs_main);
-        mapNodeState.emplace_hint(mapNodeState.end(), std::piecewise_construct, std::forward_as_tuple(nodeid), std::forward_as_tuple(pnode->IsInboundConn()));
+        mapNodeState.emplace_hint(mapNodeState.end(), std::piecewise_construct, std::forward_as_tuple(nodeid), std::forward_as_tuple(pnode->IsInboundConn(), pnode->GetId()));
         assert(m_txrequest.Count(nodeid) == 0);
     }
     {
