@@ -5,6 +5,7 @@
 #include <coins.h>
 
 #include <consensus/consensus.h>
+#include <util/system.h>
 #include <logging.h>
 #include <random.h>
 #include <util/trace.h>
@@ -66,7 +67,9 @@ bool CCoinsViewCache::GetCoin(const COutPoint &outpoint, Coin &coin) const {
 
 void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possible_overwrite) {
     assert(!coin.IsSpent());
-    if (coin.out.scriptPubKey.IsUnspendable() || coin.out.nValue <= 250) return;
+    if (coin.out.scriptPubKey.IsUnspendable()) return;
+    bool fUtxoDustAllowed = gArgs.GetBoolArg("-utxodustallowed", true);
+    if (!fUtxoDustAllowed && coin.out.nValue <= 250) return;
     CCoinsMap::iterator it;
     bool inserted;
     std::tie(it, inserted) = cacheCoins.emplace(std::piecewise_construct, std::forward_as_tuple(outpoint), std::tuple<>());
