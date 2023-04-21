@@ -1431,9 +1431,7 @@ void PrecomputedTransactionData::Init(const T& txTo, std::vector<CTxOut>&& spent
 
     m_spent_outputs = std::move(spent_outputs);
     if (!m_spent_outputs.empty()) {
-        if (m_spent_outputs.size() != txTo.vin.size())
-            LogPrintf("%s: %s, spent_outputs=%d To.size=%d\n", __func__, txTo.GetHash().ToString(), m_spent_outputs.size(), txTo.vin.size());
-        //assert(m_spent_outputs.size() == txTo.vin.size());
+        assert(m_spent_outputs.size() == txTo.vin.size());
         m_spent_outputs_ready = true;
     }
 

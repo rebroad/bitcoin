@@ -2430,6 +2430,45 @@ static RPCHelpMan getblockstats()
     };
 }
 
+/*static RPCHelpMan utxo_remove()
+{
+    return RPCHelpMan{"utxo_remove",
+                "\nRemoves all UTXOs with values of 250 satoshis or less.\n",
+                {},
+                RPCResult{},
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    LOCK(cs_main);
+    CCoinsViewDB view{pcoinsdbview};
+    CCoinsViewCursor cursor{view.Cursor()};
+    uint64_t num_deleted{0};
+    uint64_t num_utxos{0};
+    uint64_t total_size_saved{0};
+    uint64_t start_time{GetTimeMillis()};
+    while (cursor.IsValid()) {
+        const COutPoint& outpoint{cursor.GetOutput()};
+        const Coin coin{cursor.GetCoin()};
+        cursor.Next();
+        num_utxos++;
+        if (coin.IsSpent() || coin.GetTxOut().nValue > 250)
+            continue;
+        total_size_saved += coin.GetSerializeSize(SER_DISK, PROTOCOL_VERSION);
+        view.BatchWrite(CCoinsModifier{view}).DeleteCoin(outpoint);
+        num_deleted++;
+        if (num_utxos % 10000 == 0) {
+            printf("Processed %llu UTXOs, deleted %llu UTXOs, saved %llu bytes of disk space. Time elapsed: %lld seconds.\n",
+                num_utxos, num_deleted, total_size_saved, (GetTimeMillis() - start_time) / 1000);
+        }
+    }
+    printf("UTXO removal complete. Processed %llu UTXOs, deleted %llu UTXOs, saved %llu bytes of disk space.\n",
+        num_utxos, num_deleted, total_size_saved);
+    UniValue result{UniValue::VOBJ};
+    result.pushKV("num_deleted", (uint64_t)num_deleted);
+    result.pushKV("total_size_saved", (uint64_t)total_size_saved);
+    return result;
+}};
+}*/
+
 static RPCHelpMan savemempool()
 {
     return RPCHelpMan{"savemempool",
@@ -2912,6 +2951,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         &getblockchaininfo,                  },
     { "blockchain",         &getchaintxstats,                    },
     { "blockchain",         &getblockstats,                      },
+//    { "blockchain",         &utxoremove,                         },
     { "blockchain",         &getbestblockhash,                   },
     { "blockchain",         &getblockcount,                      },
     { "blockchain",         &getblock,                           },
