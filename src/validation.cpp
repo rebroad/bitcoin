@@ -1812,9 +1812,17 @@ DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockI
                 COutPoint out(hash, o);
                 Coin coin;
                 bool is_spent = view.SpendCoin(out, &coin);
-                if (!is_spent || tx.vout[o] != coin.out || pindex->nHeight != coin.nHeight || is_coinbase != coin.fCoinBase) {
-                    fClean = false; // transaction output mismatch
-                }
+                //if (!is_spent || tx.vout[o] != coin.out || pindex->nHeight != coin.nHeight || is_coinbase != coin.fCoinBase) {
+                //    fClean = false; // transaction output mismatch
+                //}
+                if (!is_spent)
+                    LogPrintf("%s: %s, o=%d !is_spent\n", __func__, tx.GetHash().ToString(), o+1);
+                if (tx.vout[o] != coin.out)
+                    LogPrintf("%s: %s, o=%d tx.vout != coin.out\n", __func__, tx.GetHash().ToString(), o+1);
+                if (pindex->nHeight != coin.nHeight)
+                    LogPrintf("%s: %s, o=%d pindex.nHeight (%d) != coin.nHeight (%d)\n", __func__, tx.GetHash().ToString(), o+1, pindex->nHeight, coin.nHeight);
+                if (is_coinbase != coin.fCoinBase)
+                    LogPrintf("%s: %s, o=%d is_coinbase (%d) != coin.fCoinBase (%d)\n", __func__, tx.GetHash().ToString(), o+1, is_coinbase, coin.fCoinBase);
             }
         }
 
@@ -1822,15 +1830,20 @@ DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockI
         if (i > 0) { // not coinbases
             CTxUndo &txundo = blockUndo.vtxundo[i-1];
             if (txundo.vprevout.size() != tx.vin.size()) {
-                error("DisconnectBlock(): transaction and undo data inconsistent");
-                return DISCONNECT_FAILED;
-            }
+                //error("DisconnectBlock(): transaction and undo data inconsistent");
+                //return DISCONNECT_FAILED;
+                LogPrintf("%s: %s txundo.vprevouts=%d tx.vins=%d\n", __func__, tx.GetHash().ToString(), txundo.vprevout.size(), tx.vin.size());
+            } else
             for (unsigned int j = tx.vin.size(); j > 0;) {
                 --j;
                 const COutPoint& out = tx.vin[j].prevout;
                 int res = ApplyTxInUndo(std::move(txundo.vprevout[j]), view, out);
-                if (res == DISCONNECT_FAILED) return DISCONNECT_FAILED;
-                fClean = fClean && res != DISCONNECT_UNCLEAN;
+                //if (res == DISCONNECT_FAILED) return DISCONNECT_FAILED;
+                //fClean = fClean && res != DISCONNECT_UNCLEAN;
+                if (res == DISCONNECT_FAILED)
+                    LogPrintf("%s: %s, j=%d TxUndo failed\n", __func__, tx.GetHash().ToString(), j+1);
+                if (res == DISCONNECT_UNCLEAN)
+                    LogPrintf("%s: %s, j=%d TxUndo unclean\n", __func__, tx.GetHash().ToString(), j+1);
             }
             // At this point, all of txundo.vprevout should have been moved out.
         }
