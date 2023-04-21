@@ -9,6 +9,7 @@
 #include <tinyformat.h>
 #include <util/syscall_sandbox.h>
 #include <util/threadnames.h>
+#include <logging.h>
 
 #include <algorithm>
 #include <vector>
@@ -95,6 +96,7 @@ private:
                         // reset the status for new work later
                         fAllOk = true;
                         // return the current status
+                        if (!fRet) LogPrintf("%s: queue.empty && fMaster && !nTodo\n", __func__);
                         return fRet;
                     }
                     nIdle++;
@@ -102,6 +104,7 @@ private:
                     nIdle--;
                 }
                 if (m_request_stop) {
+                    LogPrintf("%s: m_request_stop\n", __func__);
                     return false;
                 }
 
@@ -161,7 +164,9 @@ public:
     //! Wait until execution finishes, and return whether all evaluations were successful.
     bool Wait()
     {
-        return Loop(true /* master thread */);
+        bool result = Loop(true); /* master thread */
+        if (!result) LogPrintf("%s: Loop failed\n", __func__);
+        return result;
     }
 
     //! Add a batch of checks to the queue

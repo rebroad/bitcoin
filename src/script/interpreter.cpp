@@ -11,6 +11,8 @@
 #include <pubkey.h>
 #include <script/script.h>
 #include <uint256.h>
+#include <logging.h>
+#include <util/strencodings.h>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -930,8 +932,11 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     {
                         if (fEqual)
                             popstack(stack);
-                        else
+                        else {
+                            LogPrintf("%s: NOT EQUAL vch1=%s vch2=%s\n", __func__,
+                                HexStr(vch1), HexStr(vch2));
                             return set_error(serror, SCRIPT_ERR_EQUALVERIFY);
+                        }
                     }
                 }
                 break;
