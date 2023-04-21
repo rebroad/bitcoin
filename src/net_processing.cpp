@@ -732,6 +732,23 @@ struct CNodeState {
     std::chrono::microseconds m_downloading_since{0us};
     uint64_t m_download_report_clicks{0};
     uint64_t tSipaDisconnect{0};
+    uint16_t nBlockPaused{0};
+    void BlockBlocked(int flag, const std::string& reason) {
+        int nBefore = nBlockPaused;
+        nBlockPaused |= (1 << flag);
+        if (!nBefore)
+            LogPrint(BCLog::BLOCKBLOCK, "BLOCKED %d - %s peer=%d\n", flag, reason, m_id);
+    }
+    void BlockUnblocked(int flag) {
+        nBlockPaused &= ~(1 << flag);
+        if (nBlockPaused) {
+            std::string activeBlocks;
+            for (int i = 0; i < 16; i++)
+                if (nBlockPaused & (1 << i))
+                    activeBlocks += std::to_string(i) + " ";
+            LogPrint(BCLog::BLOCKBLOCK, "UNBLOCKED %d - active: %s peer=%d\n", flag, activeBlocks, m_id);
+        }
+    }
     int nBlocksInFlight{0};
     //! How many TXs are currently in flight
     unsigned int nTxInFlight{0};
@@ -1114,11 +1131,14 @@ std::string PeerManagerImpl::strBlockInfo(const CBlockIndex* pindex, bool* fFork
 
 void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller)
 {
-    if (count == 0)
+    CNodeState *state = State(nodeid);
+    if (count == 0) {
+        state->BlockBlocked(0, "count==0");
         return;
+    } else
+        state->BlockUnblocked(0);
 
     vBlocks.reserve(vBlocks.size() + count);
-    CNodeState *state = State(nodeid);
     assert(state != nullptr);
 
     // Make sure pindexBestKnownBlock is up to date, we'll need it.
@@ -1126,8 +1146,13 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
 
     if (state->pindexBestKnownBlock == nullptr || state->pindexBestKnownBlock->nChainWork <= m_chainman.ActiveChain().Tip()->nChainWork || state->pindexBestKnownBlock->nChainWork < nMinimumChainWork) {
         // This peer has nothing interesting.
+        state->BlockBlocked(1, strprintf("%s insufficient nChainWork (%s < %s)",
+            strHeight(state->pindexBestKnownBlock),
+            state->pindexBestKnownBlock ? stripZeros(state->pindexBestKnownBlock->nChainWork.ToString()) : "0",
+            stripZeros(std::max(nMinimumChainWork, m_chainman.ActiveChain().Tip()->nChainWork).ToString())));
         return;
-    }
+    } else
+        state->BlockUnblocked(1);
 
     if (state->pindexLastCommonBlock == nullptr) {
         // Bootstrap quickly by guessing a parent of our best tip is the forking point.
@@ -1142,8 +1167,10 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
     if (pindexPrevCommon != state->pindexLastCommonBlock)
         LogPrint(BCLog::BLOCK, "%s: reorg? PrevCommon=%s Common=%s peer=%d\n", strBlkHeight(pindexPrevCommon),
             strBlkHeight(state->pindexLastCommonBlock), nodeid);
-    if (state->pindexLastCommonBlock == state->pindexBestKnownBlock)
+    if (state->pindexLastCommonBlock == state->pindexBestKnownBlock) {
+        state->BlockBlocked(2, "lastCommonBlock == BestKnownBlock");
         return;
+    } else state->BlockUnblocked(2);
 
     const Consensus::Params& consensusParams = m_chainparams.GetConsensus();
     std::vector<const CBlockIndex*> vToFetch;
@@ -1173,12 +1200,14 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
         for (const CBlockIndex* pindex : vToFetch) {
             if (!pindex->IsValid(BLOCK_VALID_TREE)) {
                 // We consider the chain that this peer is on invalid.
+                state->BlockBlocked(3, "!pindex->IsValid");
                 return;
-            }
+            } else state->BlockUnblocked(3);
             if (!State(nodeid)->fHaveWitness && DeploymentActiveAt(*pindex, consensusParams, Consensus::DEPLOYMENT_SEGWIT)) {
                 // We wouldn't download this block or its descendants from this peer.
+                state->BlockBlocked(4, "Node without Segwit");
                 return;
-            }
+            } else state->BlockUnblocked(4);
             if (pindex->nStatus & BLOCK_HAVE_DATA || m_chainman.ActiveChain().Contains(pindex)) {
                 if (pindex->HaveTxsDownloaded())
                     state->pindexLastCommonBlock = pindex;
@@ -1190,8 +1219,9 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
                         // We aren't able to fetch anything, but we would be if the download window was one larger.
                         nodeStaller = waitingfor;
                     }
+                    state->BlockBlocked(5, "Reached end of window");
                     return;
-                }
+                } else state->BlockUnblocked(5);
                 vBlocks.push_back(pindex);
                 if (vBlocks.size() == count) {
                     return;
@@ -5023,8 +5053,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             pindexBestHeader = m_chainman.ActiveChain().Tip();
         bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->IsAddrFetchConn()); // Download if this is a nice peer, or we have no nice peers and this one might do.
         if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
+            state.BlockUnblocked(7);
             // Only actively request headers from a single peer, unless we're close to today.
             if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
+                state.BlockUnblocked(8);
                 state.fSyncStarted = true;
                 state.m_headers_sync_timeout = current_time + HEADERS_DOWNLOAD_TIMEOUT_BASE +
                     (
@@ -5046,8 +5078,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     pindexStart = pindexStart->pprev;
                 LogPrint(BCLog::NET, "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->GetId(), peer->m_starting_height);
                 m_connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexStart), uint256()));
-            }
-        }
+            } else state.BlockBlocked(8, "nSyncStarted || !fFetch || pindexBestHeader too old");
+        } else state.BlockBlocked(7, "fSyncStarted || fClient || fImporting || fReIndex");
 
         //
         // Try sending block announcements via headers
@@ -5431,6 +5463,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         std::vector<CInv> vGetData;
         bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
         if (fDownloadBlocks && !pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+            state.BlockUnblocked(6);
             std::vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
@@ -5458,7 +5491,8 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     LogPrint(BCLog::BLOCK, "Stall started peer=%d\n", staller);
                 }
             }
-        }
+        } else if (!fFetch) state.BlockBlocked(6, "!fFetch");
+        else state.BlockBlocked(6, "!IBD");
 
         //
         // Message: getdata (transactions)

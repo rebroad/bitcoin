@@ -152,6 +152,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::REINDEX, "reindex"},
     {BCLog::BLOCK, "block"},
     {BCLog::BLOCKSEND, "blocksend"},
+    {BCLog::BLOCKBLOCK, "blockblock"},
     {BCLog::RAND, "rand"},
     {BCLog::PRUNE, "prune"},
     {BCLog::PROXY, "proxy"},
