@@ -1681,15 +1681,14 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
         for (const auto& txin : tx.vin) {
             const COutPoint& prevout = txin.prevout;
             const Coin& coin = inputs.AccessCoin(prevout);
-            //if (!coin.IsSpent())
-                spent_outputs.emplace_back(coin.out);
+            spent_outputs.emplace_back(coin.out);
             spent_flags.emplace_back(coin.IsSpent());
         }
         txdata.Init(tx, std::move(spent_outputs));
     }
-    //assert(txdata.m_spent_outputs.size() == tx.vin.size());
+    assert(txdata.m_spent_outputs.size() == tx.vin.size());
 
-    for (unsigned int i = 0; i < txdata.m_spent_outputs.size(); i++) {
+    for (unsigned int i = 0; i < tx.vin.size(); i++) {
         if (!spent_flags[i]) continue; // Skip UTXO dust
 
         // We very carefully only pass in things to CScriptCheck which
