@@ -1359,6 +1359,10 @@ void PeerManagerImpl::ReattemptInitialBroadcast(CScheduler& scheduler)
         CTransactionRef tx = m_mempool.get(txid);
 
         if (tx != nullptr) {
+            // Do not relay transactions with outputs of 250 satoshis or less
+            for (const auto& txout : tx->vout)
+                if (txout.nValue <= 250)
+                    continue;
             LOCK(cs_main);
             _RelayTransaction(txid, tx->GetWitnessHash());
         } else {
@@ -2588,7 +2592,16 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
 		nSize, (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
-            _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
+            // Do not relay transactions with outputs of 250 satoshis or less
+            bool should_relay = true;
+            for (const auto& txout : tx.vout) {
+                if (txout.nValue <= 250) {
+                    should_relay = false;
+                    break;
+                }
+            }
+            if (should_relay)
+                _RelayTransaction(orphanHash, porphanTx->GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(*porphanTx, orphan_work_set);
             m_orphanage.EraseTx(orphanHash);
             for (const CTransactionRef& removedTx : result.m_replaced_transactions.value()) {
@@ -3736,7 +3749,16 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // requests for it.
             m_txrequest.ForgetTxHash(tx.GetHash());
             m_txrequest.ForgetTxHash(tx.GetWitnessHash());
-            _RelayTransaction(tx.GetHash(), tx.GetWitnessHash());
+            // Do not relay transactions with outputs of 250 satoshis or less
+            bool should_relay = true;
+            for (const auto& txout : tx.vout) {
+                if (txout.nValue <= 250) {
+                    should_relay = false;
+                    break;
+                }
+            }
+            if (should_relay)
+                _RelayTransaction(tx.GetHash(), tx.GetWitnessHash());
             m_orphanage.AddChildrenToWorkSet(tx, peer->m_orphan_work_set);
 
             pfrom.m_last_tx_time = GetTime<std::chrono::seconds>();
