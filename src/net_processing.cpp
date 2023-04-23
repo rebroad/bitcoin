@@ -1356,14 +1356,16 @@ void PeerManagerImpl::ReattemptInitialBroadcast(CScheduler& scheduler)
 {
     std::set<uint256> unbroadcast_txids = m_mempool.GetUnbroadcastTxs();
 
+    bool fRelayDust = gArgs.GetBoolArg("-relaydust", false);
     for (const auto& txid : unbroadcast_txids) {
         CTransactionRef tx = m_mempool.get(txid);
 
         if (tx != nullptr) {
-            // Do not relay transactions with outputs of 250 satoshis or less
-            for (const auto& txout : tx->vout)
-                if (txout.nValue <= 250)
-                    continue;
+            if (!fRelayDust)
+                // Do not relay transactions with outputs of 250 satoshis or less
+                for (const auto& txout : tx->vout)
+                    if (txout.nValue <= 250)
+                        continue;
             LOCK(cs_main);
             _RelayTransaction(txid, tx->GetWitnessHash());
         } else {
@@ -2571,6 +2573,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
     AssertLockHeld(cs_main);
     AssertLockHeld(g_cs_orphans);
 
+    bool fRelayDust = GetBoolArg("-relaydust", false);
     while (!orphan_work_set.empty()) {
         const uint256 orphanHash = *orphan_work_set.begin();
         orphan_work_set.erase(orphan_work_set.begin());
@@ -2593,12 +2596,14 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
 		nSize, (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
-            // Do not relay transactions with outputs of 250 satoshis or less
             bool should_relay = true;
-            for (const auto& txout : tx.vout) {
-                if (txout.nValue <= 250) {
-                    should_relay = false;
-                    break;
+            if (!fRelayDust) {
+                // Do not relay transactions with outputs of 250 satoshis or less
+                for (const auto& txout : tx.vout) {
+                    if (txout.nValue <= 250) {
+                        should_relay = false;
+                        break;
+                    }
                 }
             }
             if (should_relay)
@@ -3750,12 +3755,14 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // requests for it.
             m_txrequest.ForgetTxHash(tx.GetHash());
             m_txrequest.ForgetTxHash(tx.GetWitnessHash());
-            // Do not relay transactions with outputs of 250 satoshis or less
             bool should_relay = true;
-            for (const auto& txout : tx.vout) {
-                if (txout.nValue <= 250) {
-                    should_relay = false;
-                    break;
+            if (!gArgs.GetBoolArg("-relaydust", false)) {
+                // Do not relay transactions with outputs of 250 satoshis or less
+                for (const auto& txout : tx.vout) {
+                    if (txout.nValue <= 250) {
+                        should_relay = false;
+                        break;
+                    }
                 }
             }
             if (should_relay)
