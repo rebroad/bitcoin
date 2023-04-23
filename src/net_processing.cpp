@@ -738,18 +738,19 @@ struct CNodeState {
     void BlockBlocked(int flag, const std::string& reason) {
         int nBefore = nBlockPaused;
         nBlockPaused |= (1 << flag);
-        if (!nBefore)
+        if (nBlockPaused != nBefore)
             LogPrint(BCLog::BLOCKBLOCK, "BLOCKED %d - %s peer=%d\n", flag, reason, m_id);
     }
     void BlockUnblocked(int flag) {
+        //int nBefore = nBlockPaused;
         nBlockPaused &= ~(1 << flag);
-        if (nBlockPaused) {
+        /*if (nBlockPaused != nBefore) {
             std::string activeBlocks;
             for (int i = 0; i < 16; i++)
                 if (nBlockPaused & (1 << i))
                     activeBlocks += std::to_string(i) + " ";
             LogPrint(BCLog::BLOCKBLOCK, "UNBLOCKED %d - active: %s peer=%d\n", flag, activeBlocks, m_id);
-        }
+        } */
     }
     unsigned int nBlocksInFlight{0};
     //! How many TXs are currently in flight
