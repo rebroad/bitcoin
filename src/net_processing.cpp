@@ -735,10 +735,10 @@ struct CNodeState {
     uint64_t m_download_report_clicks{0};
     uint64_t tSipaDisconnect{0};
     uint16_t nBlockPaused{0};
-    void BlockBlocked(int flag, const std::string& reason) {
+    void BlockBlocked(int flag, const std::string& reason = "") {
         int nBefore = nBlockPaused;
         nBlockPaused |= (1 << flag);
-        if (nBlockPaused != nBefore)
+        if (nBlockPaused != nBefore && reason != "")
             LogPrint(BCLog::BLOCKBLOCK, "BLOCKED %d - %s peer=%d\n", flag, reason, m_id);
     }
     void BlockUnblocked(int flag) {
@@ -5607,8 +5607,9 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     LogPrint(BCLog::BLOCK, "Stall started peer=%d\n", staller);
                 }
             }
-        } else if (!fFetch) state.BlockBlocked(6, "!fFetch");
-        else state.BlockBlocked(6, "!IBD");
+        } else if (pto->fClient) state.BlockBlocked(6, "pto->fClient");
+        else if (state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) state.BlockBlocked(6, "!fFetch || m_limited_node");
+        else state.BlockBlocked(6);
 
         //
         // Message: getdata (transactions)
