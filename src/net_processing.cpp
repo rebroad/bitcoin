@@ -2573,7 +2573,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
     AssertLockHeld(cs_main);
     AssertLockHeld(g_cs_orphans);
 
-    bool fRelayDust = GetBoolArg("-relaydust", false);
+    bool fRelayDust = gArgs.GetBoolArg("-relaydust", false);
     while (!orphan_work_set.empty()) {
         const uint256 orphanHash = *orphan_work_set.begin();
         orphan_work_set.erase(orphan_work_set.begin());

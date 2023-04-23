@@ -650,6 +650,28 @@ static RPCHelpMan downloadblocks()
     };
 }
 
+static RPCHelpMan relaydust()
+{
+    return RPCHelpMan{"relaydust",
+                "\nEnables/disables dust relaying.\n",
+                {
+                    {"enabled", RPCArg::Type::BOOL, RPCArg::Optional::NO, "whether to relay dust"},
+                },
+                RPCResult{
+                    RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+                    HelpExampleCli("relaydust", "1") + HelpExampleRpc("relaydust", "1")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::string strEnabled = request.params[0].get_str();
+    gArgs.ForceSetArg("-relaydust", strEnabled);
+
+    return NullUniValue;
+}
+    };
+}
+
 static RPCHelpMan getrawmempool()
 {
     return RPCHelpMan{"getrawmempool",
@@ -2973,6 +2995,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         &maxmempool,                         },
     { "blockchain",         &updatechain,                        },
     { "blockchain",         &downloadblocks,                     },
+    { "blockchain",         &relaydust,                          },
     { "blockchain",         &verifychain,                        },
 
     { "blockchain",         &preciousblock,                      },

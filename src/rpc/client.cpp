@@ -67,6 +67,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "maxoutboundrelay", 0, "number" },
     { "updatechain", 1, "boolean" },
     { "downloadblocks", 1, "boolean" },
+    { "relaydust", 1, "boolean" },
     { "runttoggle", 1, "minutes" },
     { "bitnodeprotocolversion", 0, "number" },
     { "waitforblockheight", 0, "height" },
