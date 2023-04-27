@@ -56,7 +56,8 @@ while True:
                         updated_outputs[new_address] = float(send_amount)
 
             # Create a new raw transaction with the modified output values
-            updated_raw_tx = rpc_connection.createrawtransaction(decoded_tx["vin"], updated_outputs)
+            updated_outputs_list = [{"address": k, "amount": v} for k, v in updated_outputs.items()]
+            updated_raw_tx = rpc_connection.createrawtransaction(decoded_tx["vin"], updated_outputs_list)
 
             # Sign the updated raw transaction
             signed_tx = rpc_connection.signrawtransactionwithwallet(updated_raw_tx)
