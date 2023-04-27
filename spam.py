@@ -48,11 +48,11 @@ while True:
 
             # Update the change output value
             for output in decoded_tx["vout"]:
-                if output["scriptPubKey"]["addresses"][0] == change_address:
+                if "addresses" in output["scriptPubKey"] and output["scriptPubKey"]["addresses"][0] == change_address:
                     output["value"] = float(change_output_value)
 
             # Create a new raw transaction with the modified output values
-            updated_raw_tx = rpc_connection.createrawtransaction(decoded_tx["vin"], {out["scriptPubKey"]["addresses"][0]: out["value"] for out in decoded_tx["vout"]})
+            updated_raw_tx = rpc_connection.createrawtransaction(decoded_tx["vin"], {out["scriptPubKey"]["addresses"][0]: out["value"] for out in decoded_tx["vout"] if "addresses" in out["scriptPubKey"]})
 
             # Sign the updated raw transaction
             signed_tx = rpc_connection.signrawtransactionwithwallet(updated_raw_tx)
