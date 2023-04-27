@@ -1,4 +1,5 @@
 from bitcoinrpc.authproxy import AuthServiceProxy, JSONRPCException
+from decimal import Decimal
 import time
 
 class CustomAuthServiceProxy(AuthServiceProxy):
@@ -13,6 +14,8 @@ rpc_port = '18332'
 url = f"http://{rpc_user}:{rpc_password}@127.0.0.1:{rpc_port}/"
 rpc_connection = CustomAuthServiceProxy(url)
 
+send_amount = Decimal('0.000003')
+
 # Create a new address for each transaction
 while True:
     for i in range(50000):
@@ -20,7 +23,7 @@ while True:
         try:
             change_address = rpc_connection.getrawchangeaddress()
             # Create a raw transaction with no inputs and one output
-            raw_tx = rpc_connection.createrawtransaction([], {new_address: 0.000003})
+            raw_tx = rpc_connection.createrawtransaction([], {new_address: send_amount})
 
             # Fund the raw transaction without adding the fee
             funded_tx = rpc_connection.fundrawtransaction(raw_tx, {"feeRate": 0, "changeAddress": change_address})
@@ -29,24 +32,24 @@ while True:
             decoded_tx = rpc_connection.decoderawtransaction(funded_tx["hex"])
 
             # Calculate the total input amount
-            input_amount = 0
+            input_amount = Decimal(0)
             for input in decoded_tx["vin"]:
                 tx_out = rpc_connection.gettxout(input["txid"], input["vout"])
-                input_amount += tx_out["value"]
+                input_amount += Decimal(tx_out["value"])
 
             # Calculate the output amount
-            output_amount = 0
+            output_amount = Decimal(0)
             for output in decoded_tx["vout"]:
-                output_amount += output["value"]
+                output_amount += Decimal(output["value"])
 
             # Calculate the fee (1 satoshi) and set the change output value
-            fee = 1 / 100000000
+            fee = Decimal('0.00000001')
             change_output_value = input_amount - output_amount - fee
 
             # Update the change output value
             for output in decoded_tx["vout"]:
                 if output["scriptPubKey"]["addresses"][0] == change_address:
-                    output["value"] = change_output_value
+                    output["value"] = float(change_output_value)
 
             # Create a new raw transaction with the modified output values
             updated_raw_tx = rpc_connection.createrawtransaction(decoded_tx["vin"], {out["scriptPubKey"]["addresses"][0]: out["value"] for out in decoded_tx["vout"]})
@@ -56,7 +59,7 @@ while True:
 
             # Send the signed transaction
             txid = rpc_connection.sendrawtransaction(signed_tx["hex"])
-            print(f"Sent 0.000003 BTC to address {new_address} (TXID: {txid})")
+            print(f"Sent {send_amount} BTC to address {new_address} (TXID: {txid})")
         except JSONRPCException as e:
             print(f"Failed to send transaction: {e}")
 
