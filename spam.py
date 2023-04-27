@@ -19,7 +19,7 @@ while True:
         new_address = rpc_connection.getnewaddress()
         try:
             # Send 0.0000000246 BTC from the wallet to the new address
-            txid = rpc_connection.sendtoaddress(new_address, 0.0000000246, "", "", True, "", 246)
+            txid = rpc_connection.sendtoaddress(new_address, 0.0000000246, "", "", True, "", True)
             print(f"Sent 0.0000000246 BTC to address {new_address} (TXID: {txid})")
         except JSONRPCException as e:
             print(f"Failed to send transaction: {e}")
