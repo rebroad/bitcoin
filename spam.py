@@ -11,17 +11,27 @@ rpc_connection = AuthServiceProxy(url)
 
 send_amount = Decimal('0.000003')
 
+def select_utxo(rpc, min_value):
+    while True:
+        unspent_outputs = rpc.listunspent(0)
+        suitable_utxos = [utxo for utxo in unspent_outputs if Decimal(utxo["amount"]) >= min_value]
+        if len(suitable_utxos) > 0:
+            return suitable_utxos[0]
+        else:
+            print("No suitable UTXOs. Waiting for 30 seconds before retrying.")
+            time.sleep(30)
+
 def create_send_transaction(rpc, destination, amount):
     change_address = rpc.getrawchangeaddress()
-    raw_tx = rpc.createrawtransaction([], {destination: float(amount)})
-    funded_tx = rpc.fundrawtransaction(raw_tx, {"feeRate": 0, "changeAddress": change_address})
-    decoded_tx = rpc.decoderawtransaction(funded_tx["hex"])
-    input_amount = sum(Decimal(tx_out["value"]) for vin in decoded_tx["vin"] for tx_out in [rpc.gettxout(vin["txid"], vin["vout"])])
     fee = Decimal('0.00000001')
-    change_value = input_amount - amount - fee
-    updated_outputs = {destination: float(amount), change_address: float(change_value)}
-    updated_raw_tx = rpc.createrawtransaction(decoded_tx["vin"], updated_outputs)
-    signed_tx = rpc.signrawtransactionwithwallet(updated_raw_tx)
+    min_required_value = amount + fee
+    utxo = select_utxo(rpc, min_required_value)
+    input_value = Decimal(utxo["amount"])
+    change_value = input_value - amount - fee
+    inputs = [{"txid": utxo["txid"], "vout": utxo["vout"]}]
+    outputs = {destination: float(amount), change_address: float(change_value)}
+    raw_tx = rpc.createrawtransaction(inputs, outputs)
+    signed_tx = rpc.signrawtransactionwithwallet(raw_tx)
     return rpc.sendrawtransaction(signed_tx["hex"])
 
 while True:
