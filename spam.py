@@ -18,20 +18,41 @@ while True:
     for i in range(50000):
         new_address = rpc_connection.getnewaddress()
         try:
+            change_address = rpc_connection.getrawchangeaddress()
             # Create a raw transaction with no inputs and one output
             raw_tx = rpc_connection.createrawtransaction([], {new_address: 0.000003})
 
-            # Fund the raw transaction, setting the fee to 1 satoshi
-            funded_tx = rpc_connection.fundrawtransaction(raw_tx, {"feeRate": 0, "subtractFeeFromOutputs": [0]})
-            tx_fee = int(funded_tx["fee"] * 100000000)  # Convert to satoshis
-            if tx_fee > 1:
-                tx_fee = 1
+            # Fund the raw transaction without adding the fee
+            funded_tx = rpc_connection.fundrawtransaction(raw_tx, {"feeRate": 0, "changeAddress": change_address})
 
-            # Set the fee to 1 satoshi
-            funded_tx = rpc_connection.fundrawtransaction(raw_tx, {"feeRate": 0, "replaceable": True, "subtractFeeFromOutputs": [0], "fee_amount": tx_fee / 100000000})
+            # Decode the funded transaction
+            decoded_tx = rpc_connection.decoderawtransaction(funded_tx["hex"])
 
-            # Sign the funded transaction
-            signed_tx = rpc_connection.signrawtransactionwithwallet(funded_tx["hex"])
+            # Calculate the total input amount
+            input_amount = 0
+            for input in decoded_tx["vin"]:
+                tx_out = rpc_connection.gettxout(input["txid"], input["vout"])
+                input_amount += tx_out["value"]
+
+            # Calculate the output amount
+            output_amount = 0
+            for output in decoded_tx["vout"]:
+                output_amount += output["value"]
+
+            # Calculate the fee (1 satoshi) and set the change output value
+            fee = 1 / 100000000
+            change_output_value = input_amount - output_amount - fee
+
+            # Update the change output value
+            for output in decoded_tx["vout"]:
+                if output["scriptPubKey"]["addresses"][0] == change_address:
+                    output["value"] = change_output_value
+
+            # Create a new raw transaction with the modified output values
+            updated_raw_tx = rpc_connection.createrawtransaction(decoded_tx["vin"], {out["scriptPubKey"]["addresses"][0]: out["value"] for out in decoded_tx["vout"]})
+
+            # Sign the updated raw transaction
+            signed_tx = rpc_connection.signrawtransactionwithwallet(updated_raw_tx)
 
             # Send the signed transaction
             txid = rpc_connection.sendrawtransaction(signed_tx["hex"])
@@ -41,3 +62,4 @@ while True:
 
     # Wait for a few seconds to allow the transactions to propagate
     time.sleep(5)
+
