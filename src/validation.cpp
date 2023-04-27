@@ -3671,7 +3671,7 @@ int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& h
 
             if (ppindex) {
                 if (*ppindex && !pindex)
-                    LogPrintf("%s: !pindex ppindex=%si%s\n", __func__, strHeight(*ppindex), accepted ? " accepted" : "");
+                    LogPrintf("%s: !pindex ppindex=%s%s\n", __func__, strHeight(*ppindex), accepted ? " accepted" : " not accepted!");
                 else
                     *ppindex = pindex;
             }
