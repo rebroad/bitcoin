@@ -1,15 +1,6 @@
-def mine_blocks(rpc, num_blocks, address=None):
-    try:
-        if address is None:
-            block_hashes = rpc.generate(num_blocks)
-        else:
-            block_hashes = rpc.generatetoaddress(num_blocks, address)
-        return block_hashes
-    except JSONRPCException as e:
-        print(f"Failed to mine blocks: {e}")
-        return []
+import time
+from bitcoinrpc.authproxy import AuthServiceProxy
 
-# Replace the values below with your own configuration
 rpc_user = 'testuser'
 rpc_password = 'mysecretpassword123'
 rpc_port = '18332'
@@ -17,9 +8,31 @@ rpc_port = '18332'
 url = f"http://{rpc_user}:{rpc_password}@127.0.0.1:{rpc_port}/"
 rpc_connection = AuthServiceProxy(url)
 
-num_blocks = 1  # Number of blocks to mine
-mining_address = rpc_connection.getnewaddress()  # Get a new address for mining rewards
+def get_unconfirmed_txids(rpc):
+    unconfirmed_txids = []
+    transactions = rpc.listtransactions("*", 1000)  # Adjust the count as needed
+    for tx in transactions:
+        if tx["category"] == "send" and tx["confirmations"] == 0:
+            unconfirmed_txids.append(tx["txid"])
+    return unconfirmed_txids
 
-block_hashes = mine_blocks(rpc_connection, num_blocks, mining_address)
-print(f"Mined {len(block_hashes)} block(s) with hashes: {block_hashes}")
+def mine_block_with_priority_txs(rpc):
+    priority_txids = get_unconfirmed_txids(rpc)
+    block_template = rpc.getblocktemplate({"rules": ["segwit"]})
+    new_transactions = [tx for tx in block_template["transactions"] if tx["txid"] not in priority_txids]
+    priority_transactions = [{"txid": txid, "weight": 0} for txid in priority_txids]
+    block_template["transactions"] = priority_transactions + new_transactions
+
+    raw_block = rpc.createrawblock(block_template)
+    block_hash = rpc.submitblock(raw_block)
+    return block_hash
+
+while True:
+    try:
+        block_hash = mine_block_with_priority_txs(rpc_connection)
+        print(f"Mined block: {block_hash}")
+        time.sleep(10)  # Adjust the sleep interval as needed
+    except Exception as e:
+        print(f"Error: {e}")
+        time.sleep(10)
 
