@@ -10,7 +10,12 @@ url = f"http://{rpc_user}:{rpc_password}@127.0.0.1:{rpc_port}/"
 rpc = AuthServiceProxy(url)
 
 send_amount = Decimal('0.000003')
-fee_rate = Decimal('2')  # satoshis per byte
+
+def get_min_relay_fee(rpc):
+    network_info = rpc.getnetworkinfo()
+    return Decimal(network_info["relayfee"])
+
+fee_rate = get_min_relay_fee(rpc) * 100_000_000  # satoshis per byte
 
 def select_utxo(rpc, min_value):
     while True:
@@ -41,21 +46,20 @@ def create_send_transaction(rpc, destination, amount):
             try:
                 txid = rpc.sendrawtransaction(signed_tx["hex"])
                 print(f"Sent {send_amount} BTC to address {destination} (TXID: {txid})")
-                return
+                return True
             except JSONRPCException as e:
                 if "too-long-mempool-chain" in str(e):
                     print(f"Failed to send transaction with UTXO {utxo['txid']}: {e}")
                     continue
                 print(f"Failed to send transaction: {e}")
-                return
+                return False
 
+new_address = rpc.getnewaddress()
 while True:
     for _ in range(50000):
-        new_address = rpc.getnewaddress()
         try:
-            txid = create_send_transaction(rpc, new_address, send_amount)
-            print(f"Sent {send_amount} BTC to address {new_address} (TXID: {txid})")
-
+            if create_send_transaction(rpc, new_address, send_amount):
+                new_address = rpc.getnewaddress()
         except JSONRPCException as e:
             print(f"Failed to send transaction: {e}")
     time.sleep(5)
