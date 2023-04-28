@@ -14,9 +14,9 @@ send_amount = Decimal('0.000003')
 def select_utxo(rpc, min_value):
     while True:
         unspent_outputs = rpc.listunspent(0)
-        suitable_utxos = [utxo for utxo in unspent_outputs if Decimal(utxo["amount"]) >= min_value]
+        suitable_utxos = sorted([utxo for utxo in unspent_outputs if Decimal(utxo["amount"]) >= min_value], key=lambda x: x["amount"])
         if len(suitable_utxos) > 0:
-            return suitable_utxos[0]
+            return suitable_utxos
         else:
             print("No suitable UTXOs. Waiting for 30 seconds before retrying.")
             time.sleep(30)
@@ -25,14 +25,31 @@ def create_send_transaction(rpc, destination, amount):
     change_address = rpc.getrawchangeaddress()
     fee = Decimal('0.00000001')
     min_required_value = amount + fee
-    utxo = select_utxo(rpc, min_required_value)
-    input_value = Decimal(utxo["amount"])
-    change_value = input_value - amount - fee
-    inputs = [{"txid": utxo["txid"], "vout": utxo["vout"]}]
-    outputs = {destination: float(amount), change_address: float(change_value)}
-    raw_tx = rpc.createrawtransaction(inputs, outputs)
-    signed_tx = rpc.signrawtransactionwithwallet(raw_tx)
-    return rpc.sendrawtransaction(signed_tx["hex"])
+
+    while True:
+        suitable_utxos = select_utxo(rpc, min_required_value)
+
+        for utxo in suitable_utxos:
+            input_value = Decimal(utxo["amount"])
+            change_value = input_value - amount - fee
+            inputs = [{"txid": utxo["txid"], "vout": utxo["vout"]}]
+            outputs = {destination: float(amount), change_address: float(change_value)}
+            raw_tx = rpc.createrawtransaction(inputs, outputs)
+            signed_tx = rpc.signrawtransactionwithwallet(raw_tx)
+            try:
+                txid = rpc.sendrawtransaction(signed_tx["hex"])
+                print(f"Sent {send_amount} BTC to address {new_address} (TXID: {txid})")
+                return
+            except JSONRPCException as e:
+                if "too-long-mempool-chain" in str(e):
+                    print(f"Failed to send transaction with UTXO {utxo['txid']}: {e}")
+                    continue
+                else:
+                    print(f"Failed to send transaction: {e}")
+                    return
+        else:
+            print("All suitable UTXOs failed. Waiting for 1 minute before retrying...")
+            time.sleep(60)
 
 while True:
     for _ in range(50000):
