@@ -2064,13 +2064,13 @@ static RPCHelpMan reconsiderblock()
         chainman.ActiveChainstate().ResetBlockFailureFlags(pblockindex);
     }
 
-    //BlockValidationState state;
-    //chainman.ActiveChainstate().ActivateBestChain(state);
-    fActivateChain = true;
+    BlockValidationState state;
+    chainman.ActiveChainstate().ActivateBestChain(state);
+    //fActivateChain = true;
 
-    //if (!state.IsValid()) {
-    //    throw JSONRPCError(RPC_DATABASE_ERROR, state.ToString());
-    //}
+    if (!state.IsValid()) {
+        throw JSONRPCError(RPC_DATABASE_ERROR, state.ToString());
+    }
 
     return NullUniValue;
 },
