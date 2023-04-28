@@ -23,8 +23,8 @@ def mine_block_with_priority_txs(rpc):
     priority_transactions = [{"txid": txid, "weight": 0} for txid in priority_txids]
     block_template["transactions"] = priority_transactions + new_transactions
 
-    raw_block = rpc.createrawblock(block_template)
-    block_hash = rpc.submitblock(raw_block)
+    response = rpc.generatetodescriptor(1, f"addr({rpc.getnewaddress()})")
+    block_hash = response[0] if response else None
     return block_hash
 
 while True:
