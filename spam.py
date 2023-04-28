@@ -11,6 +11,18 @@ rpc = AuthServiceProxy(url)
 
 send_amount = Decimal('0.000003')
 
+def wait_for_new_block(rpc, timeout=600):
+    start_height = rpc.getblockcount()
+    start_time = time.time()
+
+    while True:
+        current_height = rpc.getblockcount()
+        if current_height > start_height:
+            break
+        if time.time() - start_time > timeout:
+            break
+        time.sleep(5)
+
 def create_send_transaction(rpc, destination, amount):
     change_address = rpc.getrawchangeaddress()
     inputs = []
@@ -26,8 +38,13 @@ def create_send_transaction(rpc, destination, amount):
         print(f"Sent {send_amount} BTC to address {destination} (TXID: {txid})")
         return True
     except JSONRPCException as e:
-        print(f"Failed to send transaction: {e}")
-        return False
+        if "too-long-mempool-chain" in str(e):
+            print("Mempool chain limit reached. Waiting for the next block...")
+            wait_for_new_block(rpc)
+            return False
+        else:
+            print(f"Failed to send transaction: {e}")
+            return False
 
 new_address = rpc.getnewaddress()
 while True:
