@@ -23,21 +23,25 @@ def select_utxo(rpc, min_value):
 
 def create_send_transaction(rpc, destination, amount):
     change_address = rpc.getrawchangeaddress()
-    fee = Decimal('0.00000001')
-    min_required_value = amount + fee
 
     while True:
-        suitable_utxos = select_utxo(rpc, min_required_value)
+        suitable_utxos = select_utxo(rpc, amount)
 
         for utxo in suitable_utxos:
             input_value = Decimal(utxo["amount"])
-            change_value = input_value - amount - fee
             inputs = [{"txid": utxo["txid"], "vout": utxo["vout"]}]
-            outputs = {destination: float(amount), change_address: float(change_value)}
+            outputs = {destination: float(amount)}
             raw_tx = rpc.createrawtransaction(inputs, outputs)
             signed_tx = rpc.signrawtransactionwithwallet(raw_tx)
+            transaction_size = len(signed_tx["hex"]) // 2  # Calculate the transaction size in bytes
+            fee = fee_rate * transaction_size / 100_000_000  # Calculate the fee in BTC
+            change_value = input_value - amount - fee
+            if change_value > 0:
+                outputs[change_address] = float(change_value)
+            updated_raw_tx = rpc.createrawtransaction(inputs, outputs)
+            updated_signed_tx = rpc.signrawtransactionwithwallet(updated_raw_tx)
             try:
-                txid = rpc.sendrawtransaction(signed_tx["hex"])
+                txid = rpc.sendrawtransaction(updated_signed_tx["hex"])
                 print(f"Sent {send_amount} BTC to address {new_address} (TXID: {txid})")
                 return
             except JSONRPCException as e:
