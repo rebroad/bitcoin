@@ -10,6 +10,7 @@ url = f"http://{rpc_user}:{rpc_password}@127.0.0.1:{rpc_port}/"
 rpc_connection = AuthServiceProxy(url)
 
 send_amount = Decimal('0.000003')
+fee_rate = Decimal('1')  # satoshis per byte
 
 def select_utxo(rpc, min_value):
     while True:
