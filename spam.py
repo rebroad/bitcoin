@@ -38,10 +38,10 @@ def create_send_transaction(rpc, destination, amount):
             change_value = input_value - amount - fee
             if change_value > 0:
                 outputs[change_address] = float(change_value)
-            updated_raw_tx = rpc.createrawtransaction(inputs, outputs)
-            updated_signed_tx = rpc.signrawtransactionwithwallet(updated_raw_tx)
+            raw_tx = rpc.createrawtransaction(inputs, outputs)
+            signed_tx = rpc.signrawtransactionwithwallet(raw_tx)
             try:
-                txid = rpc.sendrawtransaction(updated_signed_tx["hex"])
+                txid = rpc.sendrawtransaction(signed_tx["hex"])
                 print(f"Sent {send_amount} BTC to address {new_address} (TXID: {txid})")
                 return
             except JSONRPCException as e:
