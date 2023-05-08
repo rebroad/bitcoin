@@ -5523,13 +5523,13 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         if (state.vBlocksInFlight.size() > 0) {
             QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
             int nOtherPeersWithValidatedDownloads = m_peers_downloading_from - 1;
+            int64_t nNow = GetTime();
+            int nDelay = nNow - count_seconds(pto->m_last_recv);
             if (current_time > state.m_downloading_since + std::chrono::seconds{consensusParams.nPowTargetSpacing} * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
-                LogPrintf("Timeout downloading block %s. DLS=%s nPTS=%d BDTB=%d nOPWVD=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), strAge((current_time - state.m_downloading_since).count() / 1000000), consensusParams.nPowTargetSpacing, BLOCK_DOWNLOAD_TIMEOUT_BASE, nOtherPeersWithValidatedDownloads, pto->GetId());
+                LogPrintf("Timeout downloading block %s. DLS=%s nPTS=%d BDTB=%d nOPWVD=%d nLBT=%s nLR=%s vPMs=%d disconnecting peer=%d\n", strBlkHeight(queuedBlock.pindex), strAge((current_time - state.m_downloading_since).count() / 1000000), consensusParams.nPowTargetSpacing, BLOCK_DOWNLOAD_TIMEOUT_BASE, nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->m_last_block_time)), strAge(nNow - count_seconds(pto->m_last_recv)), pto->vProcessMsg.size(), pto->GetId());
                 pto->fDisconnect = true; // REBTODO - this logic really needs improving!
                 return true;
             }
-            int64_t nNow = GetTime();
-            int nDelay = nNow - count_seconds(pto->m_last_recv);
             if (nDelay > m_longest_delay && current_time > state.m_downloading_since + std::chrono::seconds{m_longest_delay}) {
                 LogPrintf("Block download max delay %ds -> %ds NetClicks=%d nOPWVD=%d nLBT=%s peer=%d\n", m_longest_delay, nDelay, nNetClicks - state.m_download_report_clicks, nOtherPeersWithValidatedDownloads, strAge(nNow - count_seconds(pto->m_last_block_time)), pto->GetId());
                 m_longest_delay = nDelay;
