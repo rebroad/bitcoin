@@ -2989,8 +2989,8 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 g_tiptowards = pindexMostWork->nHeight;
                 static int old_tiptowards = 0;
                 if (old_tiptowards != g_tiptowards) {
-                    int old_behind = old_tiptowards ? old_tiptowards - m_chain.Tip()->nHeight : 0;
-                    int nBehind = g_tiptowards ? g_tiptowards - m_chain.Tip()->nHeight : 0;
+                    int old_behind = old_tiptowards && m_chain.Tip() ? old_tiptowards - m_chain.Tip()->nHeight : 0;
+                    int nBehind = g_tiptowards && m_chain.Tip() ? g_tiptowards - m_chain.Tip()->nHeight : 0;
                     LogPrintf("%s: g_tiptowards %d -> %d  behind %d -> %d\n", __func__, old_tiptowards, g_tiptowards, old_behind, nBehind);
                     old_tiptowards = g_tiptowards;
                 }
