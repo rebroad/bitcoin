@@ -2150,7 +2150,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     int64_t nSigOpsCost = 0;
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     unsigned int missing_inputs = 0;
-    bool fSkipVerification = gArgs.GetBoolArg("-reindex-chainstate", false);
+    bool fSkipVerification = gArgs.GetBoolArg("-skipverification", false);
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = *(block.vtx[i]);
