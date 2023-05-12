@@ -2150,6 +2150,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     int64_t nSigOpsCost = 0;
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     unsigned int missing_inputs = 0;
+    bool fSkipVerification = gArgs.GetBoolArg("-reindex-chainstate", false);
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = *(block.vtx[i]);
@@ -2160,7 +2161,11 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         {
             CAmount txfee = 0;
             TxValidationState tx_state;
-            if (!Consensus::CheckTxInputs(tx, tx_state, view, pindex->nHeight, txfee, &missing_inputs)) {
+            // Skip script verification during chainstate reindex
+            bool fCheckTxScriptsResult = true;
+            if (!fSkipVerification)
+                fCheckTxScriptsResult = Consensus::CheckTxInputs(tx, tx_state, view, pindex->nHeight, txfee, &missing_inputs);
+            if (!fCheckTxScriptsResult) {
                 // Any transaction validation failure in ConnectBlock is a block consensus failure
                 state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
                             tx_state.GetRejectReason(), tx_state.GetDebugMessage());
