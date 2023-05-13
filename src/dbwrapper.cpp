@@ -130,6 +130,7 @@ CDBWrapper::CDBWrapper(const fs::path& path, size_t nCacheSize, bool fMemory, bo
     } else {
         if (fWipe) {
             LogPrintf("Wiping LevelDB in %s\n", fs::PathToString(path));
+            assert(!fWipe);
             leveldb::Status result = leveldb::DestroyDB(fs::PathToString(path), options);
             dbwrapper_private::HandleError(result);
         }
