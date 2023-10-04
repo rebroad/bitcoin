@@ -111,7 +111,8 @@ std::optional<ChainstateLoadingError> LoadChainstate(bool fReset,
                 return ChainstateLoadingError::ERROR_LOADCHAINTIP_FAILED;
             }
             assert(chainstate->m_chain.Tip() != nullptr);
-        }
+        } else
+            LogPrintf("%s: Skipped LoadChainTip()\n", __func__);
     }
 
     if (!fReset) {
