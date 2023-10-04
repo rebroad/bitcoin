@@ -2506,6 +2506,12 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
         }
     }
     UpdateTipLog(coins_tip, pindexNew, m_params, __func__, "", warning_messages.original);
+
+    if (pindexNew->nChainWork >= pindexBestHeader->nChainWork && gArgs.GetBoolArg("-stopafteribd", node::DEFAULT_STOPAFTERIBD)) {
+        LogPrintf("Stopping after IBD\n");
+        StartShutdown();
+    }
+
 }
 
 /** Disconnect m_chain's tip.
