@@ -3257,7 +3257,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         return;
     }
 
-    if (!pfrom.fSuccessfullyConnected) {
+    if (!pfrom.fSuccessfullyConnected && !pfrom.fDisconnect) {
         LogPrintf("Unsupported message \"%s\" prior to verack from peer=%d\n", SanitizeString(msg_type), pfrom.GetId());
         Misbehaving(pfrom.GetId(), 20, strprintf("\"%s\" before verack", SanitizeString(msg_type)));
         return; // REBTODO - why does it matter?!
