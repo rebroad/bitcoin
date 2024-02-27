@@ -18,14 +18,14 @@ uint16_t static inline ReadLE16(const unsigned char* ptr)
 {
     uint16_t x;
     memcpy((char*)&x, ptr, 2);
-    return le16toh(x);
+    return le16toh_internal(x);
 }
 
 uint32_t static inline ReadLE32(const unsigned char* ptr)
 {
     uint32_t x;
     memcpy((char*)&x, ptr, 4);
-    return le32toh(x);
+    return le32toh_internal(x);
 }
 
 uint64_t static inline ReadLE64(const unsigned char* ptr)
@@ -33,23 +33,25 @@ uint64_t static inline ReadLE64(const unsigned char* ptr)
     uint64_t x;
     memcpy((char*)&x, ptr, 8);
     return le64toh(x);
+    return le64toh_internal(x);
 }
 
 void static inline WriteLE16(unsigned char* ptr, uint16_t x)
 {
     uint16_t v = htole16(x);
+    uint16_t v = htole16_internal(x);
     memcpy(ptr, (char*)&v, 2);
 }
 
 void static inline WriteLE32(unsigned char* ptr, uint32_t x)
 {
-    uint32_t v = htole32(x);
+    uint32_t v = htole32_internal(x);
     memcpy(ptr, (char*)&v, 4);
 }
 
 void static inline WriteLE64(unsigned char* ptr, uint64_t x)
 {
-    uint64_t v = htole64(x);
+    uint64_t v = htole64_internal(x);
     memcpy(ptr, (char*)&v, 8);
 }
 
@@ -57,21 +59,21 @@ uint16_t static inline ReadBE16(const unsigned char* ptr)
 {
     uint16_t x;
     memcpy((char*)&x, ptr, 2);
-    return be16toh(x);
+    return be16toh_internal(x);
 }
 
 uint32_t static inline ReadBE32(const unsigned char* ptr)
 {
     uint32_t x;
     memcpy((char*)&x, ptr, 4);
-    return be32toh(x);
+    return be32toh_internal(x);
 }
 
 uint64_t static inline ReadBE64(const unsigned char* ptr)
 {
     uint64_t x;
     memcpy((char*)&x, ptr, 8);
-    return be64toh(x);
+    return be64toh_internal(x);
 }
 
 void static inline WriteBE16(unsigned char* ptr, uint16_t x)
@@ -82,13 +84,13 @@ void static inline WriteBE16(unsigned char* ptr, uint16_t x)
 
 void static inline WriteBE32(unsigned char* ptr, uint32_t x)
 {
-    uint32_t v = htobe32(x);
+    uint32_t v = htobe32_internal(x);
     memcpy(ptr, (char*)&v, 4);
 }
 
 void static inline WriteBE64(unsigned char* ptr, uint64_t x)
 {
-    uint64_t v = htobe64(x);
+    uint64_t v = htobe64_internal(x);
     memcpy(ptr, (char*)&v, 8);
 }
 

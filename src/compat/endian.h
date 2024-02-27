@@ -5,18 +5,8 @@
 #ifndef BITCOIN_COMPAT_ENDIAN_H
 #define BITCOIN_COMPAT_ENDIAN_H
 
+#include <bit>
 #include <stdint.h>
-
-#if defined(HAVE_CONFIG_H)
-#include <config/bitcoin-config.h>
-#endif
-
-// First try to use system-provided endian functions
-#if defined(HAVE_ENDIAN_H)
-#include <endian.h>
-#elif defined(HAVE_SYS_ENDIAN_H)
-#include <sys/endian.h>
-#endif
 
 // If we're not using autotools, try to detect system endian functions
 #if !defined(HAVE_CONFIG_H)
