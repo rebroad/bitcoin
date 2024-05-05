@@ -112,7 +112,7 @@ public:
         }
     }
     bool shutdownRequested() override { return ShutdownRequested(); }
-    void mapPort(bool use_natpmp) override { StartMapPort(use_natpmp); }
+    void mapPort(bool use_pcp) override { StartMapPort(use_pcp); }
     bool getProxy(Network net, proxyType& proxy_info) override { return GetProxy(net, proxy_info); }
     size_t getNodeCount(ConnectionDirection flags) override
     {
