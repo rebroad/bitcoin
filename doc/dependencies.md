@@ -33,7 +33,6 @@ Controlling dependencies
 Some dependencies are not needed in all configurations. The following are some factors that affect the dependency list.
 
 #### Options passed to `./configure`
-* libnatpmp is not needed with `--without-natpmp`.
 * Berkeley DB is not needed with `--disable-wallet` or `--without-bdb`.
 * SQLite is not needed with `--disable-wallet` or `--without-sqlite`.
 * Qt is not needed with `--without-gui`.
