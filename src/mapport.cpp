@@ -209,7 +209,7 @@ static void MapPortProtoSetEnabled(MapPortProtoFlag proto, bool enabled)
     }
 }
 
-void StartMapPort(bool use_upnp, bool use_natpmp)
+void StartMapPort(bool use_natpmp)
 {
     MapPortProtoSetEnabled(MapPortProtoFlag::NAT_PMP, use_natpmp);
     DispatchMapPort();
