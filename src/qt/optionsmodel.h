@@ -46,7 +46,6 @@ public:
         StartAtStartup,         // bool
         ShowTrayIcon,           // bool
         MinimizeToTray,         // bool
-        MapPortUPnP,            // bool
         MapPortNatpmp,          // bool
         MinimizeOnClose,        // bool
         ProxyUse,               // bool

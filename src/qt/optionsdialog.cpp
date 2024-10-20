@@ -50,17 +50,6 @@ OptionsDialog::OptionsDialog(QWidget *parent, bool enableWallet) :
     connect(ui->prune, &QPushButton::toggled, ui->pruneSize, &QWidget::setEnabled);
 
     /* Network elements init */
-#ifndef USE_UPNP
-    ui->mapPortUpnp->setEnabled(false);
-#endif
-#ifndef USE_NATPMP
-    ui->mapPortNatpmp->setEnabled(false);
-#endif
-    connect(this, &QDialog::accepted, [this](){
-        QSettings settings;
-        model->node().mapPort(settings.value("fUseUPnP").toBool(), settings.value("fUseNatpmp").toBool());
-    });
-
     ui->proxyIp->setEnabled(false);
     ui->proxyPort->setEnabled(false);
     ui->proxyPort->setValidator(new QIntValidator(1, 65535, this));
@@ -247,7 +236,6 @@ void OptionsDialog::setMapper()
     mapper->addMapping(ui->m_enable_psbt_controls, OptionsModel::EnablePSBTControls);
 
     /* Network */
-    mapper->addMapping(ui->mapPortUpnp, OptionsModel::MapPortUPnP);
     mapper->addMapping(ui->mapPortNatpmp, OptionsModel::MapPortNatpmp);
     mapper->addMapping(ui->allowIncoming, OptionsModel::Listen);
     mapper->addMapping(ui->enableServer, OptionsModel::Server);
