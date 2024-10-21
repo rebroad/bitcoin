@@ -27,7 +27,6 @@ Library                                                         | Purpose       
 [qrencode](https://formulae.brew.sh/formula/qrencode)           | QR codes in GUI  | Generating QR codes (only needed when GUI enabled)
 [zeromq](https://formulae.brew.sh/formula/zeromq)               | ZMQ notification | Allows generating ZMQ notifications (requires ZMQ version >= 4.0.0)
 [sqlite](https://formulae.brew.sh/formula/sqlite)               | SQLite DB        | Wallet storage (only needed when wallet enabled)
-[miniupnpc](https://formulae.brew.sh/formula/miniupnpc)         | UPnP Support     | Firewall-jumping support (needed for port mapping support)
 [libnatpmp](https://formulae.brew.sh/formula/libnatpmp)         | NAT-PMP Support  | Firewall-jumping support (needed for port mapping support)
 [python3](https://formulae.brew.sh/formula/python@3.9)          | Testing          | Python Interpreter (only needed when running the test suite)
 
@@ -159,15 +158,6 @@ brew install qrencode
 ---
 
 #### Port Mapping Dependencies
-
-###### miniupnpc
-
-miniupnpc may be used for UPnP port mapping.
-Skip if you do not need this functionality.
-
-``` bash
-brew install miniupnpc
-```
 
 ###### libnatpmp
 
