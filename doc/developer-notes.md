@@ -525,9 +525,6 @@ Threads
   - [ThreadDNSAddressSeed (`b-dnsseed`)](https://doxygen.bitcoincore.org/class_c_connman.html#aa7c6970ed98a4a7bafbc071d24897d13)
     : Loads addresses of peers from the DNS.
 
-  - [ThreadMapPort (`b-upnp`)](https://doxygen.bitcoincore.org/net_8cpp.html#a63f82a71c4169290c2db1651a9bbe249)
-    : Universal plug-and-play startup/shutdown.
-
   - [ThreadSocketHandler (`b-net`)](https://doxygen.bitcoincore.org/class_c_connman.html#a765597cbfe99c083d8fa3d61bb464e34)
     : Sends/Receives data from peers on port 8333.
 

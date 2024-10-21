@@ -40,7 +40,6 @@ Optional dependencies:
 
  Library     | Purpose          | Description
  ------------|------------------|----------------------
- miniupnpc   | UPnP Support     | Firewall-jumping support
  libnatpmp   | NAT-PMP Support  | Firewall-jumping support
  libdb4.8    | Berkeley DB      | Wallet storage (only needed when legacy wallet enabled)
  qt          | GUI              | GUI toolkit (only needed when GUI enabled)
@@ -95,9 +94,9 @@ executables, which are based on BerkeleyDB 4.8. If you do not care about wallet 
 
 To build Bitcoin Core without wallet, see [*Disable-wallet mode*](#disable-wallet-mode)
 
-Optional port mapping libraries (see: `--with-miniupnpc`, `--enable-upnp-default`, and `--with-natpmp`, `--enable-natpmp-default`):
+Optional port mapping libraries (see: `--with-natpmp`, `--enable-natpmp-default`):
 
-    sudo apt install libminiupnpc-dev libnatpmp-dev
+    sudo apt install libnatpmp-dev
 
 ZMQ dependencies (provides ZMQ API):
 
@@ -156,9 +155,9 @@ pass `--with-incompatible-bdb` to configure. Otherwise, you can build Berkeley D
 
 To build Bitcoin Core without wallet, see [*Disable-wallet mode*](#disable-wallet-mode)
 
-Optional port mapping libraries (see: `--with-miniupnpc`, `--enable-upnp-default`, and `--with-natpmp`, `--enable-natpmp-default`):
+Optional port mapping libraries (see: `--natpmp`, `--enable-natpmp-default`):
 
-    sudo dnf install miniupnpc-devel libnatpmp-devel
+    sudo dnf install libnatpmp-devel
 
 ZMQ dependencies (provides ZMQ API):
 
@@ -193,17 +192,6 @@ Notes
 -----
 The release is built with GCC and then "strip bitcoind" to strip the debug
 symbols, which reduces the executable size by about 90%.
-
-miniupnpc
----------
-
-[miniupnpc](https://miniupnp.tuxfamily.org) may be used for UPnP port mapping.  It can be downloaded from [here](
-https://miniupnp.tuxfamily.org/files/).  UPnP support is compiled in and
-turned off by default.  See the configure options for UPnP behavior desired:
-
-    --without-miniupnpc      No UPnP support, miniupnp not required
-    --disable-upnp-default   (the default) UPnP support turned off by default at runtime
-    --enable-upnp-default    UPnP support turned on by default at runtime
 
 libnatpmp
 ---------
@@ -306,7 +294,7 @@ This example lists the steps necessary to setup and build a command line only, n
     git clone https://github.com/bitcoin/bitcoin.git
     cd bitcoin/
     ./autogen.sh
-    ./configure --disable-wallet --without-gui --without-miniupnpc
+    ./configure --disable-wallet --without-gui
     make check
 
 Note:
