@@ -146,12 +146,6 @@ AC_ARG_ENABLE([usdt],
   [use_usdt=$enableval],
   [use_usdt=yes])
 
-AC_ARG_WITH([miniupnpc],
-  [AS_HELP_STRING([--with-miniupnpc],
-  [enable UPNP (default is yes if libminiupnpc is found)])],
-  [use_upnp=$withval],
-  [use_upnp=auto])
-
 AC_ARG_ENABLE([upnp-default],
   [AS_HELP_STRING([--enable-upnp-default],
   [if UPNP is enabled, turn it on at startup (default is no)])],
@@ -732,18 +726,9 @@ case $host in
          case $host in
            *aarch64*)
              dnl The preferred Homebrew prefix for Apple Silicon is /opt/homebrew.
-             dnl Therefore, as we do not use pkg-config to detect miniupnpc and libnatpmp
+             dnl Therefore, as we do not use pkg-config to detect libnatpmp
              dnl packages, we should set the CPPFLAGS and LDFLAGS variables for them
              dnl explicitly.
-             if test "$use_upnp" != "no" && $BREW list --versions miniupnpc >/dev/null; then
-               miniupnpc_prefix=$($BREW --prefix miniupnpc 2>/dev/null)
-               if test "$suppress_external_warnings" != "no"; then
-                 CPPFLAGS="$CPPFLAGS -isystem $miniupnpc_prefix/include"
-               else
-                 CPPFLAGS="$CPPFLAGS -I$miniupnpc_prefix/include"
-               fi
-               LDFLAGS="$LDFLAGS -L$miniupnpc_prefix/lib"
-             fi
              if test "$use_natpmp" != "no" && $BREW list --versions libnatpmp >/dev/null; then
                libnatpmp_prefix=$($BREW --prefix libnatpmp 2>/dev/null)
                if test "$suppress_external_warnings" != "no"; then
@@ -1370,35 +1355,6 @@ if test "$build_bitcoin_cli$build_bitcoin_tx$build_bitcoin_util$build_bitcoind$b
   use_zmq=no
 fi
 
-dnl Check for libminiupnpc (optional)
-if test "$use_upnp" != "no"; then
-  AC_CHECK_HEADERS(
-    [miniupnpc/miniupnpc.h miniupnpc/upnpcommands.h miniupnpc/upnperrors.h],
-    [AC_CHECK_LIB([miniupnpc], [upnpDiscover], [MINIUPNPC_LIBS=-lminiupnpc], [have_miniupnpc=no])],
-    [have_miniupnpc=no]
-  )
-dnl The minimum supported miniUPnPc API version is set to 10. This keeps compatibility
-dnl with Ubuntu 16.04 LTS and Debian 8 libminiupnpc-dev packages.
-if test "$have_miniupnpc" != "no"; then
-  AC_MSG_CHECKING([whether miniUPnPc API version is supported])
-  AC_PREPROC_IFELSE([AC_LANG_PROGRAM([[
-      @%:@include <miniupnpc/miniupnpc.h>
-    ]], [[
-      #if MINIUPNPC_API_VERSION >= 10
-      // Everything is okay
-      #else
-      #  error miniUPnPc API version is too old
-      #endif
-    ]])],[
-      AC_MSG_RESULT([yes])
-    ],[
-    AC_MSG_RESULT([no])
-    AC_MSG_WARN([miniUPnPc API version < 10 is unsupported, disabling UPnP support.])
-    have_miniupnpc=no
-  ])
-fi
-fi
-
 dnl Check for libnatpmp (optional).
 if test "$use_natpmp" != "no"; then
   AC_CHECK_HEADERS([natpmp.h],
@@ -1659,34 +1615,6 @@ if test "$enable_wallet" != "no"; then
 
 else
   AC_MSG_RESULT([no])
-fi
-
-dnl enable upnp support
-AC_MSG_CHECKING([whether to build with support for UPnP])
-if test "$have_miniupnpc" = "no"; then
-  if test "$use_upnp" = "yes"; then
-     AC_MSG_ERROR([UPnP requested but cannot be built. Use --without-miniupnpc])
-  fi
-  AC_MSG_RESULT([no])
-  use_upnp=no
-else
-  if test "$use_upnp" != "no"; then
-    AC_MSG_RESULT([yes])
-    AC_MSG_CHECKING([whether to build with UPnP enabled by default])
-    use_upnp=yes
-    upnp_setting=0
-    if test "$use_upnp_default" != "no"; then
-      use_upnp_default=yes
-      upnp_setting=1
-    fi
-    AC_MSG_RESULT([$use_upnp_default])
-    AC_DEFINE_UNQUOTED([USE_UPNP],[$upnp_setting],[UPnP support not compiled if undefined, otherwise value (0 or 1) determines default state])
-    if test "$TARGET_OS" = "windows"; then
-      MINIUPNPC_CPPFLAGS="-DSTATICLIB -DMINIUPNP_STATICLIB"
-    fi
-  else
-    AC_MSG_RESULT([no])
-  fi
 fi
 
 dnl Enable NAT-PMP support.
