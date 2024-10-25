@@ -189,14 +189,11 @@ static void DispatchMapPort()
     }
 
     if (g_mapport_enabled_protos & g_mapport_current_proto) {
-        // Enabling another protocol does not cause switching from the currently used one.
         return;
     }
 
     assert(g_mapport_thread.joinable());
     assert(!g_mapport_interrupt);
-    // Interrupt a protocol-specific loop in the ThreadUpnp() or in the ThreadNatpmp()
-    // to force trying the next protocol in the ThreadMapPort() loop.
     g_mapport_interrupt();
 }
 
