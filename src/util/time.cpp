@@ -17,11 +17,11 @@
 #include <ctime>
 #include <thread>
 
-#include <tinyformat.h>
-
 #ifdef WIN32
 #include <windows.h>
 #include <winnt.h>
+
+#include <processthreadsapi.h>
 #else
 #include <ctime>
 #endif
@@ -208,8 +208,28 @@ std::chrono::nanoseconds ThreadCpuTime()
     if (!GetThreadTimes(GetCurrentThread(), &creation, &exit, &kernel, &user)) {
         return std::chrono::nanoseconds{0};
     }
-    return std::chrono::seconds{kernel.dwHighDateTime} + std::chrono::nanoseconds{kernel.dwLowDateTime};
+
+    ULARGE_INTEGER kernel_;
+    kernel_.LowPart = kernel.dwLowDateTime;
+    kernel_.HighPart = kernel.dwHighDateTime;
+
+    ULARGE_INTEGER user_;
+    user_.LowPart = user.dwLowDateTime;
+    user_.HighPart = user.dwHighDateTime;
+
+    return std::chrono::nanoseconds{(kernel_.QuadPart + user_.QuadPart) * 100};
 #else
     return std::chrono::nanoseconds{0};
 #endif
+}
+
+std::chrono::nanoseconds operator+=(std::atomic<std::chrono::nanoseconds>& a, std::chrono::nanoseconds b)
+{
+    std::chrono::nanoseconds expected;
+    std::chrono::nanoseconds desired;
+    do {
+        expected = a.load();
+        desired = expected + b;
+    } while (!a.compare_exchange_weak(expected, desired));
+    return desired;
 }

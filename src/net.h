@@ -26,7 +26,7 @@
 #include <uint256.h>
 #include <util/check.h>
 #include <util/sock.h>
-
+#include <util/time.h>
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -280,6 +280,13 @@ public:
     uint64_t nRecvBytes;
     uint64_t nRecvBytesSnap;
     uint64_t nRecvBytesSnapOld;
+    //! CPU time spent processing messages to/from the peer
+    std::chrono::nanoseconds m_cpu_time;
+    //! CPU time snapshot for rate calculation
+    std::chrono::nanoseconds m_cpu_time_snap;
+    //! Old CPU time snapshot for rate calculation
+    std::chrono::nanoseconds m_cpu_time_snap_old;
+    // Mempool statistics - for transactions coming in via mempool
     uint64_t nMempoolBytes;
     uint64_t nMempoolBytesSnap;
     uint64_t nMempoolBytesSnapOld;
@@ -302,12 +309,6 @@ public:
     Network m_network;
     uint32_t m_mapped_as;
     ConnectionType m_conn_type;
-    //! CPU time spent processing messages to/from the peer
-    std::chrono::nanoseconds m_cpu_time;
-    //! CPU time snapshot for rate calculation
-    std::chrono::nanoseconds m_cpu_time_snap;
-    //! Old CPU time snapshot for rate calculation
-    std::chrono::nanoseconds m_cpu_time_snap_old;
 };
 
 
@@ -468,6 +469,11 @@ public:
 
     std::atomic<std::chrono::seconds> m_last_send{0s};
     std::atomic<std::chrono::seconds> m_last_recv{0s};
+    std::atomic<std::chrono::nanoseconds> m_cpu_time{0};
+    std::atomic<std::chrono::nanoseconds> m_cpu_time_snap{0};
+    std::atomic<std::chrono::nanoseconds> m_cpu_time_snap_old{0};
+
+    // Mempool statistics - for transactions coming in via mempool
     uint64_t nMempoolBytes{0};
     uint64_t nMempoolBytesSnap{0};
     uint64_t nMempoolBytesSnapOld{0};
@@ -743,11 +749,6 @@ public:
     std::chrono::nanoseconds GetCpuTime() const {
         return m_cpu_time.load();
     }
-
-    //! CPU time snapshot for rate calculation
-    std::chrono::nanoseconds m_cpu_time_snap{0};
-    //! Old CPU time snapshot for rate calculation
-    std::chrono::nanoseconds m_cpu_time_snap_old{0};
 
 private:
     const NodeId id;

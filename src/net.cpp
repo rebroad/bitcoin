@@ -623,6 +623,8 @@ void CNode::CopyStats(CNodeStats& stats) {
     X(nMempoolTXs);
     X(nMempoolTXsSnapOld);
     X(nRecvBytesSnapOld);
+    X(m_cpu_time);
+    X(m_cpu_time_snap_old);
     X(nTimeSnapOld);
     X(nBTxBpsPct);
     X(nBTXpm);
@@ -641,9 +643,6 @@ void CNode::CopyStats(CNodeStats& stats) {
     stats.addrLocal = addrLocalUnlocked.IsValid() ? addrLocalUnlocked.ToString() : "";
 
     X(m_conn_type);
-    X(m_cpu_time);
-    X(m_cpu_time_snap);
-    X(m_cpu_time_snap_old);
 }
 #undef X
 
@@ -2639,6 +2638,8 @@ void CConnman::ThreadMessageHandler()
                     else
                         LogPrintf("%s: Force ProcessMessages() as blks2b=%d vProcessMsgs=%d fDisconnect=%s peer=%d\n", __func__, pnode->nBlocksToBeProcessed, pnode->vProcessMsg.size(), pnode->fDisconnect, pnode->GetId());
                 }
+
+                CpuTimer timer{[&pnode](std::chrono::nanoseconds elapsed) { pnode->m_cpu_time += elapsed; }};
 
                 // Receive messages
                 bool fMoreNodeWork = m_msgproc->ProcessMessages(pnode, flagInterruptMsgProc, fToggle);
