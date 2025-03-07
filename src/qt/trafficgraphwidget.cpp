@@ -5,6 +5,7 @@
 #include <interfaces/node.h>
 #include <qt/trafficgraphwidget.h>
 #include <qt/clientmodel.h>
+#include <logging.h>
 
 #include <QPainter>
 #include <QPainterPath>
@@ -13,6 +14,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cfloat>
 
 #define DESIRED_SAMPLES         800
 
@@ -48,7 +50,22 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
         path.moveTo(x, YMARGIN + h);
         for(int i = 0; i < sampleCount; ++i) {
             x = XMARGIN + w - w * i / DESIRED_SAMPLES;
-            int y = YMARGIN + h - (int)(h * samples.at(i) / fMax);
+            
+            // Skip NaN or infinity values to prevent Qt errors
+            float sample = samples.at(i);
+            if (std::isnan(sample) || std::isinf(sample) || fMax <= 0.0f) {
+                LogPrintf("TrafficGraphWidget: Skipping invalid sample value: %f\n", sample);
+                continue;
+            }
+            
+            int y = YMARGIN + h - (int)(h * sample / fMax);
+            
+            // Check that y is a valid value before adding to path
+            if (std::isnan(y) || std::isinf(y)) {
+                LogPrintf("TrafficGraphWidget: Invalid y value calculated: %d, sample=%f, fMax=%f\n", y, sample, fMax);
+                continue;
+            }
+            
             path.lineTo(x, y);
         }
         path.lineTo(x, YMARGIN + h);
@@ -136,12 +153,14 @@ void TrafficGraphWidget::updateRates()
 
     float tmax = 0.0f;
     for (const float f : vSamplesIn) {
-        if(f > tmax) tmax = f;
+        if (!std::isnan(f) && !std::isinf(f) && f > tmax) tmax = f;
     }
     for (const float f : vSamplesOut) {
-        if(f > tmax) tmax = f;
+        if (!std::isnan(f) && !std::isinf(f) && f > tmax) tmax = f;
     }
     fMax = tmax;
+    // Ensure we have a non-zero fMax to prevent division by zero
+    if (fMax <= 0.0f) fMax = 0.1f;
     update();
 }
 
