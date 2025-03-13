@@ -8,6 +8,11 @@
 #include <qt/guiutil.h>
 
 #include <QPainter>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QFileDialog>
+#include <QMessageBox>
 #include <QPainterPath>
 #include <QColor>
 #include <QTimer>
@@ -38,6 +43,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 	timer->setInterval(75);
 	timer->start();
 	setMouseTracking(true);
+	setFocusPolicy(Qt::StrongFocus); // To accept keyboard events
 }
 
 void TrafficGraphWidget::setClientModel(ClientModel *model)
@@ -454,4 +460,105 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
 	}
 
 	return std::chrono::minutes{values[m_new_value]};
+}
+
+void TrafficGraphWidget::keyPressEvent(QKeyEvent *event)
+{
+	if (event->modifiers() & Qt::ControlModifier) {
+		if (event->key() == Qt::Key_E) {
+			exportData();
+			return;
+		}
+	}
+	QWidget::keyPressEvent(event);
+}
+
+void TrafficGraphWidget::exportData()
+{
+	if (!clientModel) return;
+
+	// Create a JSON object to store the data
+	QJsonObject jsonObj;
+
+	// Add values array
+	QJsonArray valuesArray;
+	for (int i = 0; i < VALUES_SIZE; i++) {
+		valuesArray.append(QJsonValue(static_cast<int>(values[i])));
+	}
+	jsonObj["values"] = valuesArray;
+
+	// Add nLastBytesIn array
+	QJsonArray lastBytesInArray;
+	for (int i = 0; i < VALUES_SIZE; i++) {
+		lastBytesInArray.append(QJsonValue(QString::number(nLastBytesIn[i])));
+	}
+	jsonObj["nLastBytesIn"] = lastBytesInArray;
+
+	// Add nLastBytesOut array
+	QJsonArray lastBytesOutArray;
+	for (int i = 0; i < VALUES_SIZE; i++) {
+		lastBytesOutArray.append(QJsonValue(QString::number(nLastBytesOut[i])));
+	}
+	jsonObj["nLastBytesOut"] = lastBytesOutArray;
+
+	// Add nLastTime array
+	QJsonArray lastTimeArray;
+	for (int i = 0; i < VALUES_SIZE; i++) {
+		lastTimeArray.append(QJsonValue(QString::number(nLastTime[i].count())));
+	}
+	jsonObj["nLastTime"] = lastTimeArray;
+
+	// Add vSamplesIn, vSamplesOut, and vTimeStamp arrays
+	QJsonArray samplesInArray;
+	QJsonArray samplesOutArray;
+	QJsonArray timeStampArray;
+
+	for (int i = 0; i < VALUES_SIZE; i++) {
+		QJsonArray samplesInSubArray;
+		for (int j = 0; j < vSamplesIn[i].size(); j++) {
+			samplesInSubArray.append(QJsonValue(vSamplesIn[i].at(j)));
+		}
+		samplesInArray.append(samplesInSubArray);
+
+		QJsonArray samplesOutSubArray;
+		for (int j = 0; j < vSamplesOut[i].size(); j++) {
+			samplesOutSubArray.append(QJsonValue(vSamplesOut[i].at(j)));
+		}
+		samplesOutArray.append(samplesOutSubArray);
+
+		QJsonArray timeStampSubArray;
+		for (int j = 0; j < vTimeStamp[i].size(); j++) {
+			timeStampSubArray.append(QJsonValue(QString::number(vTimeStamp[i].at(j).count())));
+		}
+		timeStampArray.append(timeStampSubArray);
+	}
+
+	jsonObj["vSamplesIn"] = samplesInArray;
+	jsonObj["vSamplesOut"] = samplesOutArray;
+	jsonObj["vTimeStamp"] = timeStampArray;
+
+	// Convert to JSON document
+	QJsonDocument doc(jsonObj);
+
+	// Get a filename from the user or use the default
+	QString fileName = QFileDialog::getSaveFileName(this, tr("Save Traffic Graph Data"),
+												  "traffic_data.json",
+												  tr("JSON Files (*.json)"));
+
+	if (fileName.isEmpty()) {
+		return; // User canceled the dialog
+	}
+
+	// Save to file
+	QFile file(fileName);
+	if (!file.open(QIODevice::WriteOnly)) {
+		QMessageBox::critical(this, tr("Error"), tr("Could not open file for writing"));
+		return;
+	}
+
+	file.write(doc.toJson());
+	file.close();
+
+	QMessageBox::information(this, tr("Export Successful"),
+						   tr("Traffic data has been exported to %1").arg(fileName));
 }

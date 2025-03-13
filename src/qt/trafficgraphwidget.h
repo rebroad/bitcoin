@@ -7,6 +7,8 @@
 
 #include <QWidget>
 #include <QQueue>
+#include <QFile>
+#include <QKeyEvent>
 
 #include <chrono>
 
@@ -27,11 +29,13 @@ public:
     explicit TrafficGraphWidget(QWidget *parent = nullptr);
     void setClientModel(ClientModel *model);
     bool GraphRangeBump() const;
+    void exportData();
 
 protected:
     void paintEvent(QPaintEvent *) override;
     int y_value(float value);
     void mouseMoveEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
     int ttpoint = -1;
     int x_offset = 0;
     int y_offset = 0;
