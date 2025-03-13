@@ -11,6 +11,9 @@
 #include <QKeyEvent>
 
 #include <chrono>
+#include <fs.h>
+#include <serialize.h>
+#include <streams.h>
 
 class ClientModel;
 
@@ -27,9 +30,14 @@ class TrafficGraphWidget : public QWidget
 
 public:
     explicit TrafficGraphWidget(QWidget *parent = nullptr);
+    ~TrafficGraphWidget();
     void setClientModel(ClientModel *model);
     bool GraphRangeBump() const;
     void exportData();
+
+private:
+    void saveData();
+    bool loadData();
 
 protected:
     void paintEvent(QPaintEvent *) override;

@@ -6,6 +6,7 @@
 #include <qt/trafficgraphwidget.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
+#include <clientversion.h>
 
 #include <QPainter>
 #include <QJsonDocument>
@@ -46,8 +47,12 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 	setFocusPolicy(Qt::StrongFocus); // To accept keyboard events
 }
 
-void TrafficGraphWidget::setClientModel(ClientModel *model)
+TrafficGraphWidget::~TrafficGraphWidget()
 {
+    saveData();
+}
+
+void TrafficGraphWidget::setClientModel(ClientModel *model) {
 	clientModel = model;
 	int64_t nTime = GetTimeMillis();
 	if(model) {
@@ -60,12 +65,15 @@ void TrafficGraphWidget::setClientModel(ClientModel *model)
 			vTimeStamp[i].push_front(nLastTime[i]);
 		}
 	}
+    // Load saved traffic data if available and the arrays are empty
+    if (model && vSamplesIn[0].empty() && vSamplesOut[0].empty()) {
+		loadData();
+    }
 }
 
 bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
 
-int TrafficGraphWidget::y_value(float value)
-{
+int TrafficGraphWidget::y_value(float value) {
 	int h = height() - YMARGIN * 2;
 
 	// Check for potential division by zero or very small values
@@ -561,4 +569,176 @@ void TrafficGraphWidget::exportData()
 
 	QMessageBox::information(this, tr("Export Successful"),
 						   tr("Traffic data has been exported to %1").arg(fileName));
+}
+
+void TrafficGraphWidget::saveData()
+{
+    if (!clientModel) return;
+
+    try {
+	fs::path pathTrafficGraph = fs::path("/tmp/trafficgraphdata");
+	FILE* file = fsbridge::fopen(pathTrafficGraph, "wb");
+	if (file) {
+	    CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
+	    if (!fileout.IsNull()) {
+		// Version
+		fileout << static_cast<int>(1);
+
+		// Save values array
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    fileout << VARINT(static_cast<uint32_t>(values[i]));
+		}
+
+		// Save nLastBytesIn array
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    fileout << VARINT(nLastBytesIn[i]);
+		}
+
+		// Save nLastBytesOut array
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    fileout << VARINT(nLastBytesOut[i]);
+		}
+
+		// Save nLastTime array
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    fileout << VARINT(static_cast<uint64_t>(nLastTime[i].count()));
+		}
+
+		// Save vSamplesIn, vSamplesOut, and vTimeStamp arrays
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    // Save size of each queue
+		    unsigned int samplesInSize = vSamplesIn[i].size();
+		    fileout << VARINT(static_cast<uint32_t>(samplesInSize));
+
+		    // Save queue contents - convert float to uint32_t for serialization
+		    for (unsigned int j = 0; j < samplesInSize; j++) {
+			float value = vSamplesIn[i].at(j);
+			uint32_t uint_value;
+			// Use memcpy for bit-exact conversion (safe on any system with IEEE 754 floats)
+			memcpy(&uint_value, &value, sizeof(float));
+			ser_writedata32(fileout, uint_value);
+		    }
+
+		    unsigned int samplesOutSize = vSamplesOut[i].size();
+		    fileout << VARINT(static_cast<uint32_t>(samplesOutSize));
+
+		    for (unsigned int j = 0; j < samplesOutSize; j++) {
+			float value = vSamplesOut[i].at(j);
+			uint32_t uint_value;
+			// Use memcpy for bit-exact conversion (safe on any system with IEEE 754 floats)
+			memcpy(&uint_value, &value, sizeof(float));
+			ser_writedata32(fileout, uint_value);
+		    }
+
+		    unsigned int timeStampSize = vTimeStamp[i].size();
+		    fileout << VARINT(static_cast<uint32_t>(timeStampSize));
+
+		    for (unsigned int j = 0; j < timeStampSize; j++) {
+			fileout << VARINT(static_cast<uint64_t>(vTimeStamp[i].at(j).count()));
+		    }
+		}
+
+		fileout.fclose();
+		LogPrintf("TrafficGraphWidget: Data saved to %s\n", fs::PathToString(pathTrafficGraph));
+	    }
+	}
+    } catch (const std::exception& e) {
+	LogPrintf("TrafficGraphWidget: Error saving data: %s\n", e.what());
+    }
+}
+
+bool TrafficGraphWidget::loadData()
+{
+    try {
+	fs::path pathTrafficGraph = fs::path("/tmp/trafficgraphdata");
+	FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
+
+	if (!file) {
+	    return false;
+	}
+
+	CAutoFile filein(file, SER_DISK, CLIENT_VERSION);
+	if (filein.IsNull()) {
+	    return false;
+	}
+
+	// Read version
+	int version;
+	filein >> version;
+	if (version != 1) {
+	    return false;
+	}
+
+	// We don't load the values array as it's initialized in the header
+	// Skip values
+	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+	    uint32_t dummy;
+	    filein >> VARINT(dummy);
+	}
+
+	// Load nLastBytesIn array
+	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+	    filein >> VARINT(nLastBytesIn[i]);
+	}
+
+	// Load nLastBytesOut array
+	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+	    filein >> VARINT(nLastBytesOut[i]);
+	}
+
+	// Load nLastTime array
+	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+	    uint64_t timeMs;
+	    filein >> VARINT(timeMs);
+	    nLastTime[i] = std::chrono::milliseconds{static_cast<int64_t>(timeMs)};
+	}
+
+	// Load vSamplesIn, vSamplesOut, and vTimeStamp arrays
+	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+	    // Clear existing data
+	    vSamplesIn[i].clear();
+	    vSamplesOut[i].clear();
+	    vTimeStamp[i].clear();
+
+	    // Load vSamplesIn
+	    unsigned int samplesInSize;
+	    filein >> VARINT(samplesInSize);
+
+	    for (unsigned int j = 0; j < samplesInSize; j++) {
+		uint32_t uint_value = ser_readdata32(filein);
+		float value;
+		// Use memcpy for bit-exact conversion back to float
+		memcpy(&value, &uint_value, sizeof(float));
+		vSamplesIn[i].push_back(value);
+	    }
+
+	    // Load vSamplesOut
+	    unsigned int samplesOutSize;
+	    filein >> VARINT(samplesOutSize);
+	    for (unsigned int j = 0; j < samplesOutSize; j++) {
+		uint32_t uint_value = ser_readdata32(filein);
+		float value;
+		// Use memcpy for bit-exact conversion back to float
+		memcpy(&value, &uint_value, sizeof(float));
+		vSamplesOut[i].push_back(value);
+	    }
+
+	    // Load vTimeStamp
+	    unsigned int timeStampSize;
+	    filein >> VARINT(timeStampSize);
+
+	    for (unsigned int j = 0; j < timeStampSize; j++) {
+		uint64_t timeMs;
+		filein >> VARINT(timeMs);
+		vTimeStamp[i].push_back(std::chrono::milliseconds{static_cast<int64_t>(timeMs)});
+	    }
+	}
+
+	filein.fclose();
+	LogPrintf("TrafficGraphWidget: Data loaded from %s\n", fs::PathToString(pathTrafficGraph));
+	return true;
+    } catch (const std::exception& e) {
+	LogPrintf("TrafficGraphWidget: Error loading data: %s\n", e.what());
+	return false;
+    }
 }
