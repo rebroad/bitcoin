@@ -38,6 +38,18 @@
     - For I2P: Added code to disconnect existing session so it will be freshly recreated
   - This implementation ensures when a user re-enables the network, Bitcoin immediately attempts to reconnect to privacy-enhancing network services rather than waiting for backoff timers
 
+## Traffic Graph Data Validation and Timestamp Synthesis
+- **Task**: Enhance TrafficGraphWidget's loadDataFromCSV() function to properly handle invalid timestamp data
+  - ✅ Implemented robust timestamp validation with multiple checks:
+    - Detection of future timestamps (beyond current time)
+    - Identification of outdated timestamps (significantly in the past)
+    - Verification of timestamp linearity and sequence integrity
+  - ✅ Created intelligent timestamp synthesis for invalid data scenarios:
+    - Analyzes 28-day range sample count to determine appropriate timespan
+    - Scans debug.log to identify periods when bitcoind was actually running
+    - Avoids generating timestamps during inactive periods (gaps of 30+ minutes)
+  - This enhancement ensures the traffic graph displays accurate time-series data even when CSV files contain corrupted timestamps, improving visualization reliability without manual intervention
+
 ---
 *This file will be updated with additional preferences as they are identified.*
 
