@@ -649,12 +649,13 @@ void TrafficGraphWidget::saveData()
 
 bool TrafficGraphWidget::loadData()
 {
+    LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
     try {
 		fs::path pathTrafficGraph = fs::path("/tmp/trafficgraphdata");
 		FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
 
 		if (!file) {
-		    LogPrintf("TrafficGraphWidget: Binary data file not found, trying CSV fallback\n");
+		    LogPrintf("TrafficGraphWidget: Binary data file not found, attempting to load from CSV\n");
 		    return loadDataFromCSV();
 		}
 
@@ -734,23 +735,31 @@ bool TrafficGraphWidget::loadData()
 		return true;
     } catch (const std::exception& e) {
 		LogPrintf("TrafficGraphWidget: Error loading binary data: %s\n", e.what());
-		LogPrintf("TrafficGraphWidget: Trying CSV fallback\n");
+		LogPrintf("TrafficGraphWidget: Attempting to load from CSV after binary load error\n");
 		return loadDataFromCSV();
     }
 }
 
 bool TrafficGraphWidget::loadDataFromCSV()
 {
+    LogPrintf("TrafficGraphWidget: Attempting to load data from CSV at /tmp/trafficgraphdata.csv\n");
     try {
 		// Path to the CSV file
 		fs::path pathCSV = fs::path("/tmp/trafficgraphdata.csv");
 		QFile file(QString::fromStdString(fs::PathToString(pathCSV)));
 
 		// Check if file exists and can be opened
-		if (!file.exists() || !file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-		    LogPrintf("TrafficGraphWidget: CSV file not found or cannot be opened\n");
+		if (!file.exists()) {
+		    LogPrintf("TrafficGraphWidget: CSV file not found\n");
 		    return false;
 		}
+
+		if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		    LogPrintf("TrafficGraphWidget: CSV file exists but cannot be opened\n");
+		    return false;
+		}
+
+		LogPrintf("TrafficGraphWidget: CSV file found and opened successfully\n");
 
 		QTextStream in(&file);
 		QString line;
@@ -770,6 +779,7 @@ bool TrafficGraphWidget::loadDataFromCSV()
 		    line = in.readLine().trimmed();
 
 		    // Skip empty lines
+		    // Skip empty lines
 		    if (line.isEmpty()) continue;
 
 		    // Check for time range headers
@@ -778,6 +788,7 @@ bool TrafficGraphWidget::loadDataFromCSV()
 				QRegExp rangeRegex("# Time Range (\\d+): (\\d+) minutes");
 				if (rangeRegex.indexIn(line) != -1) {
 				    currentRange = rangeRegex.cap(1).toInt();
+				    LogPrintf("TrafficGraphWidget: Found original format header for range %d\n", currentRange);
 
 				    // Validate range
 				    if (currentRange < 0 || currentRange >= VALUES_SIZE) {
@@ -788,6 +799,25 @@ bool TrafficGraphWidget::loadDataFromCSV()
 				continue;
 		    }
 
+		    // Check for CSV DATA START format
+		    QRegExp startRegex("CSV DATA START - RANGE (\\d+)");
+		    if (startRegex.indexIn(line) != -1) {
+			currentRange = startRegex.cap(1).toInt();
+			LogPrintf("TrafficGraphWidget: Found CSV DATA START marker for range %d\n", currentRange);
+
+			// Validate range
+			if (currentRange < 0 || currentRange >= VALUES_SIZE) {
+			    LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
+			    currentRange = -1; // Reset to invalid
+			}
+			continue;
+		    }
+
+		    // Check for CSV DATA END format - we'll skip this line
+		    if (line.startsWith("CSV DATA END")) {
+			LogPrintf("TrafficGraphWidget: Found CSV DATA END marker for range %d\n", currentRange);
+			continue;
+		    }
 		    // Process data rows only if we have a valid current range
 		    if (currentRange >= 0 && currentRange < VALUES_SIZE) {
 				// Check for header row
@@ -821,6 +851,23 @@ bool TrafficGraphWidget::loadDataFromCSV()
 
 		file.close();
 
+		// Log how many data points were loaded for each time range
+		int totalDataPoints = 0;
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    if (!vSamplesIn[i].empty()) {
+			int count = vSamplesIn[i].size();
+			totalDataPoints += count;
+			LogPrintf("TrafficGraphWidget: Loaded %d data points for time range %d (%d minutes)\n",
+			  count, i, values[i]);
+		    }
+		}
+
+		if (totalDataPoints == 0) {
+		    LogPrintf("TrafficGraphWidget: No data points were loaded from the CSV file\n");
+		    return false;
+		}
+
+		LogPrintf("TrafficGraphWidget: Successfully loaded %d total data points from CSV file\n", totalDataPoints);
 		// Set last values based on the first (most recent) entries in the queues
 		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
 		    if (!vSamplesIn[i].empty() && !vSamplesOut[i].empty() && !vTimeStamp[i].empty()) {
