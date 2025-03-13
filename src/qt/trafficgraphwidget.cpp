@@ -55,7 +55,14 @@ TrafficGraphWidget::~TrafficGraphWidget()
 void TrafficGraphWidget::setClientModel(ClientModel *model) {
 	clientModel = model;
 	int64_t nTime = GetTimeMillis();
-	if(model) {
+	if (model) {
+		if (vSamplesIn[0].empty() && vSamplesOut[0].empty()) {
+		// Load saved traffic data if available and the arrays are empty
+			LogPrintf("vSamplesIn[0].empty()=%d\n", vSamplesIn[0].empty());
+			loadData();
+			return;
+		}
+
 		for (int i = 0; i < VALUES_SIZE; i++) {
 			nLastBytesIn[i] = model->node().getTotalBytesRecv();
 			nLastBytesOut[i] = model->node().getTotalBytesSent();
@@ -65,17 +72,6 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
 			vTimeStamp[i].push_front(nLastTime[i]);
 		}
 	}
-    // Load saved traffic data if available and the arrays are empty
-    if (model) {
-		LogPrintf("vSamplesIn[0].empty()=%d\n", vSamplesIn[0].empty());
-        // Clear any existing data to ensure new data is loaded
-        for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-            vSamplesIn[i].clear();
-            vSamplesOut[i].clear();
-            vTimeStamp[i].clear();
-        }
-		loadData();
-    }
 }
 
 bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
@@ -767,6 +763,167 @@ bool TrafficGraphWidget::loadDataFromCSV()
 		}
 
 		LogPrintf("TrafficGraphWidget: CSV file found and opened successfully\n");
+
+		// Step 1: Analyze the CSV file to determine the max time range and sample count
+		int largestRange = 0;
+		int sampleCount = 0;
+
+		// Find the largest range with data points
+		for (int i = VALUES_SIZE - 1; i >= 0; i--) {
+		    if (values[i] > largestRange) {
+			largestRange = values[i];
+			LogPrintf("TrafficGraphWidget: Checking range %d with %d minutes\n", i, values[i]);
+		    }
+		}
+
+		// The last range (index 12) is 28 days (40320 minutes)
+		int maxRange = values[VALUES_SIZE - 1];
+		LogPrintf("TrafficGraphWidget: Largest time range is %d minutes (28 days)\n", maxRange);
+
+		// Step 2: Analyze debug.log to determine when Bitcoin-Qt was running
+		fs::path debugLogPath = fs::path(GetHomeDir()) / ".bitcoin" / "debug.log";
+		QFile debugLogFile(QString::fromStdString(fs::PathToString(debugLogPath)));
+
+		// Store timestamps of when Bitcoin-Qt was running
+		std::vector<std::pair<int64_t, int64_t>> runningPeriods;
+
+		if (debugLogFile.exists() && debugLogFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		    LogPrintf("TrafficGraphWidget: Found debug.log at %s\n", fs::PathToString(debugLogPath));
+
+		    QTextStream logStream(&debugLogFile);
+		    QString logLine;
+		    int64_t lastTimestamp = 0;
+		    int64_t periodStart = 0;
+		    bool inPeriod = false;
+
+		    // Regex to extract timestamp from debug.log lines
+		    QRegExp timestampRegex("([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)");
+
+		    while (!logStream.atEnd()) {
+				logLine = logStream.readLine();
+
+				if (timestampRegex.indexIn(logLine) != -1) {
+				    QString timestampStr = timestampRegex.cap(1);
+				    QDateTime timestamp = QDateTime::fromString(timestampStr, "yyyy-MM-ddThh:mm:ssZ");
+				    timestamp.setTimeSpec(Qt::UTC);
+				    int64_t currentTimestamp = timestamp.toSecsSinceEpoch();
+
+				    if (!inPeriod) {
+						// Start a new period
+						periodStart = currentTimestamp;
+						inPeriod = true;
+					 } else if (currentTimestamp - lastTimestamp > 30 * 60) {
+						// Gap of more than 30 minutes, end previous period and start a new one
+						runningPeriods.push_back(std::make_pair(periodStart, lastTimestamp));
+						LogPrintf("TrafficGraphWidget: Found running period: %s to %s\n",
+						    FormatISO8601DateTime(periodStart).c_str(),
+						    FormatISO8601DateTime(lastTimestamp).c_str());
+
+						periodStart = currentTimestamp;
+				    }
+
+				    lastTimestamp = currentTimestamp;
+				}
+		    }
+
+		    // Add the last period
+		    if (inPeriod) {
+				runningPeriods.push_back(std::make_pair(periodStart, lastTimestamp));
+				LogPrintf("TrafficGraphWidget: Found running period: %s to %s\n",
+				    FormatISO8601DateTime(periodStart).c_str(),
+				    FormatISO8601DateTime(lastTimestamp).c_str());
+		    }
+
+		    debugLogFile.close();
+
+		    LogPrintf("TrafficGraphWidget: Found %d running periods in debug.log\n", (int)runningPeriods.size());
+		} else {
+		    LogPrintf("TrafficGraphWidget: Could not open debug.log, assuming continuous running\n");
+		    // If we can't analyze the debug.log, assume Bitcoin-Qt was running continuously
+		    // We'll set a single running period for the last 28 days
+		    int64_t now = GetTime();
+		    runningPeriods.push_back(std::make_pair(now - maxRange * 60, now));
+		}
+
+		// Calculate total running time (in seconds)
+		int64_t totalRunningTime = 0;
+		for (const auto& period : runningPeriods) {
+		    totalRunningTime += (period.second - period.first);
+		}
+		LogPrintf("TrafficGraphWidget: Total running time: %d seconds (%0.2f days)\n",
+		    totalRunningTime, totalRunningTime / (24.0 * 60 * 60));
+
+		// Clear existing data
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    vSamplesIn[i].clear();
+		    vSamplesOut[i].clear();
+		    vTimeStamp[i].clear();
+		}
+
+		// Store parsed data before assigning timestamps
+		std::vector<std::vector<float>> parsedSamplesIn(VALUES_SIZE);
+		std::vector<std::vector<float>> parsedSamplesOut(VALUES_SIZE);
+
+		// First pass: read the CSV file to parse the rate data
+		QTextStream in(&file);
+		QString line;
+		int currentRange = -1;
+
+		while (!in.atEnd()) {
+		    line = in.readLine().trimmed();
+
+		    // Skip empty lines
+		    if (line.isEmpty()) continue;
+
+		    // Check for time range headers
+		    if (line.startsWith("#")) {
+				// Time Range header: "# Time Range X: Y minutes"
+				QRegExp rangeRegex("# Time Range (\\d+): (\\d+) minutes");
+				if (rangeRegex.indexIn(line) != -1) {
+				    currentRange = rangeRegex.cap(1).toInt();
+				    LogPrintf("TrafficGraphWidget: Found original format header for range %d\n", currentRange);
+
+				    // Validate range
+				    if (currentRange < 0 || currentRange >= VALUES_SIZE) {
+						LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
+						currentRange = -1; // Reset to invalid
+				    }
+				}
+				continue;
+			    }
+
+		    // Check for CSV DATA START format
+		    QRegExp startRegex("CSV DATA START - RANGE (\\d+)");
+		    if (startRegex.indexIn(line) != -1) {
+				currentRange = startRegex.cap(1).toInt();
+				LogPrintf("TrafficGraphWidget: Found CSV DATA START marker for range %d\n", currentRange);
+
+				// Validate range
+				if (currentRange < 0 || currentRange >= VALUES_SIZE) {
+				    LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
+				    currentRange = -1; // Reset to invalid
+				}
+				continue;
+		    }
+
+		    // Check for CSV DATA END format - we'll skip this line
+		    if (line.startsWith("CSV DATA END")) {
+				LogPrintf("TrafficGraphWidget: Found CSV DATA END marker for range %d\n", currentRange);
+				continue;
+		    }
+
+		    // Process data rows only if we have a valid current range
+		    if (currentRange >= 0 && currentRange < VALUES_SIZE) {
+				// Check for header row
+				if (line.startsWith("index,")) continue;
+
+				// Parse data row: "index,timestamp,in_rate,out_rate"
+				QStringList parts = line.split(',');
+				if (parts.size()
+
+// CODE MISSING HERE
+
+// Previous remaining code of the function:-
 
 		QTextStream in(&file);
 		QString line;
