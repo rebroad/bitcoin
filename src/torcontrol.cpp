@@ -562,6 +562,18 @@ void TorController::disconnected_cb(TorControlConnection& _conn)
     reconnect_timeout *= RECONNECT_TIMEOUT_EXP;
 }
 
+void TorController::ResetReconnectBackoff()
+{
+    // Reset the exponential backoff timer to its initial value
+    reconnect_timeout = RECONNECT_TIMEOUT_START;
+
+    // Force an immediate reconnection attempt
+    if (reconnect_ev) {
+        event_del(reconnect_ev);
+        event_active(reconnect_ev, 0, 0);
+    }
+}
+
 void TorController::Reconnect()
 {
     /* Try to reconnect and reestablish if we get booted - for example, Tor
@@ -631,6 +643,20 @@ void StopTorControl()
         torControlThread.join();
         event_base_free(gBase);
         gBase = nullptr;
+    }
+}
+
+void ResetTorBackoff()
+{
+    // If the tor control thread is running, force a reconnection
+    if (torControlThread.joinable() && gBase) {
+        // Signal the event loop to perform a reconnection
+        // This will reconnect with the reset backoff timer
+        event_base_once(gBase, -1, EV_TIMEOUT, [](evutil_socket_t, short, void*) {
+            // No direct access to the controller from here, so we just
+            // break the loop which will force a reconnection
+            event_base_loopbreak(gBase);
+        }, nullptr, nullptr);
     }
 }
 

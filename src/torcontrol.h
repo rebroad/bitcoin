@@ -30,6 +30,7 @@ static const bool DEFAULT_LISTEN_ONION = true;
 void StartTorControl(CService onion_service_target);
 void InterruptTorControl();
 void StopTorControl();
+void ResetTorBackoff();
 
 CService DefaultOnionServiceTarget();
 
@@ -123,6 +124,9 @@ public:
 
     /** Reconnect, after getting disconnected */
     void Reconnect();
+
+    /** Reset reconnection backoff timer and attempt immediate reconnection */
+    void ResetReconnectBackoff();
 private:
     struct event_base* base;
     const std::string m_tor_control_center;

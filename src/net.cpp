@@ -30,6 +30,7 @@
 #include <util/syscall_sandbox.h>
 #include <util/system.h>
 #include <util/thread.h>
+#include <torcontrol.h>
 #include <util/trace.h>
 #include <util/translation.h>
 
@@ -2825,6 +2826,9 @@ void CConnman::SetNetworkActive(bool active)
     }
 
     fNetworkActive = active;
+
+    // Reset Tor connection backoff if enabled
+    if (active && gArgs.GetArg("-torcontrol", "").empty() == false) ResetTorBackoff();
 
     if (m_client_interface) {
         m_client_interface->NotifyNetworkActiveChanged(fNetworkActive);

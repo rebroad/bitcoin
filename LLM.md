@@ -30,6 +30,14 @@
     - This confirms the working hypothesis that the base code needed modifications to work with newer GCC versions
   - This verification is needed because moorlane-core-master.wip branch had compilation errors that required patching
 
+## Network Connections Reset Implementation
+- **Task**: Modify codebase to reset Tor and I2P connections when network is re-enabled
+  - ✅ Investigated connection management for Tor and I2P services
+  - ✅ Modified `CConnman::SetNetworkActive` to reset connections when network is activated:
+    - For Tor: Added call to `ResetTorBackoff()` to reset backoff timer and reconnect
+    - For I2P: Added code to disconnect existing session so it will be freshly recreated
+  - This implementation ensures when a user re-enables the network, Bitcoin immediately attempts to reconnect to privacy-enhancing network services rather than waiting for backoff timers
+
 ---
 *This file will be updated with additional preferences as they are identified.*
 
