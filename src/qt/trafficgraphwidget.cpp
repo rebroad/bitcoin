@@ -650,95 +650,190 @@ void TrafficGraphWidget::saveData()
 bool TrafficGraphWidget::loadData()
 {
     try {
-	fs::path pathTrafficGraph = fs::path("/tmp/trafficgraphdata");
-	FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
+		fs::path pathTrafficGraph = fs::path("/tmp/trafficgraphdata");
+		FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
 
-	if (!file) {
-	    return false;
-	}
+		if (!file) {
+		    LogPrintf("TrafficGraphWidget: Binary data file not found, trying CSV fallback\n");
+		    return loadDataFromCSV();
+		}
 
-	CAutoFile filein(file, SER_DISK, CLIENT_VERSION);
-	if (filein.IsNull()) {
-	    return false;
-	}
+		CAutoFile filein(file, SER_DISK, CLIENT_VERSION);
+		if (filein.IsNull()) return false;
 
-	// Read version
-	int version;
-	filein >> version;
-	if (version != 1) {
-	    return false;
-	}
+		// Read version
+		int version;
+		filein >> version;
+		if (version != 1) return false;
 
-	// We don't load the values array as it's initialized in the header
-	// Skip values
-	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-	    uint32_t dummy;
-	    filein >> VARINT(dummy);
-	}
+		// We don't load the values array as it's initialized in the header
+		// Skip values
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    uint32_t dummy;
+		    filein >> VARINT(dummy);
+		}
 
-	// Load nLastBytesIn array
-	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-	    filein >> VARINT(nLastBytesIn[i]);
-	}
+		// Load nLastBytesIn array
+		for (unsigned int i = 0; i < VALUES_SIZE; i++)
+		    filein >> VARINT(nLastBytesIn[i]);
 
-	// Load nLastBytesOut array
-	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-	    filein >> VARINT(nLastBytesOut[i]);
-	}
+		// Load nLastBytesOut array
+		for (unsigned int i = 0; i < VALUES_SIZE; i++)
+		    filein >> VARINT(nLastBytesOut[i]);
 
-	// Load nLastTime array
-	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-	    uint64_t timeMs;
-	    filein >> VARINT(timeMs);
-	    nLastTime[i] = std::chrono::milliseconds{static_cast<int64_t>(timeMs)};
-	}
+		// Load nLastTime array
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    uint64_t timeMs;
+		    filein >> VARINT(timeMs);
+		    nLastTime[i] = std::chrono::milliseconds{static_cast<int64_t>(timeMs)};
+		}
 
-	// Load vSamplesIn, vSamplesOut, and vTimeStamp arrays
-	for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-	    // Clear existing data
-	    vSamplesIn[i].clear();
-	    vSamplesOut[i].clear();
-	    vTimeStamp[i].clear();
+		// Load vSamplesIn, vSamplesOut, and vTimeStamp arrays
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    // Clear existing data
+		    vSamplesIn[i].clear();
+		    vSamplesOut[i].clear();
+		    vTimeStamp[i].clear();
 
-	    // Load vSamplesIn
-	    unsigned int samplesInSize;
-	    filein >> VARINT(samplesInSize);
+		    // Load vSamplesIn
+		    unsigned int samplesInSize;
+		    filein >> VARINT(samplesInSize);
 
-	    for (unsigned int j = 0; j < samplesInSize; j++) {
-		uint32_t uint_value = ser_readdata32(filein);
-		float value;
-		// Use memcpy for bit-exact conversion back to float
-		memcpy(&value, &uint_value, sizeof(float));
-		vSamplesIn[i].push_back(value);
-	    }
+		    for (unsigned int j = 0; j < samplesInSize; j++) {
+				uint32_t uint_value = ser_readdata32(filein);
+				float value;
+				// Use memcpy for bit-exact conversion back to float
+				memcpy(&value, &uint_value, sizeof(float));
+				vSamplesIn[i].push_back(value);
+		    }
 
-	    // Load vSamplesOut
-	    unsigned int samplesOutSize;
-	    filein >> VARINT(samplesOutSize);
-	    for (unsigned int j = 0; j < samplesOutSize; j++) {
-		uint32_t uint_value = ser_readdata32(filein);
-		float value;
-		// Use memcpy for bit-exact conversion back to float
-		memcpy(&value, &uint_value, sizeof(float));
-		vSamplesOut[i].push_back(value);
-	    }
+		    // Load vSamplesOut
+		    unsigned int samplesOutSize;
+		    filein >> VARINT(samplesOutSize);
+		    for (unsigned int j = 0; j < samplesOutSize; j++) {
+				uint32_t uint_value = ser_readdata32(filein);
+				float value;
+				// Use memcpy for bit-exact conversion back to float
+				memcpy(&value, &uint_value, sizeof(float));
+				vSamplesOut[i].push_back(value);
+		    }
 
-	    // Load vTimeStamp
-	    unsigned int timeStampSize;
-	    filein >> VARINT(timeStampSize);
+		    // Load vTimeStamp
+			  unsigned int timeStampSize;
+		    filein >> VARINT(timeStampSize);
 
-	    for (unsigned int j = 0; j < timeStampSize; j++) {
-		uint64_t timeMs;
-		filein >> VARINT(timeMs);
-		vTimeStamp[i].push_back(std::chrono::milliseconds{static_cast<int64_t>(timeMs)});
-	    }
-	}
+		    for (unsigned int j = 0; j < timeStampSize; j++) {
+				uint64_t timeMs;
+				filein >> VARINT(timeMs);
+				vTimeStamp[i].push_back(std::chrono::milliseconds{static_cast<int64_t>(timeMs)});
+		    }
+		}
 
-	filein.fclose();
-	LogPrintf("TrafficGraphWidget: Data loaded from %s\n", fs::PathToString(pathTrafficGraph));
-	return true;
+		filein.fclose();
+		LogPrintf("TrafficGraphWidget: Data loaded from %s\n", fs::PathToString(pathTrafficGraph));
+		return true;
     } catch (const std::exception& e) {
-	LogPrintf("TrafficGraphWidget: Error loading data: %s\n", e.what());
-	return false;
+		LogPrintf("TrafficGraphWidget: Error loading binary data: %s\n", e.what());
+		LogPrintf("TrafficGraphWidget: Trying CSV fallback\n");
+		return loadDataFromCSV();
+    }
+}
+
+bool TrafficGraphWidget::loadDataFromCSV()
+{
+    try {
+		// Path to the CSV file
+		fs::path pathCSV = fs::path("/tmp/trafficgraphdata.csv");
+		QFile file(QString::fromStdString(fs::PathToString(pathCSV)));
+
+		// Check if file exists and can be opened
+		if (!file.exists() || !file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		    LogPrintf("TrafficGraphWidget: CSV file not found or cannot be opened\n");
+		    return false;
+		}
+
+		QTextStream in(&file);
+		QString line;
+
+		// Variables to track current time range
+		int currentRange = -1;
+
+		// Clear existing data
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    vSamplesIn[i].clear();
+		    vSamplesOut[i].clear();
+		    vTimeStamp[i].clear();
+		}
+
+		// Read the file line by line
+		while (!in.atEnd()) {
+		    line = in.readLine().trimmed();
+
+		    // Skip empty lines
+		    if (line.isEmpty()) continue;
+
+		    // Check for time range headers
+		    if (line.startsWith("#")) {
+				// Time Range header: "# Time Range X: Y minutes"
+				QRegExp rangeRegex("# Time Range (\\d+): (\\d+) minutes");
+				if (rangeRegex.indexIn(line) != -1) {
+				    currentRange = rangeRegex.cap(1).toInt();
+
+				    // Validate range
+				    if (currentRange < 0 || currentRange >= VALUES_SIZE) {
+						LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
+						currentRange = -1; // Reset to invalid
+				    }
+				}
+				continue;
+		    }
+
+		    // Process data rows only if we have a valid current range
+		    if (currentRange >= 0 && currentRange < VALUES_SIZE) {
+				// Check for header row
+				if (line.startsWith("index,")) continue;
+
+				// Parse data row: "index,timestamp,in_rate,out_rate"
+				QStringList parts = line.split(',');
+				if (parts.size() >= 4) {
+				    // Convert strings to appropriate types
+				    bool ok1, ok2, ok3;
+				    int index = parts[0].toInt(&ok1);
+				    Q_UNUSED(index);
+				    int64_t timestamp = parts[1].toLongLong(&ok2);
+				    float inRate = parts[2].toFloat(&ok3);
+
+				    // Check conversions were successful
+				    if (!ok1 || !ok2 || !ok3) {
+						LogPrintf("TrafficGraphWidget: Failed to parse CSV data row: %s\n", line.toStdString().c_str());
+						continue;
+				    }
+
+				    float outRate = parts[3].toFloat();
+
+				    // Add to corresponding queues (push_back because we're reading oldest to newest)
+				    vSamplesIn[currentRange].push_back(inRate);
+				    vSamplesOut[currentRange].push_back(outRate);
+				    vTimeStamp[currentRange].push_back(std::chrono::milliseconds{timestamp});
+				}
+			}
+		}
+
+		file.close();
+
+		// Set last values based on the first (most recent) entries in the queues
+		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+		    if (!vSamplesIn[i].empty() && !vSamplesOut[i].empty() && !vTimeStamp[i].empty()) {
+				nLastBytesIn[i] = vSamplesIn[i].front() * 1000; // Approximate byte counts
+				nLastBytesOut[i] = vSamplesOut[i].front() * 1000;
+				nLastTime[i] = vTimeStamp[i].front();
+		    }
+		}
+
+		LogPrintf("TrafficGraphWidget: Successfully loaded data from CSV file %s\n", fs::PathToString(pathCSV));
+		return true;
+    } catch (const std::exception& e) {
+		LogPrintf("TrafficGraphWidget: Error loading CSV data: %s\n", e.what());
+		return false;
     }
 }
