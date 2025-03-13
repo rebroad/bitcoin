@@ -792,73 +792,70 @@ bool TrafficGraphWidget::loadDataFromCSV()
 
 	    // Process range headers
 	    if (line.startsWith("#") || line.startsWith("CSV DATA START")) {
-		QRegExp rangeRegex;
-		if (line.startsWith("#")) {
-		    // Time Range header: "# Time Range X: Y minutes"
-		    rangeRegex = QRegExp("# Time Range (\\d+): (\\d+) minutes");
-		} else {
-		    // CSV DATA START format
-		    rangeRegex = QRegExp("CSV DATA START - RANGE (\\d+)");
-		}
+			QRegExp rangeRegex;
+			if (line.startsWith("#")) {
+			    // Time Range header: "# Time Range X: Y minutes"
+			    rangeRegex = QRegExp("# Time Range (\\d+): (\\d+) minutes");
+			} else {
+			    // CSV DATA START format
+			    rangeRegex = QRegExp("CSV DATA START - RANGE (\\d+)");
+			}
 
-		if (rangeRegex.indexIn(line) != -1) {
-		    currentRange = rangeRegex.cap(1).toInt();
-		    // Validate range
-		    if (currentRange < 0 || currentRange >= VALUES_SIZE) {
-			LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
-			currentRange = -1; // Reset to invalid
-		    }
-		}
-		continue;
+			if (rangeRegex.indexIn(line) != -1) {
+			    currentRange = rangeRegex.cap(1).toInt();
+			    // Validate range
+			    if (currentRange < 0 || currentRange >= VALUES_SIZE) {
+					LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
+					currentRange = -1; // Reset to invalid
+			    }
+			}
+			continue;
 	    }
 
 	    // Skip CSV DATA END lines
-	    if (line.startsWith("CSV DATA END")) {
-		continue;
-	    }
+	    if (line.startsWith("CSV DATA END")) continue;
 
 	    // Skip header rows
 	    if (line.startsWith("index,")) continue;
 
 	    // Process data rows if we have a valid current range
 	    if (currentRange >= 0 && currentRange < VALUES_SIZE) {
-		// Parse data row: "index,timestamp,in_rate,out_rate"
-		QStringList parts = line.split(',');
-		if (parts.size() >= 4) {
-		    bool ok;
-		    int64_t timestamp = parts[1].toLongLong(&ok);
+			// Parse data row: "index,timestamp,in_rate,out_rate"
+			QStringList parts = line.split(',');
+			if (parts.size() >= 4) {
+			    bool ok;
+			    int64_t timestamp = parts[1].toLongLong(&ok);
 
-		    if (!ok) {
-			LogPrintf("TrafficGraphWidget: Failed to parse timestamp: %s\n", parts[1].toStdString().c_str());
-			continue;
-		    }
+			    if (!ok) {
+					LogPrintf("TrafficGraphWidget: Failed to parse timestamp: %s\n", parts[1].toStdString().c_str());
+					continue;
+			    }
 
-		    // Count samples in the largest range (28 days)
-		    if (currentRange == largestRangeIndex) {
-			sampleCount++;
-		    }
+			    // Count samples in the largest range (28 days)
+				// TODO better to use the first range it finds that is not full. If all full, then it's 28 days.
+			    if (currentRange == largestRangeIndex) sampleCount++;
 
-		    // Validate timestamps
-		    // 1. Check for future timestamps
-		    if (timestamp > currentTime * 1000) {
-			LogPrintf("TrafficGraphWidget: Found future timestamp %lld (current time: %lld)\n", timestamp/1000, currentTime);
-			timestampsValid = false;
-		    }
+			    // Validate timestamps
+			    // 1. Check for future timestamps
+			    if (timestamp > currentTime * 1000) {
+					LogPrintf("TrafficGraphWidget: Found future timestamp %lld (current time: %lld)\n", timestamp/1000, currentTime);
+					timestampsValid = false;
+			    }
 
-		    // 2. Check for extremely old timestamps (more than a year old)
-		    if (timestamp/1000 < oldestAllowedTime) {
-			LogPrintf("TrafficGraphWidget: Found too old timestamp %lld (oldest allowed: %lld)\n", timestamp/1000, oldestAllowedTime);
-			timestampsValid = false;
-		    }
+			    // 2. Check for extremely old timestamps (more than a year old)
+			    if (timestamp/1000 < oldestAllowedTime) {
+					LogPrintf("TrafficGraphWidget: Found too old timestamp %lld (oldest allowed: %lld)\n", timestamp/1000, oldestAllowedTime);
+					timestampsValid = false;
+			    }
 
-		    // 3. Check for non-linear sequence (timestamps should be in descending order as we read the file)
-		    if (lastValidTimestamp > 0 && lastValidTimestamp <= timestamp) {
-			LogPrintf("TrafficGraphWidget: Found non-linear timestamp sequence: %lld after %lld\n", timestamp/1000, lastValidTimestamp/1000);
-			timestampsValid = false;
-		    }
+			    // 3. Check for non-linear sequence (timestamps should be in descending order as we read the file)
+			    if (lastValidTimestamp > 0 && lastValidTimestamp <= timestamp) {
+					LogPrintf("TrafficGraphWidget: Found non-linear timestamp sequence: %lld after %lld\n", timestamp/1000, lastValidTimestamp/1000);
+					timestampsValid = false;
+			    }
 
-		    lastValidTimestamp = timestamp;
-		}
+			    lastValidTimestamp = timestamp;
+			}
 	    }
 	}
 
