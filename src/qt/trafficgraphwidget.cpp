@@ -66,7 +66,14 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
 		}
 	}
     // Load saved traffic data if available and the arrays are empty
-    if (model && vSamplesIn[0].empty() && vSamplesOut[0].empty()) {
+    if (model) {
+		LogPrintf("vSamplesIn[0].empty()=%d\n", vSamplesIn[0].empty());
+        // Clear any existing data to ensure new data is loaded
+        for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+            vSamplesIn[i].clear();
+            vSamplesOut[i].clear();
+            vTimeStamp[i].clear();
+        }
 		loadData();
     }
 }
@@ -647,8 +654,7 @@ void TrafficGraphWidget::saveData()
     }
 }
 
-bool TrafficGraphWidget::loadData()
-{
+bool TrafficGraphWidget::loadData() {
     LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
     try {
 		fs::path pathTrafficGraph = fs::path("/tmp/trafficgraphdata");
@@ -657,7 +663,8 @@ bool TrafficGraphWidget::loadData()
 		if (!file) {
 		    LogPrintf("TrafficGraphWidget: Binary data file not found, attempting to load from CSV\n");
 		    return loadDataFromCSV();
-		}
+		} else
+		    LogPrintf("TrafficGraphWidget: Binary data file found, attempting to load from it\n");
 
 		CAutoFile filein(file, SER_DISK, CLIENT_VERSION);
 		if (filein.IsNull()) return false;
