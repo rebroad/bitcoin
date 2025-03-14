@@ -134,8 +134,10 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 
 		// Final lineTo - check that x is valid and that we have at least one valid point
 		if (pathHasValidPoints) {
-			// Add a line down to the bottom of the graph to complete the filled area properly
+			// Add a line down to the bottom of the graph
 			path.lineTo(lastValidX, YMARGIN + h);
+			// Add a horizontal line back to the starting point to properly close the shape
+			path.lineTo(XMARGIN + w, YMARGIN + h);
 		}
 	}
 }

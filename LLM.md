@@ -70,7 +70,12 @@
     - Changed to `for (int i = 0; i < sampleCount; ++i)` to maintain proper bounds checking
     - Verified the fix prevents out-of-bounds access while preserving desired functionality
   - This fix resolves a critical stability issue that was causing the Bitcoin-Qt application to crash when viewing the network traffic graph
-
+- **Task**: Fix visual artifact in TrafficGraphWidget showing diagonal lines
+  - ✅ Identified visual issue where diagonal lines appeared on the graph from the last data point to the bottom left corner
+  - ✅ Fixed by properly closing the path shape in the paintPath function:
+    - Added horizontal line back to the starting point after drawing the vertical line to the bottom
+    - Ensured the graph area is properly filled without unintended diagonal artifacts
+  - This improvement enhances the visual appearance of the network traffic graph, providing a cleaner and more accurate representation of network activity
 ---
 *This file will be updated with additional preferences as they are identified.*
 
