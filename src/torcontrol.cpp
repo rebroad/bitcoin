@@ -18,6 +18,7 @@
 #include <util/system.h>
 #include <util/thread.h>
 #include <util/time.h>
+#include <shutdown.h>
 
 #include <deque>
 #include <boost/algorithm/string.hpp>
@@ -877,6 +878,14 @@ bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generate
     int64_t last_progress_time = start_time;
     std::string last_non_matching_address;
 
+    // Track statistics on partial matches
+    // Index is the number of matching characters, value is the count of addresses with that many matches
+    std::vector<int> match_stats(prefix.size() + 1, 0);
+
+    // Track the best match so far and its address
+    size_t best_match_length = 0;
+    std::string best_match_address;
+
     // Continue generation until a matching key is found - no maximum limit
     while (true) {
         // Generate random private key
@@ -895,26 +904,61 @@ bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generate
         std::string simulated_address = hash.ToString().substr(0, 16);
         last_non_matching_address = simulated_address;
 
-        // Check if this key produces an address with the desired prefix
-        if (simulated_address.substr(0, prefix.size()) == prefix) {
-            int64_t elapsed_ms = GetTimeMillis() - start_time;
-            LogPrintf("tor: Found matching vanity address after %d attempts (%.2f seconds)\n",
-                     attempts + 1, elapsed_ms/1000.0);
-            generated_private_key = key;
-            return true;
+        // Calculate how many characters match with the prefix
+        size_t match_length = 0;
+        while (match_length < prefix.size() && match_length < simulated_address.size() &&
+               simulated_address[match_length] == prefix[match_length]) {
+            match_length++;
+        }
+
+        // Update match statistics
+        match_stats[match_length]++;
+
+        // Update best match if this one is better
+        if (match_length > best_match_length) {
+            best_match_length = match_length;
+            best_match_address = simulated_address;
         }
 
         attempts++;
+
+        // Check if this key produces an address with the desired prefix
+        if (match_length == prefix.size()) {
+            int64_t elapsed_ms = GetTimeMillis() - start_time;
+            LogPrintf("tor: Found matching vanity address after %s attempts (%.2f seconds)\n",
+                     strUnit(attempts, ""), elapsed_ms/1000.0);
+            generated_private_key = key;
+            return true;
+        }
 
         // Report progress every 5 seconds
         int64_t current_time = GetTimeMillis();
         if (current_time - last_progress_time > 5000) { // 5 seconds in milliseconds
             int64_t elapsed_ms = current_time - start_time;
             double attempts_per_second = attempts * 1000.0 / elapsed_ms;
-            LogPrintf("tor: Still searching for vanity address, %d attempts so far (%.2f attempts/sec)\n"
-                     "     Last non-matching address: %s...\n",
-                     attempts, attempts_per_second, last_non_matching_address);
+
+            // Build the statistics string for partial matches
+            std::string match_stats_str;
+            for (size_t i = 1; i <= best_match_length; i++) {
+                if (i > 1) match_stats_str += ", ";
+                match_stats_str += strprintf("%d char%s: %d", i, i == 1 ? "" : "s", match_stats[i]);
+            }
+
+            LogPrintf("tor: Vanity address search progress: %s attempts (%.2f attempts/sec)\n"
+                      "     Partial matches: %s\n"
+                      "     Best match so far: %s (%d/%d chars matched)\n"
+                      "     Last address: %s\n",
+                      strUnit(attempts, ""), attempts_per_second,
+                      match_stats_str.empty() ? "none yet" : match_stats_str,
+                      best_match_address, best_match_length, prefix.size(),
+                      last_non_matching_address);
             last_progress_time = current_time;
+        }
+
+        // Check for shutdown request
+        if (ShutdownRequested()) {
+            LogPrintf("tor: Vanity address generation interrupted due to node shutdown\n");
+            return false;
         }
     }
 
