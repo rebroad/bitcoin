@@ -1,3 +1,5 @@
+In torcontrol.cpp, why is there duplicated code between add_onion_cb() and auth_cb() ? Also, get rid of fallback - failure is not an option!
+
 Should start accepting TXs into mempool once "estimated time left until synced" drops below 30 minutes.
 
 If bps% below zero, show first decimal point
