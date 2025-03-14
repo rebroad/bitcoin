@@ -429,8 +429,7 @@ void TrafficGraphWidget::updateStuff()
 		update();
 }
 
-void TrafficGraphWidget::updateRates(int i)
-{
+void TrafficGraphWidget::updateRates(int i) {
 	std::chrono::milliseconds nTime{GetTimeMillis()};
 	quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
 			bytesOut = clientModel->node().getTotalBytesSent();
@@ -462,8 +461,7 @@ void TrafficGraphWidget::updateRates(int i)
 	}
 }
 
-std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
-{
+std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
 	// value is the array marker plus 1 (as zero is reserved for bumping up)
 	if (!value) { // bump
 		m_bump_value = false;
@@ -504,27 +502,6 @@ void TrafficGraphWidget::exportData()
 		valuesArray.append(QJsonValue(static_cast<int>(values[i])));
 	}
 	jsonObj["values"] = valuesArray;
-
-	// Add nLastBytesIn array
-	QJsonArray lastBytesInArray;
-	for (int i = 0; i < VALUES_SIZE; i++) {
-		lastBytesInArray.append(QJsonValue(QString::number(nLastBytesIn[i])));
-	}
-	jsonObj["nLastBytesIn"] = lastBytesInArray;
-
-	// Add nLastBytesOut array
-	QJsonArray lastBytesOutArray;
-	for (int i = 0; i < VALUES_SIZE; i++) {
-		lastBytesOutArray.append(QJsonValue(QString::number(nLastBytesOut[i])));
-	}
-	jsonObj["nLastBytesOut"] = lastBytesOutArray;
-
-	// Add nLastTime array
-	QJsonArray lastTimeArray;
-	for (int i = 0; i < VALUES_SIZE; i++) {
-		lastTimeArray.append(QJsonValue(QString::number(nLastTime[i].count())));
-	}
-	jsonObj["nLastTime"] = lastTimeArray;
 
 	// Add vSamplesIn, vSamplesOut, and vTimeStamp arrays
 	QJsonArray samplesInArray;
@@ -595,22 +572,6 @@ void TrafficGraphWidget::saveData()
 				// Version
 				fileout << static_cast<int>(1);
 
-				// Save values array
-				for (unsigned int i = 0; i < VALUES_SIZE; i++)
-				    fileout << VARINT(static_cast<uint32_t>(values[i]));
-
-				// Save nLastBytesIn array - TODO needed?
-				for (unsigned int i = 0; i < VALUES_SIZE; i++)
-					fileout << VARINT(nLastBytesIn[i]);
-
-				// Save nLastBytesOut array - TODO needed?
-				for (unsigned int i = 0; i < VALUES_SIZE; i++)
-				    fileout << VARINT(nLastBytesOut[i]);
-
-				// Save nLastTime array - TODO needed (derived)?
-				for (unsigned int i = 0; i < VALUES_SIZE; i++)
-				    fileout << VARINT(static_cast<uint64_t>(nLastTime[i].count()));
-
 				// Save vSamplesIn, vSamplesOut, and vTimeStamp arrays
 				for (unsigned int i = 0; i < VALUES_SIZE; i++) {
 				    // Save size of each queue
@@ -673,28 +634,6 @@ bool TrafficGraphWidget::loadData() {
 		int version;
 		filein >> version;
 		if (version != 1) return false;
-
-		// We don't load the values array as it's initialized in the header
-		// Skip values
-		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-		    uint32_t dummy;
-		    filein >> VARINT(dummy);
-		}
-
-		// Load nLastBytesIn array
-		for (unsigned int i = 0; i < VALUES_SIZE; i++)
-		    filein >> VARINT(nLastBytesIn[i]);
-
-		// Load nLastBytesOut array
-		for (unsigned int i = 0; i < VALUES_SIZE; i++)
-		    filein >> VARINT(nLastBytesOut[i]);
-
-		// Load nLastTime array
-		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-		    uint64_t timeMs;
-		    filein >> VARINT(timeMs);
-		    nLastTime[i] = std::chrono::milliseconds{static_cast<int64_t>(timeMs)};
-		}
 
 		// Load vSamplesIn, vSamplesOut, and vTimeStamp arrays
 		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
