@@ -49,7 +49,9 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 
 TrafficGraphWidget::~TrafficGraphWidget()
 {
-    saveData();
+    if (clientModel != nullptr) {
+        saveData();
+    }
 }
 
 void TrafficGraphWidget::setClientModel(ClientModel *model) {
@@ -587,7 +589,7 @@ void TrafficGraphWidget::saveData()
     if (!clientModel) return;
 
     try {
-	fs::path pathTrafficGraph = fs::path("/tmp/trafficgraphdata");
+	fs::path pathTrafficGraph = fs::path(clientModel->dataDir().toStdString().c_str()) / "trafficgraphdata";
 	FILE* file = fsbridge::fopen(pathTrafficGraph, "wb");
 	if (file) {
 	    CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
@@ -659,9 +661,10 @@ void TrafficGraphWidget::saveData()
 }
 
 bool TrafficGraphWidget::loadData() {
+    if (!clientModel) return false;
     LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
     try {
-		fs::path pathTrafficGraph = fs::path("/tmp/trafficgraphdata");
+		fs::path pathTrafficGraph = fs::path(clientModel->dataDir().toStdString().c_str()) / "trafficgraphdata";
 		FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
 
 		if (!file) {
@@ -753,10 +756,11 @@ bool TrafficGraphWidget::loadData() {
 
 bool TrafficGraphWidget::loadDataFromCSV()
 {
-    LogPrintf("TrafficGraphWidget: Attempting to load data from CSV at /tmp/trafficgraphdata.csv\n");
+    if (!clientModel) return false;
+    LogPrintf("TrafficGraphWidget: Attempting to load data from CSV in the data directory\n");
     try {
 		// Path to the CSV file
-		fs::path pathCSV = fs::path("/tmp/trafficgraphdata.csv");
+		fs::path pathCSV = fs::path(clientModel->dataDir().toStdString().c_str()) / "trafficgraphdata.csv";
 		QFile file(QString::fromStdString(fs::PathToString(pathCSV)));
 
 		// Check if file exists and can be opened

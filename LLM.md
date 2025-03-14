@@ -50,6 +50,17 @@
     - Avoids generating timestamps during inactive periods (gaps of 30+ minutes)
   - This enhancement ensures the traffic graph displays accurate time-series data even when CSV files contain corrupted timestamps, improving visualization reliability without manual intervention
 
+## Traffic Graph Data Persistence
+- **Task**: Update TrafficGraphWidget to properly persist network traffic data across application restarts
+  - ✅ Modified data storage location from temporary directory to application data directory:
+    - Changed hard-coded `/tmp/trafficgraphdata` paths to use `clientModel->dataDir()`
+    - Updated both binary and CSV data file paths for consistency
+  - ✅ Added robust null pointer protection:
+    - Added checks in TrafficGraphWidget destructor to verify clientModel exists before calling saveData()
+    - Added similar null checks in loadData() and loadDataFromCSV() methods
+    - Updated log messages to accurately reflect new file locations
+  - These changes ensure network traffic history persists across application restarts and system reboots, preventing data loss and providing users with continuous historical network usage visualization
+
 ---
 *This file will be updated with additional preferences as they are identified.*
 
