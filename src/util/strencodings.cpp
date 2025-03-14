@@ -368,7 +368,7 @@ std::string FormatParagraph(const std::string& in, size_t width, size_t indent)
     return out.str();
 }
 
-std::string strUnit(float value, int dp = 3) {
+std::string strUnit(float value, int dp) {
     std::string letter;
     if (value < 1'000) {
         ;
