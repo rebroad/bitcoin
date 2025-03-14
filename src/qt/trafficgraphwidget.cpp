@@ -358,7 +358,7 @@ void TrafficGraphWidget::updateStuff() {
 
 	bool fUpdate = false;
 	for (int i = 0; i < VALUES_SIZE; i++) {
-		uint64_t msecs_per_sample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
+		uint64_t msecs_per_sample = uint64_t(values[i]) * uint64_t(60000) / DESIRED_SAMPLES;
 		if (nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // TODO - we deduct nInterval/2 to avoid creep (due to delays in the algorithm, but is there a better way?)
 			updateRates(i);
 			if (i == m_value) {
@@ -416,15 +416,18 @@ void TrafficGraphWidget::updateRates(int i) {
 	std::chrono::milliseconds nTime{GetTimeMillis()};
 	quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
 			bytesOut = clientModel->node().getTotalBytesSent();
-	int nRealInterval = (nTime - nLastTime[i]).count();
+	int64_t nRealInterval = ((int64_t)nTime - (int64_t)nLastTime[i]).count();
 	static int nDebugI = 0;
 	if (i > nDebugI) nDebugI = i;
-	if (nDebugI == i && nRealInterval >= 0)
-		LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
-	float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
-	float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
-	vSamplesIn[i].push_front(in_rate_kilobytes_per_sec);
-	vSamplesOut[i].push_front(out_rate_kilobytes_per_sec);
+	float in_rate_kilobytes_per_sec = 0, out_rate_kilobytes_per_sec = 0;
+	if (nRealInterval >= 0) {
+	    if (nDebugI == i)
+		    LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
+	    in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
+	    out_rate_kilobytes_per_msec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
+	}
+	vSamplesIn[i].push_front(in_rate_kilobytes_per_msec);
+	vSamplesOut[i].push_front(out_rate_kilobytes_per_msec);
 	vTimeStamp[i].push_front(nTime);
 	nLastTime[i] = nTime;
 	nLastBytesIn[i] = bytesIn;
@@ -436,14 +439,13 @@ void TrafficGraphWidget::updateRates(int i) {
 	    m_value == i && i < VALUES_SIZE - 1) {
 		m_bump_value = true;
 		LogPrintf("%s: Setting m_bump_value=true for range %d at size %d\n", __func__, i, vTimeStamp[i].size());
-		fFull[i] = 1;  // Mark this range as full immediately
 	} else if (fFull[i]<=0 && vTimeStamp[i].size()+5 > DESIRED_SAMPLES) {
 		if (fFull[i]<0)
 		    LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
 		fFull[i] = vTimeStamp[i].size() - DESIRED_SAMPLES-1;
 	}
 	while (vTimeStamp[i].size() > DESIRED_SAMPLES) {
-		if (!fFull[i]) fFull[i] = true;  // Make sure it's marked as full
+		fFull[i] = 1;
 		vSamplesIn[i].pop_back();
 		vSamplesOut[i].pop_back();
 		vTimeStamp[i].pop_back();
