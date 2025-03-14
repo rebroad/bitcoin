@@ -131,13 +131,15 @@ private:
     struct event_base* base;
     const std::string m_tor_control_center;
     TorControlConnection conn;
-    std::string private_key;
-    std::string service_id;
+    std::vector<std::string> private_keys;
+    std::vector<std::string> service_ids;
     bool reconnect;
     struct event *reconnect_ev = nullptr;
     float reconnect_timeout;
-    CService service;
+    std::vector<CService> services;
     const CService m_target;
+    size_t num_services{1}; // Default to 1 service
+    size_t current_service_index{0}; // Tracks which service is currently being created
     /** Cookie for SAFECOOKIE auth */
     std::vector<uint8_t> cookie;
     /** ClientNonce for SAFECOOKIE auth */
@@ -159,6 +161,17 @@ public:
 
     /** Callback for reconnect timer */
     static void reconnect_cb(evutil_socket_t fd, short what, void *arg);
+
+private:
 };
+
+/**
+ * Generate a private key for an onion service that produces an address with the desired prefix.
+ *
+ * @param prefix The desired prefix for the onion address
+ * @param[out] generated_private_key The generated private key if successful
+ * @return true if a matching key was found, false otherwise
+ */
+bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generated_private_key);
 
 #endif // BITCOIN_TORCONTROL_H

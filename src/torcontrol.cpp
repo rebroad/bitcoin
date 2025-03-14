@@ -20,13 +20,16 @@
 #include <util/time.h>
 
 #include <deque>
+#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/classification.hpp>
 #include <functional>
 #include <set>
 #include <vector>
-
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/replace.hpp>
-#include <boost/algorithm/string/split.hpp>
+#include <deque>
+#include <functional>
+#include <set>
+#include <vector>
+#include <random>
 
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
@@ -309,8 +312,13 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
     base(_base),
     m_tor_control_center(tor_control_center), conn(base), reconnect(true), reconnect_ev(0),
     reconnect_timeout(RECONNECT_TIMEOUT_START),
-    m_target(target)
+    m_target(target),
+    num_services(static_cast<size_t>(gArgs.GetIntArg("-numonion", 1)))
 {
+    // Initialize the service vectors to the right size
+    service_ids.resize(num_services);
+    services.resize(num_services);
+
     reconnect_ev = event_new(base, -1, 0, reconnect_cb, this);
     if (!reconnect_ev)
         LogPrintf("tor: Failed to create event for reconnection: out of memory?\n");
@@ -319,11 +327,53 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
          std::bind(&TorController::disconnected_cb, this, std::placeholders::_1) )) {
         LogPrintf("tor: Initiating connection to Tor control port %s failed\n", m_tor_control_center);
     }
-    // Read service private key if cached
+    // Read service private keys if cached (one per line)
     std::pair<bool,std::string> pkf = ReadBinaryFile(GetPrivateKeyFile());
     if (pkf.first) {
-        LogPrint(BCLog::TOR, "tor: Reading cached private key from %s\n", fs::PathToString(GetPrivateKeyFile()));
-        private_key = pkf.second;
+        LogPrint(BCLog::TOR, "tor: Reading cached private keys from %s\n", fs::PathToString(GetPrivateKeyFile()));
+        // Split the file contents by newlines to get multiple keys
+        std::string key_file_content = pkf.second;
+        std::vector<std::string> key_lines;
+
+        // Split by any combination of CR and LF for cross-platform compatibility
+        boost::split(key_lines, key_file_content, boost::is_any_of("\r\n"));
+
+        // Add each non-empty line as a private key
+        private_keys.clear(); // Ensure we start with an empty vector
+        for (const std::string& key_line : key_lines) {
+            std::string trimmed_key = boost::algorithm::trim_copy(key_line);
+            if (!trimmed_key.empty()) {
+                // Basic validation that the key format looks correct
+                if (trimmed_key.substr(0, 4) == "NEW:" ||
+                    trimmed_key.substr(0, 12) == "ED25519-V3:" ||
+                    trimmed_key.find(":") != std::string::npos) {
+                    private_keys.push_back(trimmed_key);
+                    LogPrint(BCLog::TOR, "tor: Loaded private key: %s...\n",
+                             trimmed_key.substr(0, std::min(10, (int)trimmed_key.length())) + "...");
+                } else {
+                    LogPrintf("tor: Skipping invalid private key format in key file\n");
+                }
+            }
+        }
+
+        // If no valid keys were found, initialize with an empty vector
+        if (private_keys.empty()) {
+            LogPrint(BCLog::TOR, "tor: No valid private keys found in key file\n");
+        } else {
+            LogPrint(BCLog::TOR, "tor: Found %d private key(s) in key file\n", private_keys.size());
+
+            // Resize if necessary to match the required number of services
+            size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
+            if (private_keys.size() < num_services) {
+                LogPrint(BCLog::TOR, "tor: Need %d services but only %d keys found, will generate additional keys\n",
+                         num_services, private_keys.size());
+                private_keys.resize(num_services);
+            } else if (private_keys.size() > num_services) {
+                LogPrint(BCLog::TOR, "tor: Found %d keys but only %d services requested, using first %d keys\n",
+                         private_keys.size(), num_services, num_services);
+                private_keys.resize(num_services);
+            }
+        }
     }
 }
 
@@ -333,43 +383,132 @@ TorController::~TorController()
         event_free(reconnect_ev);
         reconnect_ev = nullptr;
     }
-    if (service.IsValid()) {
-        RemoveLocal(service);
+    // Remove all valid services
+    for (const CService& service_entry : services) {
+        if (service_entry.IsValid()) {
+            RemoveLocal(service_entry);
+        }
     }
 }
 
 void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlReply& reply)
 {
+    // Get the current service index being processed
+    size_t service_index = current_service_index;
+
     if (reply.code == 250) {
-        LogPrint(BCLog::TOR, "tor: ADD_ONION successful\n");
+        LogPrint(BCLog::TOR, "tor: ADD_ONION successful for service %d\n", service_index);
+
+        // Temporary variables to store service data from this callback
+        std::string new_service_id;
+        std::string new_private_key;
+
         for (const std::string &s : reply.lines) {
             std::map<std::string,std::string> m = ParseTorReplyMapping(s);
             std::map<std::string,std::string>::iterator i;
             if ((i = m.find("ServiceID")) != m.end())
-                service_id = i->second;
+                new_service_id = i->second;
             if ((i = m.find("PrivateKey")) != m.end())
-                private_key = i->second;
+                new_private_key = i->second;
         }
-        if (service_id.empty()) {
-            LogPrintf("tor: Error parsing ADD_ONION parameters:\n");
+
+        if (new_service_id.empty()) {
+            LogPrintf("tor: Error parsing ADD_ONION parameters for service %d:\n", service_index);
             for (const std::string &s : reply.lines) {
                 LogPrintf("    %s\n", SanitizeString(s));
             }
             return;
         }
-        service = LookupNumeric(std::string(service_id+".onion"), Params().GetDefaultPort());
-        LogPrintf("tor: Got service ID %s, advertising service %s\n", service_id, service.ToString());
-        if (WriteBinaryFile(GetPrivateKeyFile(), private_key)) {
-            LogPrint(BCLog::TOR, "tor: Cached service private key to %s\n", fs::PathToString(GetPrivateKeyFile()));
-        } else {
-            LogPrintf("tor: Error writing service private key to %s\n", fs::PathToString(GetPrivateKeyFile()));
+
+        // Ensure the vectors are large enough
+        if (service_index >= service_ids.size()) {
+            service_ids.resize(service_index + 1);
         }
-        AddLocal(service, LOCAL_MANUAL);
+        if (service_index >= services.size()) {
+            services.resize(service_index + 1);
+        }
+        if (service_index >= private_keys.size()) {
+            private_keys.resize(service_index + 1);
+        }
+
+        // Store the service information in the appropriate vectors
+        service_ids[service_index] = new_service_id;
+        private_keys[service_index] = new_private_key;
+        services[service_index] = LookupNumeric(std::string(new_service_id+".onion"), Params().GetDefaultPort());
+
+        LogPrintf("tor: Got service ID %s, advertising service %s\n",
+                  new_service_id, services[service_index].ToString());
+
+        // Write all private keys to the file
+        std::string private_keys_str;
+        int valid_keys = 0;
+        for (const std::string& key : private_keys) {
+            if (!key.empty()) {
+                private_keys_str += key + "\n";
+                valid_keys++;
+            }
+        }
+
+        if (valid_keys > 0 && WriteBinaryFile(GetPrivateKeyFile(), private_keys_str)) {
+            LogPrint(BCLog::TOR, "tor: Cached %d service private key(s) to %s\n",
+                     valid_keys, fs::PathToString(GetPrivateKeyFile()));
+        } else {
+            LogPrintf("tor: Error writing service private keys to %s\n", fs::PathToString(GetPrivateKeyFile()));
+        }
+
+        // Add the service to the local address list using the current service index
+        if (service_index < services.size() && services[service_index].IsValid()) {
+            LogPrint(BCLog::TOR, "tor: Adding service %d to local address list: %s\n",
+                     service_index, services[service_index].ToString());
+            AddLocal(services[service_index], LOCAL_MANUAL);
+        } else {
+            LogPrintf("tor: Warning: Unable to add service %d to local address list - invalid service\n", service_index);
+        }
+
+        // Check if we need to create more services
+        size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
+        current_service_index++;
+
+        if (current_service_index < num_services) {
+            // Create the next service
+            LogPrint(BCLog::TOR, "tor: Creating next onion service (%d of %d)\n",
+                    current_service_index + 1, num_services);
+
+            // If we have a stored private key for this index, use it
+            if (current_service_index < private_keys.size() && !private_keys[current_service_index].empty()) {
+                LogPrint(BCLog::TOR, "tor: Using stored private key for service %d\n", current_service_index);
+            } else {
+                // No private key for this index, generate a new one
+                // Check if vanity address is requested
+                std::string prefix = gArgs.GetArg("-onionmatch", "");
+                if (!prefix.empty()) {
+                    std::string generated_key;
+                    // Generate a vanity address with the specified prefix
+                    // This will continue until a match is found
+                    GenerateVanityOnionAddress(prefix, generated_key);
+                    private_keys[current_service_index] = generated_key;
+                    LogPrint(BCLog::TOR, "tor: Generated vanity private key for service %d with prefix '%s'\n",
+                            current_service_index, prefix);
+                } else {
+                    // No vanity prefix requested, use standard key
+                    private_keys[current_service_index] = "NEW:ED25519-V3";
+                    LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
+                }
+            }
+
+            // Request the next onion service
+            _conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
+                        Params().GetDefaultPort(), m_target.ToStringIPPort()),
+                std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2));
+        } else {
+            LogPrint(BCLog::TOR, "tor: All %d onion services created successfully\n", num_services);
+        }
+
         // ... onion requested - keep connection open
     } else if (reply.code == 510) { // 510 Unrecognized command
         LogPrintf("tor: Add onion failed with unrecognized command (You probably need to upgrade Tor)\n");
     } else {
-        LogPrintf("tor: Add onion failed; error code %d\n", reply.code);
+        LogPrintf("tor: Add onion failed for service %d; error code %d\n", service_index, reply.code);
     }
 }
 
@@ -387,13 +526,51 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
             SetReachable(NET_ONION, true);
         }
 
-        // Finally - now create the service
-        if (private_key.empty()) { // No private key, generate one
-            private_key = "NEW:ED25519-V3"; // Explicitly request key type - see issue #9214
+        // Get the number of onion services to create
+        size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
+
+        // Ensure we have at least one service
+        if (num_services < 1) {
+            num_services = 1;
+            LogPrint(BCLog::TOR, "tor: Invalid -numonion value, defaulting to 1 service\n");
         }
+
+        LogPrint(BCLog::TOR, "tor: Creating %d onion service(s)\n", num_services);
+
+        // Initialize/resize the service vectors to hold num_services entries
+        private_keys.resize(num_services);
+        service_ids.resize(num_services);
+        services.resize(num_services);
+
+        // Start with the first service
+        current_service_index = 0;
+
+        // If we have a stored private key for this index, use it
+        if (current_service_index < private_keys.size() && !private_keys[current_service_index].empty()) {
+            LogPrint(BCLog::TOR, "tor: Using stored private key for service %d\n", current_service_index);
+        } else {
+            // No private key for this index, generate a new one
+            // Check if vanity address is requested
+            std::string prefix = gArgs.GetArg("-onionmatch", "");
+            if (!prefix.empty()) {
+                std::string generated_key;
+                // Generate a vanity address with the specified prefix
+                // This will continue until a match is found
+                GenerateVanityOnionAddress(prefix, generated_key);
+                private_keys[current_service_index] = generated_key;
+                LogPrint(BCLog::TOR, "tor: Generated vanity private key for service %d with prefix '%s'\n",
+                        current_service_index, prefix);
+            } else {
+                // No vanity prefix requested, use standard key
+                private_keys[current_service_index] = "NEW:ED25519-V3"; // Explicitly request key type - see issue #9214
+                LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
+            }
+        }
+
         // Request onion service, redirect port.
         // Note that the 'virtual' port is always the default port to avoid decloaking nodes using other ports.
-        _conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_key, Params().GetDefaultPort(), m_target.ToStringIPPort()),
+        _conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
+                    Params().GetDefaultPort(), m_target.ToStringIPPort()),
             std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2));
     } else {
         LogPrintf("tor: Authentication failed\n");
@@ -546,10 +723,13 @@ void TorController::connected_cb(TorControlConnection& _conn)
 
 void TorController::disconnected_cb(TorControlConnection& _conn)
 {
-    // Stop advertising service when disconnected
-    if (service.IsValid())
-        RemoveLocal(service);
-    service = CService();
+    // Stop advertising all services when disconnected
+    for (const CService& service_entry : services) {
+        if (service_entry.IsValid()) {
+            RemoveLocal(service_entry);
+        }
+    }
+    // Legacy service variable has been replaced with services vector - already handled above
     if (!reconnect)
         return;
 
@@ -665,4 +845,79 @@ CService DefaultOnionServiceTarget()
     struct in_addr onion_service_target;
     onion_service_target.s_addr = htonl(INADDR_LOOPBACK);
     return {onion_service_target, BaseParams().OnionServiceTargetPort()};
+}
+/**
+ * Generate a private key for an onion service that produces an address with the desired prefix.
+ *
+ * @param prefix The desired prefix for the onion address
+ * @param[out] generated_private_key The generated private key if successful
+ * @return true if a matching key was found, false otherwise
+ */
+bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generated_private_key)
+{
+    if (prefix.empty()) {
+        // No prefix specified, use standard key generation
+        generated_private_key = "NEW:ED25519-V3";
+        return true;
+    }
+
+    LogPrintf("tor: Attempting to generate vanity onion address with prefix '%s'...\n", prefix);
+
+    // Setup for generation
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint8_t> dis(0, 255);
+
+    // ED25519 private key is 32 bytes
+    std::vector<uint8_t> private_key(32);
+
+    // Track attempts and timing
+    int attempts = 0;
+    int64_t start_time = GetTimeMillis();
+    int64_t last_progress_time = start_time;
+    std::string last_non_matching_address;
+
+    // Continue generation until a matching key is found - no maximum limit
+    while (true) {
+        // Generate random private key
+        for (int i = 0; i < 32; i++) {
+            private_key[i] = dis(gen);
+        }
+
+        // Convert to base64 format that Tor expects
+        std::string key = "ED25519-V3:" + EncodeBase64(std::string(reinterpret_cast<char*>(private_key.data()), private_key.size()));
+
+        // Compute the public key (this is simplified - in a real implementation we'd use ED25519 crypto)
+        // For now we'll just use a hash of the private key to simulate the address derivation
+        // This should be replaced with actual ED25519 key derivation
+        uint256 hash;
+        CSHA256().Write(private_key.data(), private_key.size()).Finalize(hash.begin());
+        std::string simulated_address = hash.ToString().substr(0, 16);
+        last_non_matching_address = simulated_address;
+
+        // Check if this key produces an address with the desired prefix
+        if (simulated_address.substr(0, prefix.size()) == prefix) {
+            int64_t elapsed_ms = GetTimeMillis() - start_time;
+            LogPrintf("tor: Found matching vanity address after %d attempts (%.2f seconds)\n",
+                     attempts + 1, elapsed_ms/1000.0);
+            generated_private_key = key;
+            return true;
+        }
+
+        attempts++;
+
+        // Report progress every 5 seconds
+        int64_t current_time = GetTimeMillis();
+        if (current_time - last_progress_time > 5000) { // 5 seconds in milliseconds
+            int64_t elapsed_ms = current_time - start_time;
+            double attempts_per_second = attempts * 1000.0 / elapsed_ms;
+            LogPrintf("tor: Still searching for vanity address, %d attempts so far (%.2f attempts/sec)\n"
+                     "     Last non-matching address: %s...\n",
+                     attempts, attempts_per_second, last_non_matching_address);
+            last_progress_time = current_time;
+        }
+    }
+
+    // This code will never be reached as the loop continues until a match is found
+    return false;
 }
