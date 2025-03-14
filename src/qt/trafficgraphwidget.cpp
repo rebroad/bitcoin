@@ -432,7 +432,7 @@ void TrafficGraphWidget::updateRates(int i) {
 	static int8_t fFull[VALUES_SIZE] = {0};
 	// Only trigger "Bump it up!" when we're about to exceed DESIRED_SAMPLES for the first time
 	// Check this condition once before entering the trimming loop
-	if (fFull[i]<=0 && vTimeStamp[i].size() > DESIRED_SAMPLES && ttpoint < 0 &&
+	if (fFull[i]<0 && vTimeStamp[i].size() > DESIRED_SAMPLES && ttpoint < 0 &&
 	    m_value == i && i < VALUES_SIZE - 1) {
 		m_bump_value = true;
 		LogPrintf("%s: Setting m_bump_value=true for range %d at size %d\n", __func__, i, vTimeStamp[i].size());
