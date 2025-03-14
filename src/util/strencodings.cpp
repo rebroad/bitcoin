@@ -382,12 +382,12 @@ std::string strUnit(float value, int dp) {
         letter = "G";
         value /= 1'000'000'000;
     }
-    if (value < 1) return strprintf(strprintf("%%.%df%s%", dp, letter), value);
-    if (value < 10) return strprintf(strprintf("%%.%df%s%", std::max(dp - 1, 0), letter), value);
-    if (value < 100) return strprintf(strprintf("%%.%df%s%", std::max(dp - 2, 0), letter), value);
-    if (value < 1'000) return strprintf(strprintf("%%.%df%s%", std::max(dp - 3, 0), letter), value);
+    if (value < 1) return strprintf(strprintf("%%.%df%s", dp, letter), value);
+    if (value < 10) return strprintf(strprintf("%%.%df%s", std::max(dp - 1, 0), letter), value);
+    if (value < 100) return strprintf(strprintf("%%.%df%s", std::max(dp - 2, 0), letter), value);
+    if (value < 1'000) return strprintf(strprintf("%%.%df%s", std::max(dp - 3, 0), letter), value);
 
-    return strprintf(strprintf("%%.%df%s%", std::max(dp - 4, 0),  letter), value);
+    return strprintf(strprintf("%%.%df%s", std::max(dp - 4, 0),  letter), value);
 }
 
 std::string strAge(const int64_t nAge) {

@@ -419,7 +419,7 @@ void TrafficGraphWidget::updateRates(int i) {
 	int nRealInterval = (nTime - nLastTime[i]).count();
 	static int nDebugI = 0;
 	if (i > nDebugI) nDebugI = i;
-	if (nDebugI == i)
+	if (nDebugI == i && nRealInterval >= 0)
 		LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
 	float in_rate_kilobytes_per_sec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
 	float out_rate_kilobytes_per_sec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
@@ -429,16 +429,19 @@ void TrafficGraphWidget::updateRates(int i) {
 	nLastTime[i] = nTime;
 	nLastBytesIn[i] = bytesIn;
 	nLastBytesOut[i] = bytesOut;
-	static bool fFull[VALUES_SIZE];
+	static int8_t fFull[VALUES_SIZE] = {0};
 	// Only trigger "Bump it up!" when we're about to exceed DESIRED_SAMPLES for the first time
 	// Check this condition once before entering the trimming loop
-	if (!fFull[i] && vTimeStamp[i].size() > DESIRED_SAMPLES && ttpoint < 0 &&
+	if (fFull[i]<=0 && vTimeStamp[i].size() > DESIRED_SAMPLES && ttpoint < 0 &&
 	    m_value == i && i < VALUES_SIZE - 1) {
 		m_bump_value = true;
 		LogPrintf("%s: Setting m_bump_value=true for range %d at size %d\n", __func__, i, vTimeStamp[i].size());
-		fFull[i] = true;  // Mark this range as full immediately
-	} else if (!fFull[i] && vTimeStamp[i].size()+4 > DESIRED_SAMPLES)
-		LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
+		fFull[i] = 1;  // Mark this range as full immediately
+	} else if (fFull[i]<=0 && vTimeStamp[i].size()+5 > DESIRED_SAMPLES) {
+		if (fFull[i]<0)
+		    LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
+		fFull[i] = vTimeStamp[i].size() - DESIRED_SAMPLES-1;
+	}
 	while (vTimeStamp[i].size() > DESIRED_SAMPLES) {
 		if (!fFull[i]) fFull[i] = true;  // Make sure it's marked as full
 		vSamplesIn[i].pop_back();

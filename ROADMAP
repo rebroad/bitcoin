@@ -1,6 +1,6 @@
-New tor logging ought to be within the tor LogPrint
+Error writing first tor private key to secret key file - why?
 
-Cannot shutdown bitcoin when it's still searhing for vanity tor addresses - need to be able to shutdown!
+New tor logging ought to be within the tor LogPrint
 
 In torcontrol.cpp, why is there duplicated code between add_onion_cb() and auth_cb() ? Also, get rid of fallback - failure is not an option!
 
