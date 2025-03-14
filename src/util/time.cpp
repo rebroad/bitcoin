@@ -23,9 +23,8 @@ void UninterruptibleSleep(const std::chrono::microseconds& n) { std::this_thread
 
 static std::atomic<int64_t> nMockTime(0); //!< For testing
 
-int64_t GetTime()
-{
-    int64_t mocktime = nMockTime.load(std::memory_order_relaxed);
+uint64_t GetTime() {
+    uint64_t mocktime = nMockTime.load(std::memory_order_relaxed);
     if (mocktime) return mocktime;
 
     time_t now = time(nullptr);
@@ -33,8 +32,7 @@ int64_t GetTime()
     return now;
 }
 
-bool ChronoSanityCheck()
-{
+bool ChronoSanityCheck() {
     // std::chrono::system_clock.time_since_epoch and time_t(0) are not guaranteed
     // to use the Unix epoch timestamp, prior to C++20, but in practice they almost
     // certainly will. Any differing behavior will be assumed to be an error, unless
@@ -98,8 +96,7 @@ static T GetSystemTime()
     return now;
 }
 
-void SetMockTime(int64_t nMockTimeIn)
-{
+void SetMockTime(int64_t nMockTimeIn) {
     Assert(nMockTimeIn >= 0);
     nMockTime.store(nMockTimeIn, std::memory_order_relaxed);
 }
@@ -114,19 +111,17 @@ std::chrono::seconds GetMockTime()
     return std::chrono::seconds(nMockTime.load(std::memory_order_relaxed));
 }
 
-int64_t GetTimeMillis()
-{
-    return int64_t{GetSystemTime<std::chrono::milliseconds>().count()};
+uint64_t GetTimeMillis() {
+    return uint64_t{GetSystemTime<std::chrono::milliseconds>().count()};
 }
 
-int64_t GetTimeMicros()
-{
-    return int64_t{GetSystemTime<std::chrono::microseconds>().count()};
+uint64_t GetTimeMicros() {
+    return uint64_t{GetSystemTime<std::chrono::microseconds>().count()};
 }
 
-int64_t GetTimeSeconds()
+uint64_t GetTimeSeconds()
 {
-    return int64_t{GetSystemTime<std::chrono::seconds>().count()};
+    return uint64_t{GetSystemTime<std::chrono::seconds>().count()};
 }
 
 std::string FormatISO8601DateTime(int64_t nTime) {

@@ -41,14 +41,14 @@ inline double CountSecondsDouble(SecondsDouble t) { return t.count(); }
  * DEPRECATED
  * Use either GetTimeSeconds (not mockable) or GetTime<T> (mockable)
  */
-int64_t GetTime();
+uint64_t GetTime();
 
 /** Returns the system time (not mockable) */
-int64_t GetTimeMillis();
+uint64_t GetTimeMillis();
 /** Returns the system time (not mockable) */
-int64_t GetTimeMicros();
+uint64_t GetTimeMicros();
 /** Returns the system time (not mockable) */
-int64_t GetTimeSeconds(); // Like GetTime(), but not mockable
+uint64_t GetTimeSeconds(); // Like GetTime(), but not mockable
 
 /**
  * DEPRECATED
