@@ -86,5 +86,27 @@
     - Used `getCurrentRangeIndex()` to determine the correct position when "bumping" occurs
   - This fix ensures the slider properly reflects the current time range after loading traffic data, providing accurate visual feedback to the user
 ---
+
+## Multiple Onion Addresses Implementation
+- **Task**: Modify Bitcoin Core to support multiple Tor onion addresses and vanity address prefixes
+  - 🔄 Add new configuration options to control onion address generation:
+    - `-numonion=<n>`: Specify the number of onion addresses to create (default: 1)
+    - `-onionmatch=<prefix>`: Optional prefix for generating vanity onion addresses
+  - 🔄 Modify the TorController class to handle multiple services:
+    - Update member variables to use vectors for multiple private keys, service IDs, and services
+    - Extend the ADD_ONION functionality to create multiple onion services
+    - Implement proper error handling for multiple service creation attempts
+  - 🔄 Update private key file handling:
+    - Modify GetPrivateKeyFile() to read/write multiple keys (one per line)
+    - Implement proper backup and recovery mechanisms for multiple keys
+  - 🔄 Implement vanity onion address generation:
+    - Add functionality to generate onion addresses with specified prefixes
+    - Add timeout/attempt limits to prevent infinite loops during generation
+  - 🔄 Update connection handling:
+    - Ensure all onion addresses are properly added to local address list
+    - Update warning messages to reflect the new multi-address capability
+  - This enhancement will improve privacy by allowing Bitcoin Core nodes to operate on multiple Tor onion addresses simultaneously, while also adding customization options for users who want recognizable address prefixes
+
+---
 *This file will be updated with additional preferences as they are identified.*
 
