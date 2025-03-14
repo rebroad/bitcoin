@@ -85,10 +85,8 @@ int TrafficGraphWidget::y_value(float value) {
 	}
 
 	// Check for NaN input value
-	if (std::isnan(value) || std::isinf(value)) {
-		LogPrintf("TrafficGraphWidget::y_value: input value is NaN or infinity: %f\n", value);
+	if (std::isnan(value) || std::isinf(value))
 		return YMARGIN + h; // Return bottom of the graph
-	}
 
 	float result;
 	if (fToggle) {
@@ -98,17 +96,13 @@ int TrafficGraphWidget::y_value(float value) {
 	}
 
 	// Check final calculation result
-	if (std::isnan(result) || std::isinf(result)) {
-		LogPrintf("TrafficGraphWidget::y_value: calculation resulted in NaN or infinity. value: %f, fMax: %f, result: %f\n",
-				 value, fMax, result);
+	if (std::isnan(result) || std::isinf(result))
 		return YMARGIN + h; // Return bottom of the graph
-	}
 
 	return YMARGIN + h - (h * 1.0 * result);
 }
 
-void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
-{
+void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 	int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / values[m_value]), int(samples.size()));
 	if(sampleCount > 0) {
 		int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
@@ -203,7 +197,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 		last_w = w; last_h = h;
 	}
 
-	if(fMax <= 0.0f) return;
+	if (fMax <= 0.0f) return;
 
 	QColor axisCol(Qt::gray);
 	painter.setPen(axisCol);
@@ -216,15 +210,14 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 	const float yMarginText = 2.0;
 
 	// if we drew 10 or 3 fewer lines, break them up at the next lower order of magnitude
-	if(fMax / val <= (fToggle ? 10.0f : 3.0f)) {
+	if (fMax / val <= (fToggle ? 10.0f : 3.0f)) {
 		float oldval = val;
 		val = pow(10.0f, base - 1);
 		painter.setPen(axisCol.darker());
 		painter.drawText(XMARGIN, y_value(val)-yMarginText, GUIUtil::formatBytesps(val*1000));
 		int count = 1;
 		for(float y = val; y < (!fToggle || fMax / val < 20 ? fMax : oldval); y += val, count++) {
-			if(count % 10 == 0)
-				continue;
+			if (count % 10 == 0) continue;
 			int yy = y_value(y);
 			painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
 		}
@@ -238,21 +231,21 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 	}
 	// draw lines
 	painter.setPen(axisCol);
-	for(float y = val; y < fMax; y += val) {
+	for (float y = val; y < fMax; y += val) {
 		int yy = y_value(y);
 		painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
 	}
 	painter.drawText(XMARGIN, y_value(val)-yMarginText, GUIUtil::formatBytesps(val*1000));
 
 	painter.setRenderHint(QPainter::Antialiasing);
-	if(!vSamplesIn[m_value].empty()) {
+	if (!vSamplesIn[m_value].empty()) {
 		QPainterPath p;
 		paintPath(p, vSamplesIn[m_value]);
 		painter.fillPath(p, QColor(0, 255, 0, 128));
 		painter.setPen(Qt::green);
 		painter.drawPath(p);
 	}
-	if(!vSamplesOut[m_value].empty()) {
+	if (!vSamplesOut[m_value].empty()) {
 		QPainterPath p;
 		paintPath(p, vSamplesOut[m_value]);
 		painter.fillPath(p, QColor(255, 0, 0, 128));
@@ -296,15 +289,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 		QToolTip::hideText();
 }
 
-void TrafficGraphWidget::update_fMax()
-{
+void TrafficGraphWidget::update_fMax() {
 	float tmax = 0.0f;
-	for (const float f : vSamplesIn[m_new_value]) {
-		if(f > tmax) tmax = f;
-	}
-	for (const float f : vSamplesOut[m_new_value]) {
-		if(f > tmax) tmax = f;
-	}
+	for (const float f : vSamplesIn[m_new_value]) if (f > tmax) tmax = f;
+	for (const float f : vSamplesOut[m_new_value]) if (f > tmax) tmax = f;
 	new_fMax = tmax;
 	static float last_fMax = -1;
 	if (new_fMax != last_fMax) {
@@ -313,10 +301,8 @@ void TrafficGraphWidget::update_fMax()
 	}
 }
 
-bool update_num(float new_val, float &current, float &increment, int length)
-{
-	if (new_val == 0 || current == new_val)
-		return false;
+bool update_num(float new_val, float &current, float &increment, int length) {
+	if (new_val == 0 || current == new_val) return false;
 
 	if (abs(increment) <= abs(0.8 * current) / length) { // allow equal to as current and increment could be zero
 		int old_increment = increment;
@@ -334,12 +320,10 @@ bool update_num(float new_val, float &current, float &increment, int length)
 		if (((increment > 0) && (current + increment * 2 > new_val)) ||
 				((increment < 0) && (current + increment * 2 < new_val))) {
 			increment = increment / 2; // Keep the momentum going even if new_val is elsewhere.
-		} else {
+		} else
 			if (((increment > 0) && (current + increment * 8 < new_val)) ||
-					((increment < 0) && (current + increment * 8 > new_val))) {
+					((increment < 0) && (current + increment * 8 > new_val)))
 				increment = increment * 2;
-			}
-		}
 	}
 	if (abs(increment) < 0.8 * current / length) {
 		if ((increment >= 0 && new_val > current) || (increment <= 0 && new_val < current)) {
@@ -354,8 +338,7 @@ bool update_num(float new_val, float &current, float &increment, int length)
 	return true;
 }
 
-void TrafficGraphWidget::updateStuff()
-{
+void TrafficGraphWidget::updateStuff() {
 	if(!clientModel) return;
 
 	static int nInterval{timer->interval()};
@@ -365,10 +348,9 @@ void TrafficGraphWidget::updateStuff()
 	for (int i = 0; i < VALUES_SIZE; i++) {
 		// Check if nLastTime[i] is in the future compared to current time
 		bool lastTimeInFuture = (nLastTime[i].count() > nTime);
-		if (lastTimeInFuture) {
+		if (lastTimeInFuture)
 			LogPrintf("%s: Detected nLastTime[%d] in the future. nLastTime: %lld, current time: %lld\n",
 				__func__, i, nLastTime[i].count(), nTime);
-		}
 
 		int64_t msecs_per_sample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
 		// Take a new sample if it's time to do so or if the last time was in the future
@@ -381,23 +363,20 @@ void TrafficGraphWidget::updateStuff()
 				}
 				fUpdate = true;
 			}
-			if (i == m_new_value)
-				update_fMax();
+			if (i == m_new_value) update_fMax();
 		}
 	}
 
-	static float y_increment = 0;
-	static float x_increment = 0;
-	if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2))
-		fUpdate = true;
+	static float y_increment = 0, x_increment = 0;
+	if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2)) fUpdate = true;
 	if (update_num(values[m_new_value], m_range, x_increment, width() - XMARGIN * 2)) {
 		if (values[m_new_value] > m_range && values[m_value] < m_range) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
-				values[m_value], values[m_value+1], m_range);
+							values[m_value], values[m_value+1], m_range);
 			m_value++; // TODO - re-assess the tooltip
 		} else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
-				values[m_value], values[m_value-1], m_range);
+							values[m_value], values[m_value-1], m_range);
 			m_value--; // TODO - re-assess the tooltip
 		}
 		fUpdate = true;
@@ -425,8 +404,7 @@ void TrafficGraphWidget::updateStuff()
 		fUpdate = true; // TODO - technically it's only the ToolTip that needs to be refreshed
 	}
 
-	if (fUpdate)
-		update();
+	if (fUpdate) update();
 }
 
 void TrafficGraphWidget::updateRates(int i) {
@@ -450,11 +428,8 @@ void TrafficGraphWidget::updateRates(int i) {
 	if (!fFull[i] && vTimeStamp[i].size()+4 > DESIRED_SAMPLES)
 		LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
 	while(vTimeStamp[i].size() > DESIRED_SAMPLES) {
-		if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i])
-			m_bump_value = true;
-
+		if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i]) m_bump_value = true;
 		fFull[i] = true;
-
 		vSamplesIn[i].pop_back();
 		vSamplesOut[i].pop_back();
 		vTimeStamp[i].pop_back();
@@ -466,8 +441,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
 	if (!value) { // bump
 		m_bump_value = false;
 		value = m_value + 1;
-	} else
-		value--; // get the array marker
+	} else value--; // get the array marker
 	int old_value = m_new_value;
 	m_new_value = std::min((int)value, VALUES_SIZE - 1);
 	if (m_new_value != old_value) {
@@ -478,8 +452,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
 	return std::chrono::minutes{values[m_new_value]};
 }
 
-void TrafficGraphWidget::keyPressEvent(QKeyEvent *event)
-{
+void TrafficGraphWidget::keyPressEvent(QKeyEvent *event) {
 	if (event->modifiers() & Qt::ControlModifier) {
 		if (event->key() == Qt::Key_E) {
 			exportData();
@@ -489,8 +462,7 @@ void TrafficGraphWidget::keyPressEvent(QKeyEvent *event)
 	QWidget::keyPressEvent(event);
 }
 
-void TrafficGraphWidget::exportData()
-{
+void TrafficGraphWidget::exportData() {
 	if (!clientModel) return;
 
 	// Create a JSON object to store the data
@@ -498,9 +470,8 @@ void TrafficGraphWidget::exportData()
 
 	// Add values array
 	QJsonArray valuesArray;
-	for (int i = 0; i < VALUES_SIZE; i++) {
+	for (int i = 0; i < VALUES_SIZE; i++)
 		valuesArray.append(QJsonValue(static_cast<int>(values[i])));
-	}
 	jsonObj["values"] = valuesArray;
 
 	// Add vSamplesIn, vSamplesOut, and vTimeStamp arrays
@@ -510,21 +481,18 @@ void TrafficGraphWidget::exportData()
 
 	for (int i = 0; i < VALUES_SIZE; i++) {
 		QJsonArray samplesInSubArray;
-		for (int j = 0; j < vSamplesIn[i].size(); j++) {
+		for (int j = 0; j < vSamplesIn[i].size(); j++)
 			samplesInSubArray.append(QJsonValue(vSamplesIn[i].at(j)));
-		}
 		samplesInArray.append(samplesInSubArray);
 
 		QJsonArray samplesOutSubArray;
-		for (int j = 0; j < vSamplesOut[i].size(); j++) {
+		for (int j = 0; j < vSamplesOut[i].size(); j++)
 			samplesOutSubArray.append(QJsonValue(vSamplesOut[i].at(j)));
-		}
 		samplesOutArray.append(samplesOutSubArray);
 
 		QJsonArray timeStampSubArray;
-		for (int j = 0; j < vTimeStamp[i].size(); j++) {
+		for (int j = 0; j < vTimeStamp[i].size(); j++)
 			timeStampSubArray.append(QJsonValue(QString::number(vTimeStamp[i].at(j).count())));
-		}
 		timeStampArray.append(timeStampSubArray);
 	}
 
@@ -540,9 +508,8 @@ void TrafficGraphWidget::exportData()
 												  "traffic_data.json",
 												  tr("JSON Files (*.json)"));
 
-	if (fileName.isEmpty()) {
+	if (fileName.isEmpty())
 		return; // User canceled the dialog
-	}
 
 	// Save to file
 	QFile file(fileName);
@@ -637,11 +604,6 @@ bool TrafficGraphWidget::loadData() {
 
 		// Load vSamplesIn, vSamplesOut, and vTimeStamp arrays
 		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-		    // Clear existing data
-		    vSamplesIn[i].clear();
-		    vSamplesOut[i].clear();
-		    vTimeStamp[i].clear();
-
 		    // Load vSamplesIn
 		    unsigned int samplesInSize;
 		    filein >> VARINT(samplesInSize);
@@ -666,7 +628,7 @@ bool TrafficGraphWidget::loadData() {
 		    }
 
 		    // Load vTimeStamp
-			  unsigned int timeStampSize;
+			unsigned int timeStampSize;
 		    filein >> VARINT(timeStampSize);
 
 		    for (unsigned int j = 0; j < timeStampSize; j++) {
@@ -686,8 +648,7 @@ bool TrafficGraphWidget::loadData() {
     }
 }
 
-bool TrafficGraphWidget::loadDataFromCSV()
-{
+bool TrafficGraphWidget::loadDataFromCSV() {
     if (!clientModel) return false;
     LogPrintf("TrafficGraphWidget: Attempting to load data from CSV in the data directory\n");
     try {
@@ -714,7 +675,7 @@ bool TrafficGraphWidget::loadDataFromCSV()
 		// Variables to track current time range
 		int currentRange = -1;
 
-		// Clear existing data
+		// Clear existing data - in case the binary load partially succeeded
 		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
 		    vSamplesIn[i].clear();
 		    vSamplesOut[i].clear();
@@ -725,8 +686,6 @@ bool TrafficGraphWidget::loadDataFromCSV()
 		while (!in.atEnd()) {
 		    line = in.readLine().trimmed();
 
-		    // Skip empty lines
-		    // Skip empty lines
 		    if (line.isEmpty()) continue;
 
 		    // Check for time range headers
@@ -749,22 +708,23 @@ bool TrafficGraphWidget::loadDataFromCSV()
 		    // Check for CSV DATA START format
 		    QRegExp startRegex("CSV DATA START - RANGE (\\d+)");
 		    if (startRegex.indexIn(line) != -1) {
-			currentRange = startRegex.cap(1).toInt();
-			LogPrintf("TrafficGraphWidget: Found CSV DATA START marker for range %d\n", currentRange);
+				currentRange = startRegex.cap(1).toInt();
+				LogPrintf("TrafficGraphWidget: Found CSV DATA START marker for range %d\n", currentRange);
 
-			// Validate range
-			if (currentRange < 0 || currentRange >= VALUES_SIZE) {
-			    LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
-			    currentRange = -1; // Reset to invalid
-			}
-			continue;
+				// Validate range
+				if (currentRange < 0 || currentRange >= VALUES_SIZE) {
+				    LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
+				    currentRange = -1; // Reset to invalid
+				}
+				continue;
 		    }
 
 		    // Check for CSV DATA END format - we'll skip this line
 		    if (line.startsWith("CSV DATA END")) {
-			LogPrintf("TrafficGraphWidget: Found CSV DATA END marker for range %d\n", currentRange);
-			continue;
+				LogPrintf("TrafficGraphWidget: Found CSV DATA END marker for range %d\n", currentRange);
+				continue;
 		    }
+
 		    // Process data rows only if we have a valid current range
 		    if (currentRange >= 0 && currentRange < VALUES_SIZE) {
 				// Check for header row
