@@ -55,7 +55,7 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
 		if (vSamplesIn[0].empty() && vSamplesOut[0].empty()) {
 		// Load saved traffic data if available and the arrays are empty
 			LogPrintf("vSamplesIn[0].empty()=%d\n", vSamplesIn[0].empty());
-			loadData();
+			loadData(nTime);
 			return;
 		}
 
@@ -352,15 +352,8 @@ void TrafficGraphWidget::updateStuff() {
 
 	bool fUpdate = false;
 	for (int i = 0; i < VALUES_SIZE; i++) {
-		// Check if nLastTime[i] is in the future compared to current time
-		bool lastTimeInFuture = (nLastTime[i].count() > nTime);
-		if (lastTimeInFuture)
-			LogPrintf("%s: Detected nLastTime[%d] in the future. nLastTime: %lld, current time: %lld\n",
-				__func__, i, nLastTime[i].count(), nTime);
-
 		int64_t msecs_per_sample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
-		// Take a new sample if it's time to do so or if the last time was in the future
-		if (lastTimeInFuture || nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // TODO - we deduct nInterval/2 to avoid creep (due to delays in the algorithm, but is there a better way?)
+		if (nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // TODO - we deduct nInterval/2 to avoid creep (due to delays in the algorithm, but is there a better way?)
 			updateRates(i);
 			if (i == m_value) {
 				if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
@@ -595,7 +588,7 @@ void TrafficGraphWidget::saveData()
     }
 }
 
-bool TrafficGraphWidget::loadData() {
+bool TrafficGraphWidget::loadData(int64_t nTime) {
     if (!clientModel) return false;
     LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
     try {
@@ -648,6 +641,7 @@ bool TrafficGraphWidget::loadData() {
 		    for (unsigned int j = 0; j < timeStampSize; j++) {
 				uint64_t timeMs;
 				filein >> VARINT(timeMs);
+				if (timeMs > nTime) timeMs = nTime;
 				vTimeStamp[i].push_back(std::chrono::milliseconds{static_cast<int64_t>(timeMs)});
 		    }
 		}
@@ -658,11 +652,11 @@ bool TrafficGraphWidget::loadData() {
     } catch (const std::exception& e) {
 		LogPrintf("TrafficGraphWidget: Error loading binary data: %s\n", e.what());
 		LogPrintf("TrafficGraphWidget: Attempting to load from CSV after binary load error\n");
-		return loadDataFromCSV();
+		return loadDataFromCSV(nTime);
     }
 }
 
-bool TrafficGraphWidget::loadDataFromCSV() {
+bool TrafficGraphWidget::loadDataFromCSV(int64_t nTime) {
     if (!clientModel) return false;
     LogPrintf("TrafficGraphWidget: Attempting to load data from CSV in the data directory\n");
     try {
@@ -748,24 +742,24 @@ bool TrafficGraphWidget::loadDataFromCSV() {
 				QStringList parts = line.split(',');
 				if (parts.size() >= 4) {
 				    // Convert strings to appropriate types
-				    bool ok1, ok2, ok3;
+				    bool ok1, ok2, ok3, ok4;
 				    int index = parts[0].toInt(&ok1);
-				    Q_UNUSED(index);
 				    int64_t timestamp = parts[1].toLongLong(&ok2);
 				    float inRate = parts[2].toFloat(&ok3);
+				    float outRate = parts[3].toFloat(&ok4);
 
 				    // Check conversions were successful
-				    if (!ok1 || !ok2 || !ok3) {
+				    if (!ok1 || !ok2 || !ok3 || !ok4) {
 						LogPrintf("TrafficGraphWidget: Failed to parse CSV data row: %s\n", line.toStdString().c_str());
 						continue;
 				    }
 
-				    float outRate = parts[3].toFloat();
-
 				    // Add to corresponding queues (push_back because we're reading oldest to newest)
+				    Q_UNUSED(index);
+					if (timestamp > nTime) timestamp = nTime;
+				    vTimeStamp[currentRange].push_back(std::chrono::milliseconds{timestamp});
 				    vSamplesIn[currentRange].push_back(inRate);
 				    vSamplesOut[currentRange].push_back(outRate);
-				    vTimeStamp[currentRange].push_back(std::chrono::milliseconds{timestamp});
 				}
 			}
 		}
