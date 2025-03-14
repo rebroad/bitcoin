@@ -36,8 +36,8 @@ public:
 
 private:
     void saveData();
-    bool loadData();
-    bool loadDataFromCSV();
+    bool loadData(uint64_t);
+    bool loadDataFromCSV(uint64_t);
 
 protected:
     void paintEvent(QPaintEvent *) override;

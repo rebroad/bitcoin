@@ -49,7 +49,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 
 void TrafficGraphWidget::setClientModel(ClientModel *model) {
 	clientModel = model;
-	int64_t nTime = GetTimeMillis();
+	uint64_t nTime = GetTimeMillis();
 	if (model) {
 		m_dataDir = model->dataDir();
 		if (vSamplesIn[0].empty() && vSamplesOut[0].empty()) {
@@ -348,11 +348,11 @@ void TrafficGraphWidget::updateStuff() {
 	if(!clientModel) return;
 
 	static int nInterval{timer->interval()};
-	int64_t nTime{GetTimeMillis()};
+	uint64_t nTime{GetTimeMillis()};
 
 	bool fUpdate = false;
 	for (int i = 0; i < VALUES_SIZE; i++) {
-		int64_t msecs_per_sample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
+		uint64_t msecs_per_sample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
 		if (nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // TODO - we deduct nInterval/2 to avoid creep (due to delays in the algorithm, but is there a better way?)
 			updateRates(i);
 			if (i == m_value) {
@@ -588,8 +588,7 @@ void TrafficGraphWidget::saveData()
     }
 }
 
-bool TrafficGraphWidget::loadData(int64_t nTime) {
-    if (!clientModel) return false;
+bool TrafficGraphWidget::loadData(uint64_t nTime) {
     LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
     try {
 		fs::path pathTrafficGraph = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata";
@@ -597,7 +596,7 @@ bool TrafficGraphWidget::loadData(int64_t nTime) {
 
 		if (!file) {
 		    LogPrintf("TrafficGraphWidget: Binary data file not found, attempting to load from CSV\n");
-		    return loadDataFromCSV();
+		    return loadDataFromCSV(nTime);
 		} else
 		    LogPrintf("TrafficGraphWidget: Binary data file found, attempting to load from it\n");
 
@@ -656,8 +655,7 @@ bool TrafficGraphWidget::loadData(int64_t nTime) {
     }
 }
 
-bool TrafficGraphWidget::loadDataFromCSV(int64_t nTime) {
-    if (!clientModel) return false;
+bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
     LogPrintf("TrafficGraphWidget: Attempting to load data from CSV in the data directory\n");
     try {
 		// Path to the CSV file
