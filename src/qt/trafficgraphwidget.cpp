@@ -780,7 +780,7 @@ bool TrafficGraphWidget::loadDataFromCSV()
 	int sampleCount = 0;
 	bool timestampsValid = true;
 	int64_t currentTime = GetTime();
-	int64_t oldestAllowedTime = currentTime - (365 * 24 * 60 * 60); // 1 year ago
+	int64_t oldestAllowedTime = currentTime - (20 * 365 * 24 * 60 * 60); // 20 years ago
 	int64_t lastValidTimestamp = 0;
 
 	// First pass: check validity of timestamps and count samples in largest range
@@ -901,10 +901,18 @@ bool TrafficGraphWidget::loadDataFromCSV()
 
 		    // Parse timestamp from debug.log line
 		    // Format is typically: YYYY-MM-DD HH:MM:SS message
-		    QRegExp timeRegex("(\\d{4})-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2})");
+		    QRegExp timeRegex("(\\d{4})-(\\d{2})-(\\d{2})[T ](\\d{2}):(\\d{2}):(\\d{2})");
 		    if (timeRegex.indexIn(logLine) != -1) {
-			QDateTime logDateTime = QDateTime::fromString(
-			    timeRegex.cap(0), "yyyy-MM-dd HH:mm:ss");
+			QString timeStr = timeRegex.cap(0);
+			QDateTime logDateTime;
+			if (timeStr.contains('T')) {
+			    // Handle ISO 8601 format with T separator
+			    timeStr = timeStr.replace('Z', ' ').trimmed(); // Remove any Z timezone indicator
+			    logDateTime = QDateTime::fromString(timeStr, "yyyy-MM-ddTHH:mm:ss");
+			} else {
+			    // Handle standard format with space separator
+			    logDateTime = QDateTime::fromString(timeStr, "yyyy-MM-dd HH:mm:ss");
+			}
 			int64_t logTimestamp = logDateTime.toSecsSinceEpoch();
 
 			// Only consider log entries within our time window
