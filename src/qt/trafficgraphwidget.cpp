@@ -364,8 +364,16 @@ void TrafficGraphWidget::updateStuff()
 
 	bool fUpdate = false;
 	for (int i = 0; i < VALUES_SIZE; i++) {
+		// Check if nLastTime[i] is in the future compared to current time
+		bool lastTimeInFuture = (nLastTime[i].count() > nTime);
+		if (lastTimeInFuture) {
+			LogPrintf("%s: Detected nLastTime[%d] in the future. nLastTime: %lld, current time: %lld\n",
+				__func__, i, nLastTime[i].count(), nTime);
+		}
+
 		int64_t msecs_per_sample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
-		if (nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // REBTODO - fix bad timing
+		// Take a new sample if it's time to do so or if the last time was in the future
+		if (lastTimeInFuture || nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // REBTODO - fix bad timing
 			updateRates(i);
 			if (i == m_value) {
 				if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
