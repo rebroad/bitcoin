@@ -426,7 +426,7 @@ void TrafficGraphWidget::updateRates(int i) {
 	static bool fFull[VALUES_SIZE];
 	// Only trigger "Bump it up!" when we're about to exceed DESIRED_SAMPLES for the first time
 	// Check this condition once before entering the trimming loop
-	if (!fFull[i] && vTimeStamp[i].size() > DESIRED_SAMPLES && ttpoint < 0 && 
+	if (!fFull[i] && vTimeStamp[i].size() > DESIRED_SAMPLES && ttpoint < 0 &&
 	    m_value == i && i < VALUES_SIZE - 1) {
 		m_bump_value = true;
 		LogPrintf("%s: Setting m_bump_value=true for range %d at size %d\n", __func__, i, vTimeStamp[i].size());
@@ -588,7 +588,7 @@ void TrafficGraphWidget::saveData()
     }
 }
 
-bool TrafficGraphWidget::loadData(uint64_t nTime) {
+bool TrafficGraphWidget::loadDataFromBinary(uint64_t nTime) {
     LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
     try {
 		fs::path pathTrafficGraph = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata";
@@ -742,7 +742,7 @@ bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
 				    // Convert strings to appropriate types
 				    bool ok1, ok2, ok3, ok4;
 				    int index = parts[0].toInt(&ok1);
-				    int64_t timestamp = parts[1].toLongLong(&ok2);
+				    uint64_t timestamp = parts[1].toLongLong(&ok2);
 				    float inRate = parts[2].toFloat(&ok3);
 				    float outRate = parts[3].toFloat(&ok4);
 
@@ -781,19 +781,38 @@ bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
 		}
 
 		LogPrintf("TrafficGraphWidget: Successfully loaded %d total data points from CSV file\n", totalDataPoints);
-		// Set last values based on the first (most recent) entries in the queues
-		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-		    if (!vSamplesIn[i].empty() && !vSamplesOut[i].empty() && !vTimeStamp[i].empty()) {
-				nLastBytesIn[i] = vSamplesIn[i].front() * 1000; // Approximate byte counts
-				nLastBytesOut[i] = vSamplesOut[i].front() * 1000;
-				nLastTime[i] = vTimeStamp[i].front();
-		    }
-		}
-
-		LogPrintf("TrafficGraphWidget: Successfully loaded data from CSV file %s\n", fs::PathToString(pathCSV));
 		return true;
     } catch (const std::exception& e) {
 		LogPrintf("TrafficGraphWidget: Error loading CSV data: %s\n", e.what());
 		return false;
     }
+}
+
+bool TrafficGraphWidget::loadData(uint64_t nTime) {
+    bool success = false;
+
+    // Try to load from binary file first, then fall back to CSV if that fails
+    if (!(success = loadDataFromBinary(nTime))) success = loadDataFromCSV(nTime);
+
+    // If we successfully loaded data, determine the correct band to use
+    if (success) {
+	int firstNonFullBand = VALUES_SIZE - 1;
+
+	for (int i = 0; i < VALUES_SIZE; i++) {
+	    if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
+		firstNonFullBand = i;
+		break;
+	    }
+	}
+
+	if (firstNonFullBand == VALUES_SIZE - 1)
+	    LogPrintf("TrafficGraphWidget: After loading, all bands full, setting to highest band %d\n", firstNonFullBand);
+	else
+	    LogPrintf("TrafficGraphWidget: After loading, setting to first non-full band %d\n", firstNonFullBand);
+
+	m_value = firstNonFullBand;
+	m_bump_value = true;
+    }
+
+    return success;
 }

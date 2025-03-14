@@ -36,8 +36,9 @@ public:
 
 private:
     void saveData();
-    bool loadData(uint64_t);
+    bool loadDataFromBinary(uint64_t);
     bool loadDataFromCSV(uint64_t);
+    bool loadData(uint64_t);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -47,7 +48,7 @@ protected:
     int ttpoint = -1;
     int x_offset = 0;
     int y_offset = 0;
-    int64_t tt_time = 0;
+    uint64_t tt_time = 0;
     void mousePressEvent(QMouseEvent *event) override;
     bool fToggle = true;
 
