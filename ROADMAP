@@ -1,3 +1,5 @@
+Should start accepting TXs into mempool once "estimated time left until synced" drops below 30 minutes.
+
 If bps% below zero, show first decimal point
 
 Add option to not broadcast TXs (except to whitelisted nodes)
