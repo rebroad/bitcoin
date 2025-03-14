@@ -108,41 +108,79 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 		int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
 		int x = XMARGIN + w;
 
+		// Validate inputs and initial values to prevent NaN propagation
+		if (std::isnan(m_range) || std::isinf(m_range) || m_range <= 0.0f) {
+			LogPrintf("TrafficGraphWidget::paintPath: Invalid m_range value: %f\n", m_range);
+			return;
+		}
+
+		if (std::isnan(values[m_value]) || std::isinf(values[m_value]) || values[m_value] <= 0.0f) {
+			LogPrintf("TrafficGraphWidget::paintPath: Invalid values[m_value]: %f\n", values[m_value]);
+			return;
+		}
+
 		// Initial moveTo - check for NaN before adding the first point
 		if (!std::isnan(x) && !std::isinf(x)) {
 			path.moveTo(x, YMARGIN + h);
 
 			bool pathHasValidPoints = false;
 			int lastValidX = x;
+			int lastValidY = YMARGIN + h;
+			bool previousPointValid = false;
 
 			for (int i = 0; i < sampleCount; ++i) {
 				float sample = samples.at(i);
-				x = XMARGIN + w - w * i * values[m_value] / m_range / DESIRED_SAMPLES;
 
-				// Check for NaN or infinity in calculations
-				if (std::isnan(x) || std::isinf(x)) {
-					LogPrintf("TrafficGraphWidget::paintPath: x coordinate is NaN or infinity at index %d\n", i);
+				// Check for NaN or infinity in sample
+				if (std::isnan(sample) || std::isinf(sample)) {
+					LogPrintf("TrafficGraphWidget::paintPath: sample is NaN or infinity at index %d\n", i);
+					continue; // Skip this point
+				}
+
+				// Calculate x with extra validation
+				double xCalculation = static_cast<double>(w) * i * values[m_value] / m_range / DESIRED_SAMPLES;
+				if (std::isnan(xCalculation) || std::isinf(xCalculation)) {
+					LogPrintf("TrafficGraphWidget::paintPath: x calculation produced NaN or infinity at index %d\n", i);
+					continue; // Skip this point
+				}
+
+				x = XMARGIN + w - static_cast<int>(xCalculation);
+
+				// Check for NaN or infinity or out-of-range in x
+				if (std::isnan(x) || std::isinf(x) || x < 0 || x > width()) {
+					LogPrintf("TrafficGraphWidget::paintPath: x coordinate is NaN, infinity, or out of range at index %d (x: %d)\n", i, x);
 					continue; // Skip this point
 				}
 
 				int y = y_value(sample);
 
-				// Check for NaN or infinity in y value
-				if (std::isnan(y) || std::isinf(y)) {
-					LogPrintf("TrafficGraphWidget::paintPath: y coordinate is NaN or infinity at index %d (sample: %f, fMax: %f)\n",
-							i, sample, fMax);
+				// Check for NaN or infinity or out-of-range in y
+				if (std::isnan(y) || std::isinf(y) || y < 0 || y > height()) {
+					LogPrintf("TrafficGraphWidget::paintPath: y coordinate is NaN, infinity, or out of range at index %d (sample: %f, fMax: %f, y: %d)\n",
+							i, sample, fMax, y);
 					continue; // Skip this point
 				}
 
 				// Only add valid points to the path
-				path.lineTo(x, y);
+				// If previous point wasn't valid, we need to move to this point instead of lineTo
+				if (!previousPointValid) {
+					path.moveTo(x, y);
+				} else {
+					path.lineTo(x, y);
+				}
+
 				pathHasValidPoints = true;
 				lastValidX = x;
+				lastValidY = y;
+				previousPointValid = true;
 			}
 
 			// Final lineTo - check that x is valid and that we have at least one valid point
-			if (pathHasValidPoints && !std::isnan(lastValidX) && !std::isinf(lastValidX))
+			if (pathHasValidPoints && !std::isnan(lastValidX) && !std::isinf(lastValidX)) {
+				path.lineTo(lastValidX, lastValidY);
+				// Add another line down to the bottom of the graph to complete the filled area properly
 				path.lineTo(lastValidX, YMARGIN + h);
+			}
 		} else {
 			LogPrintf("TrafficGraphWidget::paintPath: Initial x coordinate is NaN or infinity\n");
 		}
@@ -388,7 +426,7 @@ void TrafficGraphWidget::updateStuff() {
 		if (values[m_new_value] > m_range && values[m_value] < m_range) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
 							values[m_value], values[m_value+1], m_range);
-            m_value++; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
+	    m_value++; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
 		} else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
 							values[m_value], values[m_value-1], m_range);
@@ -415,8 +453,8 @@ void TrafficGraphWidget::updateStuff() {
 			fUpdate = true;
 		}
 	} else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
-        LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
-        fUpdate = true; // TODO - make fUpdate non-boolean so we can have a partial-update flag just for refreshing the tooltip only.
+	LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
+	fUpdate = true; // TODO - make fUpdate non-boolean so we can have a partial-update flag just for refreshing the tooltip only.
 	}
 
 	if (fUpdate) update();
