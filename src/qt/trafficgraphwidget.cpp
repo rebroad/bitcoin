@@ -114,7 +114,7 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 		int lastValidX = x;
 		bool previousPointValid = false;
 
-		for (int i = 0; i < sampleCount++; ++i) {
+		for (int i = 0; i < sampleCount; ++i) {
 			float sample = samples.at(i);
 			int y = y_value(sample);
 
