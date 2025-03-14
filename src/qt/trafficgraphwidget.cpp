@@ -69,7 +69,7 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
 		}
 	} else {
 		LogPrintf("%s: Saving data\n", __func__);
-        saveData();
+	saveData();
 	}
 }
 
@@ -107,30 +107,45 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 	if(sampleCount > 0) {
 		int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
 		int x = XMARGIN + w;
-		path.moveTo(x, YMARGIN + h);
-		for(int i = 0; i < sampleCount; ++i) {
-			float sample = samples.at(i);
-			x = XMARGIN + w - w * i * values[m_value] / m_range / DESIRED_SAMPLES;
 
-			// Check for NaN or infinity in calculations
-			if (std::isnan(x) || std::isinf(x)) {
-				LogPrintf("TrafficGraphWidget::paintPath: x coordinate is NaN or infinity at index %d\n", i);
-				continue; // Skip this point
+		// Initial moveTo - check for NaN before adding the first point
+		if (!std::isnan(x) && !std::isinf(x)) {
+			path.moveTo(x, YMARGIN + h);
+
+			bool pathHasValidPoints = false;
+			int lastValidX = x;
+
+			for (int i = 0; i < sampleCount; ++i) {
+				float sample = samples.at(i);
+				x = XMARGIN + w - w * i * values[m_value] / m_range / DESIRED_SAMPLES;
+
+				// Check for NaN or infinity in calculations
+				if (std::isnan(x) || std::isinf(x)) {
+					LogPrintf("TrafficGraphWidget::paintPath: x coordinate is NaN or infinity at index %d\n", i);
+					continue; // Skip this point
+				}
+
+				int y = y_value(sample);
+
+				// Check for NaN or infinity in y value
+				if (std::isnan(y) || std::isinf(y)) {
+					LogPrintf("TrafficGraphWidget::paintPath: y coordinate is NaN or infinity at index %d (sample: %f, fMax: %f)\n",
+							i, sample, fMax);
+					continue; // Skip this point
+				}
+
+				// Only add valid points to the path
+				path.lineTo(x, y);
+				pathHasValidPoints = true;
+				lastValidX = x;
 			}
 
-			int y = y_value(sample);
-
-			// Check for NaN or infinity in y value
-			if (std::isnan(y) || std::isinf(y)) {
-				LogPrintf("TrafficGraphWidget::paintPath: y coordinate is NaN or infinity at index %d (sample: %f, fMax: %f)\n",
-						  i, sample, fMax);
-				continue; // Skip this point
-			}
-
-			// Only add valid points to the path
-			path.lineTo(x, y);
+			// Final lineTo - check that x is valid and that we have at least one valid point
+			if (pathHasValidPoints && !std::isnan(lastValidX) && !std::isinf(lastValidX))
+				path.lineTo(lastValidX, YMARGIN + h);
+		} else {
+			LogPrintf("TrafficGraphWidget::paintPath: Initial x coordinate is NaN or infinity\n");
 		}
-		path.lineTo(x, YMARGIN + h);
 	}
 }
 
@@ -528,7 +543,7 @@ void TrafficGraphWidget::exportData() {
 void TrafficGraphWidget::saveData()
 {
     LogPrintf("TrafficGraphWidget: saveData() called\n");
-    
+
     try {
 		fs::path pathTrafficGraph = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata";
 		LogPrintf("TrafficGraphWidget: Trying to save data to %s\n", fs::PathToString(pathTrafficGraph));
