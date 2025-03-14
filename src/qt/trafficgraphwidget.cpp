@@ -47,13 +47,6 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 	setFocusPolicy(Qt::StrongFocus); // To accept keyboard events
 }
 
-TrafficGraphWidget::~TrafficGraphWidget()
-{
-    if (clientModel != nullptr) {
-        saveData();
-    }
-}
-
 void TrafficGraphWidget::setClientModel(ClientModel *model) {
 	clientModel = model;
 	int64_t nTime = GetTimeMillis();
@@ -73,8 +66,10 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
 			vSamplesOut[i].push_front(nLastBytesOut[i]);
 			vTimeStamp[i].push_front(nLastTime[i]);
 		}
-	} else
-		LogPrintf("%s: no model\n", __func__);
+	} else {
+		LogPrintf("%s: Saving data\n", __func__);
+        saveData();
+	}
 }
 
 bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }

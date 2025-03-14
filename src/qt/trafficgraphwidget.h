@@ -30,7 +30,6 @@ class TrafficGraphWidget : public QWidget
 
 public:
     explicit TrafficGraphWidget(QWidget *parent = nullptr);
-    ~TrafficGraphWidget();
     void setClientModel(ClientModel *model);
     bool GraphRangeBump() const;
     void exportData();
