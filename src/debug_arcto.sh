@@ -1,0 +1,159 @@
+#!/bin/bash
+
+# debug_arcto.sh
+# Script to debug QPainterPath::arcTo NaN warnings in Bitcoin-Qt
+# -------------------------------------------------------------
+
+# Set the path to Bitcoin source directory (adjust if necessary)
+BITCOIN_SRC_DIR="$(pwd)"
+
+# GDB script path
+GDB_SCRIPT="debug_arcto.gdb"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Check if GDB is installed
+if ! command -v gdb &> /dev/null; then
+    echo -e "${RED}Error: GDB is not installed. Please install GDB first.${NC}"
+    exit 1
+fi
+
+# Check if GDB script exists
+if [ ! -f "$GDB_SCRIPT" ]; then
+    echo -e "${RED}Error: GDB script '$GDB_SCRIPT' not found.${NC}"
+    echo -e "Please make sure it exists in the current directory.${NC}"
+    exit 1
+fi
+
+# Function to build Bitcoin-Qt with debug symbols
+build_bitcoin_qt() {
+    echo -e "${BLUE}Building Bitcoin-Qt with debug symbols...${NC}"
+
+    # Navigate to the source directory
+    cd "$BITCOIN_SRC_DIR" || { echo -e "${RED}Error: Could not navigate to Bitcoin source directory.${NC}"; exit 1; }
+
+    # Configure with debug symbols if needed
+    if [ ! -f "Makefile" ] || ! grep -q "CXXFLAGS = -g" Makefile; then
+        echo -e "${YELLOW}Configuring Bitcoin with debug symbols...${NC}"
+        ./configure --enable-debug || { echo -e "${RED}Configure failed!${NC}"; exit 1; }
+    fi
+
+    # Build Bitcoin-Qt
+    echo -e "${YELLOW}Compiling Bitcoin-Qt...${NC}"
+    make -j$(nproc) bitcoin-qt || { echo -e "${RED}Build failed!${NC}"; exit 1; }
+
+    echo -e "${GREEN}Bitcoin-Qt built successfully with debug symbols.${NC}"
+}
+
+# Function to launch GDB with Bitcoin-Qt
+launch_gdb_new() {
+    echo -e "${BLUE}Launching GDB with Bitcoin-Qt...${NC}"
+
+    # Determine the Bitcoin-Qt binary path
+    BITCOIN_QT_BIN="$BITCOIN_SRC_DIR/src/qt/bitcoin-qt"
+
+    if [ ! -f "$BITCOIN_QT_BIN" ]; then
+        echo -e "${RED}Error: Bitcoin-Qt binary not found at $BITCOIN_QT_BIN${NC}"
+        exit 1
+    fi
+
+    echo -e "${GREEN}Starting GDB with Bitcoin-Qt...${NC}"
+    echo -e "${YELLOW}When the program starts, interact with the application to trigger the arcTo warnings.${NC}"
+    echo -e "${YELLOW}Press Ctrl+C in GDB then type 'continue' to continue execution after a breakpoint is hit.${NC}"
+
+    gdb -x "$GDB_SCRIPT" --args "$BITCOIN_QT_BIN"
+}
+
+# Function to attach GDB to a running Bitcoin-Qt process
+attach_gdb() {
+    echo -e "${BLUE}Attaching GDB to a running Bitcoin-Qt process...${NC}"
+
+    # Find running Bitcoin-Qt processes
+    BITCOIN_PIDS=$(pgrep -f "bitcoin-qt")
+
+    if [ -z "$BITCOIN_PIDS" ]; then
+        echo -e "${RED}Error: No running Bitcoin-Qt processes found.${NC}"
+        echo -e "${YELLOW}Would you like to launch a new Bitcoin-Qt instance instead? (y/n)${NC}"
+        read -r answer
+        if [[ "$answer" =~ ^[Yy]$ ]]; then
+            launch_gdb_new
+        else
+            exit 1
+        fi
+        return
+    fi
+
+    # If multiple processes, let user select
+    if [ $(echo "$BITCOIN_PIDS" | wc -l) -gt 1 ]; then
+        echo -e "${YELLOW}Multiple Bitcoin-Qt processes found:${NC}"
+        PS_OUTPUT=$(ps -p $BITCOIN_PIDS -o pid,cmd)
+        echo "$PS_OUTPUT"
+        echo -e "${YELLOW}Enter the PID of the process to attach to:${NC}"
+        read -r selected_pid
+
+        if ! echo "$BITCOIN_PIDS" | grep -q "$selected_pid"; then
+            echo -e "${RED}Invalid PID selected.${NC}"
+            exit 1
+        fi
+
+        BITCOIN_PID=$selected_pid
+    else
+        BITCOIN_PID=$BITCOIN_PIDS
+    fi
+
+    echo -e "${GREEN}Attaching GDB to Bitcoin-Qt process $BITCOIN_PID...${NC}"
+    echo -e "${YELLOW}When attached, interact with the application to trigger the arcTo warnings.${NC}"
+    echo -e "${YELLOW}Press Ctrl+C in GDB then type 'continue' to continue execution after a breakpoint is hit.${NC}"
+
+    gdb -x "$GDB_SCRIPT" -p "$BITCOIN_PID"
+}
+
+# Main menu
+show_menu() {
+    echo -e "${BLUE}===== Bitcoin-Qt arcTo Debugger =====${NC}"
+    echo -e "${YELLOW}This script helps debug QPainterPath::arcTo NaN warnings in Bitcoin-Qt.${NC}"
+    echo
+    echo -e "${GREEN}1. Build Bitcoin-Qt with debug symbols${NC}"
+    echo -e "${GREEN}2. Launch Bitcoin-Qt with GDB (new instance)${NC}"
+    echo -e "${GREEN}3. Attach GDB to a running Bitcoin-Qt process${NC}"
+    echo -e "${GREEN}4. Build and launch with GDB${NC}"
+    echo -e "${GREEN}5. Exit${NC}"
+    echo
+    echo -e "${YELLOW}Enter your choice [1-5]:${NC}"
+    read -r choice
+
+    case $choice in
+        1) build_bitcoin_qt; show_menu ;;
+        2) launch_gdb_new ;;
+        3) attach_gdb ;;
+        4) build_bitcoin_qt; launch_gdb_new ;;
+        5) echo -e "${BLUE}Exiting.${NC}"; exit 0 ;;
+        *) echo -e "${RED}Invalid choice. Please try again.${NC}"; show_menu ;;
+    esac
+}
+
+# Make the script executable
+chmod +x "$0"
+
+# Display usage information
+echo -e "${BLUE}===== Bitcoin-Qt arcTo Debugger =====${NC}"
+echo -e "${YELLOW}This script will help you debug QPainterPath::arcTo NaN warnings in Bitcoin-Qt.${NC}"
+echo -e "${YELLOW}It works in conjunction with the GDB script '${GDB_SCRIPT}'.${NC}"
+echo
+echo -e "${BLUE}What this debugger will do:${NC}"
+echo -e "1. Set breakpoints on Qt warning functions and QPainterPath functions"
+echo -e "2. Set conditional breakpoints to catch when NaN values are passed"
+echo -e "3. Print the backtrace, variables, and arguments when breakpoints are hit"
+echo -e "4. Help identify the exact source of arcTo NaN warnings"
+echo
+echo -e "${YELLOW}Press any key to continue...${NC}"
+read -n 1
+
+# Display the menu
+show_menu
+
