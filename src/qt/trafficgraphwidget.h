@@ -33,6 +33,7 @@ public:
     void setClientModel(ClientModel *model);
     bool GraphRangeBump() const;
     void exportData();
+    unsigned int getCurrentRangeIndex() const;
 
 private:
     void saveData();

@@ -76,6 +76,15 @@
     - Added horizontal line back to the starting point after drawing the vertical line to the bottom
     - Ensured the graph area is properly filled without unintended diagonal artifacts
   - This improvement enhances the visual appearance of the network traffic graph, providing a cleaner and more accurate representation of network activity
+
+## Traffic Graph Slider Update Issue
+- **Task**: Fix slider position not updating correctly when traffic data is loaded
+  - ✅ Identified issue in `RPCConsole::setTrafficGraphRange` where the slider position was not correctly updated after data loading
+  - ✅ Added `getCurrentRangeIndex()` method to `TrafficGraphWidget` to expose the current graph range index
+  - ✅ Modified `RPCConsole::setTrafficGraphRange` to calculate the proper slider position based on the actual graph range:
+    - Replaced the static increment of slider position (`set_slider_value += 200`) with a dynamic calculation
+    - Used `getCurrentRangeIndex()` to determine the correct position when "bumping" occurs
+  - This fix ensures the slider properly reflects the current time range after loading traffic data, providing accurate visual feedback to the user
 ---
 *This file will be updated with additional preferences as they are identified.*
 

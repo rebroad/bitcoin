@@ -1170,13 +1170,13 @@ void RPCConsole::setTrafficGraphRange(unsigned int value)
     if (value)
         set_slider_value = (value - 1) * 200;
     else {
-        set_slider_value += 200;
+        // When bumping, calculate the proper slider position based on the traffic graph's new value
+        unsigned int new_graph_value = ui->trafficGraph->getCurrentRangeIndex() + 1; // +1 because the index is 0-based
+        set_slider_value = (new_graph_value - 1) * 200;
         ui->sldGraphRange->blockSignals(true);
         ui->sldGraphRange->setValue(set_slider_value);
         ui->sldGraphRange->blockSignals(false);
     }
-    //if (!slider_in_use) // PageStep was used, slider was not dragged
-    //    ui->sldGraphRange->setValue(set_slider_value); // Snap the slider to where this value is
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(mins));
     if (!slider_in_use) // As too much debug otherwise
         LogPrintf("%s: value=%d slider=%d mins=%d %s\n", __func__, value, set_slider_value, mins.count(), slider_in_use ? "":"SNAP");

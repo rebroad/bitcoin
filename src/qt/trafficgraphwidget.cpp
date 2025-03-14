@@ -75,6 +75,10 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
 
 bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
 
+unsigned int TrafficGraphWidget::getCurrentRangeIndex() const {
+    return m_new_value;
+}
+
 int TrafficGraphWidget::y_value(float value) {
 	int h = height() - YMARGIN * 2;
 
@@ -436,8 +440,6 @@ void TrafficGraphWidget::updateRates(int i) {
 	} else if (!fFull[i] && vTimeStamp[i].size()+4 > DESIRED_SAMPLES)
 		LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
 	while (vTimeStamp[i].size() > DESIRED_SAMPLES) {
-		// We've already set fFull[i] and decided on m_bump_value before this loop
-		// so we don't need to check it for each sample being removed
 		if (!fFull[i]) fFull[i] = true;  // Make sure it's marked as full
 		vSamplesIn[i].pop_back();
 		vSamplesOut[i].pop_back();
@@ -773,7 +775,7 @@ bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
 			int count = vSamplesIn[i].size();
 			totalDataPoints += count;
 			LogPrintf("TrafficGraphWidget: Loaded %d data points for time range %d (%d minutes)\n",
-			  count, i, values[i]);
+			    count, i, values[i]);
 		    }
 		}
 
@@ -796,25 +798,26 @@ bool TrafficGraphWidget::loadData(uint64_t nTime) {
     // Try to load from binary file first, then fall back to CSV if that fails
     if (!(success = loadDataFromBinary(nTime))) success = loadDataFromCSV(nTime);
 
+	if (!success) return false;
+
     // If we successfully loaded data, determine the correct band to use
-    if (success) {
 	int firstNonFullBand = VALUES_SIZE - 1;
 
-	for (int i = 0; i < VALUES_SIZE; i++) {
+	for (int i = 0; i < VALUES_SIZE; i++)
 	    if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
-		firstNonFullBand = i;
-		break;
+			firstNonFullBand = i;
+			break;
 	    }
-	}
 
 	if (firstNonFullBand == VALUES_SIZE - 1)
 	    LogPrintf("TrafficGraphWidget: After loading, all bands full, setting to highest band %d\n", firstNonFullBand);
 	else
 	    LogPrintf("TrafficGraphWidget: After loading, setting to first non-full band %d\n", firstNonFullBand);
 
-	m_value = firstNonFullBand;
-	m_bump_value = true;
+	if (firstNonFullBand) { // not the first band
+	    m_value = firstNonFullBand - 1; // Minus one as we're bumping it
+	    m_bump_value = true;
     }
 
-    return success;
+    return true;
 }
