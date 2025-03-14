@@ -651,6 +651,11 @@ bool RPCConsole::eventFilter(QObject* obj, QEvent *event)
 
 void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_t bestblock_date, double verification_progress)
 {
+    // Save traffic graph data before setting clientModel to nullptr
+    if (model == nullptr && clientModel != nullptr) {
+        ui->trafficGraph->saveData();
+    }
+
     clientModel = model;
 
     bool wallet_enabled{false};

@@ -73,7 +73,8 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
 			vSamplesOut[i].push_front(nLastBytesOut[i]);
 			vTimeStamp[i].push_front(nLastTime[i]);
 		}
-	}
+	} else
+		LogPrintf("%s: no model\n", __func__);
 }
 
 bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
@@ -587,9 +588,12 @@ void TrafficGraphWidget::exportData()
 void TrafficGraphWidget::saveData()
 {
     if (!clientModel) return;
-
+    
+    LogPrintf("TrafficGraphWidget: saveData() called\n");
+    
     try {
 	fs::path pathTrafficGraph = fs::path(clientModel->dataDir().toStdString().c_str()) / "trafficgraphdata";
+	LogPrintf("TrafficGraphWidget: Trying to save data to %s\n", fs::PathToString(pathTrafficGraph));
 	FILE* file = fsbridge::fopen(pathTrafficGraph, "wb");
 	if (file) {
 	    CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
