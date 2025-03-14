@@ -177,13 +177,11 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 
 			// Final lineTo - check that x is valid and that we have at least one valid point
 			if (pathHasValidPoints && !std::isnan(lastValidX) && !std::isinf(lastValidX)) {
-				path.lineTo(lastValidX, lastValidY);
-				// Add another line down to the bottom of the graph to complete the filled area properly
+				// Add a line down to the bottom of the graph to complete the filled area properly
 				path.lineTo(lastValidX, YMARGIN + h);
 			}
-		} else {
+		} else
 			LogPrintf("TrafficGraphWidget::paintPath: Initial x coordinate is NaN or infinity\n");
-		}
 	}
 }
 
@@ -426,7 +424,7 @@ void TrafficGraphWidget::updateStuff() {
 		if (values[m_new_value] > m_range && values[m_value] < m_range) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
 							values[m_value], values[m_value+1], m_range);
-	    m_value++; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
+		    m_value++; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
 		} else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
 							values[m_value], values[m_value-1], m_range);
@@ -453,8 +451,8 @@ void TrafficGraphWidget::updateStuff() {
 			fUpdate = true;
 		}
 	} else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
-	LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
-	fUpdate = true; // TODO - make fUpdate non-boolean so we can have a partial-update flag just for refreshing the tooltip only.
+		LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
+		fUpdate = true; // TODO - make fUpdate non-boolean so we can have a partial-update flag just for refreshing the tooltip only.
 	}
 
 	if (fUpdate) update();
