@@ -61,8 +61,25 @@ void MempoolStats::setClientModel(ClientModel *model)
     }
 }
 
-// define the colors for the feeranges
-// TODO: find a more dynamic way to assign colors
+// Define colors for fee ranges using a dynamic HSV-based approach
+// This generates a spectrum of distinct colors that will accommodate various numbers of fee ranges
+QColor getColorForRange(int index, int totalRanges) {
+    // Use HSV color model for better visual distinction
+    // Hue values chosen to provide good contrast (0-360 degrees)
+    const double baseHue = 240.0; // Start with blue
+    const double hueFactor = 360.0 / (totalRanges > 0 ? totalRanges : 1);
+    
+    // Calculate hue based on index (wrapping around the color wheel if needed)
+    double hue = fmod(baseHue + index * hueFactor, 360.0);
+    
+    // Saturation and value settings for vibrant but not too bright colors
+    const int saturation = 240;
+    const int value = 220;
+    
+    return QColor::fromHsv(hue, saturation, value);
+}
+
+// Fallback static colors for backward compatibility - TODO: explain when fallball would occur.
 const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac"), QColor("#0000c2"), QColor("#0000d8"), QColor("#0000ec"), QColor("#0000ff"), QColor("#2c2cff"), QColor("#5858ff"), QColor("#8080ff"),
                                             QColor("#008000"), QColor("#00a000"), QColor("#00c000"), QColor("#00e000"), QColor("#30e030"), QColor("#60e060"), QColor("#90e090"),
                                             QColor("#808000"), QColor("#989800"), QColor("#b0b000"), QColor("#c8c800"), QColor("#e0e000"), QColor("#e0e030"), QColor("#e0e060"),
@@ -91,9 +108,7 @@ void MempoolStats::drawChart()
         // we are going to access the clientmodel feehistogram directly avoding a copy
         QMutexLocker locker(&m_clientmodel->m_mempool_locker);
 
-        /* TODO: remove
-           helpful for testing/development (loading a prestored dataset)
-        */
+        // TODO: make the stats get saved at shutdown and loaded on startup
         if (m_clientmodel->m_mempool_feehist.size() == 0) {
             FILE *filestr = fsbridge::fopen("/tmp/statsdump", "rb");
             if (filestr) {
@@ -192,7 +207,8 @@ void MempoolStats::drawChart()
             ClickableRectItem *fee_rect = new ClickableRectItem();
             fee_rect->setRect(4, c_y, c_w, c_h);
 
-            QColor brush_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
+            QColor brush_color = getColorForRange(i, display_up_to_range + 1);
+            //QColor brush_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
             brush_color.setAlpha(85);
             if (m_selected_range >= 0 && m_selected_range != i) {
                 // if one item is selected, hide out the other ones
@@ -210,9 +226,7 @@ void MempoolStats::drawChart()
                 }
                 drawChart();
 
-                /*TODO remove
-                  store the existing feehistory to a temporary file
-                */
+                // TODO - make this happen on shutdown also
                 FILE *filestr = fsbridge::fopen("/tmp/statsdump", "wb");
                 CAutoFile file(filestr, SER_DISK, false);
                 file << m_clientmodel->m_mempool_feehist;
@@ -275,7 +289,8 @@ void MempoolStats::drawChart()
             feepath.lineTo(current_x, bottom);
             feepath.lineTo(GRAPH_PADDING_LEFT, bottom);
         }
-        QColor pen_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
+        QColor pen_color = getColorForRange(i, fee_paths.size());
+        //QColor pen_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
         QColor brush_color = pen_color;
         pen_color.setAlpha(95);
         brush_color.setAlpha(85);
