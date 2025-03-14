@@ -61,6 +61,16 @@
     - Updated log messages to accurately reflect new file locations
   - These changes ensure network traffic history persists across application restarts and system reboots, preventing data loss and providing users with continuous historical network usage visualization
 
+## TrafficGraphWidget Bug Fix
+- **Task**: Fix out-of-bounds array access in TrafficGraphWidget causing application crash
+  - ✅ Identified critical bug in TrafficGraphWidget::paintPath function:
+    - Discovered loop condition `for (int i = 0; i < sampleCount++; ++i)` was incrementing sampleCount on each iteration
+    - This caused the loop to attempt accessing elements beyond the array bounds, triggering a crash
+  - ✅ Implemented fix by removing the post-increment operator:
+    - Changed to `for (int i = 0; i < sampleCount; ++i)` to maintain proper bounds checking
+    - Verified the fix prevents out-of-bounds access while preserving desired functionality
+  - This fix resolves a critical stability issue that was causing the Bitcoin-Qt application to crash when viewing the network traffic graph
+
 ---
 *This file will be updated with additional preferences as they are identified.*
 
