@@ -478,11 +478,19 @@ void TrafficGraphWidget::updateRates(int i) {
 	nLastBytesIn[i] = bytesIn;
 	nLastBytesOut[i] = bytesOut;
 	static bool fFull[VALUES_SIZE];
-	if (!fFull[i] && vTimeStamp[i].size()+4 > DESIRED_SAMPLES)
+	// Only trigger "Bump it up!" when we're about to exceed DESIRED_SAMPLES for the first time
+	// Check this condition once before entering the trimming loop
+	if (!fFull[i] && vTimeStamp[i].size() > DESIRED_SAMPLES && ttpoint < 0 && 
+	    m_value == i && i < VALUES_SIZE - 1) {
+		m_bump_value = true;
+		LogPrintf("%s: Setting m_bump_value=true for range %d at size %d\n", __func__, i, vTimeStamp[i].size());
+		fFull[i] = true;  // Mark this range as full immediately
+	} else if (!fFull[i] && vTimeStamp[i].size()+4 > DESIRED_SAMPLES)
 		LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
-	while(vTimeStamp[i].size() > DESIRED_SAMPLES) {
-		if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && !fFull[i]) m_bump_value = true;
-		fFull[i] = true;
+	while (vTimeStamp[i].size() > DESIRED_SAMPLES) {
+		// We've already set fFull[i] and decided on m_bump_value before this loop
+		// so we don't need to check it for each sample being removed
+		if (!fFull[i]) fFull[i] = true;  // Make sure it's marked as full
 		vSamplesIn[i].pop_back();
 		vSamplesOut[i].pop_back();
 		vTimeStamp[i].pop_back();
