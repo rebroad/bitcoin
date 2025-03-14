@@ -1775,7 +1775,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             nSecondLowestPct = nSecondLowestBPct;
         }
         if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm)
-            LogPrintf("worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d:%d) Global: TXpm=%d Pct=%d %s\n", nTechnique, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, (int)nLowestTXpm, (int)nSecondLowestTXpm, nGlobalTXpm, 100 * nTotalMempoolBytes / (nTotalBytesRecv+1), strBps(nGlobalBps));
+            LogPrintf("worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d:%d) Global: TXpm=%d Pct=%d %sbps\n", nTechnique, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, (int)nLowestTXpm, (int)nSecondLowestTXpm, nGlobalTXpm, 100 * nTotalMempoolBytes / (nTotalBytesRecv+1), strUnit(nGlobalBps));
         if (lastWorstPct != worstNodePct) {
             tWorstPctChanged = now;
             lastWorstPct = worstNodePct;

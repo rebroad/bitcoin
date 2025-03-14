@@ -926,7 +926,7 @@ bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generate
         if (match_length == prefix.size()) {
             int64_t elapsed_ms = GetTimeMillis() - start_time;
             LogPrintf("tor: Found matching vanity address after %s attempts (%.2f seconds)\n",
-                     strUnit(attempts, "", 3), elapsed_ms/1000.0);
+                    strUnit(static_cast<float>(attempts)), elapsed_ms/1000.0);
             generated_private_key = key;
             return true;
         }
@@ -948,7 +948,7 @@ bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generate
                       "     Partial matches: %s\n"
                       "     Best match so far: %s (%d/%d chars matched)\n"
                       "     Last address: %s\n",
-                      strUnit(attempts, "", 3), strUnit(attempts_per_second, "", 3),
+                      strUnit(static_cast<float>(attempts)), strUnit(static_cast<float>(attempts_per_second)),
                       match_stats_str.empty() ? "none yet" : match_stats_str,
                       best_match_address, best_match_length, prefix.size(),
                       last_non_matching_address);

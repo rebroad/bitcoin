@@ -368,7 +368,7 @@ std::string FormatParagraph(const std::string& in, size_t width, size_t indent)
     return out.str();
 }
 
-std::string strUnit(float value, std::string strUnit, int dp) {
+std::string strUnit(float value, int dp = 3) {
     std::string letter;
     if (value < 1'000) {
         ;
@@ -382,20 +382,12 @@ std::string strUnit(float value, std::string strUnit, int dp) {
         letter = "G";
         value /= 1'000'000'000;
     }
-    if (value < 1) return strprintf(strprintf("%%.%df%s%%s", dp, letter), value, strUnit);
-    if (value < 10) return strprintf(strprintf("%%.%df%s%%s", std::max(dp - 1, 0), letter), value, strUnit);
-    if (value < 100) return strprintf(strprintf("%%.%df%s%%s", std::max(dp - 2, 0), letter), value, strUnit);
-    if (value < 1'000) return strprintf(strprintf("%%.%df%s%%s", std::max(dp - 3, 0), letter), value, strUnit);
+    if (value < 1) return strprintf(strprintf("%%.%df%s%", dp, letter), value);
+    if (value < 10) return strprintf(strprintf("%%.%df%s%", std::max(dp - 1, 0), letter), value);
+    if (value < 100) return strprintf(strprintf("%%.%df%s%", std::max(dp - 2, 0), letter), value);
+    if (value < 1'000) return strprintf(strprintf("%%.%df%s%", std::max(dp - 3, 0), letter), value);
 
-    return strprintf(strprintf("%%.%df%s%%s", std::max(dp - 4, 0),  letter), value, strUnit);
-}
-
-std::string strBps(float bits) {
-    return strUnit(bits, "bps", 3);
-}
-
-std::string strBytesps(float bytes) {
-    return strUnit(bytes, "B/s", 3);
+    return strprintf(strprintf("%%.%df%s%", std::max(dp - 4, 0),  letter), value);
 }
 
 std::string strAge(const int64_t nAge) {
