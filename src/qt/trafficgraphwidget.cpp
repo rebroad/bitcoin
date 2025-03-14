@@ -369,7 +369,7 @@ void TrafficGraphWidget::updateStuff() {
 
 		int64_t msecs_per_sample = int64_t(values[i]) * int64_t(60000) / DESIRED_SAMPLES;
 		// Take a new sample if it's time to do so or if the last time was in the future
-		if (lastTimeInFuture || nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // REBTODO - fix bad timing
+		if (lastTimeInFuture || nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // TODO - we deduct nInterval/2 to avoid creep (due to delays in the algorithm, but is there a better way?)
 			updateRates(i);
 			if (i == m_value) {
 				if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
@@ -388,11 +388,11 @@ void TrafficGraphWidget::updateStuff() {
 		if (values[m_new_value] > m_range && values[m_value] < m_range) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
 							values[m_value], values[m_value+1], m_range);
-			m_value++; // TODO - re-assess the tooltip
+            m_value++; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
 		} else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
 							values[m_value], values[m_value-1], m_range);
-			m_value--; // TODO - re-assess the tooltip
+		    m_value--; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
 		}
 		fUpdate = true;
 		//LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
@@ -415,8 +415,8 @@ void TrafficGraphWidget::updateStuff() {
 			fUpdate = true;
 		}
 	} else if (ttpoint >= 0 && GetTime() >= tt_time + 9) { // ToolTip is about to expire so refresh it.
-		LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
-		fUpdate = true; // TODO - technically it's only the ToolTip that needs to be refreshed
+        LogPrintf("%s: Visible. Time>=tt_time+9. Call update()\n", __func__);
+        fUpdate = true; // TODO - make fUpdate non-boolean so we can have a partial-update flag just for refreshing the tooltip only.
 	}
 
 	if (fUpdate) update();
