@@ -379,8 +379,6 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
                         trimmed_key.substr(0, 12) == "ED25519-V3:" ||
                         trimmed_key.find(":") != std::string::npos) {
                         private_keys.push_back(trimmed_key);
-                        LogPrint(BCLog::TOR, "tor: Loaded private key: %s...\n",
-                                 trimmed_key.substr(0, std::min(10, (int)trimmed_key.length())) + "...");
                     } else {
                         LogPrintf("tor: Skipping invalid private key format in key file\n");
                     }
@@ -391,7 +389,7 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
             if (private_keys.empty()) {
                 LogPrint(BCLog::TOR, "tor: No valid private keys found in key file\n");
             } else {
-                LogPrint(BCLog::TOR, "tor: Found %d private key(s) in key file\n", private_keys.size());
+                LogPrint(BCLog::TOR, "tor: Loaded %d private key(s) from key file\n", private_keys.size());
 
                 // Resize if necessary to match the required number of services
                 size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
