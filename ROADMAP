@@ -169,4 +169,4 @@ Add code to prune blk files not used in front and behind (in case we're switchin
 
 Completed Items:
 ===============
-Don't draw the traffic graph tooltips unless the window is visible (i.e. not minimized or covered by another window).
+2025-03-15: Don't draw the traffic graph tooltips unless the window is visible.
