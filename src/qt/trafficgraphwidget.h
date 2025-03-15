@@ -45,7 +45,6 @@ protected:
     void paintEvent(QPaintEvent *) override;
     int y_value(float value);
     void mouseMoveEvent(QMouseEvent *event) override;
-    void keyPressEvent(QKeyEvent *event) override;
     int ttpoint = -1;
     int x_offset = 0;
     int y_offset = 0;
