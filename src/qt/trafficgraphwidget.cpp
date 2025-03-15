@@ -156,20 +156,18 @@ void TrafficGraphWidget::keyPressEvent(QKeyEvent *event) {
     switch (event->key()) {
     case Qt::Key_Left:
         if (m_new_value > 0) {
-            unsigned int newValue = m_new_value; // Current value before change
-            // Emit signal before changing the value
-            Q_EMIT graphRangeChanged((newValue - 1) * 200);
-            setGraphRange(newValue);
-            LogPrintf("%s: Left arrow pressed, decreasing range to %d\n", __func__, newValue-1);
+            unsigned int newValue = m_new_value - 1;
+            Q_EMIT graphRangeChanged(newValue * 200);
+            setGraphRange(m_new_value);
+            LogPrintf("%s: Left arrow pressed, decreasing range to %d\n", __func__, newValue);
         }
         break;
     case Qt::Key_Right:
         if (m_new_value < VALUES_SIZE - 1) {
-            unsigned int newValue = m_new_value + 2; // Next value (+2 because setGraphRange subtracts 1)
-            // Emit signal before changing the value
-            Q_EMIT graphRangeChanged((newValue - 1) * 200);
-            setGraphRange(newValue);
-            LogPrintf("%s: Right arrow pressed, increasing range to %d\n", __func__, newValue-1);
+            unsigned int newValue = m_new_value + 1;
+            Q_EMIT graphRangeChanged(newValue * 200);
+            setGraphRange(newValue + 2);
+            LogPrintf("%s: Right arrow pressed, increasing range to %d\n", __func__, newValue);
         }
         break;
     default:
