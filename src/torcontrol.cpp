@@ -488,7 +488,10 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
 
         // Store the service information in the appropriate vectors
         service_ids[service_index] = new_service_id;
-        private_keys[service_index] = new_private_key;
+        // If we received a key from Tor, store it. Otherwise keep the key we sent.
+        if (!new_private_key.empty()) {
+            private_keys[service_index] = new_private_key;
+        }
         services[service_index] = LookupNumeric(std::string(new_service_id+".onion"), Params().GetDefaultPort());
 
         LogPrintf("tor: Got service ID %s, advertising service %s\n",
@@ -514,67 +517,37 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
                       fs::PathToString(key_directory), e.what());
         }
 
-        // Write keys to individual files in the directory
+        // Write key to individual file in the directory
         if (directory_exists) {
-            // Write the new key to its own file first
-            // This ensures we store the most recently generated key even if we have issues with others
-            if (!new_service_id.empty() && !new_private_key.empty()) {
-                fs::path key_file = key_directory / new_service_id;
+            // Save the key for the current service (if both service ID and key are present)
+            const std::string& service_id = service_ids[service_index];
+            const std::string& key = private_keys[service_index];
+
+            LogPrint(BCLog::TOR, "tor: Checking current service at index %d - service_id length: %d, key length: %d\n",
+                     service_index, service_id.length(), key.length());
+
+            if (!service_id.empty() && !key.empty()) {
+                fs::path key_file = key_directory / service_id;
                 LogPrint(BCLog::TOR, "tor: Attempting to save key for service %s to file %s\n",
-                         new_service_id, fs::PathToString(key_file));
+                         service_id, fs::PathToString(key_file));
                 try {
-                    if (WriteBinaryFile(key_file, new_private_key)) {
+                    if (WriteBinaryFile(key_file, key)) {
                         // Add to monitored files cache for the directory monitor
                         monitored_files.insert(fs::PathToString(key_file));
-                        monitored_keys_cache[fs::PathToString(key_file)] = new_private_key;
+                        monitored_keys_cache[fs::PathToString(key_file)] = key;
 
                         LogPrint(BCLog::TOR, "tor: Successfully saved private key for service %s to %s (key format: %s...)\n",
-                                 new_service_id, fs::PathToString(key_file),
-                                 new_private_key.substr(0, std::min(12, (int)new_private_key.length())));
+                                 service_id, fs::PathToString(key_file),
+                                 key.substr(0, std::min(12, (int)key.length())));
                     } else {
                         LogPrintf("tor: Error writing private key file for service %s to %s\n",
-                                  new_service_id, fs::PathToString(key_file));
+                                  service_id, fs::PathToString(key_file));
                     }
                 } catch (const std::exception& e) {
-                    LogPrintf("tor: Error saving key file for service %s: %s\n", new_service_id, e.what());
+                    LogPrintf("tor: Error saving key file for service %s: %s\n", service_id, e.what());
                 }
-            }
-
-            // Also write all other valid keys to their own files
-            // This ensures all keys are properly stored in the new format
-            int valid_keys = 0;
-            for (size_t i = 0; i < service_ids.size() && i < private_keys.size(); i++) {
-                const std::string& service_id = service_ids[i];
-                const std::string& key = private_keys[i];
-
-                LogPrint(BCLog::TOR, "tor: Checking key at index %d - service_id length: %d, key length: %d\n",
-                         i, service_id.length(), key.length());
-                if (!service_id.empty() && !key.empty() &&
-                    // Skip the one we just wrote to avoid duplicate writes
-                    !(service_id == new_service_id && key == new_private_key)) {
-                    fs::path key_file = key_directory / service_id;
-                    LogPrint(BCLog::TOR, "tor: Attempting to save existing key for service %s to file %s\n",
-                             service_id, fs::PathToString(key_file));
-                    try {
-                        if (WriteBinaryFile(key_file, key)) {
-                            valid_keys++;
-                            // Add to monitored files cache if not already there
-                            monitored_files.insert(fs::PathToString(key_file));
-                            monitored_keys_cache[fs::PathToString(key_file)] = key;
-
-                            LogPrint(BCLog::TOR, "tor: Successfully saved private key for service %s to %s (key format: %s...)\n",
-                                     service_id, fs::PathToString(key_file),
-                                     key.substr(0, std::min(12, (int)key.length())));
-                        } else {
-                            LogPrintf("tor: Error writing private key file for service %s to %s\n",
-                                     service_id, fs::PathToString(key_file));
-                        }
-                    } catch (const std::exception& e) {
-                        LogPrintf("tor: Error saving key file for service %s: %s\n", service_id, e.what());
-                    }
-                } else {
-                    LogPrint(BCLog::TOR, "tor: Skipping save for service %s - empty id or key\n", service_id);
-                }
+            } else {
+                LogPrint(BCLog::TOR, "tor: Skipping save for service %s - empty id or key\n", service_id);
             }
         } else {
             LogPrintf("tor: Could not access or create private key directory - keys not saved\n");
