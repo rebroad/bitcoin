@@ -215,7 +215,7 @@ TestingSetup::TestingSetup(const std::string& chainName, const std::vector<const
         chainparams.GetConsensus(),
         m_args.GetIntArg("-checkblocks", DEFAULT_CHECKBLOCKS),
         m_args.GetIntArg("-checklevel", DEFAULT_CHECKLEVEL),
-        /*get_unix_time_seconds=*/static_cast<int64_t(*)()>(GetTime));
+        /*get_unix_time_seconds=*/[]() { return GetTime<std::chrono::seconds>().count(); });
     assert(!maybe_verify_error.has_value());
 
     BlockValidationState state;
@@ -263,7 +263,7 @@ void TestChain100Setup::mineBlocks(int num_blocks)
     for (int i = 0; i < num_blocks; i++) {
         std::vector<CMutableTransaction> noTxns;
         CBlock b = CreateAndProcessBlock(noTxns, scriptPubKey);
-        SetMockTime(GetTime() + 1);
+        SetMockTime(GetTime<std::chrono::seconds>() + std::chrono::seconds{1});
         m_coinbase_txns.push_back(b.vtx[0]);
     }
 }

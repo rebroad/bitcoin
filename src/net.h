@@ -662,16 +662,22 @@ public:
     //! May not be called more than once
     void SetAddrLocal(const CService& addrLocalIn) LOCKS_EXCLUDED(m_addr_local_mutex);
 
-    CNode* AddRef(int num)
+    CNode* AddRef(int num = 0)
     {
-        nRefCount = nRefCount | num;
+		if (num)
+			nRefCount = nRefCount | num;
+		else
+            nRefCount++;
 
         return this;
     }
 
-    void Release(int num)
+    void Release(int num = 0)
     {
-        nRefCount = nRefCount & ~num;
+		if (num)
+			nRefCount = nRefCount & ~num;
+		else
+			nRefCount--;
     }
 
     void AddKnownTx(const uint256& hash)
