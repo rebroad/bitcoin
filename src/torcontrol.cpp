@@ -38,7 +38,7 @@
 #include <event2/event.h>
 #include <event2/thread.h>
 #include <event2/util.h>
-
+#include <fstream>
 /** Default control port */
 const std::string DEFAULT_TOR_CONTROL = "127.0.0.1:9051";
 /** Tor cookie size (from control-spec.txt) */
@@ -375,20 +375,22 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
             int line_idx = 0;
             for (const std::string& key_line : key_lines) {
                 line_idx++;
-                std::string trimmed_key = boost::algorithm::trim_copy(key_line);
                 LogPrint(BCLog::TOR, "tor: Processing key file line %d, length: %d, empty: %s\n",
-                         line_idx, key_line.length(), trimmed_key.empty() ? "true" : "false");
-                if (!trimmed_key.empty()) {
-                    // Basic validation that the key format looks correct
-                    if (trimmed_key.substr(0, 4) == "NEW:" ||
-                        trimmed_key.substr(0, 12) == "ED25519-V3:" ||
-                        trimmed_key.find(":") != std::string::npos) {
+                         line_idx, key_line.length(), key_line.empty() ? "true" : "false");
+                if (!key_line.empty()) {
+                    // Use shared validation function with a description identifying line number
+                    std::string filename = "onion_v3_private_key (line " + std::to_string(line_idx) + ")";
+                    std::pair<bool, std::string> validation_result = ValidateOnionKey(key_line, filename);
+
+                    if (validation_result.first) {
+                        // Valid key found
                         LogPrint(BCLog::TOR, "tor: Validated key format: %s...\n",
-                                 trimmed_key.substr(0, std::min(12, (int)trimmed_key.length())));
-                        private_keys.push_back(trimmed_key);
+                                 validation_result.second.substr(0, std::min(12, (int)validation_result.second.length())));
+                        private_keys.push_back(validation_result.second);
                     } else {
+                        // Invalid key
                         LogPrintf("tor: Skipping invalid private key format in key file: %s...\n",
-                                 trimmed_key.substr(0, std::min(12, (int)trimmed_key.length())));
+                                 validation_result.second.substr(0, std::min(12, (int)validation_result.second.length())));
                     }
                 }
             }
@@ -874,6 +876,29 @@ void TorController::Reconnect()
     }
 }
 
+/** Validate an onion service private key format with detailed logging */
+std::pair<bool, std::string> TorController::ValidateOnionKey(const std::string& key_data, const std::string& filename)
+{
+    LogPrint(BCLog::TOR, "tor: Key validation steps for file %s:\n", filename.c_str());
+    LogPrint(BCLog::TOR, "tor: 1. Raw key length: %d\n", key_data.length());
+
+    // Handle trailing newlines and whitespace
+    std::string key_str = key_data;
+    if (!key_str.empty() && key_str.back() == '\n') {
+        key_str.pop_back();  // Remove trailing newline if present
+        LogPrint(BCLog::TOR, "tor: Removed trailing newline\n");
+    }
+
+    std::string trimmed_key = boost::algorithm::trim_copy(key_str);
+    LogPrint(BCLog::TOR, "tor: 2. After trim length: %d\n", trimmed_key.length());
+
+    // Only check for ED25519-V3 format
+    bool valid_key = (trimmed_key.substr(0, 12) == "ED25519-V3:" && trimmed_key.length() > 12);
+    LogPrint(BCLog::TOR, "tor: Key validation %s\n", valid_key ? "PASSED" : "FAILED");
+
+    return std::make_pair(valid_key, trimmed_key);
+}
+
 fs::path TorController::GetPrivateKeyFile()
 {
     return gArgs.GetDataDirNet() / "onion_v3_private_key";
@@ -902,96 +927,89 @@ bool TorController::LoadPrivateKeysFromDirectory()
         }
     } catch (const fs::filesystem_error& e) {
         LogPrintf("tor: Error creating private key directory %s: %s\n",
-                  fs::PathToString(directory), e.what());
+                fs::PathToString(directory), e.what());
         return false;
     }
-
-    LogPrint(BCLog::TOR, "tor: Looking for private keys in directory %s\n", fs::PathToString(directory));
 
     private_keys.clear();
     monitored_files.clear();
     monitored_keys_cache.clear();
-
     int total_files_checked = 0;
     bool loaded_any = false;
 
-    // Iterate over files in the directory
     try {
         for (const auto& entry : fs::directory_iterator(directory)) {
+            total_files_checked++;
+            std::string filename = fs::PathToString(entry.path());
+            if (!fs::is_regular_file(entry.status())) {
+                continue;
+            }
+
             try {
-                total_files_checked++;
-                std::string filename;
-                try {
-                    filename = entry.path().filename().string();
-                    LogPrint(BCLog::TOR, "tor: Checking file: %s\n", filename);
-                } catch (const std::exception& e) {
-                    LogPrintf("tor: Error getting filename: %s\n", e.what());
+                std::ifstream keyfile(entry.path());
+                if (!keyfile.is_open()) {
+                    LogPrintf("tor: Failed to open private key file %s\n", filename);
                     continue;
                 }
 
-                std::pair<bool, std::string> key_data;
-                try {
-                    key_data = ReadBinaryFile(entry.path());
-                    LogPrint(BCLog::TOR, "tor: Read %d bytes from file %s\n",
-                            key_data.second.size(), filename);
-                } catch (const std::exception& e) {
-                    LogPrintf("tor: Error reading file %s: %s\n", filename, e.what());
+                std::string key_data((std::istreambuf_iterator<char>(keyfile)),
+                                std::istreambuf_iterator<char>());
+                keyfile.close();
+
+                if (key_data.empty()) {
+                    LogPrintf("tor: Empty private key file %s\n", filename);
                     continue;
                 }
 
-                if (key_data.first) {
-                    std::string trimmed_key;
-                    try {
-                        trimmed_key = boost::algorithm::trim_copy(key_data.second);
-                        LogPrint(BCLog::TOR, "tor: Validating key format from file %s\n", filename);
+                std::pair<bool, std::string> validation_result = ValidateOnionKey(key_data, filename);
 
-                        // Basic validation that the key format looks correct
-                        bool valid_key = false;
-                        if (trimmed_key.compare(0, 12, "ED25519-V3:") == 0 && trimmed_key.size() > 12) {
-                            valid_key = true;
-                            LogPrint(BCLog::TOR, "tor: Valid private key format found in file %s\n", filename);
-                        }
-
-                        if (valid_key) {
-                            private_keys.push_back(trimmed_key);
-                            monitored_files.insert(fs::PathToString(entry.path()));
-                            monitored_keys_cache[fs::PathToString(entry.path())] = trimmed_key;
-                            LogPrint(BCLog::TOR, "tor: Added private key from file %s to monitoring\n", filename);
-                            loaded_any = true;
-                        } else {
-                            LogPrintf("tor: Skipping invalid private key format in file %s\n", filename);
-                        }
-                    } catch (const std::exception& e) {
-                        LogPrintf("tor: Error processing key data from file %s: %s\n", filename, e.what());
-                    }
+                if (validation_result.first) {
+                    LogPrint(BCLog::TOR, "tor: Valid private key format found in file %s\n", filename);
+                    private_keys.push_back(validation_result.second);
+                    monitored_files.insert(fs::PathToString(entry.path()));
+                    monitored_keys_cache[fs::PathToString(entry.path())] = validation_result.second;
+                    LogPrint(BCLog::TOR, "tor: Added private key from file %s to monitoring\n", filename);
+                    loaded_any = true;
                 } else {
-                    LogPrintf("tor: Failed to read private key file %s\n", filename);
+                    LogPrintf("tor: Skipping invalid private key format in file %s\n", filename);
                 }
-            } catch (const fs::filesystem_error& e) {
-                LogPrintf("tor: Error accessing file in directory: %s\n", e.what());
             } catch (const std::exception& e) {
-                LogPrintf("tor: Unexpected error processing file in directory: %s\n", e.what());
+                LogPrintf("tor: Error processing key file %s: %s\n", filename, e.what());
             }
         }
     } catch (const fs::filesystem_error& e) {
         LogPrintf("tor: Error iterating directory %s: %s\n",
-                  fs::PathToString(directory), e.what());
+                fs::PathToString(directory), e.what());
     }
 
     if (loaded_any) {
         LogPrint(BCLog::TOR, "tor: Loaded %d private key(s) from directory, processed %d total files\n",
-                 private_keys.size(), total_files_checked);
+                private_keys.size(), total_files_checked);
         LogPrint(BCLog::TOR, "tor: Vector sizes after loading - private_keys: %d, service_ids: %d, services: %d, monitored_files: %d\n",
-                 private_keys.size(), service_ids.size(), services.size(), monitored_files.size());
+                private_keys.size(), service_ids.size(), services.size(), monitored_files.size());
+
+        // Monitor the directory for changes
+        if (!directory_monitor_ev) {
+            struct event* new_ev = event_new(base, -1, EV_PERSIST,
+                                        directory_monitor_cb, this);
+            if (!new_ev) {
+                LogPrintf("tor: Failed to create directory monitor event\n");
+                return false;
+            }
+            directory_monitor_ev = new_ev;
+            struct timeval tv = { DIRECTORY_MONITOR_INTERVAL, 0 };
+            event_add(directory_monitor_ev, &tv);
+        }
 
         // Resize if necessary to match the required number of services
+        size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
         if (private_keys.size() < num_services) {
             LogPrint(BCLog::TOR, "tor: Need %d services but only %d keys found, will generate additional keys\n",
-                     num_services, private_keys.size());
+                    num_services, private_keys.size());
             private_keys.resize(num_services);
         } else if (private_keys.size() > num_services) {
             LogPrint(BCLog::TOR, "tor: Found %d keys but only %d services requested, using first %d keys\n",
-                     private_keys.size(), num_services, num_services);
+                    private_keys.size(), num_services, num_services);
             private_keys.resize(num_services);
         }
     }
@@ -1068,12 +1086,26 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
                     if (key_data.first && !key_data.second.empty()) {
                         std::string trimmed_key;
                         try {
-                            trimmed_key = boost::algorithm::trim_copy(key_data.second);
+                            // Add detailed logging for key validation
+                            LogPrint(BCLog::TOR, "tor: Validating key: length=%d, prefix='%.10s'\n",
+                                key_data.second.length(),
+                                key_data.second.substr(0, std::min(size_t(10), key_data.second.length())).c_str());
+
+                            // Also ensure key validation accepts both with and without trailing newline
+                            std::string key_str = key_data.second;
+                            if (key_str.length() > 0 && key_str.back() == '\n') {
+                                key_str.pop_back();  // Remove trailing newline if present
+                                LogPrint(BCLog::TOR, "tor: Removed trailing newline from key\n");
+                            }
+
+                            // Add debug output before actual validation
+                            LogPrint(BCLog::TOR, "tor: Key after newline handling: length=%d\n", key_str.length());
+
+                            trimmed_key = boost::algorithm::trim_copy(key_str);
                         } catch (const std::exception& e) {
                             LogPrintf("tor: Error trimming key data: %s\n", e.what());
                             continue;
                         }
-
                         if (trimmed_key.empty()) {
                             LogPrintf("tor: Empty key found in file %s, skipping\n", filepath);
                             continue;

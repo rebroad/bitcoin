@@ -160,6 +160,8 @@ private:
     /** Reconnection timeout in seconds */
     float reconnect_timeout;
 
+    std::pair<bool, std::string> ValidateOnionKey(const std::string& key_data, const std::string& filename);
+
 public:
     /** Callback for ADD_ONION result */
     void add_onion_cb(TorControlConnection& conn, const TorControlReply& reply);
