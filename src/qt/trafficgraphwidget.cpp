@@ -116,10 +116,7 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 	bool pathHasValidPoints = false;
 	bool previousPointValid = false;
 
-    // Start at the bottom-right (though this point may not be part of the final shape)
-    path.moveTo(XMARGIN + w, YMARGIN + h);
-
-    // Plot the data points
+	// Plot the data points
 	for (int i = 0; i < sampleCount; ++i) {
 		float sample = samples.at(i);
 		int y = y_value(sample);
@@ -143,11 +140,11 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 
 	// Close the shape if there are valid points
 	if (pathHasValidPoints) {
-		// Draw a vertical line from the last point to the bottom
+		// 1. Draw a vertical line down from the last point to the bottom
 		path.lineTo(lastValidX, YMARGIN + h);
-		// Draw a horizontal line to the x-coordinate of the first point (not the rightmost edge)
+		// 2. Draw a horizontal line back to the x-coordinate where we started
 		path.lineTo(firstValidX, YMARGIN + h);
-		// Optionally, draw a vertical line back up to the first point to fully close the shape
+		// 3. Draw a vertical line up to the first point
 		path.lineTo(firstValidX, y_value(samples.at(0)));
 	}
 }
