@@ -26,12 +26,6 @@
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
-    vSamplesIn(),
-    vSamplesOut(),
-    vTimeStamp(),
-    nLastBytesIn(),
-    nLastBytesOut(),
-    nLastTime(),
     clientModel(nullptr)
 {
     timer = new QTimer(this);
@@ -42,17 +36,17 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 }
 
 void TrafficGraphWidget::setClientModel(ClientModel *model) {
-    clientModel = model;
-    uint64_t nTime = GetTimeMillis();
     if (model) {
+        clientModel = model;
         m_dataDir = model->dataDir();
         if (vSamplesIn[0].empty() && vSamplesOut[0].empty()) {
-        // Load saved traffic data if available and the arrays are empty
+            // Load saved traffic data if available and the arrays are empty
             LogPrintf("vSamplesIn[0].empty()=%d\n", vSamplesIn[0].empty());
-            loadData(nTime);
+            loadData();
             return;
         }
 
+        uint64_t nTime = GetTimeMillis();
         for (int i = 0; i < VALUES_SIZE; i++) {
             nLastBytesIn[i] = model->node().getTotalBytesRecv();
             nLastBytesOut[i] = model->node().getTotalBytesSent();
@@ -63,7 +57,8 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
         }
     } else {
         LogPrintf("%s: Saving data\n", __func__);
-    saveData();
+        saveData(); // TODO might not need to cache the data_dir now that clientmodel moved to below
+        clientModel = model;
     }
 }
 
@@ -75,7 +70,16 @@ unsigned int TrafficGraphWidget::getCurrentRangeIndex() const {
 
 int TrafficGraphWidget::y_value(float value) {
     int h = height() - YMARGIN * 2;
-    return YMARGIN + h - (h * 1.0 * (fToggle ? (pow(value, 0.30102) / pow(fMax, 0.30102)) : (value / fMax)));
+
+    if (fMax <= 0.0001f || value <= std::numeric_limits<float>::epsilon())
+        return YMARGIN + h; // Return bottom of the graph
+
+    float result = fToggle ? pow(value, 0.30102) / pow(fMax, 0.30102) : value / fMax;
+
+    if (std::isnan(result) || std::isinf(result))
+        return YMARGIN + h; // Return bottom of the graph
+
+    return YMARGIN + h - (h * 1.0 * result);
 }
 
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
@@ -86,15 +90,35 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
     int x = XMARGIN + w;
     path.moveTo(x, YMARGIN + h);
     for(int i = 0; i < sampleCount; ++i) {
-        x = XMARGIN + w - w * i * values[m_value] / m_range / DESIRED_SAMPLES;
-        int y = y_value(samples.at(i));
+        double ratio = static_cast<double>(i) * values[m_value] / m_range / DESIRED_SAMPLES;
+        x = XMARGIN + w - static_cast<int>(w * ratio);
+        float sampleValue = samples.at(i);
+        // Log when sample value is suspicious (once per second)
+        static uint64_t last_sample_log = 0;
+        uint64_t now = GetTimeMillis();
+        if ((sampleValue < 0 || std::isnan(sampleValue) || std::isinf(sampleValue)) &&
+            (now - last_sample_log >= 1000)) {
+            LogPrintf("paintPath: Sample[%d] value=%f before passing to y_value\n", i, sampleValue);
+            last_sample_log = now;
+            sampleValue = 0;
+        }
+        int y = y_value(sampleValue);
         path.lineTo(x, y);
     }
     path.lineTo(x, YMARGIN + h);
 }
 
-float floatmax(float a, float b)
-{
+float floatmax(float a, float b) {
+    // Check for problematic values in inputs
+    static uint64_t last_floatmax_log = 0;
+    uint64_t now = GetTimeMillis();
+    if ((a <= 0 || std::isnan(a) || std::isinf(a) ||
+         b <= 0 || std::isnan(b) || std::isinf(b)) &&
+        (now - last_floatmax_log >= 1000)) {
+        LogPrintf("floatmax: inputs a=%f, b=%f\n", a, b);
+        last_floatmax_log = now;
+    }
+
     if (a > b) return a;
     else return b;
 }
@@ -217,7 +241,23 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int w = width() - XMARGIN * 2;
         double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
         int x = XMARGIN + w - static_cast<int>(w * ratio);
-        int y = y_value(floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint)));
+        float inValue = vSamplesIn[m_value].at(ttpoint);
+        float outValue = vSamplesOut[m_value].at(ttpoint);
+        float maxValue = floatmax(inValue, outValue);
+
+        // Log detailed information about the tooltip values
+        static uint64_t last_tooltip_log = 0;
+        uint64_t now = GetTimeMillis();
+        if ((inValue <= 0 || outValue <= 0 || maxValue <= 0 ||
+             std::isnan(inValue) || std::isnan(outValue) || std::isnan(maxValue) ||
+             std::isinf(inValue) || std::isinf(outValue) || std::isinf(maxValue)) &&
+            (now - last_tooltip_log >= 1000)) {
+            LogPrintf("paintEvent: Tooltip values - inValue=%f, outValue=%f, maxValue=%f\n",
+                      inValue, outValue, maxValue);
+            last_tooltip_log = now;
+        }
+
+        int y = y_value(maxValue);
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
         std::chrono::milliseconds sampleTime{0};
@@ -371,8 +411,30 @@ void TrafficGraphWidget::updateRates(int i) {
     if (nRealInterval >= 0) {
         if (nDebugI == i)
             LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
+
+        // Debug information for bytes and interval
+        static uint64_t last_bytes_log = 0;
+        uint64_t now = GetTimeMillis();
+        if (nDebugI == i && now - last_bytes_log >= 5000) { // Log every 5 seconds for readability
+            LogPrintf("%s: Raw values - bytesIn=%llu, nLastBytesIn=%llu, bytesOut=%llu, nLastBytesOut=%llu, nRealInterval=%lld\n",
+                      __func__, bytesIn, nLastBytesIn[i], bytesOut, nLastBytesOut[i], nRealInterval);
+            last_bytes_log = now;
+        }
+
+        // Calculate rates
         in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
         out_rate_kilobytes_per_msec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
+
+        // Check for negative, zero, NaN or Inf values that could cause problems later
+        static uint64_t last_rate_log_time = 0;
+        if (nDebugI == i && (
+            in_rate_kilobytes_per_msec <= 0 || std::isnan(in_rate_kilobytes_per_msec) || std::isinf(in_rate_kilobytes_per_msec) ||
+            out_rate_kilobytes_per_msec <= 0 || std::isnan(out_rate_kilobytes_per_msec) || std::isinf(out_rate_kilobytes_per_msec)) &&
+            (now - last_rate_log_time >= 1000)) {
+            LogPrintf("%s: WARNING - Calculated rates: in_rate=%f, out_rate=%f\n",
+                      __func__, in_rate_kilobytes_per_msec, out_rate_kilobytes_per_msec);
+            last_rate_log_time = now;
+        }
     }
     vSamplesIn[i].push_front(in_rate_kilobytes_per_msec);
     vSamplesOut[i].push_front(out_rate_kilobytes_per_msec);
@@ -467,7 +529,7 @@ void TrafficGraphWidget::saveData() {
     }
 }
 
-bool TrafficGraphWidget::loadDataFromBinary(uint64_t nTime) {
+bool TrafficGraphWidget::loadDataFromBinary() {
     LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
     try {
         fs::path pathTrafficGraph = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata";
@@ -475,7 +537,7 @@ bool TrafficGraphWidget::loadDataFromBinary(uint64_t nTime) {
 
         if (!file) {
             LogPrintf("TrafficGraphWidget: Binary data file not found, attempting to load from CSV\n");
-            return loadDataFromCSV(nTime);
+            return loadDataFromCSV();
         } else
             LogPrintf("TrafficGraphWidget: Binary data file found, attempting to load from it\n");
 
@@ -519,7 +581,6 @@ bool TrafficGraphWidget::loadDataFromBinary(uint64_t nTime) {
             for (unsigned int j = 0; j < timeStampSize; j++) {
                 uint64_t timeMs;
                 filein >> VARINT(timeMs);
-                if (timeMs > nTime) timeMs = nTime;
                 vTimeStamp[i].push_back(std::chrono::milliseconds{static_cast<int64_t>(timeMs)});
             }
         }
@@ -530,11 +591,11 @@ bool TrafficGraphWidget::loadDataFromBinary(uint64_t nTime) {
     } catch (const std::exception& e) {
         LogPrintf("TrafficGraphWidget: Error loading binary data: %s\n", e.what());
         LogPrintf("TrafficGraphWidget: Attempting to load from CSV after binary load error\n");
-        return loadDataFromCSV(nTime);
+        return loadDataFromCSV();
     }
 }
 
-bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
+bool TrafficGraphWidget::loadDataFromCSV() {
     LogPrintf("TrafficGraphWidget: Attempting to load data from CSV in the data directory\n");
     try {
         // Path to the CSV file
@@ -633,7 +694,6 @@ bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
 
                     // Add to corresponding queues (push_back because we're reading oldest to newest)
                     Q_UNUSED(index);
-                    if (timestamp > nTime) timestamp = nTime;
                     vTimeStamp[currentRange].push_back(std::chrono::milliseconds{timestamp});
                     vSamplesIn[currentRange].push_back(inRate);
                     vSamplesOut[currentRange].push_back(outRate);
@@ -667,11 +727,11 @@ bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
     }
 }
 
-bool TrafficGraphWidget::loadData(uint64_t nTime) {
+bool TrafficGraphWidget::loadData() {
     bool success = false;
 
     // Try to load from binary file first, then fall back to CSV if that fails
-    if (!(success = loadDataFromBinary(nTime))) success = loadDataFromCSV(nTime);
+    if (!(success = loadDataFromBinary())) success = loadDataFromCSV();
 
     if (!success) return false;
 
