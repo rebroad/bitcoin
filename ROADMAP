@@ -1,3 +1,5 @@
+Is it possible to make the splashscreen appear without taking the focus from the current window?
+
 When viewing the trafficgraph widget, ensure left and right arrows work without needing to click on the slider bar first.
 
 Upon startup, if we're unable to resolve the hostname of our IP address (ddns.org), pop up a dialogue, but don't let this delay the starting of Bitcoin-Qt - i.e. non-blocking dialogue (which will still remain visible until the user clicks OK, or will disappear after 3 minutes).
