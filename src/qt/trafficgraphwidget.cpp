@@ -33,6 +33,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     timer->setInterval(75);
     timer->start();
     setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus); // Make widget focusable to respond to keyboard events
 }
 
 void TrafficGraphWidget::setClientModel(ClientModel *model) {
@@ -60,6 +61,9 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
         saveData(); // TODO might not need to cache the data_dir now that clientmodel moved to below
         clientModel = model;
     }
+
+    // Set focus to enable keyboard navigation immediately when widget is set up
+    setFocus();
 }
 
 bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
@@ -143,8 +147,39 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
     int x = event->x();
     int y = event->y();
     fToggle = !fToggle;
-    LogPrintf("%: x=%d y=%d\n", __func__, x-XMARGIN, y-YMARGIN);
+    LogPrintf("%s: x=%d y=%d\n", __func__, x-XMARGIN, y-YMARGIN);
     update();
+    setFocus(); // Set focus to widget when clicked
+}
+
+void TrafficGraphWidget::keyPressEvent(QKeyEvent *event) {
+    switch (event->key()) {
+    case Qt::Key_Left:
+        if (m_new_value > 0) {
+            unsigned int newValue = m_new_value; // Current value before change
+            // Emit signal before changing the value
+            Q_EMIT graphRangeChanged((newValue - 1) * 200);
+            setGraphRange(newValue);
+            LogPrintf("%s: Left arrow pressed, decreasing range to %d\n", __func__, newValue-1);
+        }
+        break;
+    case Qt::Key_Right:
+        if (m_new_value < VALUES_SIZE - 1) {
+            unsigned int newValue = m_new_value + 2; // Next value (+2 because setGraphRange subtracts 1)
+            // Emit signal before changing the value
+            Q_EMIT graphRangeChanged((newValue - 1) * 200);
+            setGraphRange(newValue);
+            LogPrintf("%s: Right arrow pressed, increasing range to %d\n", __func__, newValue-1);
+        }
+        break;
+    default:
+        QWidget::keyPressEvent(event);
+    }
+}
+
+void TrafficGraphWidget::setFocus()
+{
+    QWidget::setFocus();
 }
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *)
@@ -412,7 +447,9 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
         update_fMax();
         update();
     }
-
+    // Set focus when range is changed to ensure keyboard navigation continues to work
+    setFocus();
+    
     return std::chrono::minutes{values[m_new_value]};
 }
 

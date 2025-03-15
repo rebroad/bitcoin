@@ -573,6 +573,11 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     setTrafficGraphRange(1); // 1 is the lowest setting (0 bumps up)
     //ui->sldGraphRange->setTickPosition(QSlider::TicksBelow);
     //ui->sldGraphRange->setTickInterval(200);
+    
+    // Connect TrafficGraphWidget's graphRangeChanged signal to update the slider position
+    connect(ui->trafficGraph, &TrafficGraphWidget::graphRangeChanged,
+            ui->sldGraphRange, &QSlider::setValue);
+            
     updateDetailWidget();
 
     consoleFontSize = settings.value(fontSizeSettingsKey, QFont().pointSize()).toInt();
