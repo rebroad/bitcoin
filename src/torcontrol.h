@@ -152,6 +152,9 @@ private:
     /** Monitored private key files */
     std::set<std::string> monitored_files;
 
+    /** Cache mapping file paths to their private keys */
+    std::map<std::string, std::string> monitored_keys_cache;
+
     /** Event for directory monitoring */
     struct event *directory_monitor_ev;
     /** Reconnection timeout in seconds */

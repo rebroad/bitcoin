@@ -874,6 +874,7 @@ bool TorController::LoadPrivateKeysFromDirectory()
 
                                 private_keys.push_back(trimmed_key);
                                 monitored_files.insert(entry.path().string());
+                                monitored_keys_cache[entry.path().string()] = trimmed_key;  // Add to cache
 
                                 LogPrint(BCLog::TOR, "tor: Loaded private key from file %s: %s...\n",
                                          filename, trimmed_key.substr(0, std::min(10, (int)trimmed_key.length())) + "...");
@@ -1013,14 +1014,14 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
                         }
 
                         if (valid_key) {
-                            // Add to monitored files
+                            // Add to monitored files and cache
                             try {
                                 self->monitored_files.insert(filepath);
+                                self->monitored_keys_cache[filepath] = trimmed_key;
                             } catch (const std::exception& e) {
-                                LogPrintf("tor: Error adding file to monitored set: %s\n", e.what());
+                                LogPrintf("tor: Error adding file to monitoring: %s\n", e.what());
                                 continue;
                             }
-
                             // Create a new onion service with this key
                             // Only if we're connected - otherwise it will be loaded on next connection
                             try {
@@ -1089,124 +1090,89 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
 
             LogPrint(BCLog::TOR, "tor: Private key file removed: %s\n", filepath);
 
-            // Find the service ID associated with this file
-            std::pair<bool, std::string> key_data;
-            try {
-                key_data = ReadBinaryFile(fs::PathFromString(filepath));
-            } catch (const fs::filesystem_error& e) {
-                LogPrintf("tor: Error reading removed file %s: %s\n", filepath, e.what());
-                // Continue with next file since we can't process this one
-                continue;
-            } catch (const std::exception& e) {
-                LogPrintf("tor: Unexpected error reading file %s: %s\n", filepath, e.what());
+            // Get the private key from cache instead of reading the file
+            auto it = self->monitored_keys_cache.find(filepath);
+            if (it == self->monitored_keys_cache.end()) {
+                LogPrintf("tor: No cached key found for removed file %s\n", filepath);
                 continue;
             }
 
-            if (key_data.first && !key_data.second.empty()) {
-                std::string removed_key;
-                try {
-                    removed_key = boost::algorithm::trim_copy(key_data.second);
-                } catch (const std::exception& e) {
-                    LogPrintf("tor: Error trimming key data: %s\n", e.what());
-                    continue;
-                }
+            std::string removed_key = it->second;
 
-                if (removed_key.empty()) {
-                    LogPrintf("tor: Empty key found in file %s, skipping\n", filepath);
-                    continue;
-                }
-
-                // Find the index of this key in our private_keys vector
-                bool found_key = false;
-                size_t key_index = 0;
-                try {
-                    for (size_t i = 0; i < self->private_keys.size(); i++) {
-                        if (i < self->private_keys.size() && self->private_keys[i] == removed_key) {
-                            key_index = i;
-                            found_key = true;
-                            break;
-                        }
+            // Find the index of this key in our private_keys vector
+            bool found_key = false;
+            size_t key_index = 0;
+            try {
+                for (size_t i = 0; i < self->private_keys.size(); i++) {
+                    if (self->private_keys[i] == removed_key) {
+                        key_index = i;
+                        found_key = true;
+                        break;
                     }
+                }
 
-                    if (found_key) {
-                        LogPrint(BCLog::TOR, "tor: Found service corresponding to removed key file at index %d\n", key_index);
+                if (found_key) {
+                    LogPrint(BCLog::TOR, "tor: Found service corresponding to removed key file at index %d\n", key_index);
 
-                        // Check if we have a valid service to remove
-                        if (key_index < self->services.size() && self->services[key_index].IsValid()) {
-                            try {
-                                // Get the service ID for logging
-                                std::string service_id = key_index < self->service_ids.size() ?
-                                    self->service_ids[key_index] : "unknown";
+                    // Check if we have a valid service to remove
+                    if (key_index < self->services.size() && self->services[key_index].IsValid()) {
+                        try {
+                            std::string service_id = key_index < self->service_ids.size() ?
+                                self->service_ids[key_index] : "unknown";
 
-                                // First try to remove the service from Tor if we're connected
-                                try {
-                                    if (self->conn.Command("GETINFO status/circuit-established",
-                                        [self, key_index, service_id](TorControlConnection& conn, const TorControlReply& reply) {
-                                            try {
-                                                if (reply.code == 250 && reply.lines.size() > 0 && reply.lines[0] == "1") {
-                                                    // Connected to Tor, try to remove the service
-                                                    if (!service_id.empty() && service_id != "unknown") {
-                                                        conn.Command(strprintf("DEL_ONION %s", service_id),
-                                                            [key_index, service_id](TorControlConnection& conn, const TorControlReply& reply) {
-                                                                if (reply.code == 250) {
-                                                                    LogPrint(BCLog::TOR, "tor: Successfully removed service %s from Tor\n", service_id);
-                                                                } else {
-                                                                    LogPrintf("tor: Failed to remove service %s from Tor, code %d\n",
-                                                                              service_id, reply.code);
-                                                                }
-                                                            });
-                                                    }
-                                                }
-                                            } catch (const std::exception& e) {
-                                                LogPrintf("tor: Error in circuit status callback: %s\n", e.what());
+                            // First try to remove the service from Tor if we're connected
+                            if (self->conn.Command("GETINFO status/circuit-established",
+                                [self, key_index, service_id](TorControlConnection& conn, const TorControlReply& reply) {
+                                    try {
+                                        if (reply.code == 250 && reply.lines.size() > 0 && reply.lines[0] == "1") {
+                                            // Connected to Tor, try to remove the service
+                                            if (!service_id.empty() && service_id != "unknown") {
+                                                conn.Command(strprintf("DEL_ONION %s", service_id),
+                                                    [key_index, service_id](TorControlConnection& conn, const TorControlReply& reply) {
+                                                        if (reply.code == 250) {
+                                                            LogPrint(BCLog::TOR, "tor: Successfully removed service %s from Tor\n", service_id);
+                                                        } else {
+                                                            LogPrintf("tor: Failed to remove service %s from Tor, code %d\n",
+                                                                    service_id, reply.code);
+                                                        }
+                                                    });
                                             }
-                                        })) {
-                                        LogPrint(BCLog::TOR, "tor: Attempting to remove service from Tor\n");
-                                    } else {
-                                        LogPrintf("tor: Failed to send GETINFO command for circuit status\n");
+                                        }
+                                    } catch (const std::exception& e) {
+                                        LogPrintf("tor: Error in circuit status callback: %s\n", e.what());
                                     }
-                                } catch (const std::exception& e) {
-                                    LogPrintf("tor: Error checking Tor connectivity: %s\n", e.what());
-                                }
-
-                                // Remove the service from our local address list
-                                RemoveLocal(self->services[key_index]);
-                                LogPrint(BCLog::TOR, "tor: Removed service %s from local address list\n",
-                                         self->services[key_index].ToString());
-
-                                // Clear service data
-                                self->services[key_index] = CService();
-                                if (key_index < self->service_ids.size()) {
-                                    self->service_ids[key_index] = "";
-                                }
-                                if (key_index < self->private_keys.size()) {
-                                    self->private_keys[key_index] = "";
-                                }
-                            } catch (const std::exception& e) {
-                                LogPrintf("tor: Error removing service: %s\n", e.what());
+                                })) {
+                                LogPrint(BCLog::TOR, "tor: Attempting to remove service from Tor\n");
                             }
-                        } else {
-                            LogPrintf("tor: Invalid service at index %d, cannot remove\n", key_index);
+
+                            // Remove the service from our local address list
+                            RemoveLocal(self->services[key_index]);
+                            LogPrint(BCLog::TOR, "tor: Removed service %s from local address list\n",
+                                    self->services[key_index].ToString());
+
+                            // Clear service data
+                            self->services[key_index] = CService();
+                            if (key_index < self->service_ids.size()) {
+                                self->service_ids[key_index] = "";
+                            }
+                            if (key_index < self->private_keys.size()) {
+                                self->private_keys[key_index] = "";
+                            }
+                        } catch (const std::exception& e) {
+                            LogPrintf("tor: Error removing service: %s\n", e.what());
                         }
-                    } else {
-                        LogPrintf("tor: Could not find service corresponding to removed key file\n");
                     }
-                } catch (const std::exception& e) {
-                    LogPrintf("tor: Error searching for key index: %s\n", e.what());
                 }
-            } else {
-                LogPrintf("tor: Could not read key data from removed file %s\n", filepath);
+            } catch (const std::exception& e) {
+                LogPrintf("tor: Error searching for key index: %s\n", e.what());
             }
 
-            // Remove from monitored files regardless of success or failure
-            try {
-                self->monitored_files.erase(filepath);
-                LogPrint(BCLog::TOR, "tor: Removed %s from monitored files list\n", filepath);
-            } catch (const std::exception& e) {
-                LogPrintf("tor: Error removing path from monitored files set: %s\n", e.what());
-            }
+            // Remove from monitored files and cache
+            self->monitored_files.erase(filepath);
+            self->monitored_keys_cache.erase(filepath);
+            LogPrint(BCLog::TOR, "tor: Removed %s from monitored files and cache\n", filepath);
         } catch (const std::exception& e) {
-            LogPrintf("tor: Unexpected error processing removed file: %s\n", e.what());
+            LogPrintf("tor: Error processing removed file: %s\n", e.what());
         }
     }
 }
