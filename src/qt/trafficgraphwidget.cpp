@@ -215,7 +215,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.drawPath(p);
     }
     int sampleCount = vTimeStamp[m_value].size();
-    if (ttpoint >= 0 && ttpoint < sampleCount) {
+    if (ttpoint >= 0 && ttpoint < sampleCount && isVisible() && !window()->isMinimized()) {
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
         double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
@@ -344,7 +344,7 @@ void TrafficGraphWidget::updateStuff() {
     }
 
     static bool last_fToggle = fToggle;
-    if (!QToolTip::isVisible()) {
+    if (!QToolTip::isVisible() || !isVisible() || window()->isMinimized()) {
         if (ttpoint >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             if (last_fToggle == fToggle) { // Not lost due to a toggle
                 ttpoint = -1;

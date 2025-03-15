@@ -22,7 +22,6 @@ Logic to find the worst node faulty - not finding the 0% Bps.
 
 Evict (and sort) based on MempoolBytes not BlockBytes. Fix sorting of BlockTXs. Reduce BlockBytes/TXs when pruning due to full mempool.
 
-Add a loadmempool RPC (to reload the mempool.dat)
 
 Change to having 2 blocks-only nodes. Evict the worst block provider (if it's a block-only node). If the block-only nodes are the best, then incease it to 3. (Max 10 outbound connections)
 
@@ -34,7 +33,6 @@ Set txrelay to 0 for feeler and addr outbound connections
 
 Set 1stTx to 0 when IBD finishes (when we send the first real feefilter? or change IBD logic?)
 
-Repurpose old mempoolstats graph to instead show Overall Mempool Bps, Overall percentage Mempool Bps, Overall TXs per minute, node prune method (alternative between lowest percentage, lowest percentage*bps, and alternation between both) changing every hour.
 
 Cache cmpctblock (for if a node disconnected before we received the blocktxn) to save from requesting it again from another peer.
 
