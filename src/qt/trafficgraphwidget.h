@@ -36,10 +36,6 @@ public:
     unsigned int getCurrentRangeIndex() const;
 
 private:
-    void saveData();
-    bool loadDataFromBinary();
-    bool loadDataFromCSV();
-    bool loadData();
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -59,9 +55,14 @@ public Q_SLOTS:
     std::chrono::minutes setGraphRange(unsigned int value);
 
 private:
+    void saveData();
+    bool loadDataFromBinary();
+    bool loadDataFromCSV();
+    bool loadData();
     void update_fMax();
     void paintPath(QPainterPath &path, QQueue<float> &samples);
     void updateRates(int value);
+    void focusSlider(Qt::FocusReason reason);
 
     QTimer *timer;
     float fMax{0};

@@ -138,17 +138,22 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     last_x = x; last_y = y;
 }
 
-void TrafficGraphWidget::mousePressEvent(QMouseEvent *event) {
-    // Find the slider in the parent hierarchy and give it focus before handling the event
+void TrafficGraphWidget::focusSlider(Qt::FocusReason reason) {
+    // Find the slider in the parent hierarchy and give it focus
     QWidget* parent = parentWidget();
     while (parent) {
         QSlider* slider = parent->findChild<QSlider*>("sldGraphRange");
         if (slider) {
-            slider->setFocus(Qt::MouseFocusReason);
+            slider->setFocus(reason);
             break;
         }
         parent = parent->parentWidget();
     }
+}
+
+void TrafficGraphWidget::mousePressEvent(QMouseEvent *event) {
+    // Give the slider focus before handling the event
+    focusSlider(Qt::MouseFocusReason);
     
     QWidget::mousePressEvent(event);
     int x = event->x(), y = event->y();
@@ -161,15 +166,7 @@ void TrafficGraphWidget::mouseReleaseEvent(QMouseEvent *event) {
     QWidget::mouseReleaseEvent(event);
     
     // Also focus the slider after mouse release to ensure focus is maintained
-    QWidget* parent = parentWidget();
-    while (parent) {
-        QSlider* slider = parent->findChild<QSlider*>("sldGraphRange");
-        if (slider) {
-            slider->setFocus(Qt::MouseFocusReason);
-            break;
-        }
-        parent = parent->parentWidget();
-    }
+    focusSlider(Qt::MouseFocusReason);
 }
 
 void TrafficGraphWidget::focusInEvent(QFocusEvent *event) {
@@ -177,15 +174,7 @@ void TrafficGraphWidget::focusInEvent(QFocusEvent *event) {
     
     // When widget gets focus through any means (like tab navigation),
     // ensure the slider gets focus too
-    QWidget* parent = parentWidget();
-    while (parent) {
-        QSlider* slider = parent->findChild<QSlider*>("sldGraphRange");
-        if (slider) {
-            slider->setFocus(Qt::OtherFocusReason);
-            break;
-        }
-        parent = parent->parentWidget();
-    }
+    focusSlider(Qt::OtherFocusReason);
 }
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *) {
@@ -454,6 +443,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
     }
     // Set focus when range is changed to ensure keyboard navigation continues to work
     setFocus(Qt::OtherFocusReason);
+    focusSlider(Qt::OtherFocusReason);
     
     return std::chrono::minutes{values[m_new_value]};
 }
