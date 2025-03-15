@@ -372,8 +372,12 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
 
             // Add each non-empty line as a private key
             private_keys.clear(); // Ensure we start with an empty vector
+            int line_idx = 0;
             for (const std::string& key_line : key_lines) {
+                line_idx++;
                 std::string trimmed_key = boost::algorithm::trim_copy(key_line);
+                LogPrint(BCLog::TOR, "tor: Processing key file line %d, length: %d, empty: %s\n",
+                         line_idx, key_line.length(), trimmed_key.empty() ? "true" : "false");
                 if (!trimmed_key.empty()) {
                     // Basic validation that the key format looks correct
                     if (trimmed_key.substr(0, 4) == "NEW:" ||
@@ -394,6 +398,8 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
                 LogPrint(BCLog::TOR, "tor: No valid private keys found in key file\n");
             } else {
                 LogPrint(BCLog::TOR, "tor: Loaded %d private key(s) from key file\n", private_keys.size());
+                LogPrint(BCLog::TOR, "tor: Vector sizes - private_keys: %d, service_ids: %d, services: %d\n",
+                         private_keys.size(), service_ids.size(), services.size());
 
                 // Resize if necessary to match the required number of services
                 size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
@@ -440,14 +446,19 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
     // Get the current service index being processed
     size_t service_index = current_service_index;
 
+    LogPrint(BCLog::TOR, "tor: add_onion_cb called for service index %d, vectors sizes - private_keys: %d, service_ids: %d, services: %d\n",
+             service_index, private_keys.size(), service_ids.size(), services.size());
+
     if (reply.code == 250) {
         LogPrint(BCLog::TOR, "tor: ADD_ONION successful for service %d\n", service_index);
 
         // Temporary variables to store service data from this callback
         std::string new_service_id;
         std::string new_private_key;
-
+        int line_idx = 0;
         for (const std::string &s : reply.lines) {
+            line_idx++;
+            LogPrint(BCLog::TOR, "tor: Processing reply line %d: %s\n", line_idx, s.substr(0, 20) + (s.length() > 20 ? "..." : ""));
             std::map<std::string,std::string> m = ParseTorReplyMapping(s);
             std::map<std::string,std::string>::iterator i;
             if ((i = m.find("ServiceID")) != m.end())
@@ -536,6 +547,8 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
                 const std::string& service_id = service_ids[i];
                 const std::string& key = private_keys[i];
 
+                LogPrint(BCLog::TOR, "tor: Checking key at index %d - service_id length: %d, key length: %d\n",
+                         i, service_id.length(), key.length());
                 if (!service_id.empty() && !key.empty() &&
                     // Skip the one we just wrote to avoid duplicate writes
                     !(service_id == new_service_id && key == new_private_key)) {
@@ -582,6 +595,9 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
         // Check if we need to create more services
         size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
         current_service_index++;
+
+        LogPrint(BCLog::TOR, "tor: After adding service %d, vector sizes - private_keys: %d, service_ids: %d, services: %d\n",
+                 service_index, private_keys.size(), service_ids.size(), services.size());
 
         if (current_service_index < num_services) {
             // Create the next service
@@ -650,18 +666,24 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
         }
 
         LogPrint(BCLog::TOR, "tor: Creating %d onion service(s)\n", num_services);
+        LogPrint(BCLog::TOR, "tor: Before resizing - private_keys: %d, service_ids: %d, services: %d\n",
+                 private_keys.size(), service_ids.size(), services.size());
 
         // Initialize/resize the service vectors to hold num_services entries
         private_keys.resize(num_services);
         service_ids.resize(num_services);
         services.resize(num_services);
 
+        LogPrint(BCLog::TOR, "tor: After resizing - private_keys: %d, service_ids: %d, services: %d\n",
+                 private_keys.size(), service_ids.size(), services.size());
+
         // Start with the first service
         current_service_index = 0;
 
         // If we have a stored private key for this index, use it
         if (current_service_index < private_keys.size() && !private_keys[current_service_index].empty()) {
-            LogPrint(BCLog::TOR, "tor: Using stored private key for service %d\n", current_service_index);
+            LogPrint(BCLog::TOR, "tor: Using stored private key for service %d (key length: %d)\n",
+                     current_service_index, private_keys[current_service_index].length());
         } else {
             // No private key for this index, generate a new one
             // Check if vanity address is requested
@@ -984,7 +1006,10 @@ bool TorController::LoadPrivateKeysFromDirectory()
     }
 
     if (loaded_any) {
-        LogPrint(BCLog::TOR, "tor: Loaded %d private key(s) from directory\n", private_keys.size());
+        LogPrint(BCLog::TOR, "tor: Loaded %d private key(s) from directory, processed %d total files\n",
+                 private_keys.size(), total_files_checked);
+        LogPrint(BCLog::TOR, "tor: Vector sizes after loading - private_keys: %d, service_ids: %d, services: %d, monitored_files: %d\n",
+                 private_keys.size(), service_ids.size(), services.size(), monitored_files.size());
 
         // Resize if necessary to match the required number of services
         if (private_keys.size() < num_services) {
