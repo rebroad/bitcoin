@@ -132,7 +132,6 @@ public Q_SLOTS:
     void unbanSelectedNode();
     /** set which tab has the focus (is visible) */
     void setTabFocus(enum TabTypes tabType);
-
 Q_SIGNALS:
     // For RPC command executor
     void cmdRequest(const QString &command, const WalletModel* wallet_model);

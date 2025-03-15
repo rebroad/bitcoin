@@ -61,9 +61,6 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
         saveData(); // TODO might not need to cache the data_dir now that clientmodel moved to below
         clientModel = model;
     }
-
-    // Set focus to enable keyboard navigation immediately when widget is set up
-    setFocus();
 }
 
 bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
@@ -141,47 +138,57 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     last_x = x; last_y = y;
 }
 
-void TrafficGraphWidget::mousePressEvent(QMouseEvent *event)
-{
+void TrafficGraphWidget::mousePressEvent(QMouseEvent *event) {
+    // Find the slider in the parent hierarchy and give it focus before handling the event
+    QWidget* parent = parentWidget();
+    while (parent) {
+        QSlider* slider = parent->findChild<QSlider*>("sldGraphRange");
+        if (slider) {
+            slider->setFocus(Qt::MouseFocusReason);
+            break;
+        }
+        parent = parent->parentWidget();
+    }
+    
     QWidget::mousePressEvent(event);
-    int x = event->x();
-    int y = event->y();
+    int x = event->x(), y = event->y();
     fToggle = !fToggle;
     LogPrintf("%s: x=%d y=%d\n", __func__, x-XMARGIN, y-YMARGIN);
     update();
-    setFocus(); // Set focus to widget when clicked
 }
 
-void TrafficGraphWidget::keyPressEvent(QKeyEvent *event) {
-    switch (event->key()) {
-    case Qt::Key_Left:
-        if (m_new_value > 0) {
-            unsigned int newValue = m_new_value - 1;
-            Q_EMIT graphRangeChanged(newValue * 200);
-            setGraphRange(m_new_value);
-            LogPrintf("%s: Left arrow pressed, decreasing range to %d\n", __func__, newValue);
+void TrafficGraphWidget::mouseReleaseEvent(QMouseEvent *event) {
+    QWidget::mouseReleaseEvent(event);
+    
+    // Also focus the slider after mouse release to ensure focus is maintained
+    QWidget* parent = parentWidget();
+    while (parent) {
+        QSlider* slider = parent->findChild<QSlider*>("sldGraphRange");
+        if (slider) {
+            slider->setFocus(Qt::MouseFocusReason);
+            break;
         }
-        break;
-    case Qt::Key_Right:
-        if (m_new_value < VALUES_SIZE - 1) {
-            unsigned int newValue = m_new_value + 1;
-            Q_EMIT graphRangeChanged(newValue * 200);
-            setGraphRange(newValue + 2);
-            LogPrintf("%s: Right arrow pressed, increasing range to %d\n", __func__, newValue);
-        }
-        break;
-    default:
-        QWidget::keyPressEvent(event);
+        parent = parent->parentWidget();
     }
 }
 
-void TrafficGraphWidget::setFocus()
-{
-    QWidget::setFocus();
+void TrafficGraphWidget::focusInEvent(QFocusEvent *event) {
+    QWidget::focusInEvent(event);
+    
+    // When widget gets focus through any means (like tab navigation),
+    // ensure the slider gets focus too
+    QWidget* parent = parentWidget();
+    while (parent) {
+        QSlider* slider = parent->findChild<QSlider*>("sldGraphRange");
+        if (slider) {
+            slider->setFocus(Qt::OtherFocusReason);
+            break;
+        }
+        parent = parent->parentWidget();
+    }
 }
 
-void TrafficGraphWidget::paintEvent(QPaintEvent *)
-{
+void TrafficGraphWidget::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
@@ -446,7 +453,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
         update();
     }
     // Set focus when range is changed to ensure keyboard navigation continues to work
-    setFocus();
+    setFocus(Qt::OtherFocusReason);
     
     return std::chrono::minutes{values[m_new_value]};
 }

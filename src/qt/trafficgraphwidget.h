@@ -34,7 +34,6 @@ public:
     bool GraphRangeBump() const;
     void exportData();
     unsigned int getCurrentRangeIndex() const;
-    void setFocus();
 
 private:
     void saveData();
@@ -51,15 +50,13 @@ protected:
     int y_offset = 0;
     uint64_t tt_time = 0;
     void mousePressEvent(QMouseEvent *event) override;
-    void keyPressEvent(QKeyEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void focusInEvent(QFocusEvent *event) override;
     bool fToggle = true;
 
 public Q_SLOTS:
     void updateStuff();
     std::chrono::minutes setGraphRange(unsigned int value);
-
-Q_SIGNALS:
-    void graphRangeChanged(int value);
 
 private:
     void update_fMax();

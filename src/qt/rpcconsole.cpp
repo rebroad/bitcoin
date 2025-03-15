@@ -477,6 +477,11 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     platformStyle(_platformStyle)
 {
     ui->setupUi(this);
+
+    // Enable keyboard focus for the slider
+	ui->sldGraphRange->setFocusPolicy(Qt::StrongFocus);
+	ui->sldGraphRange->installEventFilter(this);
+
     QSettings settings;
 #ifdef ENABLE_WALLET
     if (WalletModel::isWalletEnabled()) {
@@ -573,10 +578,6 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     setTrafficGraphRange(1); // 1 is the lowest setting (0 bumps up)
     //ui->sldGraphRange->setTickPosition(QSlider::TicksBelow);
     //ui->sldGraphRange->setTickInterval(200);
-    
-    // Connect TrafficGraphWidget's graphRangeChanged signal to update the slider position
-    connect(ui->trafficGraph, &TrafficGraphWidget::graphRangeChanged,
-            ui->sldGraphRange, &QSlider::setValue);
             
     updateDetailWidget();
 
@@ -620,6 +621,18 @@ bool RPCConsole::eventFilter(QObject* obj, QEvent *event)
         {
         case Qt::Key_Up: if(obj == ui->lineEdit) { browseHistory(-1); return true; } break;
         case Qt::Key_Down: if(obj == ui->lineEdit) { browseHistory(1); return true; } break;
+        case Qt::Key_Left:
+            if(obj == ui->sldGraphRange) {
+                ui->sldGraphRange->setValue(ui->sldGraphRange->value() - ui->sldGraphRange->singleStep());
+                return true;
+            }
+            break;
+        case Qt::Key_Right:
+            if(obj == ui->sldGraphRange) {
+                ui->sldGraphRange->setValue(ui->sldGraphRange->value() + ui->sldGraphRange->singleStep());
+                return true;
+            }
+            break;
         case Qt::Key_PageUp: /* pass paging keys to messages widget */
         case Qt::Key_PageDown:
             if(obj == ui->lineEdit)
