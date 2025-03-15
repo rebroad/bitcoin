@@ -108,41 +108,47 @@ int TrafficGraphWidget::y_value(float value) {
 
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 	int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / values[m_value]), int(samples.size()));
-	if(sampleCount > 0) {
-		int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-		int x = XMARGIN + w;
+	if (sampleCount <= 0) return; // No samples to draw, exit early
 
-		path.moveTo(x, YMARGIN + h);
+	int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
+	int firstValidX = XMARGIN + w; // Will be updated to the x-coordinate of the first data point
+	int lastValidX = XMARGIN + w;  // Tracks the x-coordinate of the last data point
+	bool pathHasValidPoints = false;
+	bool previousPointValid = false;
 
-		bool pathHasValidPoints = false;
-		int lastValidX = x;
-		bool previousPointValid = false;
+    // Start at the bottom-right (though this point may not be part of the final shape)
+    path.moveTo(XMARGIN + w, YMARGIN + h);
 
-		for (int i = 0; i < sampleCount; ++i) {
-			float sample = samples.at(i);
-			int y = y_value(sample);
+    // Plot the data points
+	for (int i = 0; i < sampleCount; ++i) {
+		float sample = samples.at(i);
+		int y = y_value(sample);
 
-			// Calculate x coordinate
-			x = XMARGIN + w - static_cast<int>(w * i * values[m_value] / m_range / DESIRED_SAMPLES);
+		// Calculate x coordinate
+		int x = XMARGIN + w - static_cast<int>(w * i * values[m_value] / m_range / DESIRED_SAMPLES);
 
-			// If previous point wasn't valid, we need to move to this point instead of lineTo
-			if (!previousPointValid)
-				path.moveTo(x, y);
-			else
-				path.lineTo(x, y);
+		// Store the first valid x-coordinate (earliest sample, leftmost point)
+		if (i == 0) {
+			firstValidX = x;
+			path.moveTo(x, y); // Ensure the path starts at the first data point
+		} else if (!previousPointValid)
+			path.moveTo(x, y);
+		else
+			path.lineTo(x, y);
 
-			pathHasValidPoints = true;
-			lastValidX = x;
-			previousPointValid = true;
-		}
+		pathHasValidPoints = true;
+		lastValidX = x;
+		previousPointValid = true;
+	}
 
-		// Final lineTo - check that x is valid and that we have at least one valid point
-		if (pathHasValidPoints) {
-			// Add a line down to the bottom of the graph
-			path.lineTo(lastValidX, YMARGIN + h);
-			// Add a horizontal line back to the starting point to properly close the shape
-			path.lineTo(XMARGIN + w, YMARGIN + h);
-		}
+	// Close the shape if there are valid points
+	if (pathHasValidPoints) {
+		// Draw a vertical line from the last point to the bottom
+		path.lineTo(lastValidX, YMARGIN + h);
+		// Draw a horizontal line to the x-coordinate of the first point (not the rightmost edge)
+		path.lineTo(firstValidX, YMARGIN + h);
+		// Optionally, draw a vertical line back up to the first point to fully close the shape
+		path.lineTo(firstValidX, y_value(samples.at(0)));
 	}
 }
 
@@ -416,10 +422,10 @@ void TrafficGraphWidget::updateRates(int i) {
 	std::chrono::milliseconds nTime{GetTimeMillis()};
 	quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
 			bytesOut = clientModel->node().getTotalBytesSent();
-	int64_t nRealInterval = ((int64_t)nTime - (int64_t)nLastTime[i]).count();
+	int64_t nRealInterval = (nTime - nLastTime[i]).count();
 	static int nDebugI = 0;
 	if (i > nDebugI) nDebugI = i;
-	float in_rate_kilobytes_per_sec = 0, out_rate_kilobytes_per_sec = 0;
+	float in_rate_kilobytes_per_msec = 0, out_rate_kilobytes_per_msec = 0;
 	if (nRealInterval >= 0) {
 	    if (nDebugI == i)
 		    LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
