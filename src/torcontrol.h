@@ -122,6 +122,12 @@ public:
     /** Get name of file to store private key in */
     fs::path GetPrivateKeyFile();
 
+    /** Get directory to store multiple private keys */
+    fs::path GetPrivateKeyDirectory();
+
+    /** Load private keys from directory */
+    bool LoadPrivateKeysFromDirectory();
+
     /** Reconnect, after getting disconnected */
     void Reconnect();
 
@@ -135,7 +141,6 @@ private:
     std::vector<std::string> service_ids;
     bool reconnect;
     struct event *reconnect_ev = nullptr;
-    float reconnect_timeout;
     std::vector<CService> services;
     const CService m_target;
     size_t num_services{1}; // Default to 1 service
@@ -144,6 +149,13 @@ private:
     std::vector<uint8_t> cookie;
     /** ClientNonce for SAFECOOKIE auth */
     std::vector<uint8_t> clientNonce;
+    /** Monitored private key files */
+    std::set<std::string> monitored_files;
+
+    /** Event for directory monitoring */
+    struct event *directory_monitor_ev;
+    /** Reconnection timeout in seconds */
+    float reconnect_timeout;
 
 public:
     /** Callback for ADD_ONION result */
@@ -161,6 +173,9 @@ public:
 
     /** Callback for reconnect timer */
     static void reconnect_cb(evutil_socket_t fd, short what, void *arg);
+
+    /** Callback for directory monitoring */
+    static void directory_monitor_cb(evutil_socket_t fd, short what, void *arg);
 
 private:
 };

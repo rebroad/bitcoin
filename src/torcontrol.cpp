@@ -23,6 +23,7 @@
 #include <deque>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/classification.hpp>
+#include <boost/filesystem.hpp>
 #include <functional>
 #include <set>
 #include <vector>
@@ -57,12 +58,14 @@ static const float RECONNECT_TIMEOUT_EXP = 1.5;
  * this is belt-and-suspenders sanity limit to prevent memory exhaustion.
  */
 static const int MAX_LINE_LENGTH = 100000;
-
+/** Directory monitoring interval in seconds */
+static const int DIRECTORY_MONITOR_INTERVAL = 10;
 /****** Low-level TorControlConnection ********/
 
 TorControlConnection::TorControlConnection(struct event_base *_base):
     base(_base), b_conn(nullptr)
 {
+    // TODO - is this function needed given it's empty?
 }
 
 TorControlConnection::~TorControlConnection()
@@ -311,10 +314,14 @@ std::map<std::string,std::string> ParseTorReplyMapping(const std::string &s)
 
 TorController::TorController(struct event_base* _base, const std::string& tor_control_center, const CService& target):
     base(_base),
-    m_tor_control_center(tor_control_center), conn(base), reconnect(true), reconnect_ev(0),
-    reconnect_timeout(RECONNECT_TIMEOUT_START),
+    m_tor_control_center(tor_control_center),
+    conn(base),
+    reconnect(true),
+    reconnect_ev(0),
     m_target(target),
-    num_services(static_cast<size_t>(gArgs.GetIntArg("-numonion", 1)))
+    num_services(static_cast<size_t>(gArgs.GetIntArg("-numonion", 1))),
+    directory_monitor_ev(0),
+    reconnect_timeout(RECONNECT_TIMEOUT_START)
 {
     // Initialize the service vectors to the right size
     service_ids.resize(num_services);
@@ -323,56 +330,80 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
     reconnect_ev = event_new(base, -1, 0, reconnect_cb, this);
     if (!reconnect_ev)
         LogPrintf("tor: Failed to create event for reconnection: out of memory?\n");
+
+    // Create directory monitoring event
+    directory_monitor_ev = event_new(base, -1, EV_PERSIST, directory_monitor_cb, this);
+    if (!directory_monitor_ev) {
+        LogPrintf("tor: Failed to create event for directory monitoring: out of memory?\n");
+    } else {
+        // Set up a timer to check the directory periodically
+        struct timeval monitor_time = {DIRECTORY_MONITOR_INTERVAL, 0};
+        if (event_add(directory_monitor_ev, &monitor_time) < 0) {
+            LogPrintf("tor: Failed to add timer for directory monitoring\n");
+            event_free(directory_monitor_ev);
+            directory_monitor_ev = nullptr;
+        } else {
+            LogPrint(BCLog::TOR, "tor: Directory monitoring enabled with %d second interval\n", DIRECTORY_MONITOR_INTERVAL);
+        }
+    }
+
     // Start connection attempts immediately
     if (!conn.Connect(m_tor_control_center, std::bind(&TorController::connected_cb, this, std::placeholders::_1),
          std::bind(&TorController::disconnected_cb, this, std::placeholders::_1) )) {
         LogPrintf("tor: Initiating connection to Tor control port %s failed\n", m_tor_control_center);
     }
-    // Read service private keys if cached (one per line)
-    std::pair<bool,std::string> pkf = ReadBinaryFile(GetPrivateKeyFile());
-    if (pkf.first) {
-        LogPrint(BCLog::TOR, "tor: Reading cached private keys from %s\n", fs::PathToString(GetPrivateKeyFile()));
-        // Split the file contents by newlines to get multiple keys
-        std::string key_file_content = pkf.second;
-        std::vector<std::string> key_lines;
 
-        // Split by any combination of CR and LF for cross-platform compatibility
-        boost::split(key_lines, key_file_content, boost::is_any_of("\r\n"));
+    // First try to load keys from the directory
+    LoadPrivateKeysFromDirectory();
 
-        // Add each non-empty line as a private key
-        private_keys.clear(); // Ensure we start with an empty vector
-        for (const std::string& key_line : key_lines) {
-            std::string trimmed_key = boost::algorithm::trim_copy(key_line);
-            if (!trimmed_key.empty()) {
-                // Basic validation that the key format looks correct
-                if (trimmed_key.substr(0, 4) == "NEW:" ||
-                    trimmed_key.substr(0, 12) == "ED25519-V3:" ||
-                    trimmed_key.find(":") != std::string::npos) {
-                    private_keys.push_back(trimmed_key);
-                    LogPrint(BCLog::TOR, "tor: Loaded private key: %s...\n",
-                             trimmed_key.substr(0, std::min(10, (int)trimmed_key.length())) + "...");
-                } else {
-                    LogPrintf("tor: Skipping invalid private key format in key file\n");
+    // If no valid keys were loaded from directory, fall back to the single file (backwards compatibility)
+    if (private_keys.empty()) {
+        // Read service private keys if cached (one per line)
+        std::pair<bool,std::string> pkf = ReadBinaryFile(GetPrivateKeyFile());
+        if (pkf.first) {
+            LogPrint(BCLog::TOR, "tor: Reading cached private keys from %s\n", fs::PathToString(GetPrivateKeyFile()));
+            // Split the file contents by newlines to get multiple keys
+            std::string key_file_content = pkf.second;
+            std::vector<std::string> key_lines;
+
+            // Split by any combination of CR and LF for cross-platform compatibility
+            boost::split(key_lines, key_file_content, boost::is_any_of("\r\n"));
+
+            // Add each non-empty line as a private key
+            private_keys.clear(); // Ensure we start with an empty vector
+            for (const std::string& key_line : key_lines) {
+                std::string trimmed_key = boost::algorithm::trim_copy(key_line);
+                if (!trimmed_key.empty()) {
+                    // Basic validation that the key format looks correct
+                    if (trimmed_key.substr(0, 4) == "NEW:" ||
+                        trimmed_key.substr(0, 12) == "ED25519-V3:" ||
+                        trimmed_key.find(":") != std::string::npos) {
+                        private_keys.push_back(trimmed_key);
+                        LogPrint(BCLog::TOR, "tor: Loaded private key: %s...\n",
+                                 trimmed_key.substr(0, std::min(10, (int)trimmed_key.length())) + "...");
+                    } else {
+                        LogPrintf("tor: Skipping invalid private key format in key file\n");
+                    }
                 }
             }
-        }
 
-        // If no valid keys were found, initialize with an empty vector
-        if (private_keys.empty()) {
-            LogPrint(BCLog::TOR, "tor: No valid private keys found in key file\n");
-        } else {
-            LogPrint(BCLog::TOR, "tor: Found %d private key(s) in key file\n", private_keys.size());
+            // If no valid keys were found, initialize with an empty vector
+            if (private_keys.empty()) {
+                LogPrint(BCLog::TOR, "tor: No valid private keys found in key file\n");
+            } else {
+                LogPrint(BCLog::TOR, "tor: Found %d private key(s) in key file\n", private_keys.size());
 
-            // Resize if necessary to match the required number of services
-            size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
-            if (private_keys.size() < num_services) {
-                LogPrint(BCLog::TOR, "tor: Need %d services but only %d keys found, will generate additional keys\n",
-                         num_services, private_keys.size());
-                private_keys.resize(num_services);
-            } else if (private_keys.size() > num_services) {
-                LogPrint(BCLog::TOR, "tor: Found %d keys but only %d services requested, using first %d keys\n",
-                         private_keys.size(), num_services, num_services);
-                private_keys.resize(num_services);
+                // Resize if necessary to match the required number of services
+                size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
+                if (private_keys.size() < num_services) {
+                    LogPrint(BCLog::TOR, "tor: Need %d services but only %d keys found, will generate additional keys\n",
+                             num_services, private_keys.size());
+                    private_keys.resize(num_services);
+                } else if (private_keys.size() > num_services) {
+                    LogPrint(BCLog::TOR, "tor: Found %d keys but only %d services requested, using first %d keys\n",
+                             private_keys.size(), num_services, num_services);
+                    private_keys.resize(num_services);
+                }
             }
         }
     }
@@ -383,6 +414,16 @@ TorController::~TorController()
     if (reconnect_ev) {
         event_free(reconnect_ev);
         reconnect_ev = nullptr;
+    }
+    if (directory_monitor_ev) {
+        event_free(directory_monitor_ev);
+        directory_monitor_ev = nullptr;
+
+        // Clean up any monitored services
+        for (const std::string& filepath : monitored_files) {
+            LogPrint(BCLog::TOR, "tor: Cleaning up monitored file: %s\n", filepath);
+        }
+        monitored_files.clear();
     }
     // Remove all valid services
     for (const CService& service_entry : services) {
@@ -771,10 +812,403 @@ fs::path TorController::GetPrivateKeyFile()
     return gArgs.GetDataDirNet() / "onion_v3_private_key";
 }
 
+fs::path TorController::GetPrivateKeyDirectory()
+{
+    return gArgs.GetDataDirNet() / "onion_v3_private_keys";
+}
+
+bool TorController::LoadPrivateKeysFromDirectory()
+{
+    fs::path directory = GetPrivateKeyDirectory();
+
+    // Check if directory exists, if not create it
+    try {
+        fs::create_directories(directory);
+
+        if (!fs::is_directory(directory)) {
+            LogPrintf("tor: Failed to create or access private key directory %s\n", fs::PathToString(directory));
+            return false;
+        }
+    } catch (const fs::filesystem_error& e) {
+        LogPrintf("tor: Error creating private key directory %s: %s\n",
+                  fs::PathToString(directory), e.what());
+        return false;
+    }
+
+    LogPrint(BCLog::TOR, "tor: Looking for private keys in directory %s\n", fs::PathToString(directory));
+
+    private_keys.clear();
+    monitored_files.clear();
+    bool loaded_any = false;
+
+    // Iterate over files in the directory
+    try {
+        for (const auto& entry : fs::directory_iterator(directory)) {
+            try {
+                if (fs::is_regular_file(entry.path())) {
+                    std::string filename;
+                    try {
+                        filename = entry.path().filename().string();
+                    } catch (const std::exception& e) {
+                        LogPrintf("tor: Error getting filename: %s\n", e.what());
+                        continue;
+                    }
+
+                    std::pair<bool, std::string> key_data;
+                    try {
+                        key_data = ReadBinaryFile(entry.path());
+                    } catch (const std::exception& e) {
+                        LogPrintf("tor: Error reading file %s: %s\n", filename, e.what());
+                        continue;
+                    }
+
+                    if (key_data.first) {
+                        std::string trimmed_key;
+                        try {
+                            trimmed_key = boost::algorithm::trim_copy(key_data.second);
+
+                            // Basic validation that the key format looks correct
+                            if ((trimmed_key.size() > 4 && trimmed_key.substr(0, 4) == "NEW:") ||
+                                (trimmed_key.size() > 12 && trimmed_key.substr(0, 12) == "ED25519-V3:") ||
+                                trimmed_key.find(":") != std::string::npos) {
+
+                                private_keys.push_back(trimmed_key);
+                                monitored_files.insert(entry.path().string());
+
+                                LogPrint(BCLog::TOR, "tor: Loaded private key from file %s: %s...\n",
+                                         filename, trimmed_key.substr(0, std::min(10, (int)trimmed_key.length())) + "...");
+                                loaded_any = true;
+                            } else {
+                                LogPrintf("tor: Skipping invalid private key format in file %s\n", filename);
+                            }
+                        } catch (const std::exception& e) {
+                            LogPrintf("tor: Error processing key data from file %s: %s\n", filename, e.what());
+                        }
+                    } else {
+                        LogPrintf("tor: Failed to read private key file %s\n", filename);
+                    }
+                }
+            } catch (const fs::filesystem_error& e) {
+                LogPrintf("tor: Error accessing file in directory: %s\n", e.what());
+            } catch (const std::exception& e) {
+                LogPrintf("tor: Unexpected error processing file in directory: %s\n", e.what());
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        LogPrintf("tor: Error iterating directory %s: %s\n",
+                  fs::PathToString(directory), e.what());
+    }
+
+    if (loaded_any) {
+        LogPrint(BCLog::TOR, "tor: Loaded %d private key(s) from directory\n", private_keys.size());
+
+        // Resize if necessary to match the required number of services
+        if (private_keys.size() < num_services) {
+            LogPrint(BCLog::TOR, "tor: Need %d services but only %d keys found, will generate additional keys\n",
+                     num_services, private_keys.size());
+            private_keys.resize(num_services);
+        } else if (private_keys.size() > num_services) {
+            LogPrint(BCLog::TOR, "tor: Found %d keys but only %d services requested, using first %d keys\n",
+                     private_keys.size(), num_services, num_services);
+            private_keys.resize(num_services);
+        }
+    }
+
+    return loaded_any;
+}
+
 void TorController::reconnect_cb(evutil_socket_t fd, short what, void *arg)
 {
     TorController *self = static_cast<TorController*>(arg);
     self->Reconnect();
+}
+
+void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *arg)
+{
+    TorController *self = static_cast<TorController*>(arg);
+    fs::path directory = self->GetPrivateKeyDirectory();
+
+    try {
+        if (!fs::exists(directory) || !fs::is_directory(directory)) {
+            return;
+        }
+    } catch (const fs::filesystem_error& e) {
+        LogPrintf("tor: Error checking directory %s: %s\n",
+                  fs::PathToString(directory), e.what());
+        return;
+    }
+
+    // Check for new files
+    std::set<std::string> current_files;
+    try {
+        for (const auto& entry : fs::directory_iterator(directory)) {
+            try {
+                if (fs::is_regular_file(entry.path())) {
+                    current_files.insert(entry.path().string());
+                }
+            } catch (const fs::filesystem_error& e) {
+                LogPrintf("tor: Error checking file type: %s\n", e.what());
+            } catch (const std::exception& e) {
+                LogPrintf("tor: Error processing file path: %s\n", e.what());
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        LogPrintf("tor: Error iterating directory %s: %s\n",
+                  fs::PathToString(directory), e.what());
+        return;
+    }
+
+    // Find added files
+    try {
+        for (const std::string& filepath : current_files) {
+            try {
+                if (filepath.empty()) {
+                    LogPrintf("tor: Empty filepath in current_files list, skipping\n");
+                    continue;
+                }
+
+                // Check if this is a new file we're not monitoring yet
+                if (self->monitored_files.find(filepath) == self->monitored_files.end()) {
+                    LogPrint(BCLog::TOR, "tor: New private key file detected: %s\n", filepath);
+
+                    // Read the new key file
+                    std::pair<bool, std::string> key_data;
+                    try {
+                        key_data = ReadBinaryFile(fs::PathFromString(filepath));
+                    } catch (const fs::filesystem_error& e) {
+                        LogPrintf("tor: Error reading new file %s: %s\n", filepath, e.what());
+                        continue;
+                    } catch (const std::exception& e) {
+                        LogPrintf("tor: Unexpected error reading file %s: %s\n", filepath, e.what());
+                        continue;
+                    }
+
+                    if (key_data.first && !key_data.second.empty()) {
+                        std::string trimmed_key;
+                        try {
+                            trimmed_key = boost::algorithm::trim_copy(key_data.second);
+                        } catch (const std::exception& e) {
+                            LogPrintf("tor: Error trimming key data: %s\n", e.what());
+                            continue;
+                        }
+
+                        if (trimmed_key.empty()) {
+                            LogPrintf("tor: Empty key found in file %s, skipping\n", filepath);
+                            continue;
+                        }
+
+                        // Validate key format with safe string operations
+                        bool valid_key = false;
+                        try {
+                            if (trimmed_key.size() > 4 && trimmed_key.compare(0, 4, "NEW:") == 0) {
+                                valid_key = true;
+                            } else if (trimmed_key.size() > 12 && trimmed_key.compare(0, 12, "ED25519-V3:") == 0) {
+                                valid_key = true;
+                            } else if (trimmed_key.find(":") != std::string::npos) {
+                                valid_key = true;
+                            }
+                        } catch (const std::exception& e) {
+                            LogPrintf("tor: Error validating key format: %s\n", e.what());
+                            continue;
+                        }
+
+                        if (valid_key) {
+                            // Add to monitored files
+                            try {
+                                self->monitored_files.insert(filepath);
+                            } catch (const std::exception& e) {
+                                LogPrintf("tor: Error adding file to monitored set: %s\n", e.what());
+                                continue;
+                            }
+
+                            // Create a new onion service with this key
+                            // Only if we're connected - otherwise it will be loaded on next connection
+                            try {
+                                if (self->conn.Command("GETINFO status/circuit-established",
+                                    [self, trimmed_key](TorControlConnection& conn, const TorControlReply& reply) {
+                                        try {
+                                            if (reply.code == 250 && reply.lines.size() > 0 && reply.lines[0] == "1") {
+                                                // Connected to Tor, add the new service
+                                                try {
+                                                    conn.Command(strprintf("ADD_ONION %s Port=%i,%s",
+                                                                trimmed_key,
+                                                                Params().GetDefaultPort(),
+                                                                self->m_target.ToStringIPPort()),
+                                                        std::bind(&TorController::add_onion_cb, self,
+                                                                std::placeholders::_1, std::placeholders::_2));
+                                                } catch (const std::exception& e) {
+                                                    LogPrintf("tor: Error creating onion service: %s\n", e.what());
+                                                }
+                                            }
+                                        } catch (const std::exception& e) {
+                                            LogPrintf("tor: Error in circuit status callback: %s\n", e.what());
+                                        }
+                                    })) {
+                                    LogPrint(BCLog::TOR, "tor: Attempting to create service with new key\n");
+                                } else {
+                                    LogPrintf("tor: Failed to send GETINFO command for circuit status\n");
+                                }
+                            } catch (const std::exception& e) {
+                                LogPrintf("tor: Error checking Tor connectivity: %s\n", e.what());
+                            }
+                        } else {
+                            LogPrintf("tor: New file contains invalid key format, ignoring\n");
+                        }
+                    } else {
+                        LogPrintf("tor: Invalid or empty key data in file %s\n", filepath);
+                    }
+                }
+            } catch (const std::exception& e) {
+                LogPrintf("tor: Unexpected error processing new file: %s\n", e.what());
+            }
+        }
+    } catch (const std::exception& e) {
+        LogPrintf("tor: Error processing new files: %s\n", e.what());
+    }
+
+    // Find removed files
+    std::vector<std::string> removed_files;
+    try {
+        for (const std::string& filepath : self->monitored_files) {
+            if (!filepath.empty() && current_files.find(filepath) == current_files.end()) {
+                removed_files.push_back(filepath);
+            }
+        }
+    } catch (const std::exception& e) {
+        LogPrintf("tor: Error identifying removed files: %s\n", e.what());
+        return;
+    }
+
+    // Handle removed files
+    for (const std::string& filepath : removed_files) {
+        try {
+            if (filepath.empty()) {
+                LogPrintf("tor: Empty filepath in removed_files list, skipping\n");
+                continue;
+            }
+
+            LogPrint(BCLog::TOR, "tor: Private key file removed: %s\n", filepath);
+
+            // Find the service ID associated with this file
+            std::pair<bool, std::string> key_data;
+            try {
+                key_data = ReadBinaryFile(fs::PathFromString(filepath));
+            } catch (const fs::filesystem_error& e) {
+                LogPrintf("tor: Error reading removed file %s: %s\n", filepath, e.what());
+                // Continue with next file since we can't process this one
+                continue;
+            } catch (const std::exception& e) {
+                LogPrintf("tor: Unexpected error reading file %s: %s\n", filepath, e.what());
+                continue;
+            }
+
+            if (key_data.first && !key_data.second.empty()) {
+                std::string removed_key;
+                try {
+                    removed_key = boost::algorithm::trim_copy(key_data.second);
+                } catch (const std::exception& e) {
+                    LogPrintf("tor: Error trimming key data: %s\n", e.what());
+                    continue;
+                }
+
+                if (removed_key.empty()) {
+                    LogPrintf("tor: Empty key found in file %s, skipping\n", filepath);
+                    continue;
+                }
+
+                // Find the index of this key in our private_keys vector
+                bool found_key = false;
+                size_t key_index = 0;
+                try {
+                    for (size_t i = 0; i < self->private_keys.size(); i++) {
+                        if (i < self->private_keys.size() && self->private_keys[i] == removed_key) {
+                            key_index = i;
+                            found_key = true;
+                            break;
+                        }
+                    }
+
+                    if (found_key) {
+                        LogPrint(BCLog::TOR, "tor: Found service corresponding to removed key file at index %d\n", key_index);
+
+                        // Check if we have a valid service to remove
+                        if (key_index < self->services.size() && self->services[key_index].IsValid()) {
+                            try {
+                                // Get the service ID for logging
+                                std::string service_id = key_index < self->service_ids.size() ?
+                                    self->service_ids[key_index] : "unknown";
+
+                                // First try to remove the service from Tor if we're connected
+                                try {
+                                    if (self->conn.Command("GETINFO status/circuit-established",
+                                        [self, key_index, service_id](TorControlConnection& conn, const TorControlReply& reply) {
+                                            try {
+                                                if (reply.code == 250 && reply.lines.size() > 0 && reply.lines[0] == "1") {
+                                                    // Connected to Tor, try to remove the service
+                                                    if (!service_id.empty() && service_id != "unknown") {
+                                                        conn.Command(strprintf("DEL_ONION %s", service_id),
+                                                            [key_index, service_id](TorControlConnection& conn, const TorControlReply& reply) {
+                                                                if (reply.code == 250) {
+                                                                    LogPrint(BCLog::TOR, "tor: Successfully removed service %s from Tor\n", service_id);
+                                                                } else {
+                                                                    LogPrintf("tor: Failed to remove service %s from Tor, code %d\n",
+                                                                              service_id, reply.code);
+                                                                }
+                                                            });
+                                                    }
+                                                }
+                                            } catch (const std::exception& e) {
+                                                LogPrintf("tor: Error in circuit status callback: %s\n", e.what());
+                                            }
+                                        })) {
+                                        LogPrint(BCLog::TOR, "tor: Attempting to remove service from Tor\n");
+                                    } else {
+                                        LogPrintf("tor: Failed to send GETINFO command for circuit status\n");
+                                    }
+                                } catch (const std::exception& e) {
+                                    LogPrintf("tor: Error checking Tor connectivity: %s\n", e.what());
+                                }
+
+                                // Remove the service from our local address list
+                                RemoveLocal(self->services[key_index]);
+                                LogPrint(BCLog::TOR, "tor: Removed service %s from local address list\n",
+                                         self->services[key_index].ToString());
+
+                                // Clear service data
+                                self->services[key_index] = CService();
+                                if (key_index < self->service_ids.size()) {
+                                    self->service_ids[key_index] = "";
+                                }
+                                if (key_index < self->private_keys.size()) {
+                                    self->private_keys[key_index] = "";
+                                }
+                            } catch (const std::exception& e) {
+                                LogPrintf("tor: Error removing service: %s\n", e.what());
+                            }
+                        } else {
+                            LogPrintf("tor: Invalid service at index %d, cannot remove\n", key_index);
+                        }
+                    } else {
+                        LogPrintf("tor: Could not find service corresponding to removed key file\n");
+                    }
+                } catch (const std::exception& e) {
+                    LogPrintf("tor: Error searching for key index: %s\n", e.what());
+                }
+            } else {
+                LogPrintf("tor: Could not read key data from removed file %s\n", filepath);
+            }
+
+            // Remove from monitored files regardless of success or failure
+            try {
+                self->monitored_files.erase(filepath);
+                LogPrint(BCLog::TOR, "tor: Removed %s from monitored files list\n", filepath);
+            } catch (const std::exception& e) {
+                LogPrintf("tor: Error removing path from monitored files set: %s\n", e.what());
+            }
+        } catch (const std::exception& e) {
+            LogPrintf("tor: Unexpected error processing removed file: %s\n", e.what());
+        }
+    }
 }
 
 /****** Thread ********/
