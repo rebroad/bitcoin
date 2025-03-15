@@ -368,6 +368,7 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
 
             // Split by any combination of CR and LF for cross-platform compatibility
             boost::split(key_lines, key_file_content, boost::is_any_of("\r\n"));
+            LogPrint(BCLog::TOR, "tor: Found %d lines in key file\n", key_lines.size());
 
             // Add each non-empty line as a private key
             private_keys.clear(); // Ensure we start with an empty vector
@@ -378,9 +379,12 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
                     if (trimmed_key.substr(0, 4) == "NEW:" ||
                         trimmed_key.substr(0, 12) == "ED25519-V3:" ||
                         trimmed_key.find(":") != std::string::npos) {
+                        LogPrint(BCLog::TOR, "tor: Validated key format: %s...\n",
+                                 trimmed_key.substr(0, std::min(12, (int)trimmed_key.length())));
                         private_keys.push_back(trimmed_key);
                     } else {
-                        LogPrintf("tor: Skipping invalid private key format in key file\n");
+                        LogPrintf("tor: Skipping invalid private key format in key file: %s...\n",
+                                 trimmed_key.substr(0, std::min(12, (int)trimmed_key.length())));
                     }
                 }
             }
@@ -505,16 +509,20 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
             // This ensures we store the most recently generated key even if we have issues with others
             if (!new_service_id.empty() && !new_private_key.empty()) {
                 fs::path key_file = key_directory / new_service_id;
+                LogPrint(BCLog::TOR, "tor: Attempting to save key for service %s to file %s\n",
+                         new_service_id, fs::PathToString(key_file));
                 try {
                     if (WriteBinaryFile(key_file, new_private_key)) {
                         // Add to monitored files cache for the directory monitor
                         monitored_files.insert(fs::PathToString(key_file));
                         monitored_keys_cache[fs::PathToString(key_file)] = new_private_key;
 
-                        LogPrint(BCLog::TOR, "tor: Saved private key for service %s to %s\n",
-                                 new_service_id, fs::PathToString(key_file));
+                        LogPrint(BCLog::TOR, "tor: Successfully saved private key for service %s to %s (key format: %s...)\n",
+                                 new_service_id, fs::PathToString(key_file),
+                                 new_private_key.substr(0, std::min(12, (int)new_private_key.length())));
                     } else {
-                        LogPrintf("tor: Error writing private key file for service %s\n", new_service_id);
+                        LogPrintf("tor: Error writing private key file for service %s to %s\n",
+                                  new_service_id, fs::PathToString(key_file));
                     }
                 } catch (const std::exception& e) {
                     LogPrintf("tor: Error saving key file for service %s: %s\n", new_service_id, e.what());
@@ -531,8 +539,9 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
                 if (!service_id.empty() && !key.empty() &&
                     // Skip the one we just wrote to avoid duplicate writes
                     !(service_id == new_service_id && key == new_private_key)) {
-
                     fs::path key_file = key_directory / service_id;
+                    LogPrint(BCLog::TOR, "tor: Attempting to save existing key for service %s to file %s\n",
+                             service_id, fs::PathToString(key_file));
                     try {
                         if (WriteBinaryFile(key_file, key)) {
                             valid_keys++;
@@ -540,19 +549,20 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
                             monitored_files.insert(fs::PathToString(key_file));
                             monitored_keys_cache[fs::PathToString(key_file)] = key;
 
-                            LogPrint(BCLog::TOR, "tor: Saved private key for service %s to %s\n",
-                                     service_id, fs::PathToString(key_file));
+                            LogPrint(BCLog::TOR, "tor: Successfully saved private key for service %s to %s (key format: %s...)\n",
+                                     service_id, fs::PathToString(key_file),
+                                     key.substr(0, std::min(12, (int)key.length())));
                         } else {
-                            LogPrintf("tor: Error writing private key file for service %s\n", service_id);
+                            LogPrintf("tor: Error writing private key file for service %s to %s\n",
+                                     service_id, fs::PathToString(key_file));
                         }
                     } catch (const std::exception& e) {
                         LogPrintf("tor: Error saving key file for service %s: %s\n", service_id, e.what());
                     }
+                } else {
+                    LogPrint(BCLog::TOR, "tor: Skipping save for service %s - empty id or key\n", service_id);
                 }
             }
-
-            LogPrint(BCLog::TOR, "tor: Successfully saved %d private key(s) to directory %s\n",
-                     valid_keys + 1, fs::PathToString(key_directory));
         } else {
             LogPrintf("tor: Could not access or create private key directory - keys not saved\n");
         }
@@ -882,10 +892,14 @@ fs::path TorController::GetPrivateKeyDirectory()
 bool TorController::LoadPrivateKeysFromDirectory()
 {
     fs::path directory = GetPrivateKeyDirectory();
+    LogPrint(BCLog::TOR, "tor: Loading private keys from directory: %s\n", fs::PathToString(directory));
 
     // Check if directory exists, if not create it
     try {
-        fs::create_directories(directory);
+        if (!fs::exists(directory)) {
+            LogPrint(BCLog::TOR, "tor: Private key directory doesn't exist, creating: %s\n", fs::PathToString(directory));
+            fs::create_directories(directory);
+        }
 
         if (!fs::is_directory(directory)) {
             LogPrintf("tor: Failed to create or access private key directory %s\n", fs::PathToString(directory));
@@ -901,55 +915,62 @@ bool TorController::LoadPrivateKeysFromDirectory()
 
     private_keys.clear();
     monitored_files.clear();
+    monitored_keys_cache.clear();
+
+    int total_files_checked = 0;
     bool loaded_any = false;
 
     // Iterate over files in the directory
     try {
         for (const auto& entry : fs::directory_iterator(directory)) {
             try {
-                if (fs::is_regular_file(entry.path())) {
-                    std::string filename;
+                total_files_checked++;
+                std::string filename;
+                try {
+                    filename = entry.path().filename().string();
+                    LogPrint(BCLog::TOR, "tor: Checking file: %s\n", filename);
+                } catch (const std::exception& e) {
+                    LogPrintf("tor: Error getting filename: %s\n", e.what());
+                    continue;
+                }
+
+                std::pair<bool, std::string> key_data;
+                try {
+                    key_data = ReadBinaryFile(entry.path());
+                    LogPrint(BCLog::TOR, "tor: Read %d bytes from file %s\n",
+                            key_data.second.size(), filename);
+                } catch (const std::exception& e) {
+                    LogPrintf("tor: Error reading file %s: %s\n", filename, e.what());
+                    continue;
+                }
+
+                if (key_data.first) {
+                    std::string trimmed_key;
                     try {
-                        filename = entry.path().filename().string();
-                    } catch (const std::exception& e) {
-                        LogPrintf("tor: Error getting filename: %s\n", e.what());
-                        continue;
-                    }
+                        trimmed_key = boost::algorithm::trim_copy(key_data.second);
+                        LogPrint(BCLog::TOR, "tor: Validating key format from file %s\n", filename);
 
-                    std::pair<bool, std::string> key_data;
-                    try {
-                        key_data = ReadBinaryFile(entry.path());
-                    } catch (const std::exception& e) {
-                        LogPrintf("tor: Error reading file %s: %s\n", filename, e.what());
-                        continue;
-                    }
-
-                    if (key_data.first) {
-                        std::string trimmed_key;
-                        try {
-                            trimmed_key = boost::algorithm::trim_copy(key_data.second);
-
-                            // Basic validation that the key format looks correct
-                            if ((trimmed_key.size() > 4 && trimmed_key.substr(0, 4) == "NEW:") ||
-                                (trimmed_key.size() > 12 && trimmed_key.substr(0, 12) == "ED25519-V3:") ||
-                                trimmed_key.find(":") != std::string::npos) {
-
-                                private_keys.push_back(trimmed_key);
-                                monitored_files.insert(fs::PathToString(entry.path()));
-                                monitored_keys_cache[fs::PathToString(entry.path())] = trimmed_key;  // Add to cache
-
-                                LogPrint(BCLog::TOR, "tor: Loaded private key from file %s: %s...\n",
-                                         filename, trimmed_key.substr(0, std::min(10, (int)trimmed_key.length())) + "...");
-                                loaded_any = true;
-                            } else {
-                                LogPrintf("tor: Skipping invalid private key format in file %s\n", filename);
-                            }
-                        } catch (const std::exception& e) {
-                            LogPrintf("tor: Error processing key data from file %s: %s\n", filename, e.what());
+                        // Basic validation that the key format looks correct
+                        bool valid_key = false;
+                        if (trimmed_key.compare(0, 12, "ED25519-V3:") == 0 && trimmed_key.size() > 12) {
+                            valid_key = true;
+                            LogPrint(BCLog::TOR, "tor: Valid private key format found in file %s\n", filename);
                         }
-                    } else {
-                        LogPrintf("tor: Failed to read private key file %s\n", filename);
+
+                        if (valid_key) {
+                            private_keys.push_back(trimmed_key);
+                            monitored_files.insert(fs::PathToString(entry.path()));
+                            monitored_keys_cache[fs::PathToString(entry.path())] = trimmed_key;
+                            LogPrint(BCLog::TOR, "tor: Added private key from file %s to monitoring\n", filename);
+                            loaded_any = true;
+                        } else {
+                            LogPrintf("tor: Skipping invalid private key format in file %s\n", filename);
+                        }
+                    } catch (const std::exception& e) {
+                        LogPrintf("tor: Error processing key data from file %s: %s\n", filename, e.what());
                     }
+                } else {
+                    LogPrintf("tor: Failed to read private key file %s\n", filename);
                 }
             } catch (const fs::filesystem_error& e) {
                 LogPrintf("tor: Error accessing file in directory: %s\n", e.what());
