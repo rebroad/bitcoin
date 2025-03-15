@@ -72,12 +72,12 @@ int TrafficGraphWidget::y_value(float value) {
     int h = height() - YMARGIN * 2;
 
     if (fMax <= 0.0001f || value <= std::numeric_limits<float>::epsilon())
-        return YMARGIN + h; // Return bottom of the graph
+        return YMARGIN + h;
 
     float result = fToggle ? pow(value, 0.30102) / pow(fMax, 0.30102) : value / fMax;
 
     if (std::isnan(result) || std::isinf(result))
-        return YMARGIN + h; // Return bottom of the graph
+        return YMARGIN + h;
 
     return YMARGIN + h - (h * 1.0 * result);
 }
@@ -85,40 +85,19 @@ int TrafficGraphWidget::y_value(float value) {
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
     int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / values[m_value]), int(samples.size()));
     if (sampleCount <= 0) return;
-
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int x = XMARGIN + w;
     path.moveTo(x, YMARGIN + h);
     for(int i = 0; i < sampleCount; ++i) {
         double ratio = static_cast<double>(i) * values[m_value] / m_range / DESIRED_SAMPLES;
         x = XMARGIN + w - static_cast<int>(w * ratio);
-        float sampleValue = samples.at(i);
-        // Log when sample value is suspicious (once per second)
-        static uint64_t last_sample_log = 0;
-        uint64_t now = GetTimeMillis();
-        if ((sampleValue < 0 || std::isnan(sampleValue) || std::isinf(sampleValue)) &&
-            (now - last_sample_log >= 1000)) {
-            LogPrintf("paintPath: Sample[%d] value=%f before passing to y_value\n", i, sampleValue);
-            last_sample_log = now;
-            sampleValue = 0;
-        }
-        int y = y_value(sampleValue);
+        int y = y_value(samples.at(i));
         path.lineTo(x, y);
     }
     path.lineTo(x, YMARGIN + h);
 }
 
 float floatmax(float a, float b) {
-    // Check for problematic values in inputs
-    static uint64_t last_floatmax_log = 0;
-    uint64_t now = GetTimeMillis();
-    if ((a <= 0 || std::isnan(a) || std::isinf(a) ||
-         b <= 0 || std::isnan(b) || std::isinf(b)) &&
-        (now - last_floatmax_log >= 1000)) {
-        LogPrintf("floatmax: inputs a=%f, b=%f\n", a, b);
-        last_floatmax_log = now;
-    }
-
     if (a > b) return a;
     else return b;
 }
@@ -241,23 +220,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         int w = width() - XMARGIN * 2;
         double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
         int x = XMARGIN + w - static_cast<int>(w * ratio);
-        float inValue = vSamplesIn[m_value].at(ttpoint);
-        float outValue = vSamplesOut[m_value].at(ttpoint);
-        float maxValue = floatmax(inValue, outValue);
-
-        // Log detailed information about the tooltip values
-        static uint64_t last_tooltip_log = 0;
-        uint64_t now = GetTimeMillis();
-        if ((inValue <= 0 || outValue <= 0 || maxValue <= 0 ||
-             std::isnan(inValue) || std::isnan(outValue) || std::isnan(maxValue) ||
-             std::isinf(inValue) || std::isinf(outValue) || std::isinf(maxValue)) &&
-            (now - last_tooltip_log >= 1000)) {
-            LogPrintf("paintEvent: Tooltip values - inValue=%f, outValue=%f, maxValue=%f\n",
-                      inValue, outValue, maxValue);
-            last_tooltip_log = now;
-        }
-
-        int y = y_value(maxValue);
+        int y = y_value(floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint)));
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
         std::chrono::milliseconds sampleTime{0};
@@ -412,29 +375,8 @@ void TrafficGraphWidget::updateRates(int i) {
         if (nDebugI == i)
             LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
 
-        // Debug information for bytes and interval
-        static uint64_t last_bytes_log = 0;
-        uint64_t now = GetTimeMillis();
-        if (nDebugI == i && now - last_bytes_log >= 5000) { // Log every 5 seconds for readability
-            LogPrintf("%s: Raw values - bytesIn=%llu, nLastBytesIn=%llu, bytesOut=%llu, nLastBytesOut=%llu, nRealInterval=%lld\n",
-                      __func__, bytesIn, nLastBytesIn[i], bytesOut, nLastBytesOut[i], nRealInterval);
-            last_bytes_log = now;
-        }
-
-        // Calculate rates
         in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
         out_rate_kilobytes_per_msec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
-
-        // Check for negative, zero, NaN or Inf values that could cause problems later
-        static uint64_t last_rate_log_time = 0;
-        if (nDebugI == i && (
-            in_rate_kilobytes_per_msec <= 0 || std::isnan(in_rate_kilobytes_per_msec) || std::isinf(in_rate_kilobytes_per_msec) ||
-            out_rate_kilobytes_per_msec <= 0 || std::isnan(out_rate_kilobytes_per_msec) || std::isinf(out_rate_kilobytes_per_msec)) &&
-            (now - last_rate_log_time >= 1000)) {
-            LogPrintf("%s: WARNING - Calculated rates: in_rate=%f, out_rate=%f\n",
-                      __func__, in_rate_kilobytes_per_msec, out_rate_kilobytes_per_msec);
-            last_rate_log_time = now;
-        }
     }
     vSamplesIn[i].push_front(in_rate_kilobytes_per_msec);
     vSamplesOut[i].push_front(out_rate_kilobytes_per_msec);
@@ -442,7 +384,7 @@ void TrafficGraphWidget::updateRates(int i) {
     nLastTime[i] = nTime;
     nLastBytesIn[i] = bytesIn;
     nLastBytesOut[i] = bytesOut;
-    static int8_t fFull[VALUES_SIZE] = {0};
+    static int8_t fFull[VALUES_SIZE] = {};
     if (fFull[i]<=0 && vTimeStamp[i].size()+5 > DESIRED_SAMPLES) {
         if (fFull[i]<0)
             LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
