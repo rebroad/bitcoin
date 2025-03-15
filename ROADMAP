@@ -1,3 +1,9 @@
+Don't draw the traffic graph tooltips unless the window is visible (i.e. not minimized or covered by another window).
+
+Upon startup, if we're unable to resolve the hostname of our IP address (ddns.org), pop up a dialogue, but don't let this delay the starting of Bitcoin-Qt - i.e. non-blocking dialogue (which will still remain visible until the user clicks OK, or will disappear after 3 minutes).
+
+Change the onion keys file to be a directory instead, and all the keys are one key per file. Files can be added while bitcoin is running and it will load the key when it sees new files. If a file is deleted, it will disconnect from that onion address.
+
 Error writing first tor private key to secret key file - why?
 
 New tor logging ought to be within the tor LogPrint

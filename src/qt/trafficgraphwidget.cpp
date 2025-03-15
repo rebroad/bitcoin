@@ -76,7 +76,7 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
 bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
 
 unsigned int TrafficGraphWidget::getCurrentRangeIndex() const {
-    return m_new_value;
+	return m_new_value;
 }
 
 int TrafficGraphWidget::y_value(float value) {
@@ -107,45 +107,62 @@ int TrafficGraphWidget::y_value(float value) {
 }
 
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
+	// Calculate the appropriate number of samples to display
 	int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / values[m_value]), int(samples.size()));
-	if (sampleCount <= 0) return; // No samples to draw, exit early
+	if (sampleCount <= 0) return;
 
-	int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-	int firstValidX = XMARGIN + w; // Will be updated to the x-coordinate of the first data point
-	int lastValidX = XMARGIN + w;  // Tracks the x-coordinate of the last data point
-	bool pathHasValidPoints = false;
-	bool previousPointValid = false;
+	int h = height() - YMARGIN * 2;
+	int w = width() - XMARGIN * 2;
+	int rightX = XMARGIN + w;
+	int bottom = YMARGIN + h;
 
-	// Plot the data points
+	// Initialize a new path
+	path = QPainterPath();
+
+	// Start at bottom right corner
+	path.moveTo(rightX, bottom);
+
+	// Check if we have at least one sample to draw
+	if (sampleCount > 0) {
+	// Create array to hold all points before drawing
+	QVector<QPointF> points;
+	points.reserve(sampleCount);
+
+	// Calculate all points first to ensure consistent spacing
 	for (int i = 0; i < sampleCount; ++i) {
-		float sample = samples.at(i);
-		int y = y_value(sample);
+		// Use double for the calculation to avoid integer overflow/underflow
+		double ratio = static_cast<double>(i) * values[m_value] / m_range / DESIRED_SAMPLES;
 
-		// Calculate x coordinate
-		int x = XMARGIN + w - static_cast<int>(w * i * values[m_value] / m_range / DESIRED_SAMPLES);
+		// Guard against invalid ratios
+		if (ratio < 0.0) ratio = 0.0;
+		if (ratio > 1.0) ratio = 1.0;
 
-		// Store the first valid x-coordinate (earliest sample, leftmost point)
-		if (i == 0) {
-			firstValidX = x;
-			path.moveTo(x, y); // Ensure the path starts at the first data point
-		} else if (!previousPointValid)
-			path.moveTo(x, y);
-		else
-			path.lineTo(x, y);
+		// Calculate the x-coordinate with proper bounds checking
+		int x = rightX - static_cast<int>(w * ratio);
 
-		pathHasValidPoints = true;
-		lastValidX = x;
-		previousPointValid = true;
+		// Ensure x is within the widget boundaries
+		if (x < XMARGIN) x = XMARGIN;
+		if (x > rightX) x = rightX;
+
+		int y = y_value(samples.at(i));
+		points.append(QPointF(x, y));
 	}
 
-	// Close the shape if there are valid points
-	if (pathHasValidPoints) {
-		// 1. Draw a vertical line down from the last point to the bottom
-		path.lineTo(lastValidX, YMARGIN + h);
-		// 2. Draw a horizontal line back to the x-coordinate where we started
-		path.lineTo(firstValidX, YMARGIN + h);
-		// 3. Draw a vertical line up to the first point
-		path.lineTo(firstValidX, y_value(samples.at(0)));
+	// Draw line up to the first point
+	float firstSample = samples.at(0);
+	path.lineTo(rightX, y_value(firstSample));
+
+	// Draw through all points
+	for (const QPointF &point : points) {
+		path.lineTo(point);
+	}
+
+	// Complete the fill area
+		path.lineTo(points.last().x(), bottom);  // Straight down
+		path.lineTo(rightX, bottom);             // Straight right
+	} else {
+		// If no points to draw, complete the rectangle
+		path.lineTo(rightX, bottom);
 	}
 }
 
@@ -271,7 +288,17 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 	if (ttpoint >= 0 && ttpoint < sampleCount) {
 		painter.setPen(Qt::yellow);
 		int w = width() - XMARGIN * 2;
-		int x = XMARGIN + w - w * ttpoint * values[m_value] / m_range / DESIRED_SAMPLES;
+		// Use double for calculation to avoid integer overflow/underflow
+		double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
+		// Bounds check
+		if (ratio < 0.0) ratio = 0.0;
+		if (ratio > 1.0) ratio = 1.0;
+
+		int x = XMARGIN + w - static_cast<int>(w * ratio);
+		// Ensure x is within valid range
+		if (x < XMARGIN) x = XMARGIN;
+		if (x > XMARGIN + w) x = XMARGIN + w;
+
 		int y = y_value(floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint)));
 		painter.drawEllipse(QPointF(x, y), 3, 3);
 		QString strTime;
@@ -361,7 +388,8 @@ void TrafficGraphWidget::updateStuff() {
 
 	bool fUpdate = false;
 	for (int i = 0; i < VALUES_SIZE; i++) {
-		uint64_t msecs_per_sample = uint64_t(values[i]) * uint64_t(60000) / DESIRED_SAMPLES;
+		// Use 64-bit arithmetic throughout to avoid overflow
+		uint64_t msecs_per_sample = static_cast<uint64_t>(values[i]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
 		if (nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) { // TODO - we deduct nInterval/2 to avoid creep (due to delays in the algorithm, but is there a better way?)
 			updateRates(i);
 			if (i == m_value) {
@@ -378,21 +406,43 @@ void TrafficGraphWidget::updateStuff() {
 	static float y_increment = 0, x_increment = 0;
 	if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2)) fUpdate = true;
 	if (update_num(values[m_new_value], m_range, x_increment, width() - XMARGIN * 2)) {
+		// When changing range, ensure we have a clean transition
+		// Changing to a larger range (e.g., 3-day to 7-day)
 		if (values[m_new_value] > m_range && values[m_value] < m_range) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
-							values[m_value], values[m_value+1], m_range);
-		    m_value++; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
-		} else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
+						values[m_value], values[m_value+1], m_range);
+
+			// Only switch range when we're close to the target range value to avoid artifacts
+			if (std::abs(m_range - values[m_value+1]) < 0.05 * values[m_value+1]) {
+				m_value++;
+				ttpoint = -1;
+
+				// Force a full redraw when changing ranges
+				update_fMax();
+				fUpdate = true;
+			}
+		}
+		// Changing to a smaller range (e.g., 7-day to 3-day)
+		else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
-							values[m_value], values[m_value-1], m_range);
-		    m_value--; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
+						values[m_value], values[m_value-1], m_range);
+
+			// Only switch range when we're close to the target range value
+			if (std::abs(m_range - values[m_value-1]) < 0.05 * values[m_value-1]) {
+				m_value--;
+				ttpoint = -1;
+
+				// Force full redraw
+				update_fMax();
+				fUpdate = true;
+			}
 		}
 		fUpdate = true;
-		//LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
 	} else if (m_value != m_new_value) {
 		LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, m_new_value);
-		fUpdate = true;
 		m_value = m_new_value;
+		update_fMax();
+		fUpdate = true;
 	}
 
 	static bool last_fToggle = fToggle;
@@ -424,10 +474,10 @@ void TrafficGraphWidget::updateRates(int i) {
 	if (i > nDebugI) nDebugI = i;
 	float in_rate_kilobytes_per_msec = 0, out_rate_kilobytes_per_msec = 0;
 	if (nRealInterval >= 0) {
-	    if (nDebugI == i)
-		    LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
-	    in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
-	    out_rate_kilobytes_per_msec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
+		if (nDebugI == i)
+			LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
+		in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
+		out_rate_kilobytes_per_msec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
 	}
 	vSamplesIn[i].push_front(in_rate_kilobytes_per_msec);
 	vSamplesOut[i].push_front(out_rate_kilobytes_per_msec);
@@ -439,12 +489,12 @@ void TrafficGraphWidget::updateRates(int i) {
 	// Only trigger "Bump it up!" when we're about to exceed DESIRED_SAMPLES for the first time
 	// Check this condition once before entering the trimming loop
 	if (fFull[i]<0 && vTimeStamp[i].size() > DESIRED_SAMPLES && ttpoint < 0 &&
-	    m_value == i && i < VALUES_SIZE - 1) {
+		m_value == i && i < VALUES_SIZE - 1) {
 		m_bump_value = true;
 		LogPrintf("%s: Setting m_bump_value=true for range %d at size %d\n", __func__, i, vTimeStamp[i].size());
 	} else if (fFull[i]<=0 && vTimeStamp[i].size()+5 > DESIRED_SAMPLES) {
 		if (fFull[i]<0)
-		    LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
+			LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
 		fFull[i] = vTimeStamp[i].size() - DESIRED_SAMPLES-1;
 	}
 	while (vTimeStamp[i].size() > DESIRED_SAMPLES) {
@@ -524,8 +574,8 @@ void TrafficGraphWidget::exportData() {
 
 	// Get a filename from the user or use the default
 	QString fileName = QFileDialog::getSaveFileName(this, tr("Save Traffic Graph Data"),
-												  "traffic_data.json",
-												  tr("JSON Files (*.json)"));
+													"traffic_data.json",
+													tr("JSON Files (*.json)"));
 
 	if (fileName.isEmpty())
 		return; // User canceled the dialog
@@ -541,53 +591,53 @@ void TrafficGraphWidget::exportData() {
 	file.close();
 
 	QMessageBox::information(this, tr("Export Successful"),
-						   tr("Traffic data has been exported to %1").arg(fileName));
+							tr("Traffic data has been exported to %1").arg(fileName));
 }
 
 void TrafficGraphWidget::saveData()
 {
-    LogPrintf("TrafficGraphWidget: saveData() called\n");
+	LogPrintf("TrafficGraphWidget: saveData() called\n");
 
-    try {
+	try {
 		fs::path pathTrafficGraph = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata";
 		LogPrintf("TrafficGraphWidget: Trying to save data to %s\n", fs::PathToString(pathTrafficGraph));
 		FILE* file = fsbridge::fopen(pathTrafficGraph, "wb");
 		if (file) {
-		    CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
-		    if (!fileout.IsNull()) {
+			CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
+			if (!fileout.IsNull()) {
 				// Version
 				fileout << static_cast<int>(1);
 
 				// Save vSamplesIn, vSamplesOut, and vTimeStamp arrays
 				for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-				    // Save size of each queue
-				    unsigned int samplesInSize = vSamplesIn[i].size();
-				    fileout << VARINT(static_cast<uint32_t>(samplesInSize));
+					// Save size of each queue
+					unsigned int samplesInSize = vSamplesIn[i].size();
+					fileout << VARINT(static_cast<uint32_t>(samplesInSize));
 
-				    // Save queue contents - convert float to uint32_t for serialization
-				    for (unsigned int j = 0; j < samplesInSize; j++) {
+					// Save queue contents - convert float to uint32_t for serialization
+					for (unsigned int j = 0; j < samplesInSize; j++) {
 						float value = vSamplesIn[i].at(j);
 						uint32_t uint_value;
 						// Use memcpy for bit-exact conversion (safe on any system with IEEE 754 floats)
 						memcpy(&uint_value, &value, sizeof(float));
 						ser_writedata32(fileout, uint_value);
-				    }
+					}
 
-				    unsigned int samplesOutSize = vSamplesOut[i].size();
-				    fileout << VARINT(static_cast<uint32_t>(samplesOutSize));
+					unsigned int samplesOutSize = vSamplesOut[i].size();
+					fileout << VARINT(static_cast<uint32_t>(samplesOutSize));
 
-				    for (unsigned int j = 0; j < samplesOutSize; j++) {
+					for (unsigned int j = 0; j < samplesOutSize; j++) {
 						float value = vSamplesOut[i].at(j);
 						uint32_t uint_value;
 						// Use memcpy for bit-exact conversion (safe on any system with IEEE 754 floats)
 						memcpy(&uint_value, &value, sizeof(float));
 						ser_writedata32(fileout, uint_value);
-				    }
+					}
 
-				    unsigned int timeStampSize = vTimeStamp[i].size();
-				    fileout << VARINT(static_cast<uint32_t>(timeStampSize));
+					unsigned int timeStampSize = vTimeStamp[i].size();
+					fileout << VARINT(static_cast<uint32_t>(timeStampSize));
 
-				    for (unsigned int j = 0; j < timeStampSize; j++)
+					for (unsigned int j = 0; j < timeStampSize; j++)
 						fileout << VARINT(static_cast<uint64_t>(vTimeStamp[i].at(j).count()));
 				}
 
@@ -595,22 +645,22 @@ void TrafficGraphWidget::saveData()
 				LogPrintf("TrafficGraphWidget: Data saved to %s\n", fs::PathToString(pathTrafficGraph));
 			}
 		}
-    } catch (const std::exception& e) {
+	} catch (const std::exception& e) {
 		LogPrintf("TrafficGraphWidget: Error saving data: %s\n", e.what());
-    }
+	}
 }
 
 bool TrafficGraphWidget::loadDataFromBinary(uint64_t nTime) {
-    LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
-    try {
+	LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
+	try {
 		fs::path pathTrafficGraph = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata";
 		FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
 
 		if (!file) {
-		    LogPrintf("TrafficGraphWidget: Binary data file not found, attempting to load from CSV\n");
-		    return loadDataFromCSV(nTime);
+			LogPrintf("TrafficGraphWidget: Binary data file not found, attempting to load from CSV\n");
+			return loadDataFromCSV(nTime);
 		} else
-		    LogPrintf("TrafficGraphWidget: Binary data file found, attempting to load from it\n");
+			LogPrintf("TrafficGraphWidget: Binary data file found, attempting to load from it\n");
 
 		CAutoFile filein(file, SER_DISK, CLIENT_VERSION);
 		if (filein.IsNull()) return false;
@@ -622,67 +672,67 @@ bool TrafficGraphWidget::loadDataFromBinary(uint64_t nTime) {
 
 		// Load vSamplesIn, vSamplesOut, and vTimeStamp arrays
 		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-		    // Load vSamplesIn
-		    unsigned int samplesInSize;
-		    filein >> VARINT(samplesInSize);
+			// Load vSamplesIn
+			unsigned int samplesInSize;
+			filein >> VARINT(samplesInSize);
 
-		    for (unsigned int j = 0; j < samplesInSize; j++) {
+			for (unsigned int j = 0; j < samplesInSize; j++) {
 				uint32_t uint_value = ser_readdata32(filein);
 				float value;
 				// Use memcpy for bit-exact conversion back to float
 				memcpy(&value, &uint_value, sizeof(float));
 				vSamplesIn[i].push_back(value);
-		    }
+			}
 
-		    // Load vSamplesOut
-		    unsigned int samplesOutSize;
-		    filein >> VARINT(samplesOutSize);
-		    for (unsigned int j = 0; j < samplesOutSize; j++) {
+			// Load vSamplesOut
+			unsigned int samplesOutSize;
+			filein >> VARINT(samplesOutSize);
+			for (unsigned int j = 0; j < samplesOutSize; j++) {
 				uint32_t uint_value = ser_readdata32(filein);
 				float value;
 				// Use memcpy for bit-exact conversion back to float
 				memcpy(&value, &uint_value, sizeof(float));
 				vSamplesOut[i].push_back(value);
-		    }
+			}
 
-		    // Load vTimeStamp
+			// Load vTimeStamp
 			unsigned int timeStampSize;
-		    filein >> VARINT(timeStampSize);
+			filein >> VARINT(timeStampSize);
 
-		    for (unsigned int j = 0; j < timeStampSize; j++) {
+			for (unsigned int j = 0; j < timeStampSize; j++) {
 				uint64_t timeMs;
 				filein >> VARINT(timeMs);
 				if (timeMs > nTime) timeMs = nTime;
 				vTimeStamp[i].push_back(std::chrono::milliseconds{static_cast<int64_t>(timeMs)});
-		    }
+			}
 		}
 
 		filein.fclose();
 		LogPrintf("TrafficGraphWidget: Data loaded from %s\n", fs::PathToString(pathTrafficGraph));
 		return true;
-    } catch (const std::exception& e) {
+	} catch (const std::exception& e) {
 		LogPrintf("TrafficGraphWidget: Error loading binary data: %s\n", e.what());
 		LogPrintf("TrafficGraphWidget: Attempting to load from CSV after binary load error\n");
 		return loadDataFromCSV(nTime);
-    }
+	}
 }
 
 bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
-    LogPrintf("TrafficGraphWidget: Attempting to load data from CSV in the data directory\n");
-    try {
+	LogPrintf("TrafficGraphWidget: Attempting to load data from CSV in the data directory\n");
+	try {
 		// Path to the CSV file
 		fs::path pathCSV = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata.csv";
 		QFile file(QString::fromStdString(fs::PathToString(pathCSV)));
 
 		// Check if file exists and can be opened
 		if (!file.exists()) {
-		    LogPrintf("TrafficGraphWidget: CSV file not found\n");
-		    return false;
+			LogPrintf("TrafficGraphWidget: CSV file not found\n");
+			return false;
 		}
 
 		if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-		    LogPrintf("TrafficGraphWidget: CSV file exists but cannot be opened\n");
-		    return false;
+			LogPrintf("TrafficGraphWidget: CSV file exists but cannot be opened\n");
+			return false;
 		}
 
 		LogPrintf("TrafficGraphWidget: CSV file found and opened successfully\n");
@@ -695,81 +745,81 @@ bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
 
 		// Clear existing data - in case the binary load partially succeeded
 		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-		    vSamplesIn[i].clear();
-		    vSamplesOut[i].clear();
-		    vTimeStamp[i].clear();
+			vSamplesIn[i].clear();
+			vSamplesOut[i].clear();
+			vTimeStamp[i].clear();
 		}
 
 		// Read the file line by line
 		while (!in.atEnd()) {
-		    line = in.readLine().trimmed();
+			line = in.readLine().trimmed();
 
-		    if (line.isEmpty()) continue;
+			if (line.isEmpty()) continue;
 
-		    // Check for time range headers
-		    if (line.startsWith("#")) {
+			// Check for time range headers
+			if (line.startsWith("#")) {
 				// Time Range header: "# Time Range X: Y minutes"
 				QRegExp rangeRegex("# Time Range (\\d+): (\\d+) minutes");
 				if (rangeRegex.indexIn(line) != -1) {
-				    currentRange = rangeRegex.cap(1).toInt();
-				    LogPrintf("TrafficGraphWidget: Found original format header for range %d\n", currentRange);
+					currentRange = rangeRegex.cap(1).toInt();
+					LogPrintf("TrafficGraphWidget: Found original format header for range %d\n", currentRange);
 
-				    // Validate range
-				    if (currentRange < 0 || currentRange >= VALUES_SIZE) {
+					// Validate range
+					if (currentRange < 0 || currentRange >= VALUES_SIZE) {
 						LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
 						currentRange = -1; // Reset to invalid
-				    }
+					}
 				}
 				continue;
-		    }
+			}
 
-		    // Check for CSV DATA START format
-		    QRegExp startRegex("CSV DATA START - RANGE (\\d+)");
-		    if (startRegex.indexIn(line) != -1) {
+			// Check for CSV DATA START format
+			QRegExp startRegex("CSV DATA START - RANGE (\\d+)");
+			if (startRegex.indexIn(line) != -1) {
 				currentRange = startRegex.cap(1).toInt();
 				LogPrintf("TrafficGraphWidget: Found CSV DATA START marker for range %d\n", currentRange);
 
 				// Validate range
 				if (currentRange < 0 || currentRange >= VALUES_SIZE) {
-				    LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
-				    currentRange = -1; // Reset to invalid
+					LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
+					currentRange = -1; // Reset to invalid
 				}
 				continue;
-		    }
+			}
 
-		    // Check for CSV DATA END format - we'll skip this line
-		    if (line.startsWith("CSV DATA END")) {
+			// Check for CSV DATA END format - we'll skip this line
+			if (line.startsWith("CSV DATA END")) {
 				LogPrintf("TrafficGraphWidget: Found CSV DATA END marker for range %d\n", currentRange);
 				continue;
-		    }
+			}
 
-		    // Process data rows only if we have a valid current range
-		    if (currentRange >= 0 && currentRange < VALUES_SIZE) {
+			// Process data rows only if we have a valid current range
+			if (currentRange >= 0 && currentRange < VALUES_SIZE) {
 				// Check for header row
 				if (line.startsWith("index,")) continue;
 
 				// Parse data row: "index,timestamp,in_rate,out_rate"
 				QStringList parts = line.split(',');
 				if (parts.size() >= 4) {
-				    // Convert strings to appropriate types
-				    bool ok1, ok2, ok3, ok4;
-				    int index = parts[0].toInt(&ok1);
-				    uint64_t timestamp = parts[1].toLongLong(&ok2);
-				    float inRate = parts[2].toFloat(&ok3);
-				    float outRate = parts[3].toFloat(&ok4);
+					// Convert strings to appropriate types
+					bool ok1, ok2, ok3, ok4;
+					int index = parts[0].toInt(&ok1);
+					uint64_t timestamp = parts[1].toLongLong(&ok2);
+					float inRate = parts[2].toFloat(&ok3);
+					float outRate = parts[3].toFloat(&ok4);
 
-				    // Check conversions were successful
-				    if (!ok1 || !ok2 || !ok3 || !ok4) {
+					// Check conversions were successful
+					if (!ok1 || !ok2 || !ok3 || !ok4) {
 						LogPrintf("TrafficGraphWidget: Failed to parse CSV data row: %s\n", line.toStdString().c_str());
 						continue;
-				    }
+					}
 
-				    // Add to corresponding queues (push_back because we're reading oldest to newest)
-				    Q_UNUSED(index);
+					// Add to corresponding queues (push_back because we're reading oldest to newest)
+					Q_UNUSED(index);
 					if (timestamp > nTime) timestamp = nTime;
-				    vTimeStamp[currentRange].push_back(std::chrono::milliseconds{timestamp});
-				    vSamplesIn[currentRange].push_back(inRate);
-				    vSamplesOut[currentRange].push_back(outRate);
+					vTimeStamp[currentRange].push_back(std::chrono::milliseconds{timestamp});
+					vSamplesIn[currentRange].push_back(inRate);
+					vSamplesOut[currentRange].push_back(outRate);
 				}
 			}
 		}
@@ -779,53 +829,53 @@ bool TrafficGraphWidget::loadDataFromCSV(uint64_t nTime) {
 		// Log how many data points were loaded for each time range
 		int totalDataPoints = 0;
 		for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-		    if (!vSamplesIn[i].empty()) {
+			if (!vSamplesIn[i].empty()) {
 			int count = vSamplesIn[i].size();
 			totalDataPoints += count;
 			LogPrintf("TrafficGraphWidget: Loaded %d data points for time range %d (%d minutes)\n",
-			    count, i, values[i]);
-		    }
+				count, i, values[i]);
+			}
 		}
 
 		if (totalDataPoints == 0) {
-		    LogPrintf("TrafficGraphWidget: No data points were loaded from the CSV file\n");
-		    return false;
+			LogPrintf("TrafficGraphWidget: No data points were loaded from the CSV file\n");
+			return false;
 		}
 
 		LogPrintf("TrafficGraphWidget: Successfully loaded %d total data points from CSV file\n", totalDataPoints);
 		return true;
-    } catch (const std::exception& e) {
+	} catch (const std::exception& e) {
 		LogPrintf("TrafficGraphWidget: Error loading CSV data: %s\n", e.what());
 		return false;
-    }
+	}
 }
 
 bool TrafficGraphWidget::loadData(uint64_t nTime) {
-    bool success = false;
+	bool success = false;
 
-    // Try to load from binary file first, then fall back to CSV if that fails
-    if (!(success = loadDataFromBinary(nTime))) success = loadDataFromCSV(nTime);
+	// Try to load from binary file first, then fall back to CSV if that fails
+	if (!(success = loadDataFromBinary(nTime))) success = loadDataFromCSV(nTime);
 
 	if (!success) return false;
 
-    // If we successfully loaded data, determine the correct band to use
+	// If we successfully loaded data, determine the correct band to use
 	int firstNonFullBand = VALUES_SIZE - 1;
 
 	for (int i = 0; i < VALUES_SIZE; i++)
-	    if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
+		if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
 			firstNonFullBand = i;
 			break;
-	    }
+		}
 
 	if (firstNonFullBand == VALUES_SIZE - 1)
-	    LogPrintf("TrafficGraphWidget: After loading, all bands full, setting to highest band %d\n", firstNonFullBand);
+		LogPrintf("TrafficGraphWidget: After loading, all bands full, setting to highest band %d\n", firstNonFullBand);
 	else
-	    LogPrintf("TrafficGraphWidget: After loading, setting to first non-full band %d\n", firstNonFullBand);
+		LogPrintf("TrafficGraphWidget: After loading, setting to first non-full band %d\n", firstNonFullBand);
 
 	if (firstNonFullBand) { // not the first band
-	    m_value = firstNonFullBand - 1; // Minus one as we're bumping it
-	    m_bump_value = true;
-    }
+		m_value = firstNonFullBand - 1; // Minus one as we're bumping it
+		m_bump_value = true;
+	}
 
-    return true;
+	return true;
 }
