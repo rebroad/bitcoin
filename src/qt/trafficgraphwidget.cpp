@@ -406,42 +406,19 @@ void TrafficGraphWidget::updateStuff() {
 	static float y_increment = 0, x_increment = 0;
 	if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2)) fUpdate = true;
 	if (update_num(values[m_new_value], m_range, x_increment, width() - XMARGIN * 2)) {
-		// When changing range, ensure we have a clean transition
-		// Changing to a larger range (e.g., 3-day to 7-day)
 		if (values[m_new_value] > m_range && values[m_value] < m_range) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
 						values[m_value], values[m_value+1], m_range);
-
-			// Only switch range when we're close to the target range value to avoid artifacts
-			if (std::abs(m_range - values[m_value+1]) < 0.05 * values[m_value+1]) {
-				m_value++;
-				ttpoint = -1;
-
-				// Force a full redraw when changing ranges
-				update_fMax();
-				fUpdate = true;
-			}
-		}
-		// Changing to a smaller range (e.g., 7-day to 3-day)
-		else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
+				m_value++; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
+		} else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
 			LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
 						values[m_value], values[m_value-1], m_range);
-
-			// Only switch range when we're close to the target range value
-			if (std::abs(m_range - values[m_value-1]) < 0.05 * values[m_value-1]) {
-				m_value--;
-				ttpoint = -1;
-
-				// Force full redraw
-				update_fMax();
-				fUpdate = true;
-			}
+				m_value--; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
 		}
 		fUpdate = true;
 	} else if (m_value != m_new_value) {
 		LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, m_new_value);
 		m_value = m_new_value;
-		update_fMax();
 		fUpdate = true;
 	}
 
