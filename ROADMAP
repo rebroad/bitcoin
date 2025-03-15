@@ -1,3 +1,7 @@
+is it possible to log which onion address we receive incoming connections on?
+
+make rbitcoin-qt use gdb somehow, interactively run the new binary upon receiving the SIGTERM (once the last one ends)
+
 Is it possible to make the splashscreen appear without taking the focus from the current window?
 
 When viewing the trafficgraph widget, ensure left and right arrows work without needing to click on the slider bar first.
