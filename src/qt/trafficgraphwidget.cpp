@@ -601,6 +601,8 @@ bool TrafficGraphWidget::loadDataFromBinary() {
             for (int i = 0; i < VALUES_SIZE; i++) {
                 if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
                     firstNonFullRange = i;
+                    LogPrintf("TrafficGraphWidget: Found first non-full range at index %d (%d minutes, %zu/%d samples)\n", 
+                             i, values[i], vTimeStamp[i].size(), DESIRED_SAMPLES);
                     break;
                 }
             }
@@ -608,38 +610,80 @@ bool TrafficGraphWidget::loadDataFromBinary() {
             // If all ranges are full, use the last range
             if (firstNonFullRange == -1) {
                 firstNonFullRange = VALUES_SIZE - 1;
-                LogPrintf("TrafficGraphWidget: All ranges are full, using range %d for total calculation\n", firstNonFullRange);
+                LogPrintf("TrafficGraphWidget: All ranges are full, using range %d (%d minutes) for total calculation\n", 
+                         firstNonFullRange, values[firstNonFullRange]);
             } else {
-                LogPrintf("TrafficGraphWidget: Using first non-full range %d for total calculation\n", firstNonFullRange);
+                LogPrintf("TrafficGraphWidget: Using first non-full range %d (%d minutes) for total calculation\n", 
+                         firstNonFullRange, values[firstNonFullRange]);
             }
 
             // Calculate totals from the samples in this range
-            if (!vSamplesIn[firstNonFullRange].empty() && !vSamplesOut[firstNonFullRange].empty()) {
-                // Sum up all samples in the range to get total bytes
-                float totalRecv = 0.0f;
-                float totalSent = 0.0f;
+            if (!vSamplesIn[firstNonFullRange].empty() || !vSamplesOut[firstNonFullRange].empty()) {
+                // Use double for intermediate calculations to maintain precision
+                double totalRecvKB = 0.0, totalSentKB = 0.0;
+                size_t recvSamples = 0, sentSamples = 0;
+                
+                // Calculate milliseconds per sample for this range
+                double msecs_per_sample = static_cast<double>(values[firstNonFullRange]) * 60000.0 / DESIRED_SAMPLES;
+                LogPrintf("TrafficGraphWidget: Time per sample in range %d: %.2f milliseconds\n", 
+                         firstNonFullRange, msecs_per_sample);
 
-                for (const float sample : vSamplesIn[firstNonFullRange]) {
-                    totalRecv += sample;
+                // Handle receive samples - with overflow protection
+                if (!vSamplesIn[firstNonFullRange].empty()) {
+                    LogPrintf("TrafficGraphWidget: Processing %zu receive samples\n", vSamplesIn[firstNonFullRange].size());
+                    for (const float sample : vSamplesIn[firstNonFullRange]) {
+                        if (sample >= 0.0f && std::isfinite(sample)) {  // Protect against invalid values
+                            totalRecvKB += static_cast<double>(sample);
+                            recvSamples++;
+                        }
+                    }
+                    LogPrintf("TrafficGraphWidget: Total receive rate: %.6f KB/ms across %zu valid samples\n", 
+                             totalRecvKB, recvSamples);
                 }
 
-                for (const float sample : vSamplesOut[firstNonFullRange]) {
-                    totalSent += sample;
+                // Handle send samples - with overflow protection
+                if (!vSamplesOut[firstNonFullRange].empty()) {
+                    LogPrintf("TrafficGraphWidget: Processing %zu send samples\n", vSamplesOut[firstNonFullRange].size());
+                    for (const float sample : vSamplesOut[firstNonFullRange]) {
+                        if (sample >= 0.0f && std::isfinite(sample)) {  // Protect against invalid values
+                            totalSentKB += static_cast<double>(sample);
+                            sentSamples++;
+                        }
+                    }
+                    LogPrintf("TrafficGraphWidget: Total send rate: %.6f KB/ms across %zu valid samples\n", 
+                             totalSentKB, sentSamples);
                 }
 
-                // Convert from KB/msec to bytes (rates are stored in KB/msec)
-                // Multiply by msecs_per_sample to get actual bytes
-                uint64_t msecs_per_sample = static_cast<uint64_t>(values[firstNonFullRange]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
-                m_totalBytesRecv = static_cast<uint64_t>(totalRecv * msecs_per_sample * 1000); // Convert to bytes (KB * 1000)
-                m_totalBytesSent = static_cast<uint64_t>(totalSent * msecs_per_sample * 1000);
+                // Calculate total bytes with overflow protection
+                double totalRecvBytes = totalRecvKB * msecs_per_sample * 1000.0;
+                double totalSentBytes = totalSentKB * msecs_per_sample * 1000.0;
+                
+                LogPrintf("TrafficGraphWidget: Calculated bytes - receive: %.0f, send: %.0f\n", 
+                         totalRecvBytes, totalSentBytes);
+                
+                // Check for overflow before casting to uint64_t
+                if (totalRecvBytes <= std::numeric_limits<uint64_t>::max() && totalRecvBytes >= 0) {
+                    m_totalBytesRecv = static_cast<uint64_t>(totalRecvBytes);
+                } else {
+                    LogPrintf("TrafficGraphWidget: Warning - receive bytes overflow, capping at max value\n");
+                    m_totalBytesRecv = std::numeric_limits<uint64_t>::max();
+                }
+                
+                if (totalSentBytes <= std::numeric_limits<uint64_t>::max() && totalSentBytes >= 0) {
+                    m_totalBytesSent = static_cast<uint64_t>(totalSentBytes);
+                } else {
+                    LogPrintf("TrafficGraphWidget: Warning - send bytes overflow, capping at max value\n");
+                    m_totalBytesSent = std::numeric_limits<uint64_t>::max();
+                }
 
-                LogPrintf("TrafficGraphWidget: Calculated total bytes from range %d: recv=%u sent=%u\n", 
-                          firstNonFullRange, m_totalBytesRecv, m_totalBytesSent);
+                LogPrintf("TrafficGraphWidget: Final calculated total bytes from range %d: recv=%llu sent=%llu\n", 
+                         firstNonFullRange, 
+                         static_cast<unsigned long long>(m_totalBytesRecv), 
+                         static_cast<unsigned long long>(m_totalBytesSent));
             } else {
                 LogPrintf("TrafficGraphWidget: No samples found in range %d, unable to calculate totals\n", firstNonFullRange);
             }
         }
-
         return true;
     } catch (const std::exception& e) {
         LogPrintf("TrafficGraphWidget: Error loading binary data: %s\n", e.what());
