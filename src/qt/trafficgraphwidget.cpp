@@ -26,7 +26,8 @@
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
-    clientModel(nullptr)
+    clientModel(nullptr),
+    m_save_time(0)
 {
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateStuff);
@@ -468,7 +469,7 @@ void TrafficGraphWidget::saveData() {
             CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
             if (!fileout.IsNull()) {
                 // Version
-                fileout << static_cast<int>(2);
+                fileout << static_cast<int>(3);
 
                 // Save total bytes received and sent
                 uint64_t totalBytesRecv = clientModel->node().getTotalBytesRecv();
@@ -536,19 +537,19 @@ bool TrafficGraphWidget::loadDataFromBinary() {
         // Read version
         int version;
         filein >> version;
-        if (version != 1 && version != 2) {
-            LogPrintf("TrafficGraphWidget: Unsupported file version %d, expected 1 or 2\n", version);
+        if (version < 1 || version > 3) {
+            LogPrintf("TrafficGraphWidget: Unsupported file version %d, expected 1, 2, or 3\n", version);
             return false;
         }
 
-        // Load total bytes received and sent for version 2
-        if (version == 2) {
+        // Load total bytes received and sent for version 2 or 3
+        if (version >= 2) {
             filein >> VARINT(m_totalBytesRecv);
             filein >> VARINT(m_totalBytesSent);
             LogPrintf("TrafficGraphWidget: Read total bytes: recv=%u sent=%u\n", m_totalBytesRecv, m_totalBytesSent);
-        }
-        // For version 1, we'll calculate totals after loading the samples
-        else {
+
+        } else {
+            // For version 1, we'll calculate totals after loading the samples
             LogPrintf("TrafficGraphWidget: Version 1 file, will calculate totals from first non-full range\n");
             m_totalBytesRecv = 0;
             m_totalBytesSent = 0;
@@ -593,15 +594,16 @@ bool TrafficGraphWidget::loadDataFromBinary() {
         filein.fclose();
         LogPrintf("TrafficGraphWidget: Data loaded from %s\n", fs::PathToString(pathTrafficGraph));
 
+
         // For version 1 files, calculate totals from the first non-full range
         if (version == 1) {
             int firstNonFullRange = -1;
-            
+
             // Find the first non-full range
             for (int i = 0; i < VALUES_SIZE; i++) {
                 if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
                     firstNonFullRange = i;
-                    LogPrintf("TrafficGraphWidget: Found first non-full range at index %d (%d minutes, %zu/%d samples)\n", 
+                    LogPrintf("TrafficGraphWidget: Found first non-full range at index %d (%d minutes, %zu/%d samples)\n",
                              i, values[i], vTimeStamp[i].size(), DESIRED_SAMPLES);
                     break;
                 }
@@ -610,10 +612,10 @@ bool TrafficGraphWidget::loadDataFromBinary() {
             // If all ranges are full, use the last range
             if (firstNonFullRange == -1) {
                 firstNonFullRange = VALUES_SIZE - 1;
-                LogPrintf("TrafficGraphWidget: All ranges are full, using range %d (%d minutes) for total calculation\n", 
+                LogPrintf("TrafficGraphWidget: All ranges are full, using range %d (%d minutes) for total calculation\n",
                          firstNonFullRange, values[firstNonFullRange]);
             } else {
-                LogPrintf("TrafficGraphWidget: Using first non-full range %d (%d minutes) for total calculation\n", 
+                LogPrintf("TrafficGraphWidget: Using first non-full range %d (%d minutes) for total calculation\n",
                          firstNonFullRange, values[firstNonFullRange]);
             }
 
@@ -622,10 +624,10 @@ bool TrafficGraphWidget::loadDataFromBinary() {
                 // Use double for intermediate calculations to maintain precision
                 double totalRecvBytes = 0.0, totalSentBytes = 0.0;
                 size_t recvSamples = 0, sentSamples = 0;
-                
+
                 // Calculate milliseconds per sample for this range
                 double msecs_per_sample = static_cast<double>(values[firstNonFullRange]) * 60000.0 / DESIRED_SAMPLES;
-                LogPrintf("TrafficGraphWidget: Time per sample in range %d: %.2f milliseconds\n", 
+                LogPrintf("TrafficGraphWidget: Time per sample in range %d: %.2f milliseconds\n",
                          firstNonFullRange, msecs_per_sample);
 
                 // Handle receive samples - with overflow protection
@@ -650,9 +652,9 @@ bool TrafficGraphWidget::loadDataFromBinary() {
                     }
                 }
 
-                LogPrintf("TrafficGraphWidget: Calculated bytes - receive: %.0f, send: %.0f\n", 
+                LogPrintf("TrafficGraphWidget: Calculated bytes - receive: %.0f, send: %.0f\n",
                          totalRecvBytes, totalSentBytes);
-                
+
                 // Check for overflow before casting to uint64_t
                 if (totalRecvBytes <= std::numeric_limits<uint64_t>::max() && totalRecvBytes >= 0) {
                     m_totalBytesRecv = static_cast<uint64_t>(totalRecvBytes);
@@ -660,7 +662,7 @@ bool TrafficGraphWidget::loadDataFromBinary() {
                     LogPrintf("TrafficGraphWidget: Warning - receive bytes overflow, capping at max value\n");
                     m_totalBytesRecv = std::numeric_limits<uint64_t>::max();
                 }
-                
+
                 if (totalSentBytes <= std::numeric_limits<uint64_t>::max() && totalSentBytes >= 0) {
                     m_totalBytesSent = static_cast<uint64_t>(totalSentBytes);
                 } else {
@@ -668,9 +670,9 @@ bool TrafficGraphWidget::loadDataFromBinary() {
                     m_totalBytesSent = std::numeric_limits<uint64_t>::max();
                 }
 
-                LogPrintf("TrafficGraphWidget: Final calculated total bytes from range %d: recv=%llu sent=%llu\n", 
-                         firstNonFullRange, 
-                         static_cast<unsigned long long>(m_totalBytesRecv), 
+                LogPrintf("TrafficGraphWidget: Final calculated total bytes from range %d: recv=%llu sent=%llu\n",
+                         firstNonFullRange,
+                         static_cast<unsigned long long>(m_totalBytesRecv),
                          static_cast<unsigned long long>(m_totalBytesSent));
             } else {
                 LogPrintf("TrafficGraphWidget: No samples found in range %d, unable to calculate totals\n", firstNonFullRange);
@@ -823,6 +825,33 @@ bool TrafficGraphWidget::loadData() {
     if (!(success = loadDataFromBinary())) success = loadDataFromCSV();
 
     if (!success) return false;
+
+    // Find the most recent timestamp to use as m_save_time
+    if (m_save_time == 0 && !vTimeStamp[0].empty())
+        m_save_time = vTimeStamp[0].front().count();
+
+    if (m_save_time > 0) {
+        uint64_t load_time = GetTimeMillis();
+        uint64_t gap_duration = load_time - m_save_time;
+
+        if (gap_duration > 0) {
+            LogPrintf("TrafficGraphWidget: Detected gap of %llu ms between save and load\n",
+                     static_cast<unsigned long long>(gap_duration));
+
+            // Adjust timestamps to make it appear as if time didn't stop
+            for (int i = 0; i < VALUES_SIZE; i++) {
+                if (vTimeStamp[i].empty()) continue;
+                // Shift the last timestamp forward by the gap duration
+                // This makes it appear as if collection continued during suspend/exit
+                uint64_t old_timestamp = vTimeStamp[i][0].count();
+                uint64_t new_timestamp = old_timestamp + gap_duration;
+                vTimeStamp[i][0] = std::chrono::milliseconds{new_timestamp};
+
+                LogPrintf("TrafficGraphWidget: Adjusted last timestamp in range %d by %llu ms\n",
+                         i, static_cast<unsigned long long>(gap_duration));
+            }
+        }
+    }
 
     // If we successfully loaded data, determine the correct band to use
     int firstNonFullBand = VALUES_SIZE - 1;
