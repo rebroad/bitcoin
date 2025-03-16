@@ -359,7 +359,16 @@ void TrafficGraphWidget::updateStuff() {
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
         uint64_t msecs_per_sample = static_cast<uint64_t>(values[i]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
-		uint64_t this_offset = m_time_offset % msecs_per_sample;
+		if (m_time_offset > msecs_per_sample) {
+			uint64_t zero_samples = std::min(m_time_offset / msecs_per_sample, static_cast<uint64_t>(DESIRED_SAMPLES));
+			for (int j = 0; j < (int)zero_samples; j++) {
+				vSamplesIn[i].push_front(0);
+				vSamplesOut[i].push_front(0);
+				uint64_t missed_time = now - m_time_offset + (j * msecs_per_sample);
+				vTimeStamp[i].push_front(std::chrono::milliseconds{missed_time});
+			}
+		}
+		uint64_t this_offset = (m_time_offset >= msecs_per_sample) ? 0 : m_time_offset;
         if (now - this_offset > (nLastTime[i].count() + msecs_per_sample - expected_gap/2)) {
             updateRates(i);
             if (i == m_value) {
