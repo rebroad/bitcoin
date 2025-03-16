@@ -205,7 +205,7 @@ void MempoolStatsOld::drawChart() {
     int64_t maxTxCount = 0, minTxCount = std::numeric_limits<int64_t>::max();
     int64_t maxMinFee = 0;
     uint32_t maxTimeDetla = vSamples.back().m_time_delta-vSamples.front().m_time_delta;
-    for(const struct CStatsMempoolSample &sample : vSamples) {
+    for(const auto& sample : vSamples) {
         if (sample.m_dyn_mem_usage > maxDynMemUsage) maxDynMemUsage = sample.m_dyn_mem_usage;
         if (sample.m_dyn_mem_usage < minDynMemUsage) minDynMemUsage = sample.m_dyn_mem_usage;
         if (sample.m_tx_count > maxTxCount) maxTxCount = sample.m_tx_count;
