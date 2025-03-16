@@ -258,7 +258,7 @@ void MempoolStatsOld::drawChart() {
             dynMemUsagePath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topDynMemUsage-bottomDynMemUsage)*(sample.m_dyn_mem_usage-bottomDynMemUsage));
             double divide = (topTxCount-bottomTxCount)*((sample.m_tx_count)-bottomTxCount);
             if (divide == 0) divide=1;
-            txCountPath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/divide);
+            txCountPath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topTxCount-bottomTxCount)*(sample.m_tx_count-bottomTxCount));
             minFeePath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/maxMinFee*sample.m_min_fee_per_k);
         } else {
             dynMemUsagePath.lineTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topDynMemUsage-bottomDynMemUsage)*(sample.m_dyn_mem_usage-bottomDynMemUsage));
