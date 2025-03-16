@@ -547,6 +547,12 @@ bool TrafficGraphWidget::loadDataFromBinary() {
             filein >> VARINT(m_totalBytesSent);
             LogPrintf("TrafficGraphWidget: Read total bytes: recv=%u sent=%u\n", m_totalBytesRecv, m_totalBytesSent);
         }
+        // For version 1, we'll calculate totals after loading the samples
+        else {
+            LogPrintf("TrafficGraphWidget: Version 1 file, will calculate totals from first non-full range\n");
+            m_totalBytesRecv = 0;
+            m_totalBytesSent = 0;
+        }
 
         // Load vSamplesIn, vSamplesOut, and vTimeStamp arrays
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
@@ -586,6 +592,54 @@ bool TrafficGraphWidget::loadDataFromBinary() {
 
         filein.fclose();
         LogPrintf("TrafficGraphWidget: Data loaded from %s\n", fs::PathToString(pathTrafficGraph));
+
+        // For version 1 files, calculate totals from the first non-full range
+        if (version == 1) {
+            int firstNonFullRange = -1;
+            
+            // Find the first non-full range
+            for (int i = 0; i < VALUES_SIZE; i++) {
+                if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
+                    firstNonFullRange = i;
+                    break;
+                }
+            }
+
+            // If all ranges are full, use the last range
+            if (firstNonFullRange == -1) {
+                firstNonFullRange = VALUES_SIZE - 1;
+                LogPrintf("TrafficGraphWidget: All ranges are full, using range %d for total calculation\n", firstNonFullRange);
+            } else {
+                LogPrintf("TrafficGraphWidget: Using first non-full range %d for total calculation\n", firstNonFullRange);
+            }
+
+            // Calculate totals from the samples in this range
+            if (!vSamplesIn[firstNonFullRange].empty() && !vSamplesOut[firstNonFullRange].empty()) {
+                // Sum up all samples in the range to get total bytes
+                float totalRecv = 0.0f;
+                float totalSent = 0.0f;
+
+                for (const float sample : vSamplesIn[firstNonFullRange]) {
+                    totalRecv += sample;
+                }
+
+                for (const float sample : vSamplesOut[firstNonFullRange]) {
+                    totalSent += sample;
+                }
+
+                // Convert from KB/msec to bytes (rates are stored in KB/msec)
+                // Multiply by msecs_per_sample to get actual bytes
+                uint64_t msecs_per_sample = static_cast<uint64_t>(values[firstNonFullRange]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
+                m_totalBytesRecv = static_cast<uint64_t>(totalRecv * msecs_per_sample * 1000); // Convert to bytes (KB * 1000)
+                m_totalBytesSent = static_cast<uint64_t>(totalSent * msecs_per_sample * 1000);
+
+                LogPrintf("TrafficGraphWidget: Calculated total bytes from range %d: recv=%u sent=%u\n", 
+                          firstNonFullRange, m_totalBytesRecv, m_totalBytesSent);
+            } else {
+                LogPrintf("TrafficGraphWidget: No samples found in range %d, unable to calculate totals\n", firstNonFullRange);
+            }
+        }
+
         return true;
     } catch (const std::exception& e) {
         LogPrintf("TrafficGraphWidget: Error loading binary data: %s\n", e.what());
