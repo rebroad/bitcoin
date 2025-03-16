@@ -27,7 +27,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
     QWidget(parent),
     timer(nullptr),
     clientModel(nullptr),
-    m_save_time(0)
+    m_time_offset(0)
 {
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateStuff);
@@ -342,14 +342,25 @@ bool update_num(float new_val, float &current, float &increment, int length) {
 
 void TrafficGraphWidget::updateStuff() {
     if(!clientModel) return;
+    uint64_t expected_gap = timer->interval();
+    uint64_t now = GetTimeMillis();
 
-    static int nInterval{timer->interval()};
-    uint64_t nTime{GetTimeMillis()};
+	// Check for time jumps
+	if (!vTimeStamp[0].empty()) {
+		uint64_t last_time = vTimeStamp[0].front().count();
+		uint64_t actual_gap = now - last_time;
+
+		if (actual_gap >= 1000 + expected_gap) {
+			LogPrintf("%s: Time jump of %ds detected.\n", __func__, (actual_gap - expected_gap)/1000);
+			m_time_offset = actual_gap - expected_gap;
+		}
+	}
 
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
         uint64_t msecs_per_sample = static_cast<uint64_t>(values[i]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
-        if (nTime > (nLastTime[i].count() + msecs_per_sample - nInterval/2)) {
+		uint64_t this_offset = m_time_offset % msecs_per_sample;
+        if (now - this_offset > (nLastTime[i].count() + msecs_per_sample - expected_gap/2)) {
             updateRates(i);
             if (i == m_value) {
                 if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
@@ -403,24 +414,24 @@ void TrafficGraphWidget::updateStuff() {
 }
 
 void TrafficGraphWidget::updateRates(int i) {
-    std::chrono::milliseconds nTime{GetTimeMillis()};
+    std::chrono::milliseconds now{GetTimeMillis()};
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
-    int64_t nRealInterval = (nTime - nLastTime[i]).count();
+    int64_t actual_gap = (now - nLastTime[i]).count();
     static int nDebugI = 0;
     if (i > nDebugI) nDebugI = i;
     float in_rate_kilobytes_per_msec = 0, out_rate_kilobytes_per_msec = 0;
-    if (nRealInterval >= 0) {
+    if (actual_gap >= 0) {
         if (nDebugI == i)
-            LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], nRealInterval);
+            LogPrintf("%s: i=%d mins=%d nRI=%d\n", __func__, i, values[i], actual_gap);
 
-        in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - nLastBytesIn[i]) / nRealInterval;
-        out_rate_kilobytes_per_msec = static_cast<float>(bytesOut - nLastBytesOut[i]) / nRealInterval;
+        in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - nLastBytesIn[i]) / actual_gap;
+        out_rate_kilobytes_per_msec = static_cast<float>(bytesOut - nLastBytesOut[i]) / actual_gap;
     }
     vSamplesIn[i].push_front(in_rate_kilobytes_per_msec);
     vSamplesOut[i].push_front(out_rate_kilobytes_per_msec);
-    vTimeStamp[i].push_front(nTime);
-    nLastTime[i] = nTime;
+    vTimeStamp[i].push_front(now);
+    nLastTime[i] = now;
     nLastBytesIn[i] = bytesIn;
     nLastBytesOut[i] = bytesOut;
     static int8_t fFull[VALUES_SIZE] = {};
@@ -469,7 +480,7 @@ void TrafficGraphWidget::saveData() {
             CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
             if (!fileout.IsNull()) {
                 // Version
-                fileout << static_cast<int>(3);
+                fileout << static_cast<int>(2);
 
                 // Save total bytes received and sent
                 uint64_t totalBytesRecv = clientModel->node().getTotalBytesRecv();
@@ -537,12 +548,12 @@ bool TrafficGraphWidget::loadDataFromBinary() {
         // Read version
         int version;
         filein >> version;
-        if (version < 1 || version > 3) {
-            LogPrintf("TrafficGraphWidget: Unsupported file version %d, expected 1, 2, or 3\n", version);
+        if (version < 1 || version > 2) {
+            LogPrintf("TrafficGraphWidget: Unsupported file version %d, expected 1 or 2\n", version);
             return false;
         }
 
-        // Load total bytes received and sent for version 2 or 3
+        // Load total bytes received and sent for version 2
         if (version >= 2) {
             filein >> VARINT(m_totalBytesRecv);
             filein >> VARINT(m_totalBytesSent);
@@ -825,33 +836,6 @@ bool TrafficGraphWidget::loadData() {
     if (!(success = loadDataFromBinary())) success = loadDataFromCSV();
 
     if (!success) return false;
-
-    // Find the most recent timestamp to use as m_save_time
-    if (m_save_time == 0 && !vTimeStamp[0].empty())
-        m_save_time = vTimeStamp[0].front().count();
-
-    if (m_save_time > 0) {
-        uint64_t load_time = GetTimeMillis();
-        uint64_t gap_duration = load_time - m_save_time;
-
-        if (gap_duration > 0) {
-            LogPrintf("TrafficGraphWidget: Detected gap of %llu ms between save and load\n",
-                     static_cast<unsigned long long>(gap_duration));
-
-            // Adjust timestamps to make it appear as if time didn't stop
-            for (int i = 0; i < VALUES_SIZE; i++) {
-                if (vTimeStamp[i].empty()) continue;
-                // Shift the last timestamp forward by the gap duration
-                // This makes it appear as if collection continued during suspend/exit
-                uint64_t old_timestamp = vTimeStamp[i][0].count();
-                uint64_t new_timestamp = old_timestamp + gap_duration;
-                vTimeStamp[i][0] = std::chrono::milliseconds{new_timestamp};
-
-                LogPrintf("TrafficGraphWidget: Adjusted last timestamp in range %d by %llu ms\n",
-                         i, static_cast<unsigned long long>(gap_duration));
-            }
-        }
-    }
 
     // If we successfully loaded data, determine the correct band to use
     int firstNonFullBand = VALUES_SIZE - 1;
