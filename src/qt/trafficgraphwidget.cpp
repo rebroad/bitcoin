@@ -620,7 +620,7 @@ bool TrafficGraphWidget::loadDataFromBinary() {
             // Calculate totals from the samples in this range
             if (!vSamplesIn[firstNonFullRange].empty() || !vSamplesOut[firstNonFullRange].empty()) {
                 // Use double for intermediate calculations to maintain precision
-                double totalRecvKB = 0.0, totalSentKB = 0.0;
+                double totalRecvBytes = 0.0, totalSentBytes = 0.0;
                 size_t recvSamples = 0, sentSamples = 0;
                 
                 // Calculate milliseconds per sample for this range
@@ -633,12 +633,10 @@ bool TrafficGraphWidget::loadDataFromBinary() {
                     LogPrintf("TrafficGraphWidget: Processing %zu receive samples\n", vSamplesIn[firstNonFullRange].size());
                     for (const float sample : vSamplesIn[firstNonFullRange]) {
                         if (sample >= 0.0f && std::isfinite(sample)) {  // Protect against invalid values
-                            totalRecvKB += static_cast<double>(sample);
+                            totalRecvBytes += static_cast<double>(sample) * msecs_per_sample;
                             recvSamples++;
                         }
                     }
-                    LogPrintf("TrafficGraphWidget: Total receive rate: %.6f KB/ms across %zu valid samples\n", 
-                             totalRecvKB, recvSamples);
                 }
 
                 // Handle send samples - with overflow protection
@@ -646,18 +644,12 @@ bool TrafficGraphWidget::loadDataFromBinary() {
                     LogPrintf("TrafficGraphWidget: Processing %zu send samples\n", vSamplesOut[firstNonFullRange].size());
                     for (const float sample : vSamplesOut[firstNonFullRange]) {
                         if (sample >= 0.0f && std::isfinite(sample)) {  // Protect against invalid values
-                            totalSentKB += static_cast<double>(sample);
+                            totalSentBytes += static_cast<double>(sample) * msecs_per_sample;
                             sentSamples++;
                         }
                     }
-                    LogPrintf("TrafficGraphWidget: Total send rate: %.6f KB/ms across %zu valid samples\n", 
-                             totalSentKB, sentSamples);
                 }
 
-                // Calculate total bytes with overflow protection
-                double totalRecvBytes = totalRecvKB * msecs_per_sample * 1000.0;
-                double totalSentBytes = totalSentKB * msecs_per_sample * 1000.0;
-                
                 LogPrintf("TrafficGraphWidget: Calculated bytes - receive: %.0f, send: %.0f\n", 
                          totalRecvBytes, totalSentBytes);
                 
