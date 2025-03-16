@@ -44,6 +44,15 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
             // Load saved traffic data if available and the arrays are empty
             LogPrintf("vSamplesIn[0].empty()=%d\n", vSamplesIn[0].empty());
             loadData();
+
+            // Restore the saved total bytes counts to the node if they exist
+            if (m_totalBytesRecv > 0 || m_totalBytesSent > 0) {
+                model->node().setTotalBytesRecv(m_totalBytesRecv);
+                model->node().setTotalBytesSent(m_totalBytesSent);
+                LogPrintf("TrafficGraphWidget: Restored total bytes: recv=%u sent=%u\n",
+                             m_totalBytesRecv, m_totalBytesSent);
+            }
+
             return;
         }
 
@@ -154,7 +163,7 @@ void TrafficGraphWidget::focusSlider(Qt::FocusReason reason) {
 void TrafficGraphWidget::mousePressEvent(QMouseEvent *event) {
     // Give the slider focus before handling the event
     focusSlider(Qt::MouseFocusReason);
-    
+
     QWidget::mousePressEvent(event);
     int x = event->x(), y = event->y();
     fToggle = !fToggle;
@@ -164,14 +173,14 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event) {
 
 void TrafficGraphWidget::mouseReleaseEvent(QMouseEvent *event) {
     QWidget::mouseReleaseEvent(event);
-    
+
     // Also focus the slider after mouse release to ensure focus is maintained
     focusSlider(Qt::MouseFocusReason);
 }
 
 void TrafficGraphWidget::focusInEvent(QFocusEvent *event) {
     QWidget::focusInEvent(event);
-    
+
     // When widget gets focus through any means (like tab navigation),
     // ensure the slider gets focus too
     focusSlider(Qt::OtherFocusReason);
@@ -444,7 +453,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
     // Set focus when range is changed to ensure keyboard navigation continues to work
     setFocus(Qt::OtherFocusReason);
     focusSlider(Qt::OtherFocusReason);
-    
+
     return std::chrono::minutes{values[m_new_value]};
 }
 
@@ -459,7 +468,13 @@ void TrafficGraphWidget::saveData() {
             CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
             if (!fileout.IsNull()) {
                 // Version
-                fileout << static_cast<int>(1);
+                fileout << static_cast<int>(2);
+
+                // Save total bytes received and sent
+                uint64_t totalBytesRecv = clientModel->node().getTotalBytesRecv();
+                uint64_t totalBytesSent = clientModel->node().getTotalBytesSent();
+                fileout << VARINT(totalBytesRecv);
+                fileout << VARINT(totalBytesSent);
 
                 // Save vSamplesIn, vSamplesOut, and vTimeStamp arrays
                 for (unsigned int i = 0; i < VALUES_SIZE; i++) {
@@ -521,7 +536,17 @@ bool TrafficGraphWidget::loadDataFromBinary() {
         // Read version
         int version;
         filein >> version;
-        if (version != 1) return false;
+        if (version != 1 && version != 2) {
+            LogPrintf("TrafficGraphWidget: Unsupported file version %d, expected 1 or 2\n", version);
+            return false;
+        }
+
+        // Load total bytes received and sent for version 2
+        if (version == 2) {
+            filein >> VARINT(m_totalBytesRecv);
+            filein >> VARINT(m_totalBytesSent);
+            LogPrintf("TrafficGraphWidget: Read total bytes: recv=%u sent=%u\n", m_totalBytesRecv, m_totalBytesSent);
+        }
 
         // Load vSamplesIn, vSamplesOut, and vTimeStamp arrays
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {

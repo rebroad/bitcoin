@@ -81,6 +81,8 @@ private:
     //unsigned int values[VALUES_SIZE] = {5, 15, 60, 3*60, 12*60, 2*24*60, 7*24*60, 28*24*60};
     ClientModel *clientModel;
     QString m_dataDir;
+    uint64_t m_totalBytesRecv{0};
+    uint64_t m_totalBytesSent{0};
 };
 
 #endif // BITCOIN_QT_TRAFFICGRAPHWIDGET_H
