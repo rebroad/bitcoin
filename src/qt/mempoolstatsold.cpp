@@ -253,17 +253,18 @@ void MempoolStatsOld::drawChart() {
     // draw the three possible paths
     for (mempoolSamples_t::iterator it = vSamples.begin(); it != vSamples.end(); it+=samplesStep) {
         const struct CStatsMempoolSample &sample = (*it);
-        qreal xPos = maxTimeDetla > 0 ? maxwidth/maxTimeDetla*(sample.m_time_delta-vSamples.front().m_time_delta) : maxwidth/(double)vSamples.size();
+        qreal xPos = GRAPH_PADDING_LEFT + (maxTimeDetla > 0 ? maxwidth/maxTimeDetla*(sample.m_time_delta-vSamples.front().m_time_delta) : maxwidth/(double)vSamples.size());
+		qreal dynMemY = bottom-maxheightG/(topDynMemUsage-bottomDynMemUsage)*(sample.m_dyn_mem_usage-bottomDynMemUsage);
+		qreal txCountY = bottom-maxheightG/(topTxCount-bottomTxCount)*(sample.m_tx_count-bottomTxCount);
+		qreal minFeeY = bottom-maxheightG/maxMinFee*sample.m_min_fee_per_k;
         if (sample.m_time_delta == vSamples.front().m_time_delta) {
-            dynMemUsagePath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topDynMemUsage-bottomDynMemUsage)*(sample.m_dyn_mem_usage-bottomDynMemUsage));
-            double divide = (topTxCount-bottomTxCount)*((sample.m_tx_count)-bottomTxCount);
-            if (divide == 0) divide=1;
-            txCountPath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topTxCount-bottomTxCount)*(sample.m_tx_count-bottomTxCount));
-            minFeePath.moveTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/maxMinFee*sample.m_min_fee_per_k);
+            dynMemUsagePath.moveTo(xPos, dynMemY);
+            txCountPath.moveTo(xPos, txCountY);
+            minFeePath.moveTo(xPos, minFeeY);
         } else {
-            dynMemUsagePath.lineTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topDynMemUsage-bottomDynMemUsage)*(sample.m_dyn_mem_usage-bottomDynMemUsage));
-            txCountPath.lineTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/(topTxCount-bottomTxCount)*(sample.m_tx_count-bottomTxCount));
-            minFeePath.lineTo(GRAPH_PADDING_LEFT+xPos, bottom-maxheightG/maxMinFee*sample.m_min_fee_per_k);
+            dynMemUsagePath.lineTo(xPos, dynMemY);
+            txCountPath.lineTo(xPos, txCountY);
+            minFeePath.lineTo(xPos, minFeeY);
         }
     }
 
