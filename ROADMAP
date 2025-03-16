@@ -1,3 +1,5 @@
+when changing range in the traffic graph - pin X and Y so they scale the same together
+
 MPpm can be very large for a node (noticed close to startup) - why?
 
 is it possible to log which onion address we receive incoming connections on?
