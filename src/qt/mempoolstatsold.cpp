@@ -245,10 +245,7 @@ void MempoolStatsOld::drawChart() {
     if (bottomTxCount1 < bottomTxCount2) bottomTxCount = bottomTxCount2;
     else bottomTxCount = bottomTxCount1;
 
-    qreal currentX = GRAPH_PADDING_LEFT;
-    QPainterPath dynMemUsagePath(QPointF(currentX, bottom));
-    QPainterPath txCountPath(QPointF(currentX, bottom));
-    QPainterPath minFeePath(QPointF(currentX, bottom));
+    QPainterPath dynMemUsagePath, txCountPath, minFeePath;
 
     // draw the three possible paths
     for (mempoolSamples_t::iterator it = vSamples.begin(); it != vSamples.end(); it+=samplesStep) {
@@ -275,7 +272,7 @@ void MempoolStatsOld::drawChart() {
     dynMemUsagePathFill.lineTo(GRAPH_PADDING_LEFT+maxwidth, bottom);
     dynMemUsagePathFill.lineTo(GRAPH_PADDING_LEFT, bottom);
 
-    QPainterPath dynMemUsageGridPath(QPointF(currentX, bottom));
+    QPainterPath dynMemUsageGridPath(QPointF(GRAPH_PADDING_LEFT, bottom));
 
     // draw horizontal grid
     int amountOfLinesH = 5;
@@ -321,7 +318,7 @@ void MempoolStatsOld::drawChart() {
     redrawItems.append(scene->addPath(dynMemUsageGridPath, gridPen));
 
     // draw semi-transparent gradient for the dynamic memory size fill
-    QLinearGradient gradient(currentX, bottom, currentX, 0);
+    QLinearGradient gradient(GRAPH_PADDING_LEFT, bottom, GRAPH_PADDING_LEFT, 0);
     gradient.setColorAt(1.0, QColor(15,68,113, 250));
     gradient.setColorAt(0, QColor(255,255,255,0));
     QBrush graBru(gradient);
