@@ -1,3 +1,5 @@
+MPpm can be very large for a node (noticed close to startup) - why?
+
 is it possible to log which onion address we receive incoming connections on?
 
 make rbitcoin-qt use gdb somehow, interactively run the new binary upon receiving the SIGTERM (once the last one ends)
