@@ -181,10 +181,6 @@ void MempoolStats::drawChart() {
         QGraphicsTextItem *fee_range_title = m_scene->addText("Fee ranges\n(sat/b)", gridFont);
         fee_range_title->setPos(2, bottom+10);
 
-        // Add note about minimum relay fee
-        QGraphicsTextItem *min_fee_note = m_scene->addText("Min relay fee: 1 sat/vB", gridFont);
-        min_fee_note->setPos(2, bottom+30);
-
         const qreal c_w = 10, c_h = 10, c_margin = 2;
         qreal c_y = bottom - c_margin;
         int i = 0;
@@ -194,7 +190,8 @@ void MempoolStats::drawChart() {
             fee_rect->setRect(4, c_y, c_w, c_h);
 
             QColor brush_color = getColorForRange(i, display_up_to_range + 1);
-            brush_color.setAlpha(list_entry.tx_count > 0 ? 85 : 30); // Dim if no transactions
+			//QColor brush_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
+            brush_color.setAlpha(85);
             if (m_selected_range >= 0 && m_selected_range != i)
                 // if one item is selected, hide out the other ones
                 brush_color.setAlpha(30);
@@ -286,8 +283,8 @@ void MempoolStats::drawChart() {
         i++;
     }
 
-    /*QGraphicsTextItem *item_num = m_scene->addText(total_text, gridFont);
-    item_num->setPos(GRAPH_PADDING_LEFT+(maxwidth/2), bottom);*/
+    QGraphicsTextItem *item_num = m_scene->addText(total_text, gridFont);
+    item_num->setPos(GRAPH_PADDING_LEFT+(maxwidth/2), bottom);
 }
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column
