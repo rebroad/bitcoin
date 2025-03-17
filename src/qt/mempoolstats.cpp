@@ -185,12 +185,13 @@ void MempoolStats::drawChart() {
         qreal c_y = bottom - c_margin;
         int i = 0;
         for (const interfaces::mempool_feeinfo& list_entry : m_clientmodel->m_mempool_feehist[0].second) {
-            if (i > display_up_to_range) continue;
+            if (i > display_up_to_range) break;
+            if (list_entry.tx_count == 0) continue;
             ClickableRectItem *fee_rect = new ClickableRectItem();
             fee_rect->setRect(4, c_y, c_w, c_h);
 
             QColor brush_color = getColorForRange(i, display_up_to_range + 1);
-			//QColor brush_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
+            //QColor brush_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
             brush_color.setAlpha(85);
             if (m_selected_range >= 0 && m_selected_range != i)
                 // if one item is selected, hide out the other ones
@@ -234,18 +235,11 @@ void MempoolStats::drawChart() {
             int i = 0;
             qreal y = bottom;
             for (const interfaces::mempool_feeinfo& list_entry : sample.second) {
-                if (i > display_up_to_range)
-                    // skip ranges without txns
-                    continue;
-                if (fCount)
-                    y -= (maxheight_g / max_num_graph * list_entry.tx_count);
-                else
-                    y -= (maxheight_g / max_num_graph * list_entry.total_size);
-                if (first)
-                    // first sample, initiate the path with first point
-                    fee_paths.emplace_back(QPointF(current_x, y));
-                else
-                    fee_paths[i].lineTo(current_x, y);
+                if (i > display_up_to_range) break; // skip ranges without txns
+                if (fCount) y -= (maxheight_g / max_num_graph * list_entry.tx_count);
+                else y -= (maxheight_g / max_num_graph * list_entry.total_size);
+                if (first) fee_paths.emplace_back(QPointF(current_x, y));
+                else fee_paths[i].lineTo(current_x, y);
                 i++;
             }
             first = false;
