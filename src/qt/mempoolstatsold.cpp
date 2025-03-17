@@ -129,10 +129,8 @@ void MempoolStatsOld::drawChart() {
     allDataLabel->setEnabled((timeFilter == 0));
 
     // remove the items which needs to be redrawn
-    for (QGraphicsItem * item : redrawItems) {
+    for (QGraphicsItem * item : redrawItems)
         scene->removeItem(item);
-        delete item;
-    }
     redrawItems.clear();
 
     // get the samples

@@ -229,17 +229,14 @@ public:
          static int oldi = 0;
          uint64_t newsmallest = 0;
          int newi = 0;
-         std::vector<uint64_t> count(feelimits.size(), 0);
-         std::vector<uint64_t> fees(feelimits.size(), 0);
-         size_t totalmemusage = 0;
-         size_t totalmemdelta = 0;
+         std::vector<uint64_t> count(feelimits.size(), 0), fees(feelimits.size(), 0);
+         size_t totalmemusage = 0, totalmemdelta = 0;
          {
              LOCK(m_context->mempool->cs);
              for (const CTxMemPoolEntry& e : m_context->mempool->mapTx) {
                  int size = (int)e.GetTxSize();
-                 size_t memusage = e.DynamicMemoryUsage();
+                 totalmemusage += e.DynamicMemoryUsage();
                  size_t memdelta = e.MemoryDelta();
-                 totalmemusage += memusage;
                  totalmemdelta += memdelta;
                  CAmount fee = e.GetFee();
                  uint64_t asize = e.GetSizeWithAncestors();
@@ -247,9 +244,9 @@ public:
                  uint64_t dsize = e.GetSizeWithDescendants();
                  CAmount dfees = e.GetModFeesWithDescendants();
 
-                 CAmount fpb = fee / size; //fee per byte
-                 CAmount afpb = afees / asize; //fee per byte including ancestors
-                 CAmount dfpb = dfees / dsize; //fee per byte including descendants
+                 CAmount fpb = fee / size;     // fee per byte
+                 CAmount afpb = afees / asize; // fee per byte including ancestors
+                 CAmount dfpb = dfees / dsize; // fee per byte including descendants
                  CAmount tfpb = (afees + dfees - fee) / (asize + dsize - size);
                  CAmount feeperbyte = std::max(std::min(dfpb, tfpb), std::min(fpb, afpb));
 
