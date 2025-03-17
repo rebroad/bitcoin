@@ -80,6 +80,7 @@ const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac")
                                             QColor("#800000"), QColor("#a00000"), QColor("#c00000"), QColor("#e00000"), QColor("#e02020"), QColor("#e04040"), QColor("#e06060"),
                                             QColor("#800080"), QColor("#ac00ac"), QColor("#d800d8"), QColor("#ff00ff"), QColor("#ff2cff"), QColor("#ff58ff"), QColor("#ff80ff"),
                                             QColor("#000000") };
+
 void MempoolStats::drawChart() {
     if (!m_clientmodel) return;
 
