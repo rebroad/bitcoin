@@ -149,6 +149,8 @@ void MempoolStats::drawChart() {
         for (size_t i = 0; i < fee_subtotal_totalnum.size(); i++)
             if (fee_subtotal_totalnum[i] > 0) display_up_to_range = i;
 
+		fee_paths.resize(display_up_to_range + 1);
+
         // make a nice y-axis scale
         const int amount_of_h_lines = 4;
         if (max_num > 0) {
@@ -242,7 +244,7 @@ void MempoolStats::drawChart() {
                 if (i > display_up_to_range) break; // skip ranges without txns
                 if (fCount) y -= (maxheight_g / max_num_graph * list_entry.tx_count);
                 else y -= (maxheight_g / max_num_graph * list_entry.total_size);
-                if (first) fee_paths.emplace_back(QPointF(current_x, y));
+                if (first) fee_paths[i].moveTo(current_x, y);
                 else fee_paths[i].lineTo(current_x, y);
                 i++;
             }
@@ -252,7 +254,7 @@ void MempoolStats::drawChart() {
 
     int i = 0;
     QString total_text = tr("Last %1 hours").arg(QString::number(m_clientmodel->m_mempool_max_samples*m_clientmodel->m_mempool_collect_intervall/3600));
-    for (auto feepath : fee_paths) {
+    for (QPainterPath& feepath : fee_paths) {
         // close paths
         if (i > 0) {
             feepath.lineTo(fee_paths[i-1].currentPosition());
