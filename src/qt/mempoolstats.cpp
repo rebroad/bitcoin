@@ -114,9 +114,7 @@ void MempoolStats::drawChart() {
             }
         }
 
-        if (m_clientmodel->m_mempool_feehist.size() == 0)
-            // draw nothing
-            return;
+        if (m_clientmodel->m_mempool_feehist.size() == 0) return; // draw nothing
 
         fee_subtotal_totalnum.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         fee_subtotal_num.resize(m_clientmodel->m_mempool_feehist[0].second.size());
@@ -142,10 +140,8 @@ void MempoolStats::drawChart() {
         }
 
         // hide ranges we don't have txns
-        for(size_t i = 0; i < fee_subtotal_totalnum.size(); i++) {
-            if (fee_subtotal_totalnum[i] > 0)
-                display_up_to_range = i;
-        }
+        for (size_t i = 0; i < fee_subtotal_totalnum.size(); i++)
+            if (fee_subtotal_totalnum[i] > 0) display_up_to_range = i;
 
         // make a nice y-axis scale
         const int amount_of_h_lines = 4;
@@ -166,24 +162,20 @@ void MempoolStats::drawChart() {
         // draw horizontal grid
         QPainterPath grid_path(QPointF(current_x, bottom));
         int bottomNum = 0;
-        for (int i=0; i <= amount_of_h_lines; i++)
-        {
+        for (int i=0; i <= amount_of_h_lines; i++) {
             qreal lY = bottom-i*(maxheight_g/amount_of_h_lines);
             grid_path.moveTo(GRAPH_PADDING_LEFT, lY);
             grid_path.lineTo(GRAPH_PADDING_LEFT+maxwidth, lY);
 
             size_t grid_num = (float)i*(max_num_graph-bottomNum)/amount_of_h_lines + bottomNum;
             QGraphicsTextItem *item_num;
-            if (fCount)
-                item_num = m_scene->addText(QString::number(grid_num), gridFont);
-            else
-                item_num = m_scene->addText(GUIUtil::formatBytes(grid_num), gridFont);
+            if (fCount) item_num = m_scene->addText(QString::number(grid_num), gridFont);
+            else item_num = m_scene->addText(GUIUtil::formatBytes(grid_num), gridFont);
             item_num->setPos(GRAPH_PADDING_LEFT+maxwidth, lY-(item_num->boundingRect().height()/2));
         }
 
         QPen gridPen(QColor(100,100,100, 200), 1, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         m_scene->addPath(grid_path, gridPen);
-
 
         // draw fee ranges
         QGraphicsTextItem *fee_range_title = m_scene->addText("Fee ranges\n(sat/b)", gridFont);
@@ -193,35 +185,26 @@ void MempoolStats::drawChart() {
         QGraphicsTextItem *min_fee_note = m_scene->addText("Min relay fee: 1 sat/vB", gridFont);
         min_fee_note->setPos(2, bottom+30);
 
-        qreal c_y = bottom;
-        const qreal c_w = 10;
-        const qreal c_h = 10;
-        const qreal c_margin = 2;
-        c_y -= c_margin;
+        const qreal c_w = 10, c_h = 10, c_margin = 2;
+        qreal c_y = bottom - c_margin;
         int i = 0;
         for (const interfaces::mempool_feeinfo& list_entry : m_clientmodel->m_mempool_feehist[0].second) {
-            if (i > display_up_to_range) {
-                continue;
-            }
+            if (i > display_up_to_range) continue;
             ClickableRectItem *fee_rect = new ClickableRectItem();
             fee_rect->setRect(4, c_y, c_w, c_h);
 
             QColor brush_color = getColorForRange(i, display_up_to_range + 1);
             brush_color.setAlpha(list_entry.tx_count > 0 ? 85 : 30); // Dim if no transactions
-            if (m_selected_range >= 0 && m_selected_range != i) {
+            if (m_selected_range >= 0 && m_selected_range != i)
                 // if one item is selected, hide out the other ones
                 brush_color.setAlpha(30);
-            }
 
             fee_rect->setBrush(QBrush(brush_color));
             fee_rect->setCursor(Qt::PointingHandCursor);
             connect(fee_rect, &ClickableRectItem::objectClicked, [this, i](QGraphicsItem*item) {
                 // if clicked, we select or deselect if selected
-                if (m_selected_range == i) {
-                    m_selected_range = -1;
-                } else {
-                    m_selected_range = i;
-                }
+                if (m_selected_range == i) m_selected_range = -1;
+                else m_selected_range = i;
                 drawChart();
 
                 // TODO - make this happen on shutdown also
@@ -234,9 +217,8 @@ void MempoolStats::drawChart() {
 
             ClickableTextItem *fee_text = new ClickableTextItem();
             fee_text->setText(QString::number(list_entry.fee_from)+"-"+QString::number(list_entry.fee_to));
-            if (i+1 == static_cast<int>(m_clientmodel->m_mempool_feehist[0].second.size())) {
+            if (i+1 == static_cast<int>(m_clientmodel->m_mempool_feehist[0].second.size()))
                 fee_text->setText(QString::number(list_entry.fee_from)+"+");
-            }
             fee_text->setFont(gridFont);
             fee_text->setPos(4+c_w+2, c_y);
             m_scene->addItem(fee_text);
@@ -255,21 +237,18 @@ void MempoolStats::drawChart() {
             int i = 0;
             qreal y = bottom;
             for (const interfaces::mempool_feeinfo& list_entry : sample.second) {
-                if (i > display_up_to_range) {
+                if (i > display_up_to_range)
                     // skip ranges without txns
                     continue;
-                }
                 if (fCount)
                     y -= (maxheight_g / max_num_graph * list_entry.tx_count);
                 else
                     y -= (maxheight_g / max_num_graph * list_entry.total_size);
-                if (first) {
+                if (first)
                     // first sample, initiate the path with first point
                     fee_paths.emplace_back(QPointF(current_x, y));
-                }
-                else {
+                else
                     fee_paths[i].lineTo(current_x, y);
-                }
                 i++;
             }
             first = false;
@@ -313,23 +292,20 @@ void MempoolStats::drawChart() {
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column
 // sizes as the tables width is proportional to the dialogs width.
-void MempoolStats::resizeEvent(QResizeEvent *event)
-{
+void MempoolStats::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     m_gfx_view->resize(size());
     m_gfx_view->scene()->setSceneRect(rect().left(), rect().top(),rect().width(),rect().height());
     drawChart();
 }
 
-void MempoolStats::showEvent(QShowEvent *event)
-{
+void MempoolStats::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
     if (m_clientmodel)
         drawChart();
 }
 
-void MempoolStats::mousePressEvent(QMouseEvent *event)
-{
+void MempoolStats::mousePressEvent(QMouseEvent *event) {
     QWidget::mousePressEvent(event);
     fCount = !fCount;
     if (m_clientmodel)
