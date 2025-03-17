@@ -24,11 +24,7 @@
 #define YMARGIN                 10
 
 TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
-    QWidget(parent),
-    timer(nullptr),
-    clientModel(nullptr),
-    m_time_offset(0)
-{
+    QWidget(parent), timer(nullptr), clientModel(nullptr) {
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &TrafficGraphWidget::updateStuff);
     timer->setInterval(75);
@@ -346,6 +342,7 @@ void TrafficGraphWidget::updateStuff() {
     uint64_t now = GetTimeMillis();
 
 	// Check for time jumps
+	uint64_t m_time_offset = 0;
 	if (!vTimeStamp[0].empty()) {
 		uint64_t last_time = vTimeStamp[0].front().count();
 		uint64_t actual_gap = now - last_time;
@@ -357,6 +354,7 @@ void TrafficGraphWidget::updateStuff() {
 	}
 
     bool fUpdate = false;
+    static uint64_t m_offset[VALUES_SIZE] = {};
     for (int i = 0; i < VALUES_SIZE; i++) {
         uint64_t msecs_per_sample = static_cast<uint64_t>(values[i]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
 		/*if (m_time_offset > msecs_per_sample) {
@@ -368,8 +366,10 @@ void TrafficGraphWidget::updateStuff() {
 				vTimeStamp[i].push_front(std::chrono::milliseconds{missed_time});
 			}
 		}*/
-		uint64_t this_offset = (m_time_offset >= msecs_per_sample) ? 0 : m_time_offset;
-        if (now - this_offset > (nLastTime[i].count() + msecs_per_sample - expected_gap/2)) {
+		if (m_time_offset && !m_offset[i])
+		    m_offset[i] = (m_time_offset >= msecs_per_sample) ? 0 : m_time_offset;
+        if (now - m_offset[i] > (nLastTime[i].count() + msecs_per_sample - expected_gap/2)) {
+			m_offset[i] = 0;
             updateRates(i);
             if (i == m_value) {
                 if (ttpoint >= 0 && ttpoint < DESIRED_SAMPLES) {
@@ -381,6 +381,7 @@ void TrafficGraphWidget::updateStuff() {
             if (i == m_new_value) update_fMax();
         }
     }
+	m_time_offset = 0;
 
     static float y_increment = 0, x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2)) fUpdate = true;

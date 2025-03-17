@@ -83,7 +83,6 @@ private:
     QString m_dataDir;
     uint64_t m_totalBytesRecv{0};
     uint64_t m_totalBytesSent{0};
-    uint64_t m_time_offset{0};
 };
 
 #endif // BITCOIN_QT_TRAFFICGRAPHWIDGET_H
