@@ -21,18 +21,15 @@ static const int GRAPH_PADDING_TOP = 10;
 static const int GRAPH_PADDING_TOP_LABEL = 10;
 static const int GRAPH_PADDING_BOTTOM = 30;
 
-void ClickableTextItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
-{
+void ClickableTextItem::mousePressEvent(QGraphicsSceneMouseEvent *event) {
     Q_EMIT objectClicked(this);
 }
 
-void ClickableRectItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
-{
+void ClickableRectItem::mousePressEvent(QGraphicsSceneMouseEvent *event) {
     Q_EMIT objectClicked(this);
 }
 
-MempoolStats::MempoolStats(QWidget *parent) : QWidget(parent)
-{
+MempoolStats::MempoolStats(QWidget *parent) : QWidget(parent) {
     if (parent) {
         parent->installEventFilter(this);
         raise();
@@ -52,8 +49,7 @@ MempoolStats::MempoolStats(QWidget *parent) : QWidget(parent)
         drawChart();
 }
 
-void MempoolStats::setClientModel(ClientModel *model)
-{
+void MempoolStats::setClientModel(ClientModel *model) {
     m_clientmodel = model;
     if (model) {
         connect(model, &ClientModel::mempoolFeeHistChanged, this, &MempoolStats::drawChart);
@@ -68,14 +64,14 @@ QColor getColorForRange(int index, int totalRanges) {
     // Hue values chosen to provide good contrast (0-360 degrees)
     const double baseHue = 240.0; // Start with blue
     const double hueFactor = 360.0 / (totalRanges > 0 ? totalRanges : 1);
-    
+
     // Calculate hue based on index (wrapping around the color wheel if needed)
     double hue = fmod(baseHue + index * hueFactor, 360.0);
-    
+
     // Saturation and value settings for vibrant but not too bright colors
     const int saturation = 240;
     const int value = 220;
-    
+
     return QColor::fromHsv(hue, saturation, value);
 }
 
@@ -86,8 +82,7 @@ const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac")
                                             QColor("#800000"), QColor("#a00000"), QColor("#c00000"), QColor("#e00000"), QColor("#e02020"), QColor("#e04040"), QColor("#e06060"),
                                             QColor("#800080"), QColor("#ac00ac"), QColor("#d800d8"), QColor("#ff00ff"), QColor("#ff2cff"), QColor("#ff58ff"), QColor("#ff80ff"),
                                             QColor("#000000") };
-void MempoolStats::drawChart()
-{
+void MempoolStats::drawChart() {
     if (!m_clientmodel)
         return;
 
@@ -104,6 +99,7 @@ void MempoolStats::drawChart()
     gridFont.setPointSize(8);
     int display_up_to_range = 0;
     qreal maxwidth = m_gfx_view->scene()->sceneRect().width()-GRAPH_PADDING_LEFT-GRAPH_PADDING_RIGHT;
+
     {
         // we are going to access the clientmodel feehistogram directly avoding a copy
         QMutexLocker locker(&m_clientmodel->m_mempool_locker);
@@ -118,8 +114,6 @@ void MempoolStats::drawChart()
             }
         }
 
-        size_t max_num_graph=0;
-
         if (m_clientmodel->m_mempool_feehist.size() == 0) {
             // draw nothing
             return;
@@ -127,6 +121,8 @@ void MempoolStats::drawChart()
 
         fee_subtotal_totalnum.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         fee_subtotal_num.resize(m_clientmodel->m_mempool_feehist[0].second.size());
+        size_t max_num_graph=0;
+
         // calculate max tx for upper bound of chart
         for (const ClientModel::mempool_feehist_sample& sample : m_clientmodel->m_mempool_feehist) {
             uint64_t num = 0;
@@ -194,11 +190,15 @@ void MempoolStats::drawChart()
         QGraphicsTextItem *fee_range_title = m_scene->addText("Fee ranges\n(sat/b)", gridFont);
         fee_range_title->setPos(2, bottom+10);
 
+        // Add note about minimum relay fee
+        QGraphicsTextItem *min_fee_note = m_scene->addText("Min relay fee: 1 sat/vB", gridFont);
+        min_fee_note->setPos(2, bottom+30);
+
         qreal c_y = bottom;
         const qreal c_w = 10;
         const qreal c_h = 10;
         const qreal c_margin = 2;
-        c_y-=c_margin;
+        c_y -= c_margin;
         int i = 0;
         for (const interfaces::mempool_feeinfo& list_entry : m_clientmodel->m_mempool_feehist[0].second) {
             if (i > display_up_to_range) {
@@ -208,8 +208,7 @@ void MempoolStats::drawChart()
             fee_rect->setRect(4, c_y, c_w, c_h);
 
             QColor brush_color = getColorForRange(i, display_up_to_range + 1);
-            //QColor brush_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
-            brush_color.setAlpha(85);
+            brush_color.setAlpha(list_entry.tx_count > 0 ? 85 : 30); // Dim if no transactions
             if (m_selected_range >= 0 && m_selected_range != i) {
                 // if one item is selected, hide out the other ones
                 brush_color.setAlpha(30);
@@ -246,7 +245,7 @@ void MempoolStats::drawChart()
                 fee_rect->objectClicked(item);
             });
 
-            c_y-=c_h+c_margin;
+            c_y -= c_h + c_margin;
             i++;
         }
 
@@ -309,8 +308,8 @@ void MempoolStats::drawChart()
         i++;
     }
 
-    QGraphicsTextItem *item_num = m_scene->addText(total_text, gridFont);
-    item_num->setPos(GRAPH_PADDING_LEFT+(maxwidth/2), bottom);
+    /*QGraphicsTextItem *item_num = m_scene->addText(total_text, gridFont);
+    item_num->setPos(GRAPH_PADDING_LEFT+(maxwidth/2), bottom);*/
 }
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column
