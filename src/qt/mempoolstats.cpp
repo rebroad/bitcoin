@@ -45,8 +45,7 @@ MempoolStats::MempoolStats(QWidget *parent) : QWidget(parent) {
     m_scene = new QGraphicsScene(m_gfx_view);
     m_gfx_view->setScene(m_scene);
     m_gfx_view->setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
-    if (m_clientmodel)
-        drawChart();
+    if (m_clientmodel) drawChart();
 }
 
 void MempoolStats::setClientModel(ClientModel *model) {
@@ -82,6 +81,7 @@ const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac")
                                             QColor("#800000"), QColor("#a00000"), QColor("#c00000"), QColor("#e00000"), QColor("#e02020"), QColor("#e04040"), QColor("#e06060"),
                                             QColor("#800080"), QColor("#ac00ac"), QColor("#d800d8"), QColor("#ff00ff"), QColor("#ff2cff"), QColor("#ff58ff"), QColor("#ff80ff"),
                                             QColor("#000000") };
+
 void MempoolStats::drawChart() {
     if (!m_clientmodel)
         return;
@@ -114,16 +114,15 @@ void MempoolStats::drawChart() {
             }
         }
 
-        if (m_clientmodel->m_mempool_feehist.size() == 0) {
+        if (m_clientmodel->m_mempool_feehist.size() == 0)
             // draw nothing
             return;
-        }
 
         fee_subtotal_totalnum.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         fee_subtotal_num.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         size_t max_num_graph=0;
 
-        // calculate max tx for upper bound of chart
+        // Calculate max for y-axis
         for (const ClientModel::mempool_feehist_sample& sample : m_clientmodel->m_mempool_feehist) {
             uint64_t num = 0;
             int i = 0;
