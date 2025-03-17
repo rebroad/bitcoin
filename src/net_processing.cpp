@@ -2893,15 +2893,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         bool fRelay = true;
 
         vRecv >> nVersion >> Using<CustomUintFormatter<8>>(nServices) >> nTime;
-        if (nTime < 0) {
-            nTime = 0;
-        }
+        if (nTime < 0) nTime = 0;
         vRecv.ignore(8); // Ignore the addrMe service bits sent by the peer
         vRecv >> addrMe;
-        if (!pfrom.IsInboundConn())
-        {
-            m_addrman.SetServices(pfrom.addr, nServices);
-        }
+        if (!pfrom.IsInboundConn()) m_addrman.SetServices(pfrom.addr, nServices);
 
         if (!vRecv.empty()) {
             // The version message includes information about the sending node which we don't use:
@@ -2916,23 +2911,16 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             vRecv >> LIMITED_STRING(strSubVer, MAX_SUBVERSION_LENGTH);
             cleanSubVer = SanitizeString(strSubVer);
         }
-        if (!vRecv.empty()) {
-            vRecv >> starting_height;
-        }
-        if (!vRecv.empty())
-            vRecv >> fRelay;
+        if (!vRecv.empty()) vRecv >> starting_height;
+        if (!vRecv.empty()) vRecv >> fRelay;
         // Disconnect if we connected to ourself
-        if (pfrom.IsInboundConn() && !m_connman.CheckIncomingNonce(nNonce))
-        {
+        if (pfrom.IsInboundConn() && !m_connman.CheckIncomingNonce(nNonce)) {
             LogPrintf("connected to self at %s, disconnecting\n", pfrom.addr.ToString());
             pfrom.fDisconnect = true;
             return;
         }
 
-        if (pfrom.IsInboundConn() && addrMe.IsRoutable())
-        {
-            SeenLocal(addrMe);
-        }
+        if (pfrom.IsInboundConn() && addrMe.IsRoutable()) SeenLocal(addrMe);
 
         // Change version
         const int greatest_common_version = std::min(nVersion, PROTOCOL_VERSION);
@@ -2958,15 +2946,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             pfrom.m_tx_relay->lastRecvFeeFilter = -1;
         }
 
-        if((nServices & NODE_WITNESS))
-        {
+        if((nServices & NODE_WITNESS)) {
             LOCK(cs_main);
             State(pfrom.GetId())->fHaveWitness = true;
         }
 
         std::string remoteAddr;
-        if (fLogIPs)
-            remoteAddr = " peeraddr=" + pfrom.addr.ToString();
+        if (fLogIPs) remoteAddr = " peeraddr=" + pfrom.addr.ToString();
 
         //bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsOutboundOrBlockRelayConn() || cleanSubVer.find("bitnodes") != std::string::npos || pfrom.IsInboundConn());
         bool fLoggy = true;

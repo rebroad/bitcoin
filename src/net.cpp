@@ -21,6 +21,7 @@
 #include <net_permissions.h>
 #include <netaddress.h>
 #include <netbase.h>
+#include <torcontrol.h>
 #include <node/ui_interface.h>
 #include <protocol.h>
 #include <random.h>
@@ -487,16 +488,13 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
             connected = ConnectSocketDirectly(addrConnect, *sock, nConnectTimeout,
                                               conn_type == ConnectionType::MANUAL);
         }
-        if (!proxyConnectionFailed) {
+        if (!proxyConnectionFailed)
             // If a connection to the node was attempted, and failure (if any) is not caused by a problem connecting to
             // the proxy, mark this as an attempt.
             addrman.Attempt(addrConnect, fCountFailure);
-        }
     } else if (pszDest && GetNameProxy(proxy)) {
         sock = CreateSock(proxy.proxy);
-        if (!sock) {
-            return nullptr;
-        }
+        if (!sock) return nullptr;
         std::string host;
         uint16_t port{default_port};
         SplitHostPort(std::string(pszDest), port, host);
@@ -504,26 +502,14 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         connected = ConnectThroughProxy(proxy, host, port, *sock, nConnectTimeout,
                                         proxyConnectionFailed);
     }
-    if (!connected) {
-        return nullptr;
-    }
+    if (!connected) return nullptr;
 
     // Add node
     NodeId id = GetNewNodeId();
     uint64_t nonce = GetDeterministicRandomizer(RANDOMIZER_ID_LOCALHOSTNONCE).Write(id).Finalize();
-    if (!addr_bind.IsValid()) {
-        addr_bind = GetBindAddress(sock->Get());
-    }
-    CNode* pnode = new CNode(id,
-                             nLocalServices,
-                             std::move(sock),
-                             addrConnect,
-                             CalculateKeyedNetGroup(addrConnect),
-                             nonce,
-                             addr_bind,
-                             pszDest ? pszDest : "",
-                             conn_type,
-                             /*inbound_onion=*/false);
+    if (!addr_bind.IsValid()) addr_bind = GetBindAddress(sock->Get());
+    CNode* pnode = new CNode(id, nLocalServices, std::move(sock), addrConnect, CalculateKeyedNetGroup(addrConnect),
+                             nonce, addr_bind, pszDest ? pszDest : "", conn_type, /*inbound_onion=*/false);
     pnode->AddRef(1); // REB - Creation (out)
     if (pnode->GetId() == 0)
         LogPrintf("%s: Created pnode=%d GRC=%d\n", __func__, pnode->GetId(), pnode->GetRefCount());
@@ -534,8 +520,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     return pnode;
 }
 
-void CNode::CloseSocketDisconnect()
-{
+void CNode::CloseSocketDisconnect() {
     fDisconnect = true;
     LOCK(m_sock_mutex);
     if (m_sock) {
@@ -587,15 +572,13 @@ void CNode::SetAddrLocal(const CService& addrLocalIn) {
     }
 }
 
-Network CNode::ConnectedThroughNetwork() const
-{
+Network CNode::ConnectedThroughNetwork() const {
     return m_inbound_onion ? NET_ONION : addr.GetNetClass();
 }
 
 #undef X
 #define X(name) stats.name = name
-void CNode::CopyStats(CNodeStats& stats)
-{
+void CNode::CopyStats(CNodeStats& stats) {
     stats.nodeid = this->GetId();
     X(nServices);
     X(addr);
@@ -604,9 +587,8 @@ void CNode::CopyStats(CNodeStats& stats)
     if (m_tx_relay != nullptr) {
         LOCK(m_tx_relay->cs_filter);
         stats.fRelayTxes = m_tx_relay->fRelayTxes;
-    } else {
+    } else
         stats.fRelayTxes = false;
-    }
     X(m_last_send);
     X(m_last_recv);
     X(m_last_tx_time);
@@ -1185,11 +1167,8 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
 
 void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
                                             NetPermissionFlags permissionFlags,
-                                            const CAddress& addr_bind,
-                                            const CAddress& addr)
-{
-    int nInbound = 0;
-    int nMaxInbound = nMaxConnections - m_max_outbound;
+                                            const CAddress& addr_bind, const CAddress& addr) {
+    int nInbound = 0, nMaxInbound = nMaxConnections - m_max_outbound;
 
     AddWhitelistPermissionFlags(permissionFlags, addr);
     if (NetPermissions::HasFlag(permissionFlags, NetPermissionFlags::Implicit)) {
@@ -1251,21 +1230,31 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
     uint64_t nonce = GetDeterministicRandomizer(RANDOMIZER_ID_LOCALHOSTNONCE).Write(id).Finalize();
 
     ServiceFlags nodeServices = nLocalServices;
-    if (NetPermissions::HasFlag(permissionFlags, NetPermissionFlags::BloomFilter)) {
+    if (NetPermissions::HasFlag(permissionFlags, NetPermissionFlags::BloomFilter))
         nodeServices = static_cast<ServiceFlags>(nodeServices | NODE_BLOOM);
-    }
 
     const bool inbound_onion = std::find(m_onion_binds.begin(), m_onion_binds.end(), addr_bind) != m_onion_binds.end();
-    CNode* pnode = new CNode(id,
-                             nodeServices,
-                             std::move(sock),
-                             addr,
-                             CalculateKeyedNetGroup(addr),
-                             nonce,
-                             addr_bind,
-                             /*addrNameIn=*/"",
-                             ConnectionType::INBOUND,
-                             inbound_onion);
+    CNode* pnode = new CNode(id, nodeServices, std::move(sock), addr, CalculateKeyedNetGroup(addr),
+                             nonce, addr_bind, /*addrNameIn=*/"", ConnectionType::INBOUND, inbound_onion);
+
+    // Log the onion address for Tor inbound connections
+    if (inbound_onion) {
+        TorController* torController = GetTorController();
+        if (torController) {
+            const std::vector<CService>& onionServices = torController->GetOnionServices();
+            for (size_t i = 0; i < onionServices.size(); ++i) {
+                // Compare the port of addr_bind with the onion service's local port
+                // Note: onionServices[i].GetPort() is the external port (e.g., 8333),
+                // but we need to match against the internal mapped port if available
+                if (onionServices[i].GetPort() == addr_bind.GetPort()) {
+                    LogPrint(BCLog::NET, "Incoming Tor connection bound to onion address %s (service index %zu), local bind %s\n",
+                             onionServices[i].ToString(), i, addr_bind.ToString());
+                    break;
+                }
+            }
+        }
+    }
+
     pnode->AddRef(1); // REB - Creation (in)
     pnode->m_permissionFlags = permissionFlags;
     pnode->m_prefer_evict = discouraged;
@@ -2584,33 +2573,24 @@ void CConnman::ThreadOpenAddedConnections()
 }
 
 // if successful, this moves the passed grant to the constructed node
-void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFailure, CSemaphoreGrant *grantOutbound, const char *pszDest, ConnectionType conn_type)
-{
+void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFailure, CSemaphoreGrant *grantOutbound, const char *pszDest, ConnectionType conn_type) {
     assert(conn_type != ConnectionType::INBOUND);
 
     //
     // Initiate outbound network connection
     //
-    if (interruptNet) {
-        return;
-    }
-    if (!fNetworkActive) {
-        return;
-    }
+    if (interruptNet) return;
+    if (!fNetworkActive) return;
     if (!pszDest) {
         bool banned_or_discouraged = m_banman && (m_banman->IsDiscouraged(addrConnect) || m_banman->IsBanned(addrConnect));
-        if (IsLocal(addrConnect) || banned_or_discouraged || AlreadyConnectedToAddress(addrConnect)) {
+        if (IsLocal(addrConnect) || banned_or_discouraged || AlreadyConnectedToAddress(addrConnect))
             return;
-        }
-    } else if (FindNode(std::string(pszDest)))
-        return;
+    } else if (FindNode(std::string(pszDest))) return;
 
     CNode* pnode = ConnectNode(addrConnect, pszDest, fCountFailure, conn_type);
 
-    if (!pnode)
-        return;
-    if (grantOutbound)
-        grantOutbound->MoveTo(pnode->grantOutbound);
+    if (!pnode) return;
+    if (grantOutbound) grantOutbound->MoveTo(pnode->grantOutbound);
 
     m_msgproc->InitializeNode(pnode);
     {
@@ -2619,8 +2599,7 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
     }
 }
 
-void CConnman::ThreadMessageHandler()
-{
+void CConnman::ThreadMessageHandler() {
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::MESSAGE_HANDLER);
     while (!flagInterruptMsgProc || nBlocksToBeProcessed > 0)
     {
