@@ -55,39 +55,32 @@ static const float RECONNECT_TIMEOUT_START = 1.0;
 static const float RECONNECT_TIMEOUT_EXP = 1.5;
 /** Maximum length for lines received on TorControlConnection.
  * tor-control-spec.txt mentions that there is explicitly no limit defined to line length,
- * this is belt-and-suspenders sanity limit to prevent memory exhaustion.
- */
+ * this is belt-and-suspenders sanity limit to prevent memory exhaustion.  */
 static const int MAX_LINE_LENGTH = 100000;
 /** Directory monitoring interval in seconds */
 static const int DIRECTORY_MONITOR_INTERVAL = 10;
 /****** Low-level TorControlConnection ********/
 
 TorControlConnection::TorControlConnection(struct event_base *_base):
-    base(_base), b_conn(nullptr)
-{
+    base(_base), b_conn(nullptr) {
     // TODO - is this function needed given it's empty?
 }
 
-TorControlConnection::~TorControlConnection()
-{
-    if (b_conn)
-        bufferevent_free(b_conn);
+TorControlConnection::~TorControlConnection() {
+    if (b_conn) bufferevent_free(b_conn);
 }
 
-void TorControlConnection::readcb(struct bufferevent *bev, void *ctx)
-{
+void TorControlConnection::readcb(struct bufferevent *bev, void *ctx) {
     TorControlConnection *self = static_cast<TorControlConnection*>(ctx);
     struct evbuffer *input = bufferevent_get_input(bev);
     size_t n_read_out = 0;
     char *line;
     assert(input);
     //  If there is not a whole line to read, evbuffer_readln returns nullptr
-    while((line = evbuffer_readln(input, &n_read_out, EVBUFFER_EOL_CRLF)) != nullptr)
-    {
+    while((line = evbuffer_readln(input, &n_read_out, EVBUFFER_EOL_CRLF)) != nullptr) {
         std::string s(line, n_read_out);
         free(line);
-        if (s.size() < 4) // Short line
-            continue;
+        if (s.size() < 4) continue; // Short line
         // <status>(-|+| )<data><CRLF>
         self->message.code = LocaleIndependentAtoi<int>(s.substr(0,3));
         self->message.lines.push_back(s.substr(4));
@@ -103,9 +96,8 @@ void TorControlConnection::readcb(struct bufferevent *bev, void *ctx)
                     // Invoke reply handler with message
                     self->reply_handlers.front()(*self, self->message);
                     self->reply_handlers.pop_front();
-                } else {
+                } else
                     LogPrint(BCLog::TOR, "tor: Received unexpected sync reply %i\n", self->message.code);
-                }
             }
             self->message.Clear();
         }
@@ -119,8 +111,7 @@ void TorControlConnection::readcb(struct bufferevent *bev, void *ctx)
     }
 }
 
-void TorControlConnection::eventcb(struct bufferevent *bev, short what, void *ctx)
-{
+void TorControlConnection::eventcb(struct bufferevent *bev, short what, void *ctx) {
     TorControlConnection *self = static_cast<TorControlConnection*>(ctx);
     if (what & BEV_EVENT_CONNECTED) {
         LogPrint(BCLog::TOR, "tor: Successfully connected!\n");
@@ -312,6 +303,8 @@ std::map<std::string,std::string> ParseTorReplyMapping(const std::string &s)
     return mapping;
 }
 
+static TorController* gTorController = nullptr;
+
 TorController::TorController(struct event_base* _base, const std::string& tor_control_center, const CService& target):
     base(_base),
     m_tor_control_center(tor_control_center),
@@ -323,6 +316,7 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
     directory_monitor_ev(0),
     reconnect_timeout(RECONNECT_TIMEOUT_START)
 {
+	gTorController = this;
     // Initialize the service vectors to the right size
     service_ids.resize(num_services);
     services.resize(num_services);
@@ -419,8 +413,8 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
     }
 }
 
-TorController::~TorController()
-{
+TorController::~TorController() {
+	gTorController = nullptr;
     if (reconnect_ev) {
         event_free(reconnect_ev);
         reconnect_ev = nullptr;
@@ -1290,20 +1284,23 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
     }
 }
 
+// Accessor for the global TorController instance
+TorController* GetTorController() {
+	return gTorController;
+}
+
 /****** Thread ********/
 static struct event_base *gBase;
 static std::thread torControlThread;
 
-static void TorControlThread(CService onion_service_target)
-{
+static void TorControlThread(CService onion_service_target) {
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::TOR_CONTROL);
     TorController ctrl(gBase, gArgs.GetArg("-torcontrol", DEFAULT_TOR_CONTROL), onion_service_target);
 
     event_base_dispatch(gBase);
 }
 
-void StartTorControl(CService onion_service_target)
-{
+void StartTorControl(CService onion_service_target) {
     assert(!gBase);
 #ifdef WIN32
     evthread_use_windows_threads();
@@ -1321,8 +1318,7 @@ void StartTorControl(CService onion_service_target)
     });
 }
 
-void InterruptTorControl()
-{
+void InterruptTorControl() {
     if (gBase) {
         LogPrintf("tor: Thread interrupt\n");
         event_base_once(gBase, -1, EV_TIMEOUT, [](evutil_socket_t, short, void*) {
@@ -1331,8 +1327,7 @@ void InterruptTorControl()
     }
 }
 
-void StopTorControl()
-{
+void StopTorControl() {
     if (gBase) {
         torControlThread.join();
         event_base_free(gBase);
@@ -1340,8 +1335,7 @@ void StopTorControl()
     }
 }
 
-void ResetTorBackoff()
-{
+void ResetTorBackoff() {
     // If the tor control thread is running, force a reconnection
     if (torControlThread.joinable() && gBase) {
         // Signal the event loop to perform a reconnection
@@ -1354,8 +1348,7 @@ void ResetTorBackoff()
     }
 }
 
-CService DefaultOnionServiceTarget()
-{
+CService DefaultOnionServiceTarget() {
     struct in_addr onion_service_target;
     onion_service_target.s_addr = htonl(INADDR_LOOPBACK);
     return {onion_service_target, BaseParams().OnionServiceTargetPort()};
@@ -1365,10 +1358,8 @@ CService DefaultOnionServiceTarget()
  *
  * @param prefix The desired prefix for the onion address
  * @param[out] generated_private_key The generated private key if successful
- * @return true if a matching key was found, false otherwise
- */
-bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generated_private_key)
-{
+ * @return true if a matching key was found, false otherwise */
+bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generated_private_key) {
     if (prefix.empty()) {
         // No prefix specified, use standard key generation
         generated_private_key = "NEW:ED25519-V3";
@@ -1402,9 +1393,8 @@ bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generate
     // Continue generation until a matching key is found - no maximum limit
     while (true) {
         // Generate random private key
-        for (int i = 0; i < 32; i++) {
+        for (int i = 0; i < 32; i++)
             private_key[i] = dis(gen);
-        }
 
         // Convert to base64 format that Tor expects
         std::string key = "ED25519-V3:" + EncodeBase64(std::string(reinterpret_cast<char*>(private_key.data()), private_key.size()));
@@ -1420,9 +1410,8 @@ bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generate
         // Calculate how many characters match with the prefix
         size_t match_length = 0;
         while (match_length < prefix.size() && match_length < simulated_address.size() &&
-               simulated_address[match_length] == prefix[match_length]) {
+                              simulated_address[match_length] == prefix[match_length])
             match_length++;
-        }
 
         // Update match statistics
         match_stats[match_length]++;

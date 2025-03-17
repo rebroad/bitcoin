@@ -110,8 +110,7 @@ private:
 /** Controller that connects to Tor control socket, authenticate, then create
  * and maintain an ephemeral onion service.
  */
-class TorController
-{
+class TorController {
 public:
     TorController(struct event_base* base, const std::string& tor_control_center, const CService& target);
     TorController() : conn{nullptr} {
@@ -121,18 +120,17 @@ public:
 
     /** Get name of file to store private key in */
     fs::path GetPrivateKeyFile();
-
     /** Get directory to store multiple private keys */
     fs::path GetPrivateKeyDirectory();
-
     /** Load private keys from directory */
     bool LoadPrivateKeysFromDirectory();
-
     /** Reconnect, after getting disconnected */
     void Reconnect();
-
     /** Reset reconnection backoff timer and attempt immediate reconnection */
     void ResetReconnectBackoff();
+
+	const std::vector<CService>& GetOnionServices() const { return services; }
+
 private:
     struct event_base* base;
     const std::string m_tor_control_center;
@@ -175,14 +173,10 @@ public:
     void connected_cb(TorControlConnection& conn);
     /** Callback after connection lost or failed connection attempt */
     void disconnected_cb(TorControlConnection& conn);
-
     /** Callback for reconnect timer */
     static void reconnect_cb(evutil_socket_t fd, short what, void *arg);
-
     /** Callback for directory monitoring */
     static void directory_monitor_cb(evutil_socket_t fd, short what, void *arg);
-
-private:
 };
 
 /**
@@ -190,8 +184,9 @@ private:
  *
  * @param prefix The desired prefix for the onion address
  * @param[out] generated_private_key The generated private key if successful
- * @return true if a matching key was found, false otherwise
- */
+ * @return true if a matching key was found, false otherwise */
 bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generated_private_key);
+
+TorController* GetTorController();
 
 #endif // BITCOIN_TORCONTROL_H
