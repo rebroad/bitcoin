@@ -34,29 +34,25 @@ Q_SIGNALS:
 };
 
 
-class MempoolStats : public QWidget
-{
+class MempoolStats : public QWidget {
     Q_OBJECT
-
 public:
     explicit MempoolStats(QWidget *parent = Q_NULLPTR);
+	~MempoolStats();
     void setClientModel(ClientModel *model);
-
-public Q_SLOTS:
-    void drawChart();
-
-private:
-    ClientModel* m_clientmodel = Q_NULLPTR;
-
-    QGraphicsView *m_gfx_view;
-    QGraphicsScene *m_scene;
-
+protected:
     virtual void resizeEvent(QResizeEvent* event) override;
     virtual void showEvent(QShowEvent* event) override;
     virtual void mousePressEvent(QMouseEvent *event) override;
-
+private:
+    ClientModel* m_clientmodel = Q_NULLPTR;
+    QGraphicsView *m_gfx_view;
+    QGraphicsScene *m_scene;
     int m_selected_range = -1;
     bool fCount = true;
+	bool drawing = false;
+public Q_SLOTS:
+    void drawChart();
 };
 
 #endif // BITCOIN_QT_MEMPOOLSTATS_H

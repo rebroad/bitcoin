@@ -34,7 +34,6 @@ MempoolStats::MempoolStats(QWidget *parent) : QWidget(parent) {
         parent->installEventFilter(this);
         raise();
     }
-
     // autoadjust font size
     QGraphicsTextItem testText("jY"); //screendesign expected 27.5 pixel in width for this string
     testText.setFont(QFont(LABEL_FONT, LABEL_TITLE_SIZE, QFont::Light));
@@ -45,14 +44,18 @@ MempoolStats::MempoolStats(QWidget *parent) : QWidget(parent) {
     m_scene = new QGraphicsScene(m_gfx_view);
     m_gfx_view->setScene(m_scene);
     m_gfx_view->setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
-    if (m_clientmodel) drawChart();
+    //if (m_clientmodel) drawChart();
+}
+
+MempoolStats::~MempoolStats() {
+	delete m_gfx_view;
 }
 
 void MempoolStats::setClientModel(ClientModel *model) {
     m_clientmodel = model;
     if (model) {
         connect(model, &ClientModel::mempoolFeeHistChanged, this, &MempoolStats::drawChart);
-        drawChart();
+		drawChart();
     }
 }
 
@@ -83,8 +86,8 @@ const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac")
                                             QColor("#000000") };
 
 void MempoolStats::drawChart() {
-    if (!m_clientmodel)
-        return;
+    if (!m_clientmodel || drawing) return;
+	drawing = true;
 
     m_scene->clear();
 
@@ -114,7 +117,10 @@ void MempoolStats::drawChart() {
             }
         }
 
-        if (m_clientmodel->m_mempool_feehist.size() == 0) return; // draw nothing
+        if (m_clientmodel->m_mempool_feehist.size() == 0) {
+			drawing = false;
+			return; // draw nothing
+		}
 
         fee_subtotal_totalnum.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         fee_subtotal_num.resize(m_clientmodel->m_mempool_feehist[0].second.size());
@@ -220,9 +226,7 @@ void MempoolStats::drawChart() {
             fee_text->setFont(gridFont);
             fee_text->setPos(4+c_w+2, c_y);
             m_scene->addItem(fee_text);
-            connect(fee_text, &ClickableTextItem::objectClicked, [&fee_rect](QGraphicsItem*item) {
-                fee_rect->objectClicked(item);
-            });
+            connect(fee_text, &ClickableTextItem::objectClicked, fee_rect, &ClickableRectItem::objectClicked);
 
             c_y -= c_h + c_margin;
             i++;
@@ -279,6 +283,8 @@ void MempoolStats::drawChart() {
 
     QGraphicsTextItem *item_num = m_scene->addText(total_text, gridFont);
     item_num->setPos(GRAPH_PADDING_LEFT+(maxwidth/2), bottom);
+
+	drawing = false;
 }
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column

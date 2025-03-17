@@ -46,39 +46,33 @@ public Q_SLOTS:
     void drawChart();
     void objectClicked(QGraphicsItem *);
 
-private:
-    ClientModel *clientModel;
-
+protected:
     virtual void resizeEvent(QResizeEvent *event) override;
     virtual void showEvent(QShowEvent *event) override;
 
+private:
+    ClientModel *clientModel;
     QGraphicsTextItem *titleItem;
     QGraphicsLineItem *titleLine;
     QGraphicsTextItem *noDataItem;
-
     QGraphicsTextItem *dynMemUsageValueItem;
     QGraphicsTextItem *txCountValueItem;
     QGraphicsTextItem *minFeeValueItem;
-
     ClickableTextItemOld *lastHourLabel;
     ClickableTextItemOld *last3HoursLabel;
     ClickableTextItemOld *lastDayLabel;
     ClickableTextItemOld *allDataLabel;
-
     QGraphicsProxyWidget *txCountSwitch;
     QGraphicsProxyWidget *minFeeSwitch;
     QGraphicsProxyWidget *dynMemUsageSwitch;
-
     QGraphicsScene *scene;
     QVector<QGraphicsItem*> redrawItems;
-
     QCheckBox *cbShowMemUsage;
     QCheckBox *cbShowNumTxns;
     QCheckBox *cbShowMinFeerate;
-
     int64_t timeFilter;
-
     Ui::MempoolStatsOld *ui;
+	bool drawing = false;
 };
 
 #endif // BITCOIN_QT_MEMPOOLSTATSOLD_H

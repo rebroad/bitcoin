@@ -66,7 +66,6 @@
 #include <QVBoxLayout>
 #include <QWindow>
 
-
 const std::string BitcoinGUI::DEFAULT_UIPLATFORM =
 #if defined(Q_OS_MAC)
         "macosx"
@@ -77,13 +76,7 @@ const std::string BitcoinGUI::DEFAULT_UIPLATFORM =
 #endif
         ;
 
-BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformStyle, const NetworkStyle *networkStyle, QWidget *parent) :
-    QMainWindow(parent),
-    m_node(node),
-    trayIconMenu{new QMenu()},
-    platformStyle(_platformStyle),
-    m_network_style(networkStyle)
-{
+BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformStyle, const NetworkStyle *networkStyle, QWidget *parent) : QMainWindow(parent), m_node(node), trayIconMenu{new QMenu()}, platformStyle(_platformStyle), m_network_style(networkStyle) {
     QSettings settings;
     if (!restoreGeometry(settings.value("MainWindowGeometry").toByteArray())) {
         // Restore failed (perhaps missing setting), center the window
@@ -102,8 +95,7 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     rpcConsole = new RPCConsole(node, _platformStyle, nullptr);
     helpMessageDialog = new HelpMessageDialog(this, false);
 #ifdef ENABLE_WALLET
-    if(enableWallet)
-    {
+    if(enableWallet) {
         /** Create wallet frame and make it the central widget */
         walletFrame = new WalletFrame(_platformStyle, this);
         connect(walletFrame, &WalletFrame::createWalletButtonClicked, [this] {
@@ -141,9 +133,7 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     createToolBars();
 
     // Create system tray icon and notification
-    if (QSystemTrayIcon::isSystemTrayAvailable()) {
-        createTrayIcon();
-    }
+    if (QSystemTrayIcon::isSystemTrayAvailable()) createTrayIcon();
     notificator = new Notificator(QApplication::applicationName(), trayIcon, this);
 
     // Create status bar
@@ -165,8 +155,7 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     labelProxyIcon = new GUIUtil::ClickableLabel(platformStyle);
     connectionsControl = new GUIUtil::ClickableLabel(platformStyle);
     labelBlocksIcon = new GUIUtil::ClickableLabel(platformStyle);
-    if(enableWallet)
-    {
+    if(enableWallet) {
         frameBlocksLayout->addStretch();
         frameBlocksLayout->addWidget(unitDisplayControl);
         frameBlocksLayout->addStretch();
@@ -193,8 +182,7 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     // as they make the text unreadable (workaround for issue #1071)
     // See https://doc.qt.io/qt-5/gallery.html
     QString curStyle = QApplication::style()->metaObject()->className();
-    if(curStyle == "QWindowsStyle" || curStyle == "QWindowsXPStyle")
-    {
+    if(curStyle == "QWindowsStyle" || curStyle == "QWindowsXPStyle") {
         progressBar->setStyleSheet("QProgressBar { background-color: #e8e8e8; border: 1px solid grey; border-radius: 7px; padding: 1px; text-align: center; } QProgressBar::chunk { background: QLinearGradient(x1: 0, y1: 0, x2: 1, y2: 0, stop: 0 #FF8000, stop: 1 orange); border-radius: 7px; margin: 0px; }");
     }
 
@@ -225,8 +213,7 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     GUIUtil::handleCloseWindowShortcut(this);
 }
 
-BitcoinGUI::~BitcoinGUI()
-{
+BitcoinGUI::~BitcoinGUI() {
     // Unsubscribe from notifications from core
     unsubscribeFromCoreSignals();
 
@@ -239,12 +226,11 @@ BitcoinGUI::~BitcoinGUI()
     delete appMenuBar;
     MacDockIconHandler::cleanup();
 #endif
-
+    delete mempoolStatsOld;
     delete rpcConsole;
 }
 
-void BitcoinGUI::createActions()
-{
+void BitcoinGUI::createActions() {
     QActionGroup *tabGroup = new QActionGroup(this);
     connect(modalOverlay, &ModalOverlay::triggered, tabGroup, &QActionGroup::setEnabled);
 
@@ -370,14 +356,13 @@ void BitcoinGUI::createActions()
     connect(optionsAction, &QAction::triggered, this, &BitcoinGUI::optionsClicked);
     connect(showHelpMessageAction, &QAction::triggered, this, &BitcoinGUI::showHelpMessageClicked);
     connect(openRPCConsoleAction, &QAction::triggered, this, &BitcoinGUI::showDebugWindow);
-    connect(showMempoolStatsAction, &QAction::triggered, this, &BitcoinGUI::showMempoolStatsWindow);
+    connect(showMempoolStatsAction, &QAction::triggered, this, &BitcoinGUI::showMempoolStatsOldWindow);
 
     // prevents an open debug window from becoming stuck/unusable on client shutdown
     connect(quitAction, &QAction::triggered, rpcConsole, &QWidget::hide);
 
 #ifdef ENABLE_WALLET
-    if(walletFrame)
-    {
+    if(walletFrame) {
         connect(encryptWalletAction, &QAction::triggered, walletFrame, &WalletFrame::encryptWallet);
         connect(backupWalletAction, &QAction::triggered, walletFrame, &WalletFrame::backupWallet);
         connect(changePassphraseAction, &QAction::triggered, walletFrame, &WalletFrame::changePassphrase);
@@ -437,8 +422,7 @@ void BitcoinGUI::createActions()
     connect(new QShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT + Qt::Key_D), this), &QShortcut::activated, this, &BitcoinGUI::showDebugWindow);
 }
 
-void BitcoinGUI::createMenuBar()
-{
+void BitcoinGUI::createMenuBar() {
 #ifdef Q_OS_MAC
     // Create a decoupled menu bar on Mac which stays even if the window is closed
     appMenuBar = new QMenuBar();
@@ -449,8 +433,7 @@ void BitcoinGUI::createMenuBar()
 
     // Configure the menus
     QMenu *file = appMenuBar->addMenu(tr("&File"));
-    if(walletFrame)
-    {
+    if(walletFrame) {
         file->addAction(m_create_wallet_action);
         file->addAction(m_open_wallet_action);
         file->addAction(m_close_wallet_action);
@@ -467,8 +450,7 @@ void BitcoinGUI::createMenuBar()
     file->addAction(quitAction);
 
     QMenu *settings = appMenuBar->addMenu(tr("&Settings"));
-    if(walletFrame)
-    {
+    if(walletFrame) {
         settings->addAction(encryptWalletAction);
         settings->addAction(changePassphraseAction);
         settings->addSeparator();
@@ -492,11 +474,8 @@ void BitcoinGUI::createMenuBar()
     QAction* zoom_action = window_menu->addAction(tr("Zoom"));
     connect(zoom_action, &QAction::triggered, [] {
         QWindow* window = qApp->focusWindow();
-        if (window->windowState() != Qt::WindowMaximized) {
-            window->showMaximized();
-        } else {
-            window->showNormal();
-        }
+        if (window->windowState() != Qt::WindowMaximized) window->showMaximized();
+        else window->showNormal();
     });
 
     connect(qApp, &QApplication::focusWindowChanged, [zoom_action] (QWindow* window) {
@@ -535,10 +514,8 @@ void BitcoinGUI::createMenuBar()
     help->addAction(aboutQtAction);
 }
 
-void BitcoinGUI::createToolBars()
-{
-    if(walletFrame)
-    {
+void BitcoinGUI::createToolBars() {
+    if(walletFrame) {
         QToolBar *toolbar = addToolBar(tr("Tabs toolbar"));
         appToolBar = toolbar;
         toolbar->setMovable(false);
@@ -571,11 +548,9 @@ void BitcoinGUI::createToolBars()
     }
 }
 
-void BitcoinGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAndHeaderTipInfo* tip_info)
-{
+void BitcoinGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAndHeaderTipInfo* tip_info) {
     this->clientModel = _clientModel;
-    if(_clientModel)
-    {
+    if(_clientModel) {
         // Create system tray menu (or setup the dock menu) that late to prevent users from calling actions,
         // while the client has not yet fully loaded
         createTrayIconMenu();
@@ -605,10 +580,7 @@ void BitcoinGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAndH
         updateProxyIcon();
 
 #ifdef ENABLE_WALLET
-        if(walletFrame)
-        {
-            walletFrame->setClientModel(_clientModel);
-        }
+        if(walletFrame) walletFrame->setClientModel(_clientModel);
 #endif // ENABLE_WALLET
         unitDisplayControl->setOptionsModel(_clientModel->getOptionsModel());
 
@@ -621,26 +593,18 @@ void BitcoinGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAndH
             trayIcon->setVisible(optionsModel->getShowTrayIcon());
         }
     } else {
-        if(trayIconMenu)
-        {
-            // Disable context menu on tray icon
-            trayIconMenu->clear();
-        }
+        if(trayIconMenu) trayIconMenu->clear(); // Disable context menu on tray icon
         // Propagate cleared model to child objects
         rpcConsole->setClientModel(nullptr);
 #ifdef ENABLE_WALLET
-        if (walletFrame)
-        {
-            walletFrame->setClientModel(nullptr);
-        }
+        if (walletFrame) walletFrame->setClientModel(nullptr);
 #endif // ENABLE_WALLET
         unitDisplayControl->setOptionsModel(nullptr);
     }
 }
 
 #ifdef ENABLE_WALLET
-void BitcoinGUI::setWalletController(WalletController* wallet_controller)
-{
+void BitcoinGUI::setWalletController(WalletController* wallet_controller) {
     assert(!m_wallet_controller);
     assert(wallet_controller);
 
@@ -657,22 +621,20 @@ void BitcoinGUI::setWalletController(WalletController* wallet_controller)
     activity->load();
 }
 
-WalletController* BitcoinGUI::getWalletController()
-{
+WalletController* BitcoinGUI::getWalletController() {
     return m_wallet_controller;
 }
 
-void BitcoinGUI::addWallet(WalletModel* walletModel)
-{
+void BitcoinGUI::addWallet(WalletModel* walletModel) {
     if (!walletFrame) return;
 
     WalletView* wallet_view = new WalletView(walletModel, platformStyle, walletFrame);
     if (!walletFrame->addView(wallet_view)) return;
 
     rpcConsole->addWallet(walletModel);
-    if (m_wallet_selector->count() == 0) {
+    if (m_wallet_selector->count() == 0)
         setWalletActionsEnabled(true);
-    } else if (m_wallet_selector->count() == 1) {
+    else if (m_wallet_selector->count() == 1) {
         m_wallet_selector_label_action->setVisible(true);
         m_wallet_selector_action->setVisible(true);
     }
@@ -691,8 +653,7 @@ void BitcoinGUI::addWallet(WalletModel* walletModel)
     m_wallet_selector->addItem(display_name, QVariant::fromValue(walletModel));
 }
 
-void BitcoinGUI::removeWallet(WalletModel* walletModel)
-{
+void BitcoinGUI::removeWallet(WalletModel* walletModel) {
     if (!walletFrame) return;
 
     labelWalletHDStatusIcon->hide();
@@ -712,8 +673,7 @@ void BitcoinGUI::removeWallet(WalletModel* walletModel)
     updateWindowTitle();
 }
 
-void BitcoinGUI::setCurrentWallet(WalletModel* wallet_model)
-{
+void BitcoinGUI::setCurrentWallet(WalletModel* wallet_model) {
     if (!walletFrame) return;
     walletFrame->setCurrentWallet(wallet_model);
     for (int index = 0; index < m_wallet_selector->count(); ++index) {
@@ -725,23 +685,19 @@ void BitcoinGUI::setCurrentWallet(WalletModel* wallet_model)
     updateWindowTitle();
 }
 
-void BitcoinGUI::setCurrentWalletBySelectorIndex(int index)
-{
+void BitcoinGUI::setCurrentWalletBySelectorIndex(int index) {
     WalletModel* wallet_model = m_wallet_selector->itemData(index).value<WalletModel*>();
     if (wallet_model) setCurrentWallet(wallet_model);
 }
 
-void BitcoinGUI::removeAllWallets()
-{
-    if(!walletFrame)
-        return;
+void BitcoinGUI::removeAllWallets() {
+    if(!walletFrame) return;
     setWalletActionsEnabled(false);
     walletFrame->removeAllWallets();
 }
 #endif // ENABLE_WALLET
 
-void BitcoinGUI::setWalletActionsEnabled(bool enabled)
-{
+void BitcoinGUI::setWalletActionsEnabled(bool enabled) {
     overviewAction->setEnabled(enabled);
     sendCoinsAction->setEnabled(enabled);
     receiveCoinsAction->setEnabled(enabled);
@@ -758,8 +714,7 @@ void BitcoinGUI::setWalletActionsEnabled(bool enabled)
     m_close_all_wallets_action->setEnabled(enabled);
 }
 
-void BitcoinGUI::createTrayIcon()
-{
+void BitcoinGUI::createTrayIcon() {
     assert(QSystemTrayIcon::isSystemTrayAvailable());
 
 #ifndef Q_OS_MAC
@@ -771,8 +726,7 @@ void BitcoinGUI::createTrayIcon()
 #endif
 }
 
-void BitcoinGUI::createTrayIconMenu()
-{
+void BitcoinGUI::createTrayIconMenu() {
 #ifndef Q_OS_MAC
     if (!trayIcon) return;
 #endif // Q_OS_MAC
@@ -829,15 +783,13 @@ void BitcoinGUI::createTrayIconMenu()
         // See https://bugreports.qt.io/browse/QTBUG-91697
         trayIconMenu.get(), &QMenu::aboutToShow,
         [this, show_hide_action, send_action, receive_action, sign_action, verify_action, options_action, node_window_action, mempool_stats_action, quit_action] {
-            if (show_hide_action) show_hide_action->setText(
-                (!isHidden() && !isMinimized() && !GUIUtil::isObscured(this)) ?
-                    tr("&Hide") :
-                    tr("S&how"));
-            if (QApplication::activeModalWidget()) {
-                for (QAction* a : trayIconMenu.get()->actions()) {
+            if (show_hide_action)
+			    show_hide_action->setText((!isHidden() && !isMinimized() &&
+							!GUIUtil::isObscured(this)) ? tr("&Hide") : tr("S&how"));
+            if (QApplication::activeModalWidget())
+                for (QAction* a : trayIconMenu.get()->actions())
                     a->setEnabled(false);
-                }
-            } else {
+            else {
                 if (show_hide_action) show_hide_action->setEnabled(true);
                 if (enableWallet) {
                     send_action->setEnabled(sendCoinsAction->isEnabled());
@@ -853,56 +805,45 @@ void BitcoinGUI::createTrayIconMenu()
         });
 }
 
-void BitcoinGUI::optionsClicked()
-{
+void BitcoinGUI::optionsClicked() {
     openOptionsDialogWithTab(OptionsDialog::TAB_MAIN);
 }
 
-void BitcoinGUI::aboutClicked()
-{
-    if(!clientModel)
-        return;
+void BitcoinGUI::aboutClicked() {
+    if(!clientModel) return;
 
     auto dlg = new HelpMessageDialog(this, /* about */ true);
     GUIUtil::ShowModalDialogAsynchronously(dlg);
 }
 
-void BitcoinGUI::showDebugWindow()
-{
+void BitcoinGUI::showDebugWindow() {
     GUIUtil::bringToFront(rpcConsole);
     Q_EMIT consoleShown(rpcConsole);
 }
 
-void BitcoinGUI::showDebugWindowActivateConsole()
-{
+void BitcoinGUI::showDebugWindowActivateConsole() {
     rpcConsole->setTabFocus(RPCConsole::TabTypes::CONSOLE);
     showDebugWindow();
 }
 
-void BitcoinGUI::showHelpMessageClicked()
-{
+void BitcoinGUI::showHelpMessageClicked() {
     GUIUtil::bringToFront(helpMessageDialog);
 }
 
-void BitcoinGUI::showMempoolStatsWindow()
-{
+void BitcoinGUI::showMempoolStatsOldWindow() {
     // only build the mempool stats window if its requested
-    if (!mempoolStats)
-        mempoolStats = new MempoolStatsOld(this);
-    if (clientModel)
-        mempoolStats->setClientModel(clientModel);
-    mempoolStats->showNormal();
-    mempoolStats->show();
-    mempoolStats->raise();
-    mempoolStats->activateWindow();
+    if (!mempoolStatsOld) mempoolStatsOld = new MempoolStatsOld(this);
+    if (clientModel) mempoolStatsOld->setClientModel(clientModel);
+    mempoolStatsOld->showNormal();
+    mempoolStatsOld->show();
+    mempoolStatsOld->raise();
+    mempoolStatsOld->activateWindow();
 }
 
 #ifdef ENABLE_WALLET
-void BitcoinGUI::openClicked()
-{
+void BitcoinGUI::openClicked() {
     OpenURIDialog dlg(platformStyle, this);
-    if(dlg.exec())
-    {
+    if(dlg.exec()) {
         Q_EMIT receivedURI(dlg.getURI());
     }
 }

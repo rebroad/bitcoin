@@ -64,6 +64,8 @@ void MempoolStatsOld::setClientModel(ClientModel *model) {
 
 void MempoolStatsOld::drawChart() {
     if (!(isVisible() && clientModel)) return;
+	if (drawing) return;
+	drawing = true;
 
     if (!titleItem) {
         // create labels (only once)
@@ -184,6 +186,7 @@ void MempoolStatsOld::drawChart() {
     // don't paint the grind/graph if there are no or only a single sample
     if (vSamples.size() < 2) {
         noDataItem->setVisible(true);
+		drawing = false;
         return;
     }
     noDataItem->setVisible(false);
@@ -215,6 +218,7 @@ void MempoolStatsOld::drawChart() {
     int64_t dynMemUsagelog10Val2 = pow(10.0, floor(log10(1.0*(maxDynMemUsage)/4)));
     if (dynMemUsagelog10Val1 == 0) {
         LogPrintf("%s: dynMemUsagelog10Val == 0. Exiting\n", __func__);
+		drawing = false;
         return;
     }
     int64_t topDynMemUsage1 = ceil((double)maxDynMemUsage/dynMemUsagelog10Val1)*dynMemUsagelog10Val1;
@@ -231,6 +235,7 @@ void MempoolStatsOld::drawChart() {
     int64_t txCountLog10Val2 = pow(10.0, floor(log10(1.0*maxTxCount/4)));
     if (txCountLog10Val1 == 0) {
         LogPrintf("%s: txCountLog10Val == 0. Exiting\n", __func__);
+		drawing = false;
         return;
     }
     int64_t topTxCount1 = ceil((double)maxTxCount/txCountLog10Val1)*txCountLog10Val1;
@@ -331,6 +336,7 @@ void MempoolStatsOld::drawChart() {
         redrawItems.append(scene->addPath(dynMemUsagePath, linePenBlue));
         redrawItems.append(scene->addPath(dynMemUsagePathFill, QPen(Qt::NoPen), graBru));
     }
+	drawing = false;
 }
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column
@@ -357,10 +363,10 @@ void MempoolStatsOld::objectClicked(QGraphicsItem *item) {
 
 MempoolStatsOld::~MempoolStatsOld() {
     if (titleItem) {
-        for (QGraphicsItem * item : redrawItems) {
+        /*for (QGraphicsItem * item : redrawItems) {
             scene->removeItem(item);
             delete item;
-        }
+        }*/
         redrawItems.clear();
 
         delete titleItem;
@@ -373,9 +379,9 @@ MempoolStatsOld::~MempoolStatsOld() {
         delete last3HoursLabel;
         delete lastDayLabel;
         delete allDataLabel;
+        delete dynMemUsageSwitch;
         delete txCountSwitch;
         delete minFeeSwitch;
-        delete dynMemUsageSwitch;
         delete scene;
     }
 }

@@ -173,7 +173,7 @@ private:
     RPCConsole* rpcConsole = nullptr;
     HelpMessageDialog* helpMessageDialog = nullptr;
     ModalOverlay* modalOverlay = nullptr;
-    MempoolStatsOld* mempoolStats = nullptr;
+    MempoolStatsOld* mempoolStatsOld = nullptr;
 
     QMenu* m_network_context_menu = new QMenu(this);
 
@@ -303,7 +303,7 @@ public Q_SLOTS:
     /** Show help message dialog */
     void showHelpMessageClicked();
     /** Show mempool stats window */
-    void showMempoolStatsWindow();
+    void showMempoolStatsOldWindow();
 
     /** Show window if hidden, unminimize when minimized, rise when obscured or show if hidden and fToggleHidden is true */
     void showNormalIfMinimized() { showNormalIfMinimized(false); }
