@@ -64,8 +64,6 @@ void MempoolStatsOld::setClientModel(ClientModel *model) {
 
 void MempoolStatsOld::drawChart() {
     if (!(isVisible() && clientModel)) return;
-	if (drawing) return;
-	drawing = true;
 
     if (!titleItem) {
         // create labels (only once)
@@ -131,8 +129,10 @@ void MempoolStatsOld::drawChart() {
     allDataLabel->setEnabled((timeFilter == 0));
 
     // remove the items which needs to be redrawn
-    for (QGraphicsItem * item : redrawItems)
+    for (QGraphicsItem * item : redrawItems) {
         scene->removeItem(item);
+        delete item;
+    }
     redrawItems.clear();
 
     // get the samples
@@ -186,7 +186,6 @@ void MempoolStatsOld::drawChart() {
     // don't paint the grind/graph if there are no or only a single sample
     if (vSamples.size() < 2) {
         noDataItem->setVisible(true);
-		drawing = false;
         return;
     }
     noDataItem->setVisible(false);
@@ -206,7 +205,7 @@ void MempoolStatsOld::drawChart() {
     int64_t maxTxCount = 0, minTxCount = std::numeric_limits<int64_t>::max();
     int64_t maxMinFee = 0;
     uint32_t maxTimeDetla = vSamples.back().m_time_delta-vSamples.front().m_time_delta;
-    for(const auto& sample : vSamples) {
+    for(const struct CStatsMempoolSample &sample : vSamples) {
         if (sample.m_dyn_mem_usage > maxDynMemUsage) maxDynMemUsage = sample.m_dyn_mem_usage;
         if (sample.m_dyn_mem_usage < minDynMemUsage) minDynMemUsage = sample.m_dyn_mem_usage;
         if (sample.m_tx_count > maxTxCount) maxTxCount = sample.m_tx_count;
@@ -218,7 +217,6 @@ void MempoolStatsOld::drawChart() {
     int64_t dynMemUsagelog10Val2 = pow(10.0, floor(log10(1.0*(maxDynMemUsage)/4)));
     if (dynMemUsagelog10Val1 == 0) {
         LogPrintf("%s: dynMemUsagelog10Val == 0. Exiting\n", __func__);
-		drawing = false;
         return;
     }
     int64_t topDynMemUsage1 = ceil((double)maxDynMemUsage/dynMemUsagelog10Val1)*dynMemUsagelog10Val1;
@@ -235,7 +233,6 @@ void MempoolStatsOld::drawChart() {
     int64_t txCountLog10Val2 = pow(10.0, floor(log10(1.0*maxTxCount/4)));
     if (txCountLog10Val1 == 0) {
         LogPrintf("%s: txCountLog10Val == 0. Exiting\n", __func__);
-		drawing = false;
         return;
     }
     int64_t topTxCount1 = ceil((double)maxTxCount/txCountLog10Val1)*txCountLog10Val1;
@@ -254,9 +251,9 @@ void MempoolStatsOld::drawChart() {
     for (mempoolSamples_t::iterator it = vSamples.begin(); it != vSamples.end(); it+=samplesStep) {
         const struct CStatsMempoolSample &sample = (*it);
         qreal xPos = GRAPH_PADDING_LEFT + (maxTimeDetla > 0 ? maxwidth/maxTimeDetla*(sample.m_time_delta-vSamples.front().m_time_delta) : maxwidth/(double)vSamples.size());
-		qreal dynMemY = bottom-maxheightG/(topDynMemUsage-bottomDynMemUsage)*(sample.m_dyn_mem_usage-bottomDynMemUsage);
-		qreal txCountY = bottom-maxheightG/(topTxCount-bottomTxCount)*(sample.m_tx_count-bottomTxCount);
-		qreal minFeeY = bottom-maxheightG/maxMinFee*sample.m_min_fee_per_k;
+        qreal dynMemY = bottom-maxheightG/(topDynMemUsage-bottomDynMemUsage)*(sample.m_dyn_mem_usage-bottomDynMemUsage);
+        qreal txCountY = bottom-maxheightG/(topTxCount-bottomTxCount)*(sample.m_tx_count-bottomTxCount);
+        qreal minFeeY = bottom-maxheightG/maxMinFee*sample.m_min_fee_per_k;
         if (sample.m_time_delta == vSamples.front().m_time_delta) {
             dynMemUsagePath.moveTo(xPos, dynMemY);
             txCountPath.moveTo(xPos, txCountY);
@@ -336,7 +333,6 @@ void MempoolStatsOld::drawChart() {
         redrawItems.append(scene->addPath(dynMemUsagePath, linePenBlue));
         redrawItems.append(scene->addPath(dynMemUsagePathFill, QPen(Qt::NoPen), graBru));
     }
-	drawing = false;
 }
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column
@@ -363,10 +359,10 @@ void MempoolStatsOld::objectClicked(QGraphicsItem *item) {
 
 MempoolStatsOld::~MempoolStatsOld() {
     if (titleItem) {
-        /*for (QGraphicsItem * item : redrawItems) {
+        for (QGraphicsItem * item : redrawItems) {
             scene->removeItem(item);
             delete item;
-        }*/
+        }
         redrawItems.clear();
 
         delete titleItem;
@@ -379,9 +375,9 @@ MempoolStatsOld::~MempoolStatsOld() {
         delete last3HoursLabel;
         delete lastDayLabel;
         delete allDataLabel;
-        delete dynMemUsageSwitch;
         delete txCountSwitch;
         delete minFeeSwitch;
+        delete dynMemUsageSwitch;
         delete scene;
     }
 }

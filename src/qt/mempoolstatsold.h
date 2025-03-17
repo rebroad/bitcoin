@@ -46,12 +46,10 @@ public Q_SLOTS:
     void drawChart();
     void objectClicked(QGraphicsItem *);
 
-protected:
-    virtual void resizeEvent(QResizeEvent *event) override;
-    virtual void showEvent(QShowEvent *event) override;
-
 private:
     ClientModel *clientModel;
+    virtual void resizeEvent(QResizeEvent *event) override;
+    virtual void showEvent(QShowEvent *event) override;
     QGraphicsTextItem *titleItem;
     QGraphicsLineItem *titleLine;
     QGraphicsTextItem *noDataItem;
@@ -72,7 +70,6 @@ private:
     QCheckBox *cbShowMinFeerate;
     int64_t timeFilter;
     Ui::MempoolStatsOld *ui;
-	bool drawing = false;
 };
 
 #endif // BITCOIN_QT_MEMPOOLSTATSOLD_H
