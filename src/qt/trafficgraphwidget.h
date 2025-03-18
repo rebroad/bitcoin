@@ -22,10 +22,7 @@ class QPaintEvent;
 class QTimer;
 QT_END_NAMESPACE
 
-#define VALUES_SIZE 13
-
-class TrafficGraphWidget : public QWidget
-{
+class TrafficGraphWidget : public QWidget {
     Q_OBJECT
 
 public:
@@ -34,8 +31,8 @@ public:
     bool GraphRangeBump() const;
     void exportData();
     unsigned int getCurrentRangeIndex() const;
-
-private:
+    void updateStuff();
+    std::chrono::minutes setGraphRange(unsigned int value);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -50,26 +47,24 @@ protected:
     void focusInEvent(QFocusEvent *event) override;
     bool fToggle = true;
 
-public Q_SLOTS:
-    void updateStuff();
-    std::chrono::minutes setGraphRange(unsigned int value);
-
 private:
+	static constexpr unsigned int VALUES_SIZE = 13;
+	uint64_t m_offset[VALUES_SIZE] = {};
     void saveData();
     bool loadDataFromBinary();
     bool loadDataFromCSV();
     bool loadData();
     void update_fMax();
     void paintPath(QPainterPath &path, QQueue<float> &samples);
-    void updateRates(int value);
+    void updateRates(unsigned int value);
     void focusSlider(Qt::FocusReason reason);
 
     QTimer *timer;
     float fMax{0};
     float new_fMax{0};
     float m_range{0};
-    int m_value{0};
-    int m_new_value{0};
+    unsigned int m_value{0};
+    unsigned int m_new_value{0};
     bool m_bump_value{false};
     QQueue<float> vSamplesIn[VALUES_SIZE] = {};
     QQueue<float> vSamplesOut[VALUES_SIZE] = {};
@@ -77,7 +72,7 @@ private:
     quint64 nLastBytesIn[VALUES_SIZE] = {};
     quint64 nLastBytesOut[VALUES_SIZE] = {};
     std::chrono::milliseconds nLastTime[VALUES_SIZE] = {};
-    unsigned int values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
+    static constexpr unsigned int values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
     //unsigned int values[VALUES_SIZE] = {5, 15, 60, 3*60, 12*60, 2*24*60, 7*24*60, 28*24*60};
     ClientModel *clientModel;
     QString m_dataDir;

@@ -54,7 +54,7 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
         }
 
         uint64_t nTime = GetTimeMillis();
-        for (int i = 0; i < VALUES_SIZE; i++) {
+        for (unsigned int i = 0; i < this->VALUES_SIZE; i++) {
             nLastBytesIn[i] = model->node().getTotalBytesRecv();
             nLastBytesOut[i] = model->node().getTotalBytesSent();
             nLastTime[i] = std::chrono::milliseconds{nTime};
@@ -354,8 +354,8 @@ void TrafficGraphWidget::updateStuff() {
 	}
 
     bool fUpdate = false;
-    static uint64_t m_offset[VALUES_SIZE] = {};
-    for (int i = 0; i < VALUES_SIZE; i++) {
+    static uint64_t m_offset[this->VALUES_SIZE] = {};
+    for (unsigned int i = 0; i < this->VALUES_SIZE; i++) {
         uint64_t msecs_per_sample = static_cast<uint64_t>(values[i]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
 		/*if (m_time_offset > msecs_per_sample) {
 			uint64_t zero_samples = std::min(m_time_offset / msecs_per_sample, static_cast<uint64_t>(DESIRED_SAMPLES));
@@ -366,9 +366,11 @@ void TrafficGraphWidget::updateStuff() {
 				vTimeStamp[i].push_front(std::chrono::milliseconds{missed_time});
 			}
 		}*/
-		if (m_time_offset && !m_offset[i])
-		    m_offset[i] = (m_time_offset >= msecs_per_sample) ? 0 : m_time_offset;
-        if (now - m_offset[i] > (nLastTime[i].count() + msecs_per_sample - expected_gap/2)) {
+		if (m_time_offset) {
+			m_offset[i] += m_time_offset;
+			if (m_offset[i] > now - nLastTime[i].count()) m_offset[i] = now - nLastTime[i].count();
+		}
+        if (now > (nLastTime[i].count() + msecs_per_sample + m_offset[i] - expected_gap/2)) {
 			m_offset[i] = 0;
             updateRates(i);
             if (i == m_value) {
@@ -423,12 +425,12 @@ void TrafficGraphWidget::updateStuff() {
     if (fUpdate) update();
 }
 
-void TrafficGraphWidget::updateRates(int i) {
+void TrafficGraphWidget::updateRates(unsigned int i) {
     std::chrono::milliseconds now{GetTimeMillis()};
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
             bytesOut = clientModel->node().getTotalBytesSent();
     int64_t actual_gap = (now - nLastTime[i]).count();
-    static int nDebugI = 0;
+    static unsigned int nDebugI = 0;
     if (i > nDebugI) nDebugI = i;
     float in_rate_kilobytes_per_msec = 0, out_rate_kilobytes_per_msec = 0;
     if (actual_gap >= 0) {
@@ -444,14 +446,14 @@ void TrafficGraphWidget::updateRates(int i) {
     nLastTime[i] = now;
     nLastBytesIn[i] = bytesIn;
     nLastBytesOut[i] = bytesOut;
-    static int8_t fFull[VALUES_SIZE] = {};
+    static int8_t fFull[this->VALUES_SIZE] = {};
     if (fFull[i]<=0 && vTimeStamp[i].size()+5 > DESIRED_SAMPLES) {
         if (fFull[i]<0)
             LogPrintf("%s: fFull[%d] %d steps from full\n", __func__, i, DESIRED_SAMPLES+1 - vTimeStamp[i].size());
         fFull[i] = vTimeStamp[i].size() - DESIRED_SAMPLES - 1;
     }
     while (vTimeStamp[i].size() > DESIRED_SAMPLES) {
-        if (ttpoint < 0 && m_value == i && i < VALUES_SIZE - 1 && fFull[i]<0)
+        if (ttpoint < 0 && m_value == i && i < this->VALUES_SIZE - 1 && fFull[i]<0)
             m_bump_value = true;
         fFull[i] = 1;
         vSamplesIn[i].pop_back();
@@ -465,14 +467,13 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
     if (!value) { // bump
         m_bump_value = false;
         value = m_value + 1;
-    } else value--; // get the array marker
-    int old_value = m_new_value;
-    m_new_value = std::min((int)value, VALUES_SIZE - 1);
+    } else value--;
+    unsigned int old_value = m_new_value;
+    m_new_value = std::min(static_cast<int>(value), static_cast<int>(this->VALUES_SIZE) - 1);
     if (m_new_value != old_value) {
         update_fMax();
         update();
     }
-    // Set focus when range is changed to ensure keyboard navigation continues to work
     setFocus(Qt::OtherFocusReason);
     focusSlider(Qt::OtherFocusReason);
 
@@ -481,60 +482,46 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
 
 void TrafficGraphWidget::saveData() {
     LogPrintf("TrafficGraphWidget: saveData() called\n");
-
     try {
         fs::path pathTrafficGraph = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata";
         LogPrintf("TrafficGraphWidget: Trying to save data to %s\n", fs::PathToString(pathTrafficGraph));
         FILE* file = fsbridge::fopen(pathTrafficGraph, "wb");
-        if (file) {
-            CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
-            if (!fileout.IsNull()) {
-                // Version
-                fileout << static_cast<int>(2);
+		if (!file) throw std::runtime_error("Failed to open file");
+        CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
+		if (fileout.IsNull()) throw std::runtime_error("File stream is null");
+        // Version
+        fileout << static_cast<int>(3); // Bumped to 3 for m_offset
 
-                // Save total bytes received and sent
-                uint64_t totalBytesRecv = clientModel->node().getTotalBytesRecv();
-                uint64_t totalBytesSent = clientModel->node().getTotalBytesSent();
-                fileout << VARINT(totalBytesRecv);
-                fileout << VARINT(totalBytesSent);
+        uint64_t totalBytesRecv = clientModel->node().getTotalBytesRecv();
+        uint64_t totalBytesSent = clientModel->node().getTotalBytesSent();
+        fileout << VARINT(totalBytesRecv) << VARINT(totalBytesSent);
 
-                // Save vSamplesIn, vSamplesOut, and vTimeStamp arrays
-                for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-                    // Save size of each queue
-                    unsigned int samplesInSize = vSamplesIn[i].size();
-                    fileout << VARINT(static_cast<uint32_t>(samplesInSize));
+        for (unsigned int i = 0; i < this->VALUES_SIZE; i++) {
+			// Save the size of these samples
+            fileout << VARINT(static_cast<uint32_t>(vTimeStamp[i].size()));
 
-                    // Save queue contents - convert float to uint32_t for serialization
-                    for (unsigned int j = 0; j < samplesInSize; j++) {
-                        float value = vSamplesIn[i].at(j);
-                        uint32_t uint_value;
-                        // Use memcpy for bit-exact conversion (safe on any system with IEEE 754 floats)
-                        memcpy(&uint_value, &value, sizeof(float));
-                        ser_writedata32(fileout, uint_value);
-                    }
-
-                    unsigned int samplesOutSize = vSamplesOut[i].size();
-                    fileout << VARINT(static_cast<uint32_t>(samplesOutSize));
-
-                    for (unsigned int j = 0; j < samplesOutSize; j++) {
-                        float value = vSamplesOut[i].at(j);
-                        uint32_t uint_value;
-                        // Use memcpy for bit-exact conversion (safe on any system with IEEE 754 floats)
-                        memcpy(&uint_value, &value, sizeof(float));
-                        ser_writedata32(fileout, uint_value);
-                    }
-
-                    unsigned int timeStampSize = vTimeStamp[i].size();
-                    fileout << VARINT(static_cast<uint32_t>(timeStampSize));
-
-                    for (unsigned int j = 0; j < timeStampSize; j++)
-                        fileout << VARINT(static_cast<uint64_t>(vTimeStamp[i].at(j).count()));
-                }
-
-                fileout.fclose();
-                LogPrintf("TrafficGraphWidget: Data saved to %s\n", fs::PathToString(pathTrafficGraph));
+            for (int j = 0; j < vSamplesIn[i].size(); j++) {
+                float value = vSamplesIn[i].at(j);
+                uint32_t uint_value;
+                memcpy(&uint_value, &value, sizeof(float)); // IEEE 754
+                ser_writedata32(fileout, uint_value);
             }
+
+            for (int j = 0; j < vSamplesOut[i].size(); j++) {
+                float value = vSamplesOut[i].at(j);
+                uint32_t uint_value;
+                memcpy(&uint_value, &value, sizeof(float)); // IEEE 754
+                ser_writedata32(fileout, uint_value);
+            }
+
+            for (int j = 0; j < vTimeStamp[i].size(); j++)
+                fileout << VARINT(static_cast<uint64_t>(vTimeStamp[i].at(j).count()));
+
+			fileout << VARINT(m_offset[i]);
         }
+
+        fileout.fclose();
+        LogPrintf("TrafficGraphWidget: Data saved to %s\n", fs::PathToString(pathTrafficGraph));
     } catch (const std::exception& e) {
         LogPrintf("TrafficGraphWidget: Error saving data: %s\n", e.what());
     }
@@ -549,162 +536,91 @@ bool TrafficGraphWidget::loadDataFromBinary() {
         if (!file) {
             LogPrintf("TrafficGraphWidget: Binary data file not found, attempting to load from CSV\n");
             return loadDataFromCSV();
-        } else
-            LogPrintf("TrafficGraphWidget: Binary data file found, attempting to load from it\n");
-
+        }
         CAutoFile filein(file, SER_DISK, CLIENT_VERSION);
         if (filein.IsNull()) return false;
 
-        // Read version
         int version;
         filein >> version;
-        if (version < 1 || version > 2) {
+        if (version < 1 || version > 3) {
             LogPrintf("TrafficGraphWidget: Unsupported file version %d, expected 1 or 2\n", version);
             return false;
         }
 
-        // Load total bytes received and sent for version 2
+        // Total bytes (version >= 2)
         if (version >= 2) {
-            filein >> VARINT(m_totalBytesRecv);
-            filein >> VARINT(m_totalBytesSent);
+            filein >> VARINT(m_totalBytesRecv) >> VARINT(m_totalBytesSent);
             LogPrintf("TrafficGraphWidget: Read total bytes: recv=%u sent=%u\n", m_totalBytesRecv, m_totalBytesSent);
-
         } else {
-            // For version 1, we'll calculate totals after loading the samples
             LogPrintf("TrafficGraphWidget: Version 1 file, will calculate totals from first non-full range\n");
-            m_totalBytesRecv = 0;
-            m_totalBytesSent = 0;
+            m_totalBytesRecv = m_totalBytesSent = 0;
         }
 
-        // Load vSamplesIn, vSamplesOut, and vTimeStamp arrays
-        for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-            // Load vSamplesIn
-            unsigned int samplesInSize;
-            filein >> VARINT(samplesInSize);
+        for (unsigned int i = 0; i < this->VALUES_SIZE; i++) {
+            unsigned int samplesSize;
+            filein >> VARINT(samplesSize);
 
-            for (unsigned int j = 0; j < samplesInSize; j++) {
+            for (unsigned int j = 0; j < samplesSize; j++) {
                 uint32_t uint_value = ser_readdata32(filein);
                 float value;
-                // Use memcpy for bit-exact conversion back to float
                 memcpy(&value, &uint_value, sizeof(float));
                 vSamplesIn[i].push_back(value);
             }
 
-            // Load vSamplesOut
-            unsigned int samplesOutSize;
-            filein >> VARINT(samplesOutSize);
-            for (unsigned int j = 0; j < samplesOutSize; j++) {
+            if (version < 3) filein >> VARINT(samplesSize);
+            for (unsigned int j = 0; j < samplesSize; j++) {
                 uint32_t uint_value = ser_readdata32(filein);
                 float value;
-                // Use memcpy for bit-exact conversion back to float
                 memcpy(&value, &uint_value, sizeof(float));
                 vSamplesOut[i].push_back(value);
             }
 
-            // Load vTimeStamp
-            unsigned int timeStampSize;
-            filein >> VARINT(timeStampSize);
-
-            for (unsigned int j = 0; j < timeStampSize; j++) {
+            if (version < 3) filein >> VARINT(samplesSize);
+            for (unsigned int j = 0; j < samplesSize; j++) {
                 uint64_t timeMs;
                 filein >> VARINT(timeMs);
                 vTimeStamp[i].push_back(std::chrono::milliseconds{static_cast<int64_t>(timeMs)});
             }
+
+			if (version >= 3) filein >> VARINT(m_offset[i]);
+			else m_offset[i] = 0;
         }
 
         filein.fclose();
         LogPrintf("TrafficGraphWidget: Data loaded from %s\n", fs::PathToString(pathTrafficGraph));
 
-
-        // For version 1 files, calculate totals from the first non-full range
+        // Version 1: Calculate totals
         if (version == 1) {
             int firstNonFullRange = -1;
-
-            // Find the first non-full range
-            for (int i = 0; i < VALUES_SIZE; i++) {
+            for (unsigned int i = 0; i < this->VALUES_SIZE; i++) {
                 if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
                     firstNonFullRange = i;
-                    LogPrintf("TrafficGraphWidget: Found first non-full range at index %d (%d minutes, %zu/%d samples)\n",
-                             i, values[i], vTimeStamp[i].size(), DESIRED_SAMPLES);
                     break;
                 }
             }
+            if (firstNonFullRange == -1) firstNonFullRange = this->VALUES_SIZE - 1;
 
-            // If all ranges are full, use the last range
-            if (firstNonFullRange == -1) {
-                firstNonFullRange = VALUES_SIZE - 1;
-                LogPrintf("TrafficGraphWidget: All ranges are full, using range %d (%d minutes) for total calculation\n",
-                         firstNonFullRange, values[firstNonFullRange]);
-            } else {
-                LogPrintf("TrafficGraphWidget: Using first non-full range %d (%d minutes) for total calculation\n",
-                         firstNonFullRange, values[firstNonFullRange]);
-            }
+            // Use double for intermediate calculations to maintain precision
+            double totalRecvBytes = 0.0, totalSentBytes = 0.0;
+            double msecs_per_sample = static_cast<double>(values[firstNonFullRange]) * 60000.0 / DESIRED_SAMPLES;
+            for (const float sample : vSamplesIn[firstNonFullRange])
+                if (sample >= 0.0f && std::isfinite(sample))
+                    totalRecvBytes += static_cast<double>(sample) * msecs_per_sample;
+            for (const float sample : vSamplesOut[firstNonFullRange])
+                if (sample >= 0.0f && std::isfinite(sample))
+                    totalSentBytes += static_cast<double>(sample) * msecs_per_sample;
 
-            // Calculate totals from the samples in this range
-            if (!vSamplesIn[firstNonFullRange].empty() || !vSamplesOut[firstNonFullRange].empty()) {
-                // Use double for intermediate calculations to maintain precision
-                double totalRecvBytes = 0.0, totalSentBytes = 0.0;
-                size_t recvSamples = 0, sentSamples = 0;
-
-                // Calculate milliseconds per sample for this range
-                double msecs_per_sample = static_cast<double>(values[firstNonFullRange]) * 60000.0 / DESIRED_SAMPLES;
-                LogPrintf("TrafficGraphWidget: Time per sample in range %d: %.2f milliseconds\n",
-                         firstNonFullRange, msecs_per_sample);
-
-                // Handle receive samples - with overflow protection
-                if (!vSamplesIn[firstNonFullRange].empty()) {
-                    LogPrintf("TrafficGraphWidget: Processing %zu receive samples\n", vSamplesIn[firstNonFullRange].size());
-                    for (const float sample : vSamplesIn[firstNonFullRange]) {
-                        if (sample >= 0.0f && std::isfinite(sample)) {  // Protect against invalid values
-                            totalRecvBytes += static_cast<double>(sample) * msecs_per_sample;
-                            recvSamples++;
-                        }
-                    }
-                }
-
-                // Handle send samples - with overflow protection
-                if (!vSamplesOut[firstNonFullRange].empty()) {
-                    LogPrintf("TrafficGraphWidget: Processing %zu send samples\n", vSamplesOut[firstNonFullRange].size());
-                    for (const float sample : vSamplesOut[firstNonFullRange]) {
-                        if (sample >= 0.0f && std::isfinite(sample)) {  // Protect against invalid values
-                            totalSentBytes += static_cast<double>(sample) * msecs_per_sample;
-                            sentSamples++;
-                        }
-                    }
-                }
-
-                LogPrintf("TrafficGraphWidget: Calculated bytes - receive: %.0f, send: %.0f\n",
-                         totalRecvBytes, totalSentBytes);
-
-                // Check for overflow before casting to uint64_t
-                if (totalRecvBytes <= std::numeric_limits<uint64_t>::max() && totalRecvBytes >= 0) {
-                    m_totalBytesRecv = static_cast<uint64_t>(totalRecvBytes);
-                } else {
-                    LogPrintf("TrafficGraphWidget: Warning - receive bytes overflow, capping at max value\n");
-                    m_totalBytesRecv = std::numeric_limits<uint64_t>::max();
-                }
-
-                if (totalSentBytes <= std::numeric_limits<uint64_t>::max() && totalSentBytes >= 0) {
-                    m_totalBytesSent = static_cast<uint64_t>(totalSentBytes);
-                } else {
-                    LogPrintf("TrafficGraphWidget: Warning - send bytes overflow, capping at max value\n");
-                    m_totalBytesSent = std::numeric_limits<uint64_t>::max();
-                }
-
-                LogPrintf("TrafficGraphWidget: Final calculated total bytes from range %d: recv=%llu sent=%llu\n",
-                         firstNonFullRange,
-                         static_cast<unsigned long long>(m_totalBytesRecv),
-                         static_cast<unsigned long long>(m_totalBytesSent));
-            } else {
-                LogPrintf("TrafficGraphWidget: No samples found in range %d, unable to calculate totals\n", firstNonFullRange);
-            }
+            if (totalRecvBytes <= std::numeric_limits<uint64_t>::max() && totalRecvBytes >= 0)
+                m_totalBytesRecv = static_cast<uint64_t>(totalRecvBytes);
+            else m_totalBytesRecv = std::numeric_limits<uint64_t>::max();
+            if (totalSentBytes <= std::numeric_limits<uint64_t>::max() && totalSentBytes >= 0)
+                m_totalBytesSent = static_cast<uint64_t>(totalSentBytes);
+            else m_totalBytesSent = std::numeric_limits<uint64_t>::max();
         }
         return true;
     } catch (const std::exception& e) {
-        LogPrintf("TrafficGraphWidget: Error loading binary data: %s\n", e.what());
-        LogPrintf("TrafficGraphWidget: Attempting to load from CSV after binary load error\n");
-        return loadDataFromCSV();
-    }
+		return loadDataFromCSV();
+	}
 }
 
 bool TrafficGraphWidget::loadDataFromCSV() {
@@ -734,7 +650,7 @@ bool TrafficGraphWidget::loadDataFromCSV() {
         int currentRange = -1;
 
         // Clear existing data - in case the binary load partially succeeded
-        for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+        for (unsigned int i = 0; i < this->VALUES_SIZE; i++) {
             vSamplesIn[i].clear();
             vSamplesOut[i].clear();
             vTimeStamp[i].clear();
@@ -755,7 +671,7 @@ bool TrafficGraphWidget::loadDataFromCSV() {
                     LogPrintf("TrafficGraphWidget: Found original format header for range %d\n", currentRange);
 
                     // Validate range
-                    if (currentRange < 0 || currentRange >= VALUES_SIZE) {
+                    if (currentRange < 0 || static_cast<unsigned int>(currentRange) >= this->VALUES_SIZE) {
                         LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
                         currentRange = -1; // Reset to invalid
                     }
@@ -770,7 +686,7 @@ bool TrafficGraphWidget::loadDataFromCSV() {
                 LogPrintf("TrafficGraphWidget: Found CSV DATA START marker for range %d\n", currentRange);
 
                 // Validate range
-                if (currentRange < 0 || currentRange >= VALUES_SIZE) {
+                if (currentRange < 0 || static_cast<unsigned int>(currentRange) >= this->VALUES_SIZE) {
                     LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
                     currentRange = -1; // Reset to invalid
                 }
@@ -778,33 +694,19 @@ bool TrafficGraphWidget::loadDataFromCSV() {
             }
 
             // Check for CSV DATA END format - we'll skip this line
-            if (line.startsWith("CSV DATA END")) {
-                LogPrintf("TrafficGraphWidget: Found CSV DATA END marker for range %d\n", currentRange);
-                continue;
-            }
+            if (line.startsWith("CSV DATA END")) continue;
 
             // Process data rows only if we have a valid current range
-            if (currentRange >= 0 && currentRange < VALUES_SIZE) {
-                // Check for header row
+            if (currentRange >= 0 && static_cast<unsigned int>(currentRange) < this->VALUES_SIZE) {
                 if (line.startsWith("index,")) continue;
-
-                // Parse data row: "index,timestamp,in_rate,out_rate"
                 QStringList parts = line.split(',');
                 if (parts.size() >= 4) {
-                    // Convert strings to appropriate types
                     bool ok1, ok2, ok3, ok4;
                     int index = parts[0].toInt(&ok1);
                     uint64_t timestamp = parts[1].toLongLong(&ok2);
                     float inRate = parts[2].toFloat(&ok3);
                     float outRate = parts[3].toFloat(&ok4);
-
-                    // Check conversions were successful
-                    if (!ok1 || !ok2 || !ok3 || !ok4) {
-                        LogPrintf("TrafficGraphWidget: Failed to parse CSV data row: %s\n", line.toStdString().c_str());
-                        continue;
-                    }
-
-                    // Add to corresponding queues (push_back because we're reading oldest to newest)
+                    if (!ok1 || !ok2 || !ok3 || !ok4) continue;
                     Q_UNUSED(index);
                     vTimeStamp[currentRange].push_back(std::chrono::milliseconds{timestamp});
                     vSamplesIn[currentRange].push_back(inRate);
@@ -817,7 +719,7 @@ bool TrafficGraphWidget::loadDataFromCSV() {
 
         // Log how many data points were loaded for each time range
         int totalDataPoints = 0;
-        for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+        for (unsigned int i = 0; i < this->VALUES_SIZE; i++) {
             if (!vSamplesIn[i].empty()) {
             int count = vSamplesIn[i].size();
             totalDataPoints += count;
@@ -848,15 +750,15 @@ bool TrafficGraphWidget::loadData() {
     if (!success) return false;
 
     // If we successfully loaded data, determine the correct band to use
-    int firstNonFullBand = VALUES_SIZE - 1;
+    int firstNonFullBand = this->VALUES_SIZE - 1;
 
-    for (int i = 0; i < VALUES_SIZE; i++)
+    for (unsigned int i = 0; i < this->VALUES_SIZE; i++)
         if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
             firstNonFullBand = i;
             break;
         }
 
-    if (firstNonFullBand == VALUES_SIZE - 1)
+    if (firstNonFullBand == this->VALUES_SIZE - 1)
         LogPrintf("TrafficGraphWidget: After loading, all bands full, setting to highest band %d\n", firstNonFullBand);
     else
         LogPrintf("TrafficGraphWidget: After loading, setting to first non-full band %d\n", firstNonFullBand);
