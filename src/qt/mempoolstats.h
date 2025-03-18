@@ -38,6 +38,7 @@ class MempoolStats : public QWidget {
     Q_OBJECT
 public:
     explicit MempoolStats(QWidget *parent = Q_NULLPTR);
+    ~MempoolStats(); // Add destructor for proper cleanup
     void setClientModel(ClientModel *model);
 public Q_SLOTS:
     void drawChart();
@@ -50,6 +51,7 @@ private:
     virtual void mousePressEvent(QMouseEvent *event) override;
     int m_selected_range = -1;
     bool fCount = true;
+    bool drawing = false;
     // m_bottom_num represents the lowest value displayed on the y-axis of the mempool graph
     size_t m_bottom_num = 0;
 };

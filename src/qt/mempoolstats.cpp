@@ -44,7 +44,7 @@ MempoolStats::MempoolStats(QWidget *parent) : QWidget(parent) {
     LABEL_KV_SIZE *= 27.5/testText.boundingRect().width();
 
     m_gfx_view = new QGraphicsView(this);
-    m_scene = new QGraphicsScene(m_gfx_view);
+    m_scene = new QGraphicsScene(m_gfx_view); // m_scene is a child of m_gfx_view explicitly
     m_gfx_view->setScene(m_scene);
     m_scene->setSceneRect(0, 0, width(), height());
     m_gfx_view->setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
@@ -84,9 +84,20 @@ const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac")
                                             QColor("#800000"), QColor("#a00000"), QColor("#c00000"), QColor("#e00000"), QColor("#e02020"), QColor("#e04040"), QColor("#e06060"),
                                             QColor("#800080"), QColor("#ac00ac"), QColor("#d800d8"), QColor("#ff00ff"), QColor("#ff2cff"), QColor("#ff58ff"), QColor("#ff80ff"),
                                             QColor("#000000") };
+// Add destructor for proper cleanup
+MempoolStats::~MempoolStats() {
+    if (m_scene) {
+        m_scene->clear();  // Clear items before destruction
+    }
+    delete m_gfx_view; // This will also delete m_scene since it's a child
+    m_scene = nullptr;
+    m_gfx_view = nullptr;
+}
 
 void MempoolStats::drawChart() {
-    if (!m_clientmodel) return;
+    if (!m_clientmodel || !m_scene || !m_gfx_view || drawing) return;
+
+    drawing = true;
 
     m_scene->disconnect();
     m_scene->clear();
@@ -105,7 +116,10 @@ void MempoolStats::drawChart() {
     const qreal bottom = qMax(0.0, m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_BOTTOM);
     {
         // Double-check m_clientmodel is still valid before locking
-        if (!m_clientmodel) return;
+        if (!m_clientmodel) {
+            drawing = false;
+            return;
+        }
 
         // we are going to access the clientmodel feehistogram directly avoding a copy
         QMutexLocker locker(&m_clientmodel->m_mempool_locker);
@@ -120,7 +134,10 @@ void MempoolStats::drawChart() {
             }
         }
 
-        if (m_clientmodel->m_mempool_feehist.size() == 0) return; // draw nothing
+        if (m_clientmodel->m_mempool_feehist.size() == 0) {
+            drawing = false;
+            return; // draw nothing
+        }
 
         fee_subtotal_totalnum.resize(m_clientmodel->m_mempool_feehist[0].second.size());
         fee_subtotal_num.resize(m_clientmodel->m_mempool_feehist[0].second.size());
@@ -288,6 +305,8 @@ void MempoolStats::drawChart() {
 
     QGraphicsTextItem *item_num = m_scene->addText(total_text, gridFont);
     item_num->setPos(GRAPH_PADDING_LEFT+(maxwidth/2), bottom);
+
+    drawing = false; // Reset re-entrance protection
 }
 
 // We override the virtual resizeEvent of the QWidget to adjust tables column
