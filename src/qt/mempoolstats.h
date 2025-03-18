@@ -50,6 +50,8 @@ private:
     virtual void mousePressEvent(QMouseEvent *event) override;
     int m_selected_range = -1;
     bool fCount = true;
+    // m_bottom_num represents the lowest value displayed on the y-axis of the mempool graph
+    size_t m_bottom_num = 0;
 };
 
 #endif // BITCOIN_QT_MEMPOOLSTATS_H

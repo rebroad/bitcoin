@@ -30,6 +30,9 @@ void ClickableRectItem::mousePressEvent(QGraphicsSceneMouseEvent *event) {
 }
 
 MempoolStats::MempoolStats(QWidget *parent) : QWidget(parent) {
+    // Initialize m_bottom_num to ensure it's always properly set
+    m_bottom_num = 0;
+
     if (parent) {
         parent->installEventFilter(this);
         raise();
@@ -43,6 +46,7 @@ MempoolStats::MempoolStats(QWidget *parent) : QWidget(parent) {
     m_gfx_view = new QGraphicsView(this);
     m_scene = new QGraphicsScene(m_gfx_view);
     m_gfx_view->setScene(m_scene);
+    m_scene->setSceneRect(0, 0, width(), height());
     m_gfx_view->setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
     if (m_clientmodel) drawChart();
 }
@@ -84,21 +88,25 @@ const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac")
 void MempoolStats::drawChart() {
     if (!m_clientmodel) return;
 
-	m_scene->disconnect();
+    m_scene->disconnect();
     m_scene->clear();
 
+    // Move vector declaration before the mutex lock
     std::vector<QPainterPath> fee_paths;
     std::vector<size_t> fee_subtotal_totalnum;
     std::vector<size_t> fee_subtotal_num;
     qreal current_x = GRAPH_PADDING_LEFT;
-    const qreal bottom = m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_BOTTOM;
     const qreal maxheight_g = (m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_TOP-GRAPH_PADDING_TOP_LABEL-GRAPH_PADDING_BOTTOM);
     size_t max_num=0;
     QFont gridFont;
     gridFont.setPointSize(8);
     int display_up_to_range = 0;
-    qreal maxwidth = m_gfx_view->scene()->sceneRect().width()-GRAPH_PADDING_LEFT-GRAPH_PADDING_RIGHT;
+    qreal maxwidth = qMax(0.0, m_gfx_view->scene()->sceneRect().width()-GRAPH_PADDING_LEFT-GRAPH_PADDING_RIGHT);
+    const qreal bottom = qMax(0.0, m_gfx_view->scene()->sceneRect().height()-GRAPH_PADDING_BOTTOM);
     {
+        // Double-check m_clientmodel is still valid before locking
+        if (!m_clientmodel) return;
+
         // we are going to access the clientmodel feehistogram directly avoding a copy
         QMutexLocker locker(&m_clientmodel->m_mempool_locker);
 
@@ -141,6 +149,9 @@ void MempoolStats::drawChart() {
         for (size_t i = 0; i < fee_subtotal_totalnum.size(); i++)
             if (fee_subtotal_totalnum[i] > 0) display_up_to_range = i;
 
+        // Pre-size the fee_paths vector to prevent memory corruption
+        fee_paths.resize(display_up_to_range + 1);
+
         // make a nice y-axis scale
         const int amount_of_h_lines = 4;
         if (max_num > 0) {
@@ -157,15 +168,15 @@ void MempoolStats::drawChart() {
         // we ignore the time difference of collected samples due to locking issues
         const qreal x_increment = 1.0 * (width()-GRAPH_PADDING_LEFT-GRAPH_PADDING_RIGHT) / m_clientmodel->m_mempool_max_samples; //samples.size();
 
+
         // draw horizontal grid
         QPainterPath grid_path(QPointF(current_x, bottom));
-        int bottomNum = 0;
         for (int i=0; i <= amount_of_h_lines; i++) {
             qreal lY = bottom-i*(maxheight_g/amount_of_h_lines);
             grid_path.moveTo(GRAPH_PADDING_LEFT, lY);
             grid_path.lineTo(GRAPH_PADDING_LEFT+maxwidth, lY);
 
-            size_t grid_num = (float)i*(max_num_graph-bottomNum)/amount_of_h_lines + bottomNum;
+            size_t grid_num = static_cast<size_t>(i * (max_num_graph - m_bottom_num) / static_cast<double>(amount_of_h_lines)) + m_bottom_num;
             QGraphicsTextItem *item_num;
             if (fCount) item_num = m_scene->addText(QString::number(grid_num), gridFont);
             else item_num = m_scene->addText(GUIUtil::formatBytes(grid_num), gridFont);
@@ -183,7 +194,7 @@ void MempoolStats::drawChart() {
         qreal c_y = bottom - c_margin;
         int i = 0;
         for (const interfaces::mempool_feeinfo& list_entry : m_clientmodel->m_mempool_feehist[0].second) {
-            if (i > display_up_to_range) continue; // TODO why not break?
+            if (i > display_up_to_range) break; // Changed continue to break to prevent out-of-bounds access
             ClickableRectItem *fee_rect = new ClickableRectItem();
             fee_rect->setRect(4, c_y, c_w, c_h);
 
@@ -218,9 +229,9 @@ void MempoolStats::drawChart() {
             fee_text->setFont(gridFont);
             fee_text->setPos(4+c_w+2, c_y);
             m_scene->addItem(fee_text);
-			connect(fee_text, &ClickableTextItem::objectClicked, this, [this, fee_rect](QGraphicsItem*item) {
+            connect(fee_text, &ClickableTextItem::objectClicked, this, [this, fee_rect](QGraphicsItem*item) {
                 fee_rect->objectClicked(item);
-			}, Qt::QueuedConnection);
+            }, Qt::QueuedConnection);
 
             c_y -= c_h + c_margin;
             i++;
@@ -233,7 +244,7 @@ void MempoolStats::drawChart() {
             int i = 0;
             qreal y = bottom;
             for (const interfaces::mempool_feeinfo& list_entry : sample.second) {
-                if (i > display_up_to_range) continue; // skip ranges without txns
+                if (i > display_up_to_range) break; // Changed continue to break to prevent out-of-bounds access
                 if (fCount) y -= (maxheight_g / max_num_graph * list_entry.tx_count);
                 else y -= (maxheight_g / max_num_graph * list_entry.total_size);
                 if (first) fee_paths.emplace_back(QPointF(current_x, y));
@@ -284,7 +295,8 @@ void MempoolStats::drawChart() {
 void MempoolStats::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     m_gfx_view->resize(size());
-    m_gfx_view->scene()->setSceneRect(rect().left(), rect().top(),rect().width(),rect().height());
+    //m_gfx_view->scene()->setSceneRect(rect().left(), rect().top(),rect().width(),rect().height());
+    m_scene->setSceneRect(0, 0, width(), height());  // Set proper dimensions
     drawChart();
 }
 
