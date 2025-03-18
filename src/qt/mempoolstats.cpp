@@ -84,6 +84,7 @@ const static std::vector<QColor> colors = { QColor("#535154"), QColor("#0000ac")
 void MempoolStats::drawChart() {
     if (!m_clientmodel) return;
 
+	m_scene->disconnect();
     m_scene->clear();
 
     std::vector<QPainterPath> fee_paths;
@@ -195,18 +196,19 @@ void MempoolStats::drawChart() {
 
             fee_rect->setBrush(QBrush(brush_color));
             fee_rect->setCursor(Qt::PointingHandCursor);
-            connect(fee_rect, &ClickableRectItem::objectClicked, [this, i](QGraphicsItem*item) {
+            connect(fee_rect, &ClickableRectItem::objectClicked, this, [this, i](QGraphicsItem*item) {
                 // if clicked, we select or deselect if selected
                 if (m_selected_range == i) m_selected_range = -1;
                 else m_selected_range = i;
-                drawChart();
+
+                QMetaObject::invokeMethod(this, &MempoolStats::drawChart, Qt::QueuedConnection);
 
                 // TODO - make this happen on shutdown also
                 FILE *filestr = fsbridge::fopen("/tmp/statsdump", "wb");
                 CAutoFile file(filestr, SER_DISK, false);
                 file << m_clientmodel->m_mempool_feehist;
                 file.fclose();
-            });
+            }, Qt::QueuedConnection);
             m_scene->addItem(fee_rect);
 
             ClickableTextItem *fee_text = new ClickableTextItem();
@@ -216,9 +218,9 @@ void MempoolStats::drawChart() {
             fee_text->setFont(gridFont);
             fee_text->setPos(4+c_w+2, c_y);
             m_scene->addItem(fee_text);
-            connect(fee_text, &ClickableTextItem::objectClicked, [&fee_rect](QGraphicsItem*item) {
+			connect(fee_text, &ClickableTextItem::objectClicked, this, [this, fee_rect](QGraphicsItem*item) {
                 fee_rect->objectClicked(item);
-            });
+			}, Qt::QueuedConnection);
 
             c_y -= c_h + c_margin;
             i++;
