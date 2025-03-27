@@ -317,7 +317,7 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
     directory_monitor_ev(0),
     reconnect_timeout(RECONNECT_TIMEOUT_START)
 {
-	gTorController = this;
+    gTorController = this;
     // Initialize the service vectors to the right size
     service_ids.resize(num_services);
     services.resize(num_services);
@@ -415,7 +415,7 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
 }
 
 TorController::~TorController() {
-	gTorController = nullptr;
+    gTorController = nullptr;
     if (reconnect_ev) {
         event_free(reconnect_ev);
         reconnect_ev = nullptr;
@@ -1038,9 +1038,9 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
     try {
         for (const auto& entry : fs::directory_iterator(directory)) {
             try {
-                if (fs::is_regular_file(entry.path())) {
-                    current_files.insert(fs::PathToString(entry.path()));
-                }
+                // Skip .disabled directory and any other subdirectories
+                if (fs::is_directory(entry.path())) continue;
+                if (fs::is_regular_file(entry.path())) current_files.insert(fs::PathToString(entry.path()));
             } catch (const fs::filesystem_error& e) {
                 LogPrintf("tor: Error checking file type: %s\n", e.what());
             } catch (const std::exception& e) {
@@ -1127,6 +1127,20 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
                             if (self->monitored_files.size() >= num_services) {
                                 LogPrintf("tor: Skipping new key file %s - would exceed configured limit of %d onion services\n",
                                          filepath, num_services);
+
+                                // Create .disabled subdirectory if it doesn't exist
+                                fs::path disabled_dir = directory / ".disabled";
+                                try {
+                                    if (!fs::exists(disabled_dir)) fs::create_directories(disabled_dir);
+
+                                    // Move the file to .disabled directory
+                                    fs::path source_path = fs::PathFromString(filepath);
+                                    fs::path target_path = disabled_dir / source_path.filename();
+                                    fs::rename(source_path, target_path);
+                                    LogPrint(BCLog::TOR, "tor: Moved skipped key file to %s\n", fs::PathToString(target_path));
+                                } catch (const fs::filesystem_error& e) {
+                                    LogPrintf("tor: Error moving skipped file to .disabled directory: %s\n", e.what());
+                                }
                                 continue;
                             }
 
@@ -1295,7 +1309,7 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
 
 // Accessor for the global TorController instance
 TorController* GetTorController() {
-	return gTorController;
+    return gTorController;
 }
 
 /****** Thread ********/
