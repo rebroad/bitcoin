@@ -1122,6 +1122,14 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
                         }
 
                         if (valid_key) {
+                            // Check if adding this key would exceed the configured limit
+                            size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
+                            if (self->monitored_files.size() >= num_services) {
+                                LogPrintf("tor: Skipping new key file %s - would exceed configured limit of %d onion services\n",
+                                         filepath, num_services);
+                                continue;
+                            }
+
                             // Add to monitored files and cache
                             try {
                                 self->monitored_files.insert(filepath);
