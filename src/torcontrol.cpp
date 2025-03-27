@@ -55,14 +55,15 @@ static const float RECONNECT_TIMEOUT_START = 1.0;
 static const float RECONNECT_TIMEOUT_EXP = 1.5;
 /** Maximum length for lines received on TorControlConnection.
  * tor-control-spec.txt mentions that there is explicitly no limit defined to line length,
- * this is belt-and-suspenders sanity limit to prevent memory exhaustion.  */
+ * this is belt-and-suspenders sanity limit to prevent memory exhaustion. */
 static const int MAX_LINE_LENGTH = 100000;
 /** Directory monitoring interval in seconds */
 static const int DIRECTORY_MONITOR_INTERVAL = 10;
 /****** Low-level TorControlConnection ********/
 
 TorControlConnection::TorControlConnection(struct event_base *_base):
-    base(_base), b_conn(nullptr) {
+    base(_base), b_conn(nullptr)
+{
     // TODO - is this function needed given it's empty?
 }
 
@@ -1393,8 +1394,7 @@ bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generate
     // Continue generation until a matching key is found - no maximum limit
     while (true) {
         // Generate random private key
-        for (int i = 0; i < 32; i++)
-            private_key[i] = dis(gen);
+        for (int i = 0; i < 32; i++) private_key[i] = dis(gen);
 
         // Convert to base64 format that Tor expects
         std::string key = "ED25519-V3:" + EncodeBase64(std::string(reinterpret_cast<char*>(private_key.data()), private_key.size()));

@@ -12,7 +12,6 @@
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
-#include <QMutex>
 
 class ClientModel;
 
@@ -39,24 +38,19 @@ class MempoolStats : public QWidget {
     Q_OBJECT
 public:
     explicit MempoolStats(QWidget *parent = Q_NULLPTR);
-    ~MempoolStats(); // Add destructor for proper cleanup
     void setClientModel(ClientModel *model);
-    int m_bottom_num = 0;
-    int m_selected_range = -1;
-    bool fCount = true;
-    bool drawing = false;
+
 public Q_SLOTS:
     void drawChart();
 private:
+    ClientModel* m_clientmodel = Q_NULLPTR;
     QGraphicsView *m_gfx_view;
     QGraphicsScene *m_scene;
-    ClientModel *m_clientmodel;
-    QGraphicsTextItem* createTextItem(const QString& text, const QFont& font);
-    bool safeSetText(QGraphicsSimpleTextItem* item, const QString& text, const QFont& font);
     virtual void resizeEvent(QResizeEvent* event) override;
     virtual void showEvent(QShowEvent* event) override;
     virtual void mousePressEvent(QMouseEvent *event) override;
-    QMutex m_draw_mutex;
+    int m_selected_range = -1;
+    bool fCount = true;
 };
 
 #endif // BITCOIN_QT_MEMPOOLSTATS_H

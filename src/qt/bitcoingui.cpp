@@ -76,7 +76,10 @@ const std::string BitcoinGUI::DEFAULT_UIPLATFORM =
 #endif
         ;
 
-BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformStyle, const NetworkStyle *networkStyle, QWidget *parent) : QMainWindow(parent), m_node(node), trayIconMenu{new QMenu()}, platformStyle(_platformStyle), m_network_style(networkStyle) {
+BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformStyle,
+    const NetworkStyle *networkStyle, QWidget *parent) : QMainWindow(parent), m_node(node),
+    trayIconMenu{new QMenu()}, platformStyle(_platformStyle), m_network_style(networkStyle)
+{
     QSettings settings;
     if (!restoreGeometry(settings.value("MainWindowGeometry").toByteArray())) {
         // Restore failed (perhaps missing setting), center the window
@@ -226,7 +229,7 @@ BitcoinGUI::~BitcoinGUI() {
     delete appMenuBar;
     MacDockIconHandler::cleanup();
 #endif
-    delete mempoolStatsOld;
+
     delete rpcConsole;
 }
 
@@ -548,7 +551,8 @@ void BitcoinGUI::createToolBars() {
     }
 }
 
-void BitcoinGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAndHeaderTipInfo* tip_info) {
+void BitcoinGUI::setClientModel(ClientModel *_clientModel,
+           interfaces::BlockAndHeaderTipInfo* tip_info) {
     this->clientModel = _clientModel;
     if(_clientModel) {
         // Create system tray menu (or setup the dock menu) that late to prevent users from calling actions,
@@ -783,12 +787,10 @@ void BitcoinGUI::createTrayIconMenu() {
         // See https://bugreports.qt.io/browse/QTBUG-91697
         trayIconMenu.get(), &QMenu::aboutToShow,
         [this, show_hide_action, send_action, receive_action, sign_action, verify_action, options_action, node_window_action, mempool_stats_action, quit_action] {
-            if (show_hide_action)
-			    show_hide_action->setText((!isHidden() && !isMinimized() &&
-							!GUIUtil::isObscured(this)) ? tr("&Hide") : tr("S&how"));
+            if (show_hide_action) show_hide_action->setText((!isHidden() && !isMinimized() &&
+                    !GUIUtil::isObscured(this)) ? tr("&Hide") : tr("S&how"));
             if (QApplication::activeModalWidget())
-                for (QAction* a : trayIconMenu.get()->actions())
-                    a->setEnabled(false);
+                for (QAction* a : trayIconMenu.get()->actions()) a->setEnabled(false);
             else {
                 if (show_hide_action) show_hide_action->setEnabled(true);
                 if (enableWallet) {

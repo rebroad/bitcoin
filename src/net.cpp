@@ -508,8 +508,9 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     NodeId id = GetNewNodeId();
     uint64_t nonce = GetDeterministicRandomizer(RANDOMIZER_ID_LOCALHOSTNONCE).Write(id).Finalize();
     if (!addr_bind.IsValid()) addr_bind = GetBindAddress(sock->Get());
-    CNode* pnode = new CNode(id, nLocalServices, std::move(sock), addrConnect, CalculateKeyedNetGroup(addrConnect),
-                             nonce, addr_bind, pszDest ? pszDest : "", conn_type, /*inbound_onion=*/false);
+    CNode* pnode = new CNode(id, nLocalServices, std::move(sock), addrConnect,
+            CalculateKeyedNetGroup(addrConnect),
+            nonce, addr_bind, pszDest ? pszDest : "", conn_type, /*inbound_onion=*/false);
     pnode->AddRef(1); // REB - Creation (out)
     if (pnode->GetId() == 0)
         LogPrintf("%s: Created pnode=%d GRC=%d\n", __func__, pnode->GetId(), pnode->GetRefCount());
@@ -1167,7 +1168,8 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
 
 void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
                                             NetPermissionFlags permissionFlags,
-                                            const CAddress& addr_bind, const CAddress& addr) {
+                                            const CAddress& addr_bind, const CAddress& addr)
+{
     int nInbound = 0, nMaxInbound = nMaxConnections - m_max_outbound;
 
     AddWhitelistPermissionFlags(permissionFlags, addr);
@@ -1234,8 +1236,9 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
         nodeServices = static_cast<ServiceFlags>(nodeServices | NODE_BLOOM);
 
     const bool inbound_onion = std::find(m_onion_binds.begin(), m_onion_binds.end(), addr_bind) != m_onion_binds.end();
-    CNode* pnode = new CNode(id, nodeServices, std::move(sock), addr, CalculateKeyedNetGroup(addr),
-                             nonce, addr_bind, /*addrNameIn=*/"", ConnectionType::INBOUND, inbound_onion);
+    CNode* pnode = new CNode(id, nodeServices, std::move(sock), addr,
+           CalculateKeyedNetGroup(addr),
+           nonce, addr_bind, /*addrNameIn=*/"", ConnectionType::INBOUND, inbound_onion);
 
     // Log the onion address for Tor inbound connections
     if (inbound_onion) {
@@ -1247,8 +1250,7 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
                 // Note: onionServices[i].GetPort() is the external port (e.g., 8333),
                 // but we need to match against the internal mapped port if available
                 if (onionServices[i].GetPort() == addr_bind.GetPort()) {
-                    LogPrint(BCLog::NET, "Incoming Tor connection bound to onion address %s (service index %zu), local bind %s\n",
-                             onionServices[i].ToString(), i, addr_bind.ToString());
+                    LogPrint(BCLog::NET, "Incoming Tor connection bound to onion address %s (service index %zu), local bind %s\n", onionServices[i].ToString(), i, addr_bind.ToString());
                     break;
                 }
             }
