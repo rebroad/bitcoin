@@ -1109,13 +1109,12 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
                         // Validate key format with safe string operations
                         bool valid_key = false;
                         try {
-                            if (trimmed_key.size() > 4 && trimmed_key.compare(0, 4, "NEW:") == 0) {
+                            if (trimmed_key.size() > 4 && trimmed_key.compare(0, 4, "NEW:") == 0)
                                 valid_key = true;
-                            } else if (trimmed_key.size() > 12 && trimmed_key.compare(0, 12, "ED25519-V3:") == 0) {
+                            else if (trimmed_key.size() > 12 && trimmed_key.compare(0, 12, "ED25519-V3:") == 0)
                                 valid_key = true;
-                            } else if (trimmed_key.find(":") != std::string::npos) {
+                            else if (trimmed_key.find(":") != std::string::npos)
                                 valid_key = true;
-                            }
                         } catch (const std::exception& e) {
                             LogPrintf("tor: Error validating key format: %s\n", e.what());
                             continue;
