@@ -341,17 +341,19 @@ void TrafficGraphWidget::updateStuff() {
     uint64_t expected_gap = timer->interval();
     uint64_t now = GetTimeMillis();
 
-	// Check for time jumps
-	uint64_t m_time_offset = 0;
-	if (!vTimeStamp[0].empty()) {
-		uint64_t last_time = vTimeStamp[0].front().count();
-		uint64_t actual_gap = now - last_time;
+    // Check for time jumps
+    static uint64_t last_jump_time = 0;
+    uint64_t m_time_offset = 0;
+    if (!vTimeStamp[0].empty()) {
+        uint64_t last_time = vTimeStamp[0].front().count();
+        uint64_t actual_gap = now - last_time;
 
-		if (actual_gap >= 1000 + expected_gap) {
-			LogPrintf("%s: Time jump of %ds detected.\n", __func__, (actual_gap - expected_gap)/1000);
-			m_time_offset = actual_gap - expected_gap;
-		}
-	}
+        if (actual_gap >= 1000 + expected_gap && last_time != last_jump_time) {
+            LogPrintf("%s: Time jump of %ds detected.\n", __func__, (actual_gap - expected_gap)/1000);
+            m_time_offset = actual_gap - expected_gap;
+            last_jump_time = last_time;
+        }
+    }
 
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
