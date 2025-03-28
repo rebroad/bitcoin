@@ -1668,11 +1668,11 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 LOCK(pnode->cs_vRecv);
                 nRecvBytes = pnode->nRecvBytes;
             }
-            uint64_t nSendBytes;
+            /*uint64_t nSendBytes;
             {
                 LOCK(pnode->cs_vSend);
                 nSendBytes = pnode->nSendBytes;
-            }
+            }*/
             unsigned int nMempoolBytes = pnode->nMempoolBytes - pnode->nMempoolBytesSnapOld;
             unsigned int nMempoolTXs = pnode->nMempoolTXs - pnode->nMempoolTXsSnapOld;
             if ((pnode->nLastBlock >= now - 60) || (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000)) nPeersIBD++;

@@ -78,23 +78,19 @@ bool BanMan::IsDiscouraged(const CNetAddr& net_addr)
     return m_discouraged.contains(net_addr.GetAddrBytes());
 }
 
-bool BanMan::IsBanned(const CNetAddr& net_addr)
-{
+bool BanMan::IsBanned(const CNetAddr& net_addr) {
     auto current_time = GetTime();
     LOCK(m_cs_banned);
     for (const auto& it : m_banned) {
         CSubNet sub_net = it.first;
         CBanEntry ban_entry = it.second;
 
-        if (current_time < ban_entry.nBanUntil && sub_net.Match(net_addr)) {
-            return true;
-        }
+        if (current_time < ban_entry.nBanUntil && sub_net.Match(net_addr)) return true;
     }
     return false;
 }
 
-bool BanMan::IsBanned(const CSubNet& sub_net)
-{
+bool BanMan::IsBanned(const CSubNet& sub_net) {
     auto current_time = GetTime();
     LOCK(m_cs_banned);
     banmap_t::iterator i = m_banned.find(sub_net);
