@@ -193,8 +193,8 @@ void MempoolStats::drawChart()
             ClickableRectItem *fee_rect = new ClickableRectItem();
             fee_rect->setRect(4, c_y, c_w, c_h);
 
-            QColor brush_color = getColorForRange(i, display_up_to_range + 1);
-            //QColor brush_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
+            //QColor brush_color = getColorForRange(i, display_up_to_range + 1);
+            QColor brush_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
             brush_color.setAlpha(85);
             if (m_selected_range >= 0 && m_selected_range != i)
                 // if one item is selected, hide out the other ones
@@ -265,8 +265,8 @@ void MempoolStats::drawChart()
             feepath.lineTo(current_x, bottom);
             feepath.lineTo(GRAPH_PADDING_LEFT, bottom);
         }
-        QColor pen_color = getColorForRange(i, fee_paths.size());
-        //QColor pen_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
+        //QColor pen_color = getColorForRange(i, fee_paths.size());
+        QColor pen_color = colors[(i < static_cast<int>(colors.size()) ? i : static_cast<int>(colors.size())-1)];
         QColor brush_color = pen_color;
         pen_color.setAlpha(95);
         brush_color.setAlpha(85);
