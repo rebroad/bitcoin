@@ -3906,15 +3906,12 @@ bool CChainState::LoadChainTip()
     assert(!coins_cache.GetBestBlock().IsNull()); // Never called when the coins view is empty
     const CBlockIndex* tip = m_chain.Tip();
 
-    if (tip && tip->GetBlockHash() == coins_cache.GetBestBlock()) {
-        return true;
-    }
+    if (tip && tip->GetBlockHash() == coins_cache.GetBestBlock()) return true;
 
     // Load pointer to end of best chain
     CBlockIndex* pindex = m_blockman.LookupBlockIndex(coins_cache.GetBestBlock());
-    if (!pindex) {
-        return false;
-    }
+    if (!pindex) return false;
+
     m_chain.SetTip(pindex);
     if (!g_tiptowards || !fActivatingChain) {
         g_tiptowards = m_chain.Tip()->nHeight;
@@ -3925,8 +3922,7 @@ bool CChainState::LoadChainTip()
     g_chainstate = this;
     tip = m_chain.Tip();
     LogPrintf("Loaded best chain: hashBestChain=%s height=%d date=%s progress=%f\n",
-              tip->GetBlockHash().ToString(),
-              m_chain.Height(),
+              tip->GetBlockHash().ToString(), m_chain.Height(),
               FormatISO8601DateTime(tip->GetBlockTime()),
               GuessVerificationProgress(m_params.TxData(), tip));
     return true;
