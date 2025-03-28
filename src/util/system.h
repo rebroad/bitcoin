@@ -427,6 +427,11 @@ protected:
     std::optional<unsigned int> GetArgFlags(const std::string& name) const;
 
     /**
+     * Return a vector of registered argument names
+     */
+    std::vector<std::string> GetArgsList() const;
+
+    /**
      * Read and update settings file with saved settings. This needs to be
      * called after SelectParams() because the settings file location is
      * network-specific.

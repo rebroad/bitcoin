@@ -850,6 +850,156 @@ static RPCHelpMan runttoggle()
     };
 }
 
+static RPCHelpMan reloadconfig()
+{
+    return RPCHelpMan{"reloadconfig",
+                "\nReloads the bitcoin.conf configuration file.\n"
+                "Changes to any settings which can be updated at runtime will take effect immediately.\n"
+                "Settings that require a restart to change will still require a restart.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "success", "Whether the configuration was successfully reloaded"},
+                        {RPCResult::Type::ARR, "warnings", "Any warnings encountered during reload",
+                            {{RPCResult::Type::STR, "", "A warning message"}}
+                        },
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("reloadconfig", "")
+                  + HelpExampleRpc("reloadconfig", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    UniValue result(UniValue::VOBJ);
+    UniValue warnings(UniValue::VARR);
+
+    std::string error;
+    bool success = gArgs.ReadConfigFiles(error, true);
+
+    if (!error.empty()) {
+        warnings.push_back(error);
+    }
+
+    result.pushKV("success", success);
+    result.pushKV("warnings", warnings);
+
+    return result;
+}
+    };
+}
+
+static RPCHelpMan updateconfig()
+{
+    return RPCHelpMan{"updateconfig",
+                "\nUpdates a configuration setting at runtime.\n"
+                "Not all settings can be changed at runtime. Some may require a restart to take effect.\n"
+                "Settings updated with this command will not persist in bitcoin.conf; they will be reset after restart.\n"
+                "To persist settings, manually update the bitcoin.conf file.\n",
+                {
+                    {"name", RPCArg::Type::STR, RPCArg::Optional::NO, "The name of the configuration setting (without the leading dash)"},
+                    {"value", RPCArg::Type::STR, RPCArg::Optional::NO, "The new value for the setting"},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "success", "Whether the configuration was successfully updated"},
+                        {RPCResult::Type::STR, "message", "Information about the update performed"},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("updateconfig", "\"maxmempool\" \"150\"")
+                  + HelpExampleCli("updateconfig", "\"ibdtimethreshold\" \"20\"")
+                  + HelpExampleRpc("updateconfig", "\"maxmempool\", \"150\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::string name = request.params[0].get_str();
+    std::string value = request.params[1].get_str();
+
+    // Ensure name doesn't start with a dash (we add it when setting)
+    if (name[0] == '-') {
+        name = name.substr(1);
+    }
+
+    UniValue result(UniValue::VOBJ);
+
+    // Check if the argument is registered (for safety)
+    std::optional<unsigned int> flags = gArgs.GetArgFlags("-" + name);
+    if (!flags) {
+        result.pushKV("success", false);
+        result.pushKV("message", strprintf("Unknown configuration setting: %s", name));
+        return result;
+    }
+
+    gArgs.ForceSetArg(name, value);
+
+    result.pushKV("success", true);
+    result.pushKV("message", strprintf("Updated configuration: %s = %s", name, value));
+
+    return result;
+}
+    };
+}
+
+static RPCHelpMan getconfig()
+{
+    return RPCHelpMan{"getconfig",
+                "\nReturns current configuration settings.\n",
+                {
+                    {"name", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "The name of a specific configuration setting (without the leading dash)"},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR, "setting_name", "The value of the setting"},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("getconfig", "")
+                  + HelpExampleCli("getconfig", "\"maxmempool\"")
+                  + HelpExampleRpc("getconfig", "\"maxmempool\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    UniValue result(UniValue::VOBJ);
+
+    // If a specific setting name is provided, return just that setting
+    if (!request.params[0].isNull()) {
+        std::string name = request.params[0].get_str();
+        // Ensure name doesn't start with a dash
+        if (name[0] == '-') {
+            name = name.substr(1);
+        }
+
+        // Check if the argument is registered
+        std::optional<unsigned int> flags = gArgs.GetArgFlags("-" + name);
+        if (!flags) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Unknown configuration setting: %s", name));
+        }
+
+        result.pushKV(name, gArgs.GetArg("-" + name, ""));
+        return result;
+    }
+
+    // Otherwise, return all settings that are set
+    std::vector<std::string> args_list = gArgs.GetArgsList();
+    for (const std::string& arg_name : args_list) {
+        // Skip internal/non-configuration arguments
+        if (arg_name.empty() || arg_name[0] != '-') continue;
+
+        std::string name = arg_name.substr(1); // Remove the leading dash
+        if (gArgs.IsArgSet(arg_name)) {
+            result.pushKV(name, gArgs.GetArg(arg_name, ""));
+        }
+    }
+
+    return result;
+}
+    };
+}
+
 void RegisterMiscRPCCommands(CRPCTable &t)
 {
 // clang-format off
@@ -858,6 +1008,9 @@ static const CRPCCommand commands[] =
   //  --------------------- ------------------------
     { "control",            &getmemoryinfo,           },
     { "control",            &logging,                 },
+    { "control",            &reloadconfig,            },
+    { "control",            &updateconfig,            },
+    { "control",            &getconfig,               },
     { "util",               &validateaddress,         },
     { "util",               &createmultisig,          },
     { "util",               &deriveaddresses,         },

@@ -378,13 +378,32 @@ bool ArgsManager::ParseParameters(int argc, const char* const argv[], std::strin
 std::optional<unsigned int> ArgsManager::GetArgFlags(const std::string& name) const
 {
     LOCK(cs_args);
-    for (const auto& arg_map : m_available_args) {
-        const auto search = arg_map.second.find(name);
-        if (search != arg_map.second.end()) {
-            return search->second.m_flags;
+
+    // m_available_args is a map of OptionsCategory to map<string, Arg>
+    for (const auto& category_pair : m_available_args) {
+        const auto& options = category_pair.second;
+        auto it = options.find(name);
+        if (it != options.end()) {
+            return it->second.m_flags;
         }
     }
+
     return std::nullopt;
+}
+
+std::vector<std::string> ArgsManager::GetArgsList() const
+{
+    std::vector<std::string> result;
+    LOCK(cs_args);
+
+    // m_available_args is a map of OptionsCategory to map<string, Arg>
+    for (const auto& category_pair : m_available_args) {
+        for (const auto& arg_pair : category_pair.second) {
+            result.push_back(arg_pair.first);
+        }
+    }
+
+    return result;
 }
 
 fs::path ArgsManager::GetPathArg(std::string pathlike_arg) const
