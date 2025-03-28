@@ -10,6 +10,18 @@
 
 # Active Jobs
 
+## IBD Time Remaining Implementation
+- **Task**: Modify Initial Block Download (IBD) criteria from 24-hour age threshold to estimated time remaining threshold
+  - ✅ Investigated current IBD determination logic in `IsInitialBlockDownload()` function in `src/validation.cpp`
+  - ✅ Explored how estimated time is calculated in `ModalOverlay` class in the GUI code
+  - ✅ Decided on implementation approach:
+    - Add global variable `nIBDTimeRemaining` to track estimated time remaining
+    - Add command-line option `-ibdtimethreshold` (default: 30 minutes)
+    - Update `IsInitialBlockDownload()` to use time remaining instead of tip age
+    - Modify GUI code to update the global time remaining variable
+  - 🔄 Details documented in `.LLM/IBD-ETA.md`
+  - This enhancement provides a more intuitive measure of synchronization status and allows nodes to exit IBD state sooner when they're nearly synchronized
+
 ## Current Task
 - **Main Job**: Verifying compilation of moorlane-core-master.wip's base commit
   - ✅ Identified the base commit: `f1ce67f09fbaba4013443bce416e46e5b2d37c19`

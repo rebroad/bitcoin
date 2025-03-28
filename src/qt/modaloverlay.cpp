@@ -7,18 +7,19 @@
 
 #include <chainparams.h>
 #include <qt/guiutil.h>
+#include <validation.h>
 
 #include <QEasingCurve>
 #include <QPropertyAnimation>
 #include <QResizeEvent>
 
 ModalOverlay::ModalOverlay(bool enable_wallet, QWidget *parent) :
-QWidget(parent),
-ui(new Ui::ModalOverlay),
-bestHeaderHeight(0),
-bestHeaderDate(QDateTime()),
-layerIsVisible(false),
-userClosed(false)
+    QWidget(parent),
+    ui(new Ui::ModalOverlay),
+    bestHeaderHeight(0),
+    bestHeaderDate(QDateTime()),
+    layerIsVisible(false),
+    userClosed(false)
 {
     ui->setupUi(this);
     connect(ui->closeButton, &QPushButton::clicked, this, &ModalOverlay::closeClicked);
@@ -119,8 +120,12 @@ void ModalOverlay::tipUpdate(int count, const QDateTime& blockDate, double nVeri
         // show expected remaining time
         if(remainingMSecs >= 0) {
             ui->expectedTimeLeft->setText(GUIUtil::formatNiceTimeOffset(remainingMSecs / 1000.0));
+            // Set the global IBD time remaining value for use in IsInitialBlockDownload
+            nIBDTimeRemaining = remainingMSecs / 1000;
         } else {
             ui->expectedTimeLeft->setText(QObject::tr("unknown"));
+            // When time cannot be estimated, set a high value to maintain IBD state
+            nIBDTimeRemaining = std::numeric_limits<int64_t>::max();
         }
 
         static const int MAX_SAMPLES = 5000;
@@ -150,6 +155,8 @@ void ModalOverlay::tipUpdate(int count, const QDateTime& blockDate, double nVeri
     } else {
         UpdateHeaderSyncLabel();
         ui->expectedTimeLeft->setText(tr("Unknown…"));
+        // When in header sync, set a high value to maintain IBD state
+        nIBDTimeRemaining = std::numeric_limits<int64_t>::max();
     }
 }
 

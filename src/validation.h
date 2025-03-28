@@ -79,6 +79,8 @@ static const int MAX_SCRIPTCHECK_THREADS = 15;
 /** -par default (number of script-checking threads, 0 = auto) */
 static const int DEFAULT_SCRIPTCHECK_THREADS = 0;
 static const int64_t DEFAULT_MAX_TIP_AGE = 24 * 60 * 60; // REBTODO - isn't this a little large?
+/** Default time threshold in minutes to consider node in initial block download */
+static const int64_t DEFAULT_IBD_TIME_THRESHOLD = 30 * 60;
 static const bool DEFAULT_CHECKPOINTS_ENABLED = true;
 static const bool DEFAULT_TXINDEX = false;
 static constexpr bool DEFAULT_COINSTATSINDEX{false};
@@ -122,8 +124,11 @@ extern bool fCheckBlockIndex;
 extern bool fCheckpointsEnabled;
 /** A fee rate smaller than this is considered zero fee (for relaying, mining and transaction creation) */
 extern CFeeRate minRelayTxFee;
-/** If the tip is older than this (in seconds), the node is considered to be in initial block download. */
+/** Maximum age of tip in seconds to consider node in initial block download */
 extern int64_t nMaxTipAge;
+
+/** Estimated time remaining in seconds until IBD is completed */
+extern int64_t nIBDTimeRemaining;
 
 /** Block hash whose ancestors we will assume to have valid scripts without checking them. */
 extern uint256 hashAssumeValid;

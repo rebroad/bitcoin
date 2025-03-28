@@ -150,6 +150,7 @@ bool fRequireStandard = true;
 bool fCheckBlockIndex = false;
 bool fCheckpointsEnabled = DEFAULT_CHECKPOINTS_ENABLED;
 int64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
+int64_t nIBDTimeRemaining = std::numeric_limits<int64_t>::max();
 
 uint256 hashAssumeValid;
 arith_uint256 nMinimumChainWork;
@@ -1140,7 +1141,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
         }
     }
 
-    // It may or may not be the case that all the transactions made it into the mempool. Regardless,
+    // It may or not be the case that all the transactions made it into the mempool. Regardless,
     // make sure we haven't exceeded max mempool size.
     LimitMempoolSize(m_pool, m_active_chainstate.CoinsTip(),
                      gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000,
@@ -1497,6 +1498,7 @@ bool CChainState::IsInitialBlockDownload() const
     static bool fPrev = true;
     bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
     bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
+    uint64_t nIBDTimeThreshold = gArgs.GetIntArg("-ibdtimethreshold", DEFAULT_IBD_TIME_THRESHOLD / 60) * 60;
     bool fNew = false;
     if (fImporting || fReindex)
         fNew = true;
@@ -1504,9 +1506,10 @@ bool CChainState::IsInitialBlockDownload() const
         fNew = true;
     else if (fDownloadBlocks && fUpdateChain && m_chain.Tip()->nChainWork < nMinimumChainWork)
         fNew = true;
-    else if (fDownloadBlocks && fUpdateChain && m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge)) {
+    else if (fDownloadBlocks && fUpdateChain && nIBDTimeRemaining > nIBDTimeThreshold &&
+            m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge)) {
         if (!fPrev) LogPrintf("%s: Setting to true as tip age is over %s old.\n", __func__, strAge(nMaxTipAge));
-        fNew = true;
+        fPrev = fNew = true;
     }
 
     if (fNew != fPrev) {
