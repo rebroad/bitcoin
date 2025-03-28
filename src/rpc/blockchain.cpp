@@ -1983,13 +1983,32 @@ static RPCHelpMan getdustutxos()
     uint64_t dust_count = 0;
     uint64_t dust_size = 0;
     CAmount dust_amount = 0;
+    uint64_t current_count = 0;
+
+    int64_t last_log_time = GetTimeMillis();
 
     std::unique_ptr<CCoinsViewCursor> pcursor(coins_view->Cursor());
     COutPoint key;
     Coin coin;
     const CFeeRate dust_relay_fee{DUST_RELAY_TX_FEE};
 
+    LogPrint(BCLog::RPC, "getdustutxos: Starting UTXO scan\n");
+
     while (pcursor->Valid()) {
+        // Check for RPC interruption
+        if (node.rpc_interruption_point) {
+            node.rpc_interruption_point();
+        }
+
+        current_count++;
+        
+        // Log progress every 5 seconds
+        int64_t current_time = GetTimeMillis();
+        if (current_time - last_log_time > 5000) {
+            LogPrint(BCLog::RPC, "getdustutxos: Scanned %u UTXOs\n", current_count);
+            last_log_time = current_time;
+        }
+
         if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
             if (!coin.IsSpent() && !coin.out.scriptPubKey.IsUnspendable()) {
                 if (IsDust(coin.out, dust_relay_fee)) {
@@ -2001,6 +2020,8 @@ static RPCHelpMan getdustutxos()
         }
         pcursor->Next();
     }
+
+    LogPrint(BCLog::RPC, "getdustutxos: Scan complete. Found %u dust UTXOs\n", dust_count);
 
     UniValue ret(UniValue::VOBJ);
     ret.pushKV("count", (int64_t)dust_count);
