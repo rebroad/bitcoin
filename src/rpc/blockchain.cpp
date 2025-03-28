@@ -1954,6 +1954,64 @@ static RPCHelpMan getmempoolinfo()
     };
 }
 
+static RPCHelpMan getdustutxos()
+{
+    return RPCHelpMan{"getdustutxos",
+                "\nReturns statistics about dust UTXOs in the chainstate.\n"
+                "A dust UTXO is one that would cost more to spend than its value.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "count", "The number of dust UTXOs"},
+                        {RPCResult::Type::NUM, "total_size", "The total size in bytes of dust UTXOs"},
+                        {RPCResult::Type::STR_AMOUNT, "total_amount", "The total amount of dust UTXOs in " + CURRENCY_UNIT},
+                    }},
+                RPCExamples{
+                    HelpExampleCli("getdustutxos", "")
+            + HelpExampleRpc("getdustutxos", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    NodeContext& node = EnsureAnyNodeContext(request.context);
+    ChainstateManager& chainman = EnsureChainman(node);
+    LOCK(cs_main);
+
+    CChainState& active_chainstate = chainman.ActiveChainstate();
+    CCoinsViewDB* coins_view = &active_chainstate.CoinsDB();
+
+    uint64_t dust_count = 0;
+    uint64_t dust_size = 0;
+    CAmount dust_amount = 0;
+
+    std::unique_ptr<CCoinsViewCursor> pcursor(coins_view->Cursor());
+    COutPoint key;
+    Coin coin;
+    const CFeeRate dust_relay_fee{DUST_RELAY_TX_FEE};
+
+    while (pcursor->Valid()) {
+        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
+            if (!coin.IsSpent() && !coin.out.scriptPubKey.IsUnspendable()) {
+                if (IsDust(coin.out, dust_relay_fee)) {
+                    dust_count++;
+                    dust_size += ::GetSerializeSize(coin, PROTOCOL_VERSION);
+                    dust_amount += coin.out.nValue;
+                }
+            }
+        }
+        pcursor->Next();
+    }
+
+    UniValue ret(UniValue::VOBJ);
+    ret.pushKV("count", (int64_t)dust_count);
+    ret.pushKV("total_size", (int64_t)dust_size);
+    ret.pushKV("total_amount", ValueFromAmount(dust_amount));
+
+    return ret;
+},
+    };
+}
+
 static RPCHelpMan preciousblock()
 {
     return RPCHelpMan{"preciousblock",
@@ -2997,7 +3055,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         &downloadblocks,                     },
     { "blockchain",         &relaydust,                          },
     { "blockchain",         &verifychain,                        },
-
+    { "blockchain",         &getdustutxos,                       },
     { "blockchain",         &preciousblock,                      },
     { "blockchain",         &scantxoutset,                       },
     { "blockchain",         &getblockfilter,                     },
