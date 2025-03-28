@@ -173,7 +173,7 @@ void BanMan::GetBanned(banmap_t& banmap)
 
 void BanMan::SweepBanned()
 {
-    int64_t now = GetTime();
+    uint64_t now = GetTime();
     bool notify_ui = false;
     {
         LOCK(m_cs_banned);

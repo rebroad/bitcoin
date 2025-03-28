@@ -149,8 +149,8 @@ bool g_parallel_script_checks{false};
 bool fRequireStandard = true;
 bool fCheckBlockIndex = false;
 bool fCheckpointsEnabled = DEFAULT_CHECKPOINTS_ENABLED;
-int64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
-int64_t nIBDTimeRemaining = std::numeric_limits<int64_t>::max();
+uint64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
+uint64_t nIBDTimeRemaining = std::numeric_limits<int64_t>::max();
 
 uint256 hashAssumeValid;
 arith_uint256 nMinimumChainWork;
@@ -3690,7 +3690,7 @@ int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& h
     if (NotifyHeaderTip(ActiveChainstate())) {
         if (ActiveChainstate().IsInitialBlockDownload() && ppindex && *ppindex) {
             const CBlockIndex& last_accepted{**ppindex};
-            const int64_t blocks_left{(GetTime() - last_accepted.GetBlockTime()) / chainparams.GetConsensus().nPowTargetSpacing};
+            const uint64_t blocks_left{(GetTime() - last_accepted.GetBlockTime()) / chainparams.GetConsensus().nPowTargetSpacing};
             const double progress{100.0 * last_accepted.nHeight / (last_accepted.nHeight + blocks_left)};
             LogPrintf("Synchronizing blockheaders, height: %d (~%.2f%%)\n", last_accepted.nHeight, progress);
         }
