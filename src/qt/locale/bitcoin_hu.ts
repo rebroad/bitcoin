@@ -499,11 +499,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>Részlegesen aláírt Bitcoin tranzakció (PSBT) betöltése vágólapról</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Csomópont ablak</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Nyisd meg a hibaellenőrző és diagnosztizáló konzolt.</translation>
     </message>
     <message>
@@ -1964,7 +1964,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>User Agent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Csomópont ablak</translation>
     </message>
     <message>

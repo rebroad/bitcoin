@@ -478,11 +478,11 @@
         <translation>தேதி வரை</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>நோட் விண்டோ</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>திற நோட் பிழைத்திருத்தம் மற்றும் கண்டறியும் பணியகம்</translation>
     </message>
     <message>
@@ -1740,7 +1740,7 @@
         <translation>பயனர் முகவர்</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>நோட் விண்டோ</translation>
     </message>
     <message>

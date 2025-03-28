@@ -500,11 +500,11 @@ Podpisovanje je možno le s podedovanimi ("legacy") naslovi.</translation>
         <translation>Naloži delno podpisano bitcoin-transakcijo z odložišča</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Okno vozlišča</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Odpri konzolo za razhroščevanje in diagnostiko</translation>
     </message>
     <message>
@@ -1970,7 +1970,7 @@ Podpisovanje je možno le s podedovanimi ("legacy") naslovi.</translation>
         <translation>Ime agenta</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Okno vozlišča</translation>
     </message>
     <message>

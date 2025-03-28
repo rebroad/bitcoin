@@ -500,11 +500,11 @@ Podpisywanie jest możliwe tylko z adresami typu „legacy”.</translation>
         <translation>Załaduj częściowo podpisaną transakcję Bitcoin ze schowka</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Okno węzła</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Otwórz konsolę diagnostyczną i debugowanie węzłów</translation>
     </message>
     <message>
@@ -1886,7 +1886,7 @@ Podpisywanie jest możliwe tylko z adresami typu „legacy”.</translation>
         <translation>Aplikacja kliencka</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Okno węzła</translation>
     </message>
     <message>

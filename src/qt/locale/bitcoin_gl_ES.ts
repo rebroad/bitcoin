@@ -478,11 +478,11 @@
         <translation>Actualizado</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Xanela de Nodo</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Abre a consola de depuración e diagnostico do nodo</translation>
     </message>
     <message>
@@ -1788,7 +1788,7 @@
         <translation>User Agent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Node window</translation>
     </message>
     <message>

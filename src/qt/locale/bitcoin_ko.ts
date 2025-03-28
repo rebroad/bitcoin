@@ -478,11 +478,11 @@
         <translation>최신의</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>노드 창</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>노드 디버깅 및 진단 콘솔 열기 </translation>
     </message>
     <message>
@@ -1760,7 +1760,7 @@
         <translation>유저 에이전트</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>노드 창</translation>
     </message>
     <message>

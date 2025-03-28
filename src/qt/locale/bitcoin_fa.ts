@@ -479,11 +479,11 @@
         <translation>به روز</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>پنجره گره</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>باز کردن کنسول دی باگ و تشخیص گره</translation>
     </message>
     <message>
@@ -1646,7 +1646,7 @@
         <translation>نماینده کاربر</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>پنجره گره</translation>
     </message>
     <message>

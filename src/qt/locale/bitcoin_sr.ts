@@ -484,11 +484,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>Ажурирано</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Ноде прозор</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Отвори конзолу за ноде дебуг и дијагностику</translation>
     </message>
     <message>
@@ -1818,7 +1818,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>Кориснички агент</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Ноде прозор</translation>
     </message>
     <message>

@@ -500,11 +500,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>从剪贴板中加载部分签名比特币交易（PSBT）</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>节点窗口</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>打开节点调试与诊断控制台</translation>
     </message>
     <message>
@@ -1970,7 +1970,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>用户代理</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>节点窗口</translation>
     </message>
     <message>

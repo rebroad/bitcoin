@@ -500,11 +500,11 @@ Il n’est possible de signer qu’avec les adresses de type « legacy ».</tr
         <translation>Charger du presse-papiers une transaction Bitcoin signée partiellement</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Fenêtre des nœuds</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Ouvrir une console de débogage de nœuds et de diagnostic</translation>
     </message>
     <message>
@@ -1970,7 +1970,7 @@ Il n’est possible de signer qu’avec les adresses de type « legacy ».</tr
         <translation>Agent utilisateur</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Fenêtre des nœuds</translation>
     </message>
     <message>

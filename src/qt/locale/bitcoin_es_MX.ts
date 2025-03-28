@@ -503,11 +503,11 @@ Solicitar pagos (genera códigos QR y bitcoin: URI)
         <translation>Load Partially Signed Bitcoin Transaction from clipboard</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Node window</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Open node debugging and diagnostic console</translation>
     </message>
     <message>
@@ -1973,7 +1973,7 @@ Solicitar pagos (genera códigos QR y bitcoin: URI)
         <translation>User Agent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Node window</translation>
     </message>
     <message>

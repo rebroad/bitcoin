@@ -500,11 +500,11 @@ Ondertekenen is alleen mogelijk met adressen van het type 'legacy'.</translation
         <translation>Laad gedeeltelijk ondertekende Bitcoin-transactie vanaf het klembord</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Nodevenster</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Open node debugging en diagnostische console</translation>
     </message>
     <message>
@@ -1891,7 +1891,7 @@ Dit is ideaal voor alleen-lezen portommonees.</translation>
         <translation>User Agent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Nodevenster</translation>
     </message>
     <message>

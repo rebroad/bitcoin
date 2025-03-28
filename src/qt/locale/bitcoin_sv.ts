@@ -479,11 +479,11 @@ Försök igen.</translation>
         <translation>Uppdaterad</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Nod-fönster</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Öppna nodens konsol för felsökning och diagnostik</translation>
     </message>
     <message>
@@ -1777,7 +1777,7 @@ Försök igen.</translation>
         <translation>Användaragent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Nod-fönster</translation>
     </message>
     <message>

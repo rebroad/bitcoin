@@ -500,11 +500,11 @@ Das Signieren ist nur mit Adressen vom Typ 'Legacy' möglich.</translation>
         <translation>Lade teilsignierte Bitcoin-Transaktion aus Zwischenablage</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Node Fenster</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Konsole für Node Debugging und Diagnose öffnen</translation>
     </message>
     <message>
@@ -1966,7 +1966,7 @@ Das Signieren ist nur mit Adressen vom Typ 'Legacy' möglich.</translation>
         <translation>User-Agent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Node Fenster</translation>
     </message>
     <message>

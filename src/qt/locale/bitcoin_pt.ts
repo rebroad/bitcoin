@@ -490,11 +490,11 @@
         <translation>Carregar transação de Bitcoin parcialmente assinada da área de transferência.</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Janela do nó</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Abrir o depurador de nó e o console de diagnóstico</translation>
     </message>
     <message>
@@ -1930,7 +1930,7 @@ ID transação: %1</translation>
         <translation>User Agent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Janela do nó</translation>
     </message>
     <message>

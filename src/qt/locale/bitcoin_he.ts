@@ -501,11 +501,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>טעינת עסקת ביטקוין חתומה חלקית מלוח הגזירים</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>חלון צומת</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>פתיחת ניפוי באגים בצומת וגם מסוף בקרה לאבחון</translation>
     </message>
     <message>
@@ -1960,7 +1960,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>סוכן משתמש</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>חלון צומת</translation>
     </message>
     <message>

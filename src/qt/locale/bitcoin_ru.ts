@@ -500,11 +500,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>Загрузить Частично Подписанную Транзакцию из буфера обмена</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Окно узла</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Открыть консоль отладки и диагностики узла</translation>
     </message>
     <message>
@@ -1971,7 +1971,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>Пользовательский агент</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Окно узла</translation>
     </message>
     <message>

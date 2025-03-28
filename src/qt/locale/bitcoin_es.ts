@@ -500,11 +500,11 @@ Firmar solo es posible con correos del tipo Legacy.</translation>
         <translation>Cargar una transacción de Bitcoin parcialmente firmada desde el Portapapeles</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Ventana de nodo</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Abrir consola de depuración y diagnóstico de nodo</translation>
     </message>
     <message>
@@ -1966,7 +1966,7 @@ Firmar solo es posible con correos del tipo Legacy.</translation>
         <translation>Agente de usuario</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Ventana de nodo</translation>
     </message>
     <message>

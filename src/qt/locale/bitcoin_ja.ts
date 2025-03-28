@@ -487,11 +487,11 @@
         <translation>部分的に署名されたビットコインのトランザクションをクリップボードから読み込み</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>ノードウィンドウ</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>ノードのデバッグ・診断コンソールを開く</translation>
     </message>
     <message>
@@ -1837,7 +1837,7 @@
         <translation>ユーザーエージェント</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>ノードウィンドウ</translation>
     </message>
     <message>

@@ -475,11 +475,11 @@ Alihkan fail data ke dalam tab semasa</translation>
         <translation>Terkini</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Node window</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Open node debugging and diagnostic console</translation>
     </message>
     <message>
@@ -1751,7 +1751,7 @@ Alihkan fail data ke dalam tab semasa</translation>
         <translation>User Agent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Node window</translation>
     </message>
     <message>

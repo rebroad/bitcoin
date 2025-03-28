@@ -500,11 +500,11 @@ E' possibile firmare solo con indirizzi di tipo "legacy".</translation>
         <translation>Carica Partially Signed Bitcoin Transaction dagli appunti</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Finestra del nodo</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Apri il debug del nodo e la console diagnostica</translation>
     </message>
     <message>
@@ -1971,7 +1971,7 @@ Per specificare più URL separarli con una barra verticale "|".</translation>
         <translation>User Agent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Finestra del nodo</translation>
     </message>
     <message>

@@ -478,11 +478,11 @@
         <translation>Ενημερωμένο</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Κόμβος παράθυρο</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Ανοίξτε τον κόμβο εντοπισμού σφαλμάτων και τη διαγνωστική κονσόλα</translation>
     </message>
     <message>
@@ -1789,7 +1789,7 @@
         <translation>Agent χρήστη</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Κόμβος παράθυρο</translation>
     </message>
     <message>

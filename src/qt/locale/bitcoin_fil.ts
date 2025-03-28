@@ -470,7 +470,7 @@
         <translation>Napapanahon</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Bintana ng Node</translation>
     </message>
     <message>
@@ -1709,7 +1709,7 @@
         <translation>Ahente ng User</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Bintana ng Node</translation>
     </message>
     <message>

@@ -500,11 +500,11 @@ Somente é possível assinar com endereços do tipo 'legado'.</translation>
         <translation>Carregar Transação de Bitcoin Parcialmente Assinada da área de transferência</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Janela do Nó</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Abrir console de diagnóstico e depuração de Nó</translation>
     </message>
     <message>
@@ -1970,7 +1970,7 @@ Somente é possível assinar com endereços do tipo 'legado'.</translation>
         <translation>User Agent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Janela do Nó</translation>
     </message>
     <message>

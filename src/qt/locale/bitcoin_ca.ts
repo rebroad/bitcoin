@@ -500,11 +500,11 @@ Només és possible firmar amb adreces del tipus "legacy".</translation>
         <translation>Carrega la transacció de Bitcoin signada parcialment des del porta-retalls</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Finestra node</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Obrir depurador de node i consola de diagnosi.</translation>
     </message>
     <message>
@@ -1875,7 +1875,7 @@ Això és ideal per a carteres de mode només lectura.</translation>
         <translation>Agent d'usuari</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Finestra node</translation>
     </message>
     <message>

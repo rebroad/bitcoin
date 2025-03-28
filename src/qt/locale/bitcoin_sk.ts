@@ -478,11 +478,11 @@
         <translation>Aktualizovaný</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Uzlové okno</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Otvor konzolu pre ladenie a diagnostiku uzlu</translation>
     </message>
     <message>
@@ -1797,7 +1797,7 @@
         <translation>Aplikácia</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Uzlové okno</translation>
     </message>
     <message>

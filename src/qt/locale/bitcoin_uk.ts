@@ -500,11 +500,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>Завантажте Частково Підписану Біткойн Транзакцію з буфера обміну</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Вікно вузлів</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Відкрити консоль відлагоджування та діагностики</translation>
     </message>
     <message>
@@ -1966,7 +1966,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>Клієнт користувача</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Вікно вузлів</translation>
     </message>
     <message>

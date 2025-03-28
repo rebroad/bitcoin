@@ -478,11 +478,11 @@
         <translation>Đã cập nhật</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Cửa sổ node</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Mở dòng lệnh tìm và gỡ lỗi cho node</translation>
     </message>
     <message>
@@ -1784,7 +1784,7 @@
         <translation>User đặc vụ</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Cửa sổ node</translation>
     </message>
     <message>

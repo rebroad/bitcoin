@@ -478,11 +478,11 @@
         <translation>Oppdatert</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Nodevindu</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Åpne nodens konsoll for feilsøk og diagnostikk</translation>
     </message>
     <message>
@@ -1776,7 +1776,7 @@
         <translation>Brukeragent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Nodevindu</translation>
     </message>
     <message>

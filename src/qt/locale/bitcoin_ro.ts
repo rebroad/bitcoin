@@ -466,11 +466,11 @@
         <translation>Actualizat</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Fereastra nodului</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Deschide consola pentru depanare şi diagnosticare a nodului</translation>
     </message>
     <message>
@@ -1676,7 +1676,7 @@
         <translation>Agent utilizator</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Fereastra nodului</translation>
     </message>
     <message>

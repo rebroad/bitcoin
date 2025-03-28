@@ -492,11 +492,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>تحميل معاملة بتكوين الموقعة جزئيًا من الحافظة</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>نافذة Node </translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>افتح وحدة التحكم في تصحيح أخطاء node والتشخيص</translation>
     </message>
     <message>
@@ -1819,7 +1819,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>وكيل المستخدم</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>نافذة Node </translation>
     </message>
     <message>

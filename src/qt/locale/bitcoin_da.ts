@@ -478,11 +478,11 @@
         <translation>Opdateret</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Knudevindue</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Åbn knudens fejlsøgningskonsol</translation>
     </message>
     <message>
@@ -1792,7 +1792,7 @@
         <translation>Brugeragent</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Knudevindue</translation>
     </message>
     <message>

@@ -478,11 +478,11 @@
         <translation>Terbaru</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Jendela Node</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Buka konsol debug dan diagnosa node</translation>
     </message>
     <message>
@@ -1790,7 +1790,7 @@
 </translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Jendela Node</translation>
     </message>
     <message>

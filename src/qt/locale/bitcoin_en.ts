@@ -646,12 +646,12 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message>
         <location line="+2"/>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2871,7 +2871,7 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <location line="-1125"/>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

@@ -500,11 +500,11 @@ Allekirjoitus on mahdollista vain 'legacy'-tyyppisillä osoitteilla.</translatio
         <translation>Lataa osittain allekirjoitettu bitcoin-siirtotapahtuma leikepöydältä</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Solmu ikkuna</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>Avaa solmun diagnostiikka- ja vianmäärityskonsoli </translation>
     </message>
     <message>
@@ -1970,7 +1970,7 @@ Allekirjoitus on mahdollista vain 'legacy'-tyyppisillä osoitteilla.</translatio
         <translation>Käyttöliittymä</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>Solmun näkymä</translation>
     </message>
     <message>

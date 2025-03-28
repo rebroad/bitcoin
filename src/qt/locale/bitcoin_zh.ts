@@ -474,11 +474,11 @@
         <translation>最新的</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>结点窗口</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>打开结点的调试和诊断控制台</translation>
     </message>
     <message>
@@ -1060,7 +1060,7 @@
 <context>
     <name>RPCConsole</name>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>结点窗口</translation>
     </message>
     <message>

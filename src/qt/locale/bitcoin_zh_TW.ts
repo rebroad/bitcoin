@@ -495,11 +495,11 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>從剪貼簿載入部分簽名的比特幣交易</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>節點視窗</translation>
     </message>
     <message>
-        <source>Open node debugging and diagnostic console</source>
+        <source>Open debugging and diagnostic console</source>
         <translation>開啟節點調試和診斷控制台</translation>
     </message>
     <message>
@@ -1913,7 +1913,7 @@ Signing is only possible with addresses of the type 'legacy'.</source>
         <translation>使用者代理</translation>
     </message>
     <message>
-        <source>Node window</source>
+        <source>Debug window</source>
         <translation>節點視窗</translation>
     </message>
     <message>
