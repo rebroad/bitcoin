@@ -442,7 +442,7 @@ private:
     std::chrono::seconds m_stale_tip_check_time{0s};
 
     /** Last time we had no connections */
-    int64_t m_last_no_connections{GetTime()}; // REBTODO - move to net.cpp?
+    uint64_t m_last_no_connections{GetTime()}; // REBTODO - move to net.cpp?
 
     /** Number of times net.cpp has run a ProcessMessages() loop */
     int64_t nNetClicks{0};
@@ -2314,26 +2314,29 @@ void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string s
         }
         strNew += "new ";
     }
-    bool fCheck = false;
+	//bool fShow = false;
+    bool fCheck = false, fBest = false;
     std::string strExtra;
-    bool fShow = false;
     if (pindex) {
         if (pindex == m_chainman.ActiveChain().Tip()) {
-            fShow = true;
+            //fShow = true;
             strDesc += "tip "; // it's the current tip
         } else if (pindex == pindexBestHeader) {
-            fShow = true;
+            fBest = true; // fShow = true;
             strDesc += "best "; // it's the current best header
         } else if (pindex->nChainWork < m_chainman.ActiveChain().Tip()->nChainWork)
             strDesc += "old "; // it's behind our current tip
         else if (pindex->nTx > 0)
             strDesc += "got "; // it's been downloaded
         strExtra = strprintf("%s ", strBlockInfo(pindex, &fCheck));
-        if (pindex->nChainWork >= (pindexBestHeader->pprev ? (pindexBestHeader->pprev->pprev ? pindexBestHeader->pprev->pprev->nChainWork : 0) : 0))
-            fShow = true;
+		if (fBest) {
+			CNodeState *nodestate = State(node);
+			strExtra += strprintf("tif=%d ", nodestate->nTxInFlight);
+		}
+        //if (pindex->nChainWork >= (pindexBestHeader->pprev ? (pindexBestHeader->pprev->pprev ? pindexBestHeader->pprev->pprev->nChainWork : 0) : 0)) fShow = true;
     } else {
         strDesc += "invalid "; // it's probably invalid
-        fShow = true;
+        //fShow = true;
     }
     std::string strSize;
     if (nSize)
@@ -4041,9 +4044,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     State(pnode->GetId())->nNextBlockTXs = 0;
                 });
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
-                    NodeId nodeid; int64_t nTime; unsigned int nSize;
-                    if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize))
-                        req.indexes.push_back(i);
+                    NodeId nodeid; uint64_t nTime; unsigned int nSize;
+                    if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize)) req.indexes.push_back(i);
                     else if (!fSeenBefore) {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
                             m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
