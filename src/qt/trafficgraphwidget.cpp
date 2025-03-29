@@ -83,8 +83,7 @@ int TrafficGraphWidget::y_value(float value) {
 
     float result = fToggle ? pow(value, 0.30102) / pow(fMax, 0.30102) : value / fMax;
 
-    if (std::isnan(result) || std::isinf(result))
-        return YMARGIN + h;
+    if (std::isnan(result) || std::isinf(result)) return YMARGIN + h;
 
     return YMARGIN + h - (h * 1.0 * result);
 }
@@ -92,33 +91,31 @@ int TrafficGraphWidget::y_value(float value) {
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
     int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / values[m_value]), int(samples.size()));
     if (sampleCount <= 0) return;
-    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-    int x = XMARGIN + w;
+    if (m_range <= 0.0f) return; // Avoid division by zero
+
+    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2, x = XMARGIN + w;
     path.moveTo(x, YMARGIN + h);
     for(int i = 0; i < sampleCount; ++i) {
+        float sample = samples.at(i);
+        if (std::isnan(sample) || std::isinf(sample)) continue;
         double ratio = static_cast<double>(i) * values[m_value] / m_range / DESIRED_SAMPLES;
+        if (std::isnan(ratio) || std::isinf(ratio)) continue;
         x = XMARGIN + w - static_cast<int>(w * ratio);
-        int y = y_value(samples.at(i));
-        path.lineTo(x, y);
+        path.lineTo(x, y_value(sample));
     }
     path.lineTo(x, YMARGIN + h);
 }
 
 float floatmax(float a, float b) {
-    if (a > b) return a;
-    else return b;
+    return (a > b ? a : b);
 }
 
-void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
-{
+void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
     QWidget::mouseMoveEvent(event);
     if (fMax <= 0.0f) return;
-    static int last_x = -1;
-    static int last_y = -1;
-    int x = event->x();
-    int y = event->y();
-    x_offset = event->globalX() - x;
-    y_offset = event->globalY() - y;
+    static int last_x = -1, last_y = -1;
+    int x = event->x(), y = event->y();
+    x_offset = event->globalX() - x; y_offset = event->globalY() - y;
     if (last_x == x && last_y == y) return; // Do nothing if mouse hasn't moved
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
@@ -358,16 +355,16 @@ void TrafficGraphWidget::updateStuff() {
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
         uint64_t msecs_per_sample = static_cast<uint64_t>(values[i]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
-		/*if (m_time_offset > msecs_per_sample) {
-			uint64_t zero_samples = std::min(m_time_offset / msecs_per_sample, static_cast<uint64_t>(DESIRED_SAMPLES));
-			for (int j = 0; j < (int)zero_samples; j++) {
-				vSamplesIn[i].push_front(0);
-				vSamplesOut[i].push_front(0);
-				uint64_t missed_time = now - m_time_offset + (j * msecs_per_sample);
-				vTimeStamp[i].push_front(std::chrono::milliseconds{missed_time});
-			}
-		}*/
-		if (m_time_offset) {
+        /*if (m_time_offset > msecs_per_sample) {
+            uint64_t zero_samples = std::min(m_time_offset / msecs_per_sample, static_cast<uint64_t>(DESIRED_SAMPLES));
+            for (int j = 0; j < (int)zero_samples; j++) {
+                vSamplesIn[i].push_front(0);
+                vSamplesOut[i].push_front(0);
+                uint64_t missed_time = now - m_time_offset + (j * msecs_per_sample);
+                vTimeStamp[i].push_front(std::chrono::milliseconds{missed_time});
+            }
+        }*/
+        if (m_time_offset) {
             m_offset[i] += m_time_offset;
             if (m_offset[i] > now - nLastTime[i].count()) m_offset[i] = now - nLastTime[i].count();
         }
@@ -384,7 +381,7 @@ void TrafficGraphWidget::updateStuff() {
             if (i == m_new_value) update_fMax();
         }
     }
-	m_time_offset = 0;
+    m_time_offset = 0;
 
     static float y_increment = 0, x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2)) fUpdate = true;
@@ -583,8 +580,8 @@ bool TrafficGraphWidget::loadDataFromBinary() {
                 vTimeStamp[i].push_back(std::chrono::milliseconds{static_cast<int64_t>(timeMs)});
             }
 
-			if (version >= 3) filein >> VARINT(m_offset[i]);
-			else m_offset[i] = 0;
+            if (version >= 3) filein >> VARINT(m_offset[i]);
+            else m_offset[i] = 0;
         }
 
         filein.fclose();
