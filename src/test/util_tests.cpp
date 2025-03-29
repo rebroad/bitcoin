@@ -817,10 +817,12 @@ BOOST_AUTO_TEST_CASE(util_GetChainName)
 {
     TestArgsManager test_args;
     const auto testnet = std::make_pair("-testnet", ArgsManager::ALLOW_ANY);
+    const auto testnet4 = std::make_pair("-testnet4", ArgsManager::ALLOW_ANY);
     const auto regtest = std::make_pair("-regtest", ArgsManager::ALLOW_ANY);
-    test_args.SetupArgs({testnet, regtest});
+    test_args.SetupArgs({testnet, testnet4, regtest});
 
     const char* argv_testnet[] = {"cmd", "-testnet"};
+    const char* argv_testnet4[] = {"cmd", "-testnet4"};
     const char* argv_regtest[] = {"cmd", "-regtest"};
     const char* argv_test_no_reg[] = {"cmd", "-testnet", "-noregtest"};
     const char* argv_both[] = {"cmd", "-testnet", "-regtest"};
@@ -835,6 +837,12 @@ BOOST_AUTO_TEST_CASE(util_GetChainName)
 
     BOOST_CHECK(test_args.ParseParameters(2, (char**)argv_testnet, error));
     BOOST_CHECK_EQUAL(test_args.GetChainName(), "test");
+
+    BOOST_CHECK(test_args.ParseParameters(0, (char**)argv_testnet4, error));
+    BOOST_CHECK_EQUAL(test_args.GetChainName(), "main");
+
+    BOOST_CHECK(test_args.ParseParameters(2, (char**)argv_testnet4, error));
+    BOOST_CHECK_EQUAL(test_args.GetChainName(), "testnet4");
 
     BOOST_CHECK(test_args.ParseParameters(2, (char**)argv_regtest, error));
     BOOST_CHECK_EQUAL(test_args.GetChainName(), "regtest");
@@ -929,17 +937,12 @@ struct ArgsMergeTestingSetup : public BasicTestingSetup {
         ForEachNoDup(arg_actions, SET, NEGATE, [&] {
             ActionList conf_actions = {};
             ForEachNoDup(conf_actions, SET, SECTION_NEGATE, [&] {
-                for (bool soft_set : {false, true}) {
-                    for (bool force_set : {false, true}) {
-                        for (const std::string& section : {CBaseChainParams::MAIN, CBaseChainParams::TESTNET, CBaseChainParams::SIGNET}) {
-                            for (const std::string& network : {CBaseChainParams::MAIN, CBaseChainParams::TESTNET, CBaseChainParams::SIGNET}) {
-                                for (bool net_specific : {false, true}) {
+                for (bool soft_set : {false, true})
+                    for (bool force_set : {false, true})
+                        for (const std::string& section : {CBaseChainParams::MAIN, CBaseChainParams::TESTNET, CBaseChainParams::TESTNET4, CBaseChainParams::SIGNET})
+                            for (const std::string& network : {CBaseChainParams::MAIN, CBaseChainParams::TESTNET, CBaseChainParams::TESTNET4, CBaseChainParams::SIGNET})
+                                for (bool net_specific : {false, true})
                                     fn(arg_actions, conf_actions, soft_set, force_set, section, network, net_specific);
-                                }
-                            }
-                        }
-                    }
-                }
             });
         });
     }
@@ -1086,7 +1089,7 @@ BOOST_FIXTURE_TEST_CASE(util_ArgsMerge, ArgsMergeTestingSetup)
     // Results file is formatted like:
     //
     //   <input> || <IsArgSet/IsArgNegated/GetArg output> | <GetArgs output> | <GetUnsuitable output>
-    BOOST_CHECK_EQUAL(out_sha_hex, "d1e436c1cd510d0ec44d5205d4b4e3bee6387d316e0075c58206cb16603f3d82");
+    BOOST_CHECK_EQUAL(out_sha_hex, "f1ee5ab094cc43d16a6086fa7f2c10389e0f99902616b31bbf29189972ad1473");
 }
 
 // Similar test as above, but for ArgsManager::GetChainName function.
@@ -1189,7 +1192,7 @@ BOOST_FIXTURE_TEST_CASE(util_ChainMerge, ChainMergeTestingSetup)
     // Results file is formatted like:
     //
     //   <input> || <output>
-    BOOST_CHECK_EQUAL(out_sha_hex, "f263493e300023b6509963887444c41386f44b63bc30047eb8402e8c1144854c");
+    BOOST_CHECK_EQUAL(out_sha_hex, "9e60306e1363528bbc19a47f22bcede88e5d6815212f18ec8e6cdc4638dddab4");
 }
 
 BOOST_AUTO_TEST_CASE(util_ReadWriteSettings)

@@ -279,6 +279,7 @@ const std::list<SectionInfo> ArgsManager::GetUnrecognizedSections() const
         CBaseChainParams::REGTEST,
         CBaseChainParams::SIGNET,
         CBaseChainParams::TESTNET,
+        CBaseChainParams::TESTNET4,
         CBaseChainParams::MAIN
     };
 

@@ -78,8 +78,7 @@ void PaymentServer::ipcParseCommandLine(int argc, char* argv[])
     for (int i = 1; i < argc; i++)
     {
         QString arg(argv[i]);
-        if (arg.startsWith("-"))
-            continue;
+        if (arg.startsWith("-")) continue;
 
         // If the bitcoin: URI contains a payment request, we are not able to detect the
         // network as that would require fetching and parsing the payment request.
@@ -91,17 +90,20 @@ void PaymentServer::ipcParseCommandLine(int argc, char* argv[])
             savedPaymentRequests.insert(arg);
 
             SendCoinsRecipient r;
-            if (GUIUtil::parseBitcoinURI(arg, &r) && !r.address.isEmpty())
-            {
+            if (GUIUtil::parseBitcoinURI(arg, &r) && !r.address.isEmpty()) {
                 auto tempChainParams = CreateChainParams(gArgs, CBaseChainParams::MAIN);
 
-                if (IsValidDestinationString(r.address.toStdString(), *tempChainParams)) {
+                if (IsValidDestinationString(r.address.toStdString(), *tempChainParams))
                     SelectParams(CBaseChainParams::MAIN);
-                } else {
+                else {
                     tempChainParams = CreateChainParams(gArgs, CBaseChainParams::TESTNET);
-                    if (IsValidDestinationString(r.address.toStdString(), *tempChainParams)) {
+                    if (IsValidDestinationString(r.address.toStdString(), *tempChainParams))
                         SelectParams(CBaseChainParams::TESTNET);
-                    }
+					else {
+                        tempChainParams = CreateChainParams(gArgs, CBaseChainParams::TESTNET4);
+                        if (IsValidDestinationString(r.address.toStdString(), *tempChainParams))
+                            SelectParams(CBaseChainParams::TESTNET4);
+					}
                 }
             }
         }
