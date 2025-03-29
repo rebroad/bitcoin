@@ -120,8 +120,9 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
     int sampleSize = vTimeStamp[m_value].size();
-    unsigned int smallest_distance = 50; int closest_i = (i >= 0 && i < sampleSize) ? i : -1;
-    if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
+    unsigned int smallest_distance = 50;
+    int closest_i = (i >= 0 && i < sampleSize) ? i : -1;
+    if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3)
         for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
             float val = floatmax(vSamplesIn[m_value].at(test_i), vSamplesOut[m_value].at(test_i));
             int y_data = y_value(val);
@@ -131,7 +132,6 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
                 closest_i = test_i;
             }
         }
-    }
     //if (ttpoint != closest_i || closest_i != -1)
     //    LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
     if (ttpoint != closest_i) {
