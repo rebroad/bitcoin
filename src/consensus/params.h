@@ -131,6 +131,8 @@ struct Params {
         } // no default case, so the compiler can warn about missing cases
         return std::numeric_limits<int>::max();
     }
+
+    bool enforce_BIP94;
 };
 
 } // namespace Consensus
