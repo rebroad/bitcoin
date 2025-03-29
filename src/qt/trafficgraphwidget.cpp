@@ -90,8 +90,7 @@ int TrafficGraphWidget::y_value(float value) {
 
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
     int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / values[m_value]), int(samples.size()));
-    if (sampleCount <= 0) return;
-    if (m_range <= 0.0f) return; // Avoid division by zero
+    if (sampleCount <= 0 || m_range <= 0) return;
 
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2, x = XMARGIN + w;
     path.moveTo(x, YMARGIN + h);
@@ -312,7 +311,7 @@ void TrafficGraphWidget::update_fMax() {
 }
 
 bool update_num(float new_val, float &current, float &increment, int length) {
-    if (new_val == 0 || current == new_val) return false;
+    if (new_val <= 0 || current == new_val) return false;
 
     if (abs(increment) <= abs(0.8 * current) / length) { // allow equal to as current and increment could be zero
         int old_increment = increment;
@@ -344,6 +343,7 @@ bool update_num(float new_val, float &current, float &increment, int length) {
         increment = 0;
     } else
         current += increment;
+    if (current <= 0.0f) current = 0.0001f;
 
     return true;
 }
