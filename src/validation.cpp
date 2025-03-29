@@ -140,6 +140,8 @@ bool CBlockIndexWorkComparator::operator()(const CBlockIndex *pa, const CBlockIn
  */
 RecursiveMutex cs_main;
 
+static constexpr int64_t MAX_TIMEWARP{MAX_FUTURE_BLOCK_TIME};
+
 CBlockIndex *pindexBestHeader = nullptr;
 int g_tiptowards = 0;
 Mutex g_best_block_mutex;
@@ -3471,6 +3473,18 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     // Check timestamp against prev
     if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
+
+    // Testnet4 only: Check timestamp against prev for difficulty-adjustment
+    // blocks to prevent timewarp attacks (see https://github.com/bitcoin/bitcoin/pull/15482).
+    if (consensusParams.enforce_BIP94) {
+        // Check timestamp for the first block of each difficulty adjustment
+        // interval, except the genesis block.
+        if (nHeight % consensusParams.DifficultyAdjustmentInterval() == 0) {
+            if (block.GetBlockTime() < pindexPrev->GetBlockTime() - MAX_TIMEWARP) {
+                return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-timewarp-attack", "block's timestamp is too early on diff adjustment block");
+            }
+        }
+    }
 
     // Check timestamp
     if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME)
