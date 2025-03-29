@@ -251,8 +251,23 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         painter.setPen(Qt::yellow);
         int w = width() - XMARGIN * 2;
         double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
+        if (std::isnan(ratio) || std::isinf(ratio)) {
+            QToolTip::hideText();
+            return;
+        }
         int x = XMARGIN + w - static_cast<int>(w * ratio);
-        int y = y_value(floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint)));
+        if (ttpoint >= vSamplesIn[m_value].size() || ttpoint >= vSamplesOut[m_value].size()) {
+            QToolTip::hideText();
+            return;
+        }
+        float inSample = vSamplesIn[m_value].at(ttpoint);
+        float outSample = vSamplesOut[m_value].at(ttpoint);
+        if (std::isnan(inSample) || std::isinf(inSample) || 
+            std::isnan(outSample) || std::isinf(outSample)) {
+            QToolTip::hideText();
+            return;
+        }
+        int y = y_value(floatmax(inSample, outSample));
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
         std::chrono::milliseconds sampleTime{0};
