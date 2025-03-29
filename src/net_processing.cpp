@@ -2457,9 +2457,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
-        if ((CanDirectFetch() || !fUpdateChain) && fDownloadBlocks && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork <= pindexLast->nChainWork) {
-            if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
-                LogPrintf("CURIOUS: COMPETING BLOCK\n");
+        if ((CanDirectFetch() || !fUpdateChain) && fDownloadBlocks && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork < pindexLast->nChainWork) {
             std::vector<const CBlockIndex*> vToFetch;
             const CBlockIndex *pindexWalk = pindexLast;
             // Calculate all the blocks we'd need to switch to pindexLast, up to a limit.
@@ -2523,8 +2521,11 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                     }
                 }
             }
-        } else if (received_new_header)
+        } else if (received_new_header) {
+		    if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
+                LogPrintf("CURIOUS: COMPETING BLOCK\n");
             LogPrint(BCLog::BLOCK, "%s%s%s\n", fDownloadBlocks ? "" : "!fDownloadBlocks ", CanDirectFetch() ? "" : "!CanDirectFetch() ", pindexLast->IsValid(BLOCK_VALID_TREE) ? "" : "!IsValid(BLOCK_VALID_TREE)");
+		}
         // If we're in IBD, we want outbound peers that will serve us a useful
         // chain. Disconnect peers that are on chains with insufficient work.
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && nCount != MAX_HEADERS_RESULTS) {
