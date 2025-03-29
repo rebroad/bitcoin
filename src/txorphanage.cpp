@@ -104,17 +104,16 @@ int TxOrphanage::EraseForPeer(NodeId peer)
     return nErased;
 }
 
-unsigned int TxOrphanage::LimitOrphans(unsigned int max_orphans)
-{
+unsigned int TxOrphanage::LimitOrphans(unsigned int max_orphans) {
     AssertLockHeld(g_cs_orphans);
 
     unsigned int nEvicted = 0;
-    static int64_t nNextSweep;
-    int64_t nNow = GetTime();
+    static uint64_t nNextSweep;
+    uint64_t nNow = GetTime();
     if (nNextSweep <= nNow) {
         // Sweep out expired orphan pool entries:
         int nErased = 0;
-        int64_t nMinExpTime = nNow + ORPHAN_TX_EXPIRE_TIME - ORPHAN_TX_EXPIRE_INTERVAL;
+        uint64_t nMinExpTime = nNow + ORPHAN_TX_EXPIRE_TIME - ORPHAN_TX_EXPIRE_INTERVAL;
         std::map<uint256, OrphanTx>::iterator iter = m_orphans.begin();
         while (iter != m_orphans.end())
         {
