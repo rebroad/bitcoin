@@ -1,3 +1,5 @@
+Add CaughtUp() function, and only broadcast invs, and debug "pit not set", etc when CaughtUp
+
 Instead of IBD ending when our tip is less than 24 hours old, instead end it when we're less than 10 minutes away from completing IBD.
 
 when changing range in the traffic graph - pin X and Y so they scale the same together
