@@ -251,6 +251,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         int w = width() - XMARGIN * 2;
         double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
         if (std::isnan(ratio) || std::isinf(ratio)) {
+			LogPrintf("%s: bad ratio Nan\n", __func__);
             QToolTip::hideText();
             return;
         }
@@ -263,6 +264,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         float outSample = vSamplesOut[m_value].at(ttpoint);
         if (std::isnan(inSample) || std::isinf(inSample) || 
             std::isnan(outSample) || std::isinf(outSample)) {
+			LogPrintf("%s: bad sample Nan\n", __func__);
             QToolTip::hideText();
             return;
         }
