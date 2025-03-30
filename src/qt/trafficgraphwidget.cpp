@@ -122,8 +122,8 @@ int TrafficGraphWidget::findClosestPoint(int x, int y, int rangeIndex) const {
         }
     }
 
-    //if (ttpoint != closest_i || closest_i != -1)
-    //    LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
+    if (ttpoint != closest_i || closest_i != -1)
+	    LogPrintf("%s: i=%d ttpoint=%d m_range=%f findClosestPoint(%d, %d, %d) = %d\n", __func__, i, ttpoint, m_range, x, y, rangeIndex, closest_i);
     return closest_i;
 }
 
@@ -430,7 +430,6 @@ void TrafficGraphWidget::updateStuff() {
                 int y = y_value(currentVal);
 				int oldTtpoint = ttpoint;
                 ttpoint = findClosestPoint(x, y, next_m_value);
-				LogPrintf("%s: ttpoint=%d m_range=%f findClosestPoint(%d, %d, %d) = %d\n", __func__, oldTtpoint, m_range, x, y, next_m_value, ttpoint);
             } else {
 				LogPrintf("%s: invalid ratio. Lost ttpoint\n", __func__);
 				ttpoint = -1;
