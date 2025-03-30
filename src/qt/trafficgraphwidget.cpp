@@ -435,7 +435,7 @@ void TrafficGraphWidget::updateStuff() {
     if (next_m_value != m_value) {
         if (ttpoint >= 0) {
             int w = width() - XMARGIN * 2;
-            double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
+            double ratio = static_cast<double>(ttpoint) * values[m_value] / next_m_value / DESIRED_SAMPLES;
             if (!std::isnan(ratio) && !std::isinf(ratio)) {
                 int x = XMARGIN + w - static_cast<int>(w * ratio);
                 float currentVal = floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint));
