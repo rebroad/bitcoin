@@ -127,6 +127,8 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
     setFixedSize(r.size());
     move(QGuiApplication::primaryScreen()->geometry().center() - r.center());
 
+    setWindowFlags(windowFlags() | Qt::WindowDoesNotAcceptFocus);
+
     installEventFilter(this);
 
     GUIUtil::handleCloseWindowShortcut(this);
