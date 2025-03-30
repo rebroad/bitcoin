@@ -122,7 +122,7 @@ int TrafficGraphWidget::findClosestPoint(int x, int y, int rangeIndex) const {
         }
     }
 
-    if (ttpoint != closest_i || closest_i != -1)
+    if (ttpoint != closest_i)
 	    LogPrintf("%s: i=%d ttpoint=%d m_range=%f smdist=%d findClosestPoint(%d, %d, %d) = %d\n", __FILE__, i, ttpoint, m_range, smallest_distance, x, y, rangeIndex, closest_i);
     return (smallest_distance < std::min(h, w) / 2.0) ? closest_i : -1;
 }
