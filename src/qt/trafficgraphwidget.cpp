@@ -427,9 +427,7 @@ void TrafficGraphWidget::updateStuff() {
             if (!std::isnan(ratio) && !std::isinf(ratio)) {
                 int x = XMARGIN + w - static_cast<int>(w * ratio);
                 float currentVal = floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint));
-                int y = y_value(currentVal);
-				int oldTtpoint = ttpoint;
-                ttpoint = findClosestPoint(x, y, next_m_value);
+                ttpoint = findClosestPoint(x, y_value(currentVal), next_m_value);
             } else {
 				LogPrintf("%s: invalid ratio. Lost ttpoint\n", __func__);
 				ttpoint = -1;
