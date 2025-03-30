@@ -106,7 +106,7 @@ int TrafficGraphWidget::findClosestPoint(int x, int y, int rangeIndex) const {
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int sampleSize = vTimeStamp[rangeIndex].size();
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = -1;
-    double smallest_distance = std::min(h, w) / 2.0;
+    double smallest_distance = std::numeric_limits<double>::max();
     if (sampleSize && y <= h + YMARGIN + 10 && y >= YMARGIN - 10) {
         for (int test_i = std::max(0, i - 10); test_i < std::min(i + 10, sampleSize); test_i++) {
             double ratio = static_cast<double>(test_i) * values[rangeIndex] / m_range / DESIRED_SAMPLES;
@@ -123,8 +123,8 @@ int TrafficGraphWidget::findClosestPoint(int x, int y, int rangeIndex) const {
     }
 
     if (ttpoint != closest_i || closest_i != -1)
-	    LogPrintf("%s: i=%d ttpoint=%d m_range=%f findClosestPoint(%d, %d, %d) = %d\n", __func__, i, ttpoint, m_range, x, y, rangeIndex, closest_i);
-    return closest_i;
+	    LogPrintf("%s: i=%d ttpoint=%d m_range=%f smdist=%d findClosestPoint(%d, %d, %d) = %d\n", __func__, i, ttpoint, m_range, smallest_distance, x, y, rangeIndex, closest_i);
+    return (smallest_distance < std::min(h, w) / 2.0) ? closest_i : -1;
 }
 
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
