@@ -123,7 +123,7 @@ int TrafficGraphWidget::findClosestPoint(int x, int y, int rangeIndex) const {
     }
 
     if (ttpoint != closest_i || closest_i != -1)
-	    LogPrintf("%s: i=%d ttpoint=%d m_range=%f smdist=%d findClosestPoint(%d, %d, %d) = %d\n", __func__, i, ttpoint, m_range, smallest_distance, x, y, rangeIndex, closest_i);
+	    LogPrintf("%s: i=%d ttpoint=%d m_range=%f smdist=%d findClosestPoint(%d, %d, %d) = %d\n", __FILE__, i, ttpoint, m_range, smallest_distance, x, y, rangeIndex, closest_i);
     return (smallest_distance < std::min(h, w) / 2.0) ? closest_i : -1;
 }
 
@@ -253,7 +253,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         int w = width() - XMARGIN * 2;
         double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
         if (std::isnan(ratio) || std::isinf(ratio)) {
-            LogPrintf("%s: bad ratio Nan\n", __func__);
+            LogPrintf("%s: bad ratio Nan\n", __FILE__);
             QToolTip::hideText();
             return;
         }
@@ -266,12 +266,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         float outSample = vSamplesOut[m_value].at(ttpoint);
         if (std::isnan(inSample) || std::isinf(inSample) ||
             std::isnan(outSample) || std::isinf(outSample)) {
-            LogPrintf("%s: bad sample Nan\n", __func__);
+            LogPrintf("%s: bad sample Nan\n", __FILE__);
             QToolTip::hideText();
             return;
         }
         int y = y_value(floatmax(inSample, outSample));
-		LogPrintf("%s: circle at %d,%d tt=%d m_range=%d\n", __func__, x, y, ttpoint, m_range);
+		LogPrintf("%s: circle at %d,%d tt=%d m_range=%d\n", __FILE__, x, y, ttpoint, m_range);
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
         std::chrono::milliseconds sampleTime{0};
@@ -328,7 +328,7 @@ bool update_num(float new_val, float &current, float &increment, int length) {
             current = new_val;
             return true;
         }
-        LogPrintf("%s: new increment: %d+1 / %d = %d->%d\n", __func__, current, length, old_increment, increment);
+        LogPrintf("%s: new increment: %d+1 / %d = %d->%d\n", __FILE__, current, length, old_increment, increment);
     } else {
         if (((increment > 0) && (current + increment * 2 > new_val)) ||
                 ((increment < 0) && (current + increment * 2 < new_val))) {
@@ -341,7 +341,7 @@ bool update_num(float new_val, float &current, float &increment, int length) {
     if (abs(increment) < 0.8 * current / length) {
         if ((increment >= 0 && new_val > current) || (increment <= 0 && new_val < current)) {
             if (increment)
-                LogPrintf("%s: final jump. inc=%d < 0.8 * %d / %d\n", __func__, abs(increment), current, length);
+                LogPrintf("%s: final jump. inc=%d < 0.8 * %d / %d\n", __FILE__, abs(increment), current, length);
             current = new_val;
         }
         increment = 0;
@@ -404,18 +404,18 @@ void TrafficGraphWidget::updateStuff() {
     int next_m_value = m_value;
     if (update_num(values[m_new_value], m_range, x_increment, width() - XMARGIN * 2)) {
         if (values[m_new_value] > m_range && values[m_value] < m_range) {
-            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
+            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __FILE__, m_value, m_value+1,
                         values[m_value], values[m_value+1], m_range);
             next_m_value = m_value + 1;
         } else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
-            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
+            LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __FILE__, m_value, m_value-1,
                         values[m_value], values[m_value-1], m_range);
             next_m_value = m_value - 1;
         }
         fUpdate = true;
-        //LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
+        //LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __FILE__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
     } else if (m_value != m_new_value) {
-        LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, m_new_value);
+        LogPrintf("%s: CAUGHT! m_value %d->%d\n", __FILE__, m_value, m_new_value);
         next_m_value = m_new_value;
         fUpdate = true;
     }
@@ -429,7 +429,7 @@ void TrafficGraphWidget::updateStuff() {
                 float currentVal = floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint));
                 ttpoint = findClosestPoint(x, y_value(currentVal), next_m_value);
             } else {
-				LogPrintf("%s: invalid ratio. Lost ttpoint\n", __func__);
+				LogPrintf("%s: invalid ratio. Lost ttpoint\n", __FILE__);
 				ttpoint = -1;
 			}
         }
