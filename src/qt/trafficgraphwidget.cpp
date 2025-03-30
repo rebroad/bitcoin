@@ -71,26 +71,19 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
 
 bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
 
-unsigned int TrafficGraphWidget::getCurrentRangeIndex() const {
-    return m_new_value;
-}
+unsigned int TrafficGraphWidget::getCurrentRangeIndex() const { return m_new_value; }
 
 int TrafficGraphWidget::y_value(float value) const {
     int h = height() - YMARGIN * 2;
-
-    if (fMax <= 0.0001f || value <= std::numeric_limits<float>::epsilon())
-        return YMARGIN + h;
-
+    if (fMax <= 0.0001f || value <= std::numeric_limits<float>::epsilon()) return YMARGIN + h;
     float result = fToggle ? pow(value, 0.30102) / pow(fMax, 0.30102) : value / fMax;
-
     if (std::isnan(result) || std::isinf(result)) return YMARGIN + h;
-
     return YMARGIN + h - (h * 1.0 * result);
 }
 
 void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
     int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / values[m_value]), int(samples.size()));
-    if (sampleCount <= 0 || m_range <= 0) return;
+    if (sampleCount <= 0 || m_range <= 0.0001f) return;
 
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2, x = XMARGIN + w;
     path.moveTo(x, YMARGIN + h);
@@ -105,12 +98,10 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
     path.lineTo(x, YMARGIN + h);
 }
 
-float floatmax(float a, float b) {
-    return (a > b ? a : b);
-}
+float floatmax(float a, float b) { return (a > b ? a : b); }
 
 int TrafficGraphWidget::findClosestPoint(int x, int y, int rangeIndex) const {
-    if (fMax <= 0.0f) return -1;
+    if (fMax <= 0.0f || m_range < 0.0001f) return -1;
 
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int sampleSize = vTimeStamp[rangeIndex].size();
@@ -280,11 +271,11 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
             return;
         }
         int y = y_value(floatmax(inSample, outSample));
+		LogPrintf("%s: circle at %d,%d tt=%d m_range=%d\n", __func__, x, y, ttpoint, m_range);
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
         std::chrono::milliseconds sampleTime{0};
-        if (ttpoint + 1 < sampleCount)
-            sampleTime = vTimeStamp[m_value].at(ttpoint+1);
+        if (ttpoint + 1 < sampleCount) sampleTime = vTimeStamp[m_value].at(ttpoint+1);
         else {
             strTime = "to ";
             sampleTime = vTimeStamp[m_value].at(ttpoint);
@@ -437,8 +428,13 @@ void TrafficGraphWidget::updateStuff() {
                 int x = XMARGIN + w - static_cast<int>(w * ratio);
                 float currentVal = floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint));
                 int y = y_value(currentVal);
+				int oldTtpoint = ttpoint;
                 ttpoint = findClosestPoint(x, y, next_m_value);
-            } else ttpoint = -1;
+				LogPrintf("%s: ttpoint=%d m_range=%f findClosestPoint(%d, %d, %d) = %d\n", __func__, oldTtpoint, m_range, x, y, next_m_value, ttpoint);
+            } else {
+				LogPrintf("%s: invalid ratio. Lost ttpoint\n", __func__);
+				ttpoint = -1;
+			}
         }
         m_value = next_m_value;
     }
