@@ -122,9 +122,21 @@ int TrafficGraphWidget::findClosestPoint(int x, int y, int rangeIndex) const {
         }
     }
 
-    if (ttpoint != closest_i)
-	    LogPrintf("%s: i=%d ttpoint=%d m_range=%f smdist=%d findClosestPoint(%d, %d, %d) = %d\n", __FILE__, i, ttpoint, m_range, smallest_distance, x, y, rangeIndex, closest_i);
-    return (smallest_distance < std::min(h, w) / 2.0) ? closest_i : -1;
+    int result = (smallest_distance < std::min(h, w) / 2.0) ? closest_i : -1;
+    if (result != ttpoint) {
+        if (result >= 0) {
+            double ratio = static_cast<double>(result) * values[rangeIndex] / m_range / DESIRED_SAMPLES;
+            int point_x = XMARGIN + w - static_cast<int>(w * ratio);
+            float val = floatmax(vSamplesIn[rangeIndex].at(result), vSamplesOut[rangeIndex].at(result));
+            int point_y = y_value(val);
+            double dx = x - point_x, dy = y - point_y;
+            LogPrintf("findClosestPoint DEBUG: Found closest_i=%d, coords(x=%d, y=%d), diff(dx=%f, dy=%f), distance=%f\n",
+                      result, point_x, point_y, dx, dy, sqrt(dx*dx + dy*dy));
+        }
+        LogPrintf("%s: i=%d ttpoint=%d m_range=%f smdist=%d findClosestPoint(%d, %d, %d) = %d\n",
+                 __FILE__, i, ttpoint, m_range, smallest_distance, x, y, rangeIndex, closest_i);
+    }
+    return result;
 }
 
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
@@ -271,7 +283,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
             return;
         }
         int y = y_value(floatmax(inSample, outSample));
-		LogPrintf("%s: circle at %d,%d tt=%d m_range=%d\n", __FILE__, x, y, ttpoint, m_range);
+        LogPrintf("%s: circle at %d,%d tt=%d m_range=%d\n", __FILE__, x, y, ttpoint, m_range);
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
         std::chrono::milliseconds sampleTime{0};
@@ -429,9 +441,9 @@ void TrafficGraphWidget::updateStuff() {
                 float currentVal = floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint));
                 ttpoint = findClosestPoint(x, y_value(currentVal), next_m_value);
             } else {
-				LogPrintf("%s: invalid ratio. Lost ttpoint\n", __FILE__);
-				ttpoint = -1;
-			}
+                LogPrintf("%s: invalid ratio. Lost ttpoint\n", __FILE__);
+                ttpoint = -1;
+            }
         }
         m_value = next_m_value;
     }
