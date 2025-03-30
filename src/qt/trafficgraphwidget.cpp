@@ -75,7 +75,7 @@ unsigned int TrafficGraphWidget::getCurrentRangeIndex() const {
     return m_new_value;
 }
 
-int TrafficGraphWidget::y_value(float value) {
+int TrafficGraphWidget::y_value(float value) const {
     int h = height() - YMARGIN * 2;
 
     if (fMax <= 0.0001f || value <= std::numeric_limits<float>::epsilon())
@@ -109,6 +109,33 @@ float floatmax(float a, float b) {
     return (a > b ? a : b);
 }
 
+int TrafficGraphWidget::findClosestPoint(int x, int y, int rangeIndex) const {
+    if (fMax <= 0.0f) return -1;
+
+    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
+    int sampleSize = vTimeStamp[rangeIndex].size();
+    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = -1;
+    double smallest_distance = std::min(h, w) / 2.0;
+    if (sampleSize && y <= h + YMARGIN + 10 && y >= YMARGIN - 10) {
+        for (int test_i = std::max(0, i - 10); test_i < std::min(i + 10, sampleSize); test_i++) {
+            double ratio = static_cast<double>(test_i) * values[rangeIndex] / m_range / DESIRED_SAMPLES;
+            if (std::isnan(ratio) || std::isinf(ratio)) continue;
+            int point_x = XMARGIN + w - static_cast<int>(w * ratio);
+            float val = floatmax(vSamplesIn[rangeIndex].at(test_i), vSamplesOut[rangeIndex].at(test_i));
+            int point_y = y_value(val);
+            double dx = x - point_x, dy = y - point_y, distance = sqrt(dx*dx + dy*dy);
+            if (distance < smallest_distance) {
+                smallest_distance = distance;
+                closest_i = test_i;
+            }
+        }
+    }
+
+    //if (ttpoint != closest_i || closest_i != -1)
+    //    LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
+    return closest_i;
+}
+
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
     QWidget::mouseMoveEvent(event);
     if (fMax <= 0.0f) return;
@@ -116,25 +143,9 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
     int x = event->x(), y = event->y();
     x_offset = event->globalX() - x; y_offset = event->globalY() - y;
     if (last_x == x && last_y == y) return; // Do nothing if mouse hasn't moved
-    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
-    int sampleSize = vTimeStamp[m_value].size();
-    unsigned int smallest_distance = 50;
-    int closest_i = (i >= 0 && i < sampleSize) ? i : -1;
-    if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3)
-        for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
-            float val = floatmax(vSamplesIn[m_value].at(test_i), vSamplesOut[m_value].at(test_i));
-            int y_data = y_value(val);
-            unsigned int distance = abs(y - y_data);
-            if (distance < smallest_distance) {
-                smallest_distance = distance;
-                closest_i = test_i;
-            }
-        }
-    //if (ttpoint != closest_i || closest_i != -1)
-    //    LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
-    if (ttpoint != closest_i) {
-        ttpoint = closest_i;
+    int closestPoint = findClosestPoint(x, y, m_value);
+    if (ttpoint != closestPoint) {
+        ttpoint = closestPoint;
         update(); // Calls paintEvent() to draw or delete the highlighted point
     }
     last_x = x; last_y = y;
@@ -251,7 +262,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         int w = width() - XMARGIN * 2;
         double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
         if (std::isnan(ratio) || std::isinf(ratio)) {
-			LogPrintf("%s: bad ratio Nan\n", __func__);
+            LogPrintf("%s: bad ratio Nan\n", __func__);
             QToolTip::hideText();
             return;
         }
@@ -262,9 +273,9 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         }
         float inSample = vSamplesIn[m_value].at(ttpoint);
         float outSample = vSamplesOut[m_value].at(ttpoint);
-        if (std::isnan(inSample) || std::isinf(inSample) || 
+        if (std::isnan(inSample) || std::isinf(inSample) ||
             std::isnan(outSample) || std::isinf(outSample)) {
-			LogPrintf("%s: bad sample Nan\n", __func__);
+            LogPrintf("%s: bad sample Nan\n", __func__);
             QToolTip::hideText();
             return;
         }
@@ -351,17 +362,14 @@ bool update_num(float new_val, float &current, float &increment, int length) {
 }
 
 void TrafficGraphWidget::updateStuff() {
-    if(!clientModel) return;
-    uint64_t expected_gap = timer->interval();
-    uint64_t now = GetTimeMillis();
-
-    // Check for time jumps
+    if (!clientModel) return;
+    uint64_t expected_gap = timer->interval(), now = GetTimeMillis();
     static uint64_t last_jump_time = 0;
     uint64_t m_time_offset = 0;
+
     if (!vTimeStamp[0].empty()) {
         uint64_t last_time = vTimeStamp[0].front().count();
         uint64_t actual_gap = now - last_time;
-
         if (actual_gap >= 1000 + expected_gap && last_time != last_jump_time) {
             LogPrintf("%s: Time jump of %ds detected.\n", __func__, (actual_gap - expected_gap)/1000);
             m_time_offset = actual_gap - expected_gap;
@@ -402,22 +410,37 @@ void TrafficGraphWidget::updateStuff() {
 
     static float y_increment = 0, x_increment = 0;
     if (update_num(new_fMax, fMax, y_increment, height() - YMARGIN * 2)) fUpdate = true;
+    int next_m_value = m_value;
     if (update_num(values[m_new_value], m_range, x_increment, width() - XMARGIN * 2)) {
         if (values[m_new_value] > m_range && values[m_value] < m_range) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value+1,
                         values[m_value], values[m_value+1], m_range);
-            m_value++; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
+            next_m_value = m_value + 1;
         } else if (m_value > 0 && values[m_new_value] <= m_range && values[m_value-1] > m_range * 0.99) {
             LogPrintf("%s: m_value %d->%d m_range %d->%d cur_range=%d\n", __func__, m_value, m_value-1,
                         values[m_value], values[m_value-1], m_range);
-            m_value--; ttpoint = -1; // TODO - move the tooltip to where the corresponding data point would be
+            next_m_value = m_value - 1;
         }
         fUpdate = true;
         //LogPrintf("%s: new_range=%d range=%d new_val=%d val=%d increment=%d\n", __func__, values[m_new_value], m_range, m_new_value, m_value, x_increment);
     } else if (m_value != m_new_value) {
         LogPrintf("%s: CAUGHT! m_value %d->%d\n", __func__, m_value, m_new_value);
+        next_m_value = m_new_value;
         fUpdate = true;
-        m_value = m_new_value;
+    }
+
+    if (next_m_value != m_value) {
+        if (ttpoint >= 0) {
+            int w = width() - XMARGIN * 2;
+            double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
+            if (!std::isnan(ratio) && !std::isinf(ratio)) {
+                int x = XMARGIN + w - static_cast<int>(w * ratio);
+                float currentVal = floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint));
+                int y = y_value(currentVal);
+                ttpoint = findClosestPoint(x, y, next_m_value);
+            } else ttpoint = -1;
+        }
+        m_value = next_m_value;
     }
 
     static bool last_fToggle = fToggle;

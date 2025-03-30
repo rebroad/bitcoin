@@ -38,7 +38,7 @@ private:
 
 protected:
     void paintEvent(QPaintEvent *) override;
-    int y_value(float value);
+    int y_value(float value) const;
     void mouseMoveEvent(QMouseEvent *event) override;
     int ttpoint = -1;
     int x_offset = 0;
@@ -48,6 +48,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void focusInEvent(QFocusEvent *event) override;
     bool fToggle = true;
+    int findClosestPoint(int x, int y, int rangeIndex) const;
 
 public Q_SLOTS:
     void updateStuff();
