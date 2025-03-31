@@ -100,45 +100,6 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 
 float floatmax(float a, float b) { return (a > b ? a : b); }
 
-int TrafficGraphWidget::findClosestPoint(int x, int y, int rangeIndex) const {
-    if (fMax <= 0.0f || m_range < 0.0001f) return -1;
-
-    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-    int sampleSize = vTimeStamp[rangeIndex].size();
-    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = -1;
-    double smallest_distance = std::numeric_limits<double>::max();
-    if (sampleSize && y <= h + YMARGIN + 10 && y >= YMARGIN - 10) {
-        for (int test_i = std::max(0, i - 10); test_i < std::min(i + 10, sampleSize); test_i++) {
-            double ratio = static_cast<double>(test_i) * values[rangeIndex] / m_range / DESIRED_SAMPLES;
-            if (std::isnan(ratio) || std::isinf(ratio)) continue;
-            int point_x = XMARGIN + w - static_cast<int>(w * ratio);
-            float val = floatmax(vSamplesIn[rangeIndex].at(test_i), vSamplesOut[rangeIndex].at(test_i));
-            int point_y = y_value(val);
-            double dx = x - point_x, dy = y - point_y, distance = sqrt(dx*dx + dy*dy);
-            if (distance < smallest_distance) {
-                smallest_distance = distance;
-                closest_i = test_i;
-            }
-        }
-    }
-
-    int result = (smallest_distance < std::min(h, w) / 2.0) ? closest_i : -1;
-    if (result != ttpoint) {
-        if (result >= 0) {
-            double ratio = static_cast<double>(result) * values[rangeIndex] / m_range / DESIRED_SAMPLES;
-            int point_x = XMARGIN + w - static_cast<int>(w * ratio);
-            float val = floatmax(vSamplesIn[rangeIndex].at(result), vSamplesOut[rangeIndex].at(result));
-            int point_y = y_value(val);
-            double dx = x - point_x, dy = y - point_y;
-            LogPrintf("findClosestPoint DEBUG: Found closest_i=%d, coords(x=%d, y=%d), diff(dx=%f, dy=%f), distance=%f\n",
-                      result, point_x, point_y, dx, dy, sqrt(dx*dx + dy*dy));
-        }
-        LogPrintf("%s: i=%d ttpoint=%d m_range=%f smdist=%d findClosestPoint(%d, %d, %d) = %d\n",
-                 __FILE__, i, ttpoint, m_range, smallest_distance, x, y, rangeIndex, closest_i);
-    }
-    return result;
-}
-
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
     QWidget::mouseMoveEvent(event);
     if (fMax <= 0.0f) return;
@@ -146,9 +107,24 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
     int x = event->x(), y = event->y();
     x_offset = event->globalX() - x; y_offset = event->globalY() - y;
     if (last_x == x && last_y == y) return; // Do nothing if mouse hasn't moved
-    int closestPoint = findClosestPoint(x, y, m_value);
-    if (ttpoint != closestPoint) {
-        ttpoint = closestPoint;
+    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
+    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = -1;
+    int sampleSize = vTimeStamp[m_value].size();
+    unsigned int smallest_distance = 50;
+    if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3)
+        for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
+            float val = floatmax(vSamplesIn[m_value].at(test_i), vSamplesOut[m_value].at(test_i));
+            int y_data = y_value(val);
+            unsigned int distance = abs(y - y_data);
+            if (distance < smallest_distance) {
+                smallest_distance = distance;
+                closest_i = test_i;
+            }
+        }
+    //if (ttpoint != closest_i || closest_i != -1)
+    //    LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
+    if (ttpoint != closest_i) {
+        ttpoint = closest_i;
         update(); // Calls paintEvent() to draw or delete the highlighted point
     }
     last_x = x; last_y = y;
@@ -433,18 +409,8 @@ void TrafficGraphWidget::updateStuff() {
     }
 
     if (next_m_value != m_value) {
-        if (ttpoint >= 0) {
-            int w = width() - XMARGIN * 2;
-            double ratio = static_cast<double>(ttpoint) * values[m_value] / m_range / DESIRED_SAMPLES;
-            if (!std::isnan(ratio) && !std::isinf(ratio)) {
-                int x = XMARGIN + w - static_cast<int>(w * ratio);
-                float currentVal = floatmax(vSamplesIn[m_value].at(ttpoint), vSamplesOut[m_value].at(ttpoint));
-                ttpoint = findClosestPoint(x, y_value(currentVal), next_m_value);
-            } else {
-                LogPrintf("%s: invalid ratio. Lost ttpoint\n", __FILE__);
-                ttpoint = -1;
-            }
-        }
+        // TODO - find the equivalent point in the new m_value
+        ttpoint = -1;
         m_value = next_m_value;
     }
 
