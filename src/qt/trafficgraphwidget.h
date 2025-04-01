@@ -49,6 +49,7 @@ protected:
     void focusInEvent(QFocusEvent *event) override;
     bool fToggle = true;
     int findClosestPoint(int x, int y, int rangeIndex) const;
+    int findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const;
 
 public Q_SLOTS:
     void updateStuff();

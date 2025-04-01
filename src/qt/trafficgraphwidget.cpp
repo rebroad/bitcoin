@@ -409,8 +409,14 @@ void TrafficGraphWidget::updateStuff() {
     }
 
     if (next_m_value != m_value) {
-        // TODO - find the equivalent point in the new m_value
-        ttpoint = -1;
+        // Find the equivalent point in the new range based on timestamp
+        if (ttpoint >= 0 && ttpoint < vTimeStamp[m_value].size()) {
+            int newTtpoint = findClosestPointByTimestamp(m_value, ttpoint, next_m_value);
+            LogPrintf("%s: m_value %d->%d ttpoint %d->%d\n", __FILE__, m_value, next_m_value, ttpoint, newTtpoint);
+            ttpoint = newTtpoint;
+        } else {
+            ttpoint = -1;
+        }
         m_value = next_m_value;
     }
 
@@ -778,4 +784,43 @@ bool TrafficGraphWidget::loadData() {
     }
 
     return true;
+}
+
+int TrafficGraphWidget::findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const {
+    if (sourcePoint < 0 || sourcePoint >= vTimeStamp[sourceRange].size() || 
+        vTimeStamp[targetRange].empty()) {
+        return -1;
+    }
+
+    std::chrono::milliseconds sourceTimestamp = vTimeStamp[sourceRange].at(sourcePoint);
+    std::chrono::milliseconds sourceDuration;
+    if (sourcePoint + 1 < vTimeStamp[sourceRange].size())
+        sourceDuration = sourceTimestamp - vTimeStamp[sourceRange].at(sourcePoint + 1);
+    else {
+        uint64_t msecs_per_sample = static_cast<uint64_t>(values[sourceRange]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
+        sourceDuration = std::chrono::milliseconds(msecs_per_sample);
+    }
+    auto sourceMiddle = sourceTimestamp - (sourceDuration / 2);
+    int closestPoint = -1;
+    std::chrono::milliseconds::rep minDifference = std::numeric_limits<std::chrono::milliseconds::rep>::max();
+    
+    for (int i = 0; i < vTimeStamp[targetRange].size(); ++i) {
+        std::chrono::milliseconds targetTimestamp = vTimeStamp[targetRange].at(i);
+        std::chrono::milliseconds targetDuration;
+        if (i + 1 < vTimeStamp[targetRange].size())
+            targetDuration = targetTimestamp - vTimeStamp[targetRange].at(i + 1);
+        else {
+            uint64_t msecs_per_sample = static_cast<uint64_t>(values[targetRange]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
+            targetDuration = std::chrono::milliseconds(msecs_per_sample);
+        }
+        
+        auto targetMiddle = targetTimestamp - (targetDuration / 2);
+        auto diff = std::abs(targetMiddle.count() - sourceMiddle.count());
+        if (diff < minDifference) {
+            minDifference = diff;
+            closestPoint = i;
+        }
+    }
+    
+    return closestPoint;
 }
