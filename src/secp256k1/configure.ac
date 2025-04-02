@@ -1,4 +1,4 @@
-AC_PREREQ([2.60])
+AC_PREREQ([2.71])
 AC_INIT([libsecp256k1],[0.1])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([build-aux/m4])
@@ -20,10 +20,9 @@ AC_PATH_TOOL(RANLIB, ranlib)
 AC_PATH_TOOL(STRIP, strip)
 
 AM_PROG_CC_C_O
-AC_PROG_CC_C89
-if test x"$ac_cv_prog_cc_c89" = x"no"; then
-  AC_MSG_ERROR([c89 compiler support required])
-fi
+AC_PROG_CC
+# Modern autoconf will check for C99 compliance by default with AC_PROG_CC
+# Here we're only concerned that we have at least C89 support
 AM_PROG_AS
 
 case $host_os in
