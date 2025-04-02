@@ -7,8 +7,13 @@
 
 #include <QWidget>
 #include <QQueue>
+#include <QFile>
+#include <QKeyEvent>
 
 #include <chrono>
+#include <fs.h>
+#include <serialize.h>
+#include <streams.h>
 
 class ClientModel;
 
@@ -17,34 +22,67 @@ class QPaintEvent;
 class QTimer;
 QT_END_NAMESPACE
 
-class TrafficGraphWidget : public QWidget
-{
+#define VALUES_SIZE 13
+
+class TrafficGraphWidget : public QWidget {
     Q_OBJECT
 
 public:
     explicit TrafficGraphWidget(QWidget *parent = nullptr);
     void setClientModel(ClientModel *model);
-    std::chrono::minutes getGraphRange() const;
+    bool GraphRangeBump() const;
+    void exportData();
+    unsigned int getCurrentRangeIndex() const;
 
 protected:
     void paintEvent(QPaintEvent *) override;
+    int y_value(float value) const;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void focusInEvent(QFocusEvent *event) override;
+    int findClosestPoint(int x, int y, int rangeIndex) const;
+    int findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const;
 
 public Q_SLOTS:
-    void updateRates();
-    void setGraphRange(std::chrono::minutes new_range);
-    void clear();
+    void updateStuff();
+    std::chrono::minutes setGraphRange(unsigned int value);
 
 private:
+    void saveData();
+    bool loadDataFromBinary();
+    bool loadData();
+    void update_fMax();
     void paintPath(QPainterPath &path, QQueue<float> &samples);
+    void updateRates(int value);
+    void focusSlider(Qt::FocusReason reason);
+	void drawTooltipPoint(QPainter& painter);
 
     QTimer *timer;
-    float fMax;
-    std::chrono::minutes m_range{0};
-    QQueue<float> vSamplesIn;
-    QQueue<float> vSamplesOut;
-    quint64 nLastBytesIn;
-    quint64 nLastBytesOut;
+    float fMax{0};
+    float new_fMax{0};
+    float m_range{0};
+    int m_value{0};
+    int m_new_value{0};
+    bool m_bump_value{false};
+    bool fToggle = true;
+    int ttpoint = -1;
+    bool tt_in_series = true; // true = in series, false = out series
+    int x_offset = 0;
+    int y_offset = 0;
+    int64_t tt_time = 0;
+    QQueue<float> vSamplesIn[VALUES_SIZE] = {};
+    QQueue<float> vSamplesOut[VALUES_SIZE] = {};
+    QQueue<std::chrono::milliseconds> vTimeStamp[VALUES_SIZE] = {};
+    quint64 nLastBytesIn[VALUES_SIZE] = {};
+    quint64 nLastBytesOut[VALUES_SIZE] = {};
+    std::chrono::milliseconds nLastTime[VALUES_SIZE] = {};
+    unsigned int values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
     ClientModel *clientModel;
+    QString m_dataDir;
+    uint64_t m_totalBytesRecv{0};
+    uint64_t m_totalBytesSent{0};
+    uint64_t m_offset[VALUES_SIZE] = {};
 };
 
 #endif // BITCOIN_QT_TRAFFICGRAPHWIDGET_H
