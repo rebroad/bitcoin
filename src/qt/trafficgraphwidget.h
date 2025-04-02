@@ -57,7 +57,7 @@ public Q_SLOTS:
     std::chrono::minutes setGraphRange(unsigned int value);
 
 private:
-	uint64_t m_offset[VALUES_SIZE] = {};
+    uint64_t m_offset[VALUES_SIZE] = {};
     void saveData();
     bool loadDataFromBinary();
     bool loadData();
@@ -80,7 +80,6 @@ private:
     quint64 nLastBytesOut[VALUES_SIZE] = {};
     std::chrono::milliseconds nLastTime[VALUES_SIZE] = {};
     unsigned int values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
-    //unsigned int values[VALUES_SIZE] = {5, 15, 60, 3*60, 12*60, 2*24*60, 7*24*60, 28*24*60};
     ClientModel *clientModel;
     QString m_dataDir;
     uint64_t m_totalBytesRecv{0};

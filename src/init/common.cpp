@@ -101,16 +101,14 @@ void SetLoggingCategories(const ArgsManager& args)
 
         if (std::none_of(categories.begin(), categories.end(),
             [](std::string cat){return cat == "0" || cat == "none";})) {
-            for (const auto& cat : categories) {
+            for (const auto& cat : categories)
                 LogInstance().EnableCategory(cat);
-            }
         }
     }
 
     // Now remove the logging categories which were explicitly excluded
-    for (const std::string& cat : args.GetArgs("-debugexclude")) {
+    for (const std::string& cat : args.GetArgs("-debugexclude"))
         LogInstance().DisableCategory(cat);
-    }
 }
 
 bool StartLogging(const ArgsManager& args)

@@ -296,7 +296,7 @@ public:
          if (totalmemdelta < oldtotalmemdelta || totalmemusage < oldtotalmemusage || adjusting == 30 || adjusting == 0
                  || utilized > 95) {
              getMempoolDynamicUsage(true);
-             LogPrintf("%s: ratio: %f -> %f (newratio%s mem: %d -> %d (%f%%) (%f%% of max)\n", __func__, oldratio, 
+             LogPrintf("%s: ratio: %f -> %f (newratio%s mem: %d -> %d (%f%%) (%f%% of max)\n", __func__, oldratio,
                  ratio, ratio!=newratio ? strprintf("=%f) split=%d", newratio, adjusting+1) : ")",
                  oldtotalmemdelta, totalmemdelta, oldtotalmemdelta ? 100.0 * totalmemdelta / oldtotalmemdelta : 0,
                  utilized);

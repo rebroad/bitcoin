@@ -322,10 +322,11 @@ bool update_num(float new_val, float &current, float &increment, int length) {
         if (((increment > 0) && (current + increment * 2 > new_val)) ||
                 ((increment < 0) && (current + increment * 2 < new_val))) {
             increment = increment / 2; // Keep the momentum going even if new_val is elsewhere.
-        } else
+        } else {
             if (((increment > 0) && (current + increment * 8 < new_val)) ||
                     ((increment < 0) && (current + increment * 8 > new_val)))
                 increment = increment * 2;
+        }
     }
     if (abs(increment) < 0.8 * current / length) {
         if ((increment >= 0 && new_val > current) || (increment <= 0 && new_val < current)) {
@@ -547,17 +548,13 @@ bool TrafficGraphWidget::loadDataFromBinary() {
     try {
         fs::path pathTrafficGraph = fs::path(clientModel->dataDir().toStdString().c_str()) / "trafficgraphdata.dat";
         FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
-
         if (!file) return false;
         CAutoFile filein(file, SER_DISK, CLIENT_VERSION);
         if (filein.IsNull()) return false;
 
         int version;
         filein >> version;
-        if (version < 1 || version > 3) {
-            LogPrintf("TrafficGraphWidget: Unsupported file version %d, expected 1, 2 or 3\n", version);
-            return false;
-        }
+        if (version < 1 || version > 3) return false;
 
         filein >> VARINT(m_totalBytesRecv) >> VARINT(m_totalBytesSent);
         LogPrintf("TrafficGraphWidget: Read total bytes: recv=%u sent=%u\n", m_totalBytesRecv, m_totalBytesSent);
@@ -593,7 +590,7 @@ bool TrafficGraphWidget::loadDataFromBinary() {
         LogPrintf("TrafficGraphWidget: Data loaded from %s\n", fs::PathToString(pathTrafficGraph));
 
         return true;
-    } catch (const std::exception& e) {
+    } catch (const std::exception&) {
         return false;
     }
 }

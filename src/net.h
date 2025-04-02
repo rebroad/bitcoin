@@ -664,9 +664,9 @@ public:
 
     CNode* AddRef(int num = 0)
     {
-		if (num)
-			nRefCount = nRefCount | num;
-		else
+        if (num)
+            nRefCount = nRefCount | num;
+        else
             nRefCount++;
 
         return this;
@@ -674,10 +674,10 @@ public:
 
     void Release(int num = 0)
     {
-		if (num)
-			nRefCount = nRefCount & ~num;
-		else
-			nRefCount--;
+        if (num)
+            nRefCount = nRefCount & ~num;
+        else
+            nRefCount--;
     }
 
     void AddKnownTx(const uint256& hash)
