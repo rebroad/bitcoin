@@ -50,52 +50,46 @@ void TrafficGraphWidget::setClientModel(ClientModel *model)
 int TrafficGraphWidget::y_value(float value) const
 {
     int h = height() - YMARGIN * 2;
-    return YMARGIN + h - (h * 1.0 * (m_toggle ? (std::pow(value, 0.30102) / std::pow(fMax, 0.30102)) : (value / fMax)));
+    return YMARGIN + h - (h * 1.0 * (m_toggle ? (std::pow(value, 0.30102) / std::pow(m_fmax, 0.30102)) : (value / m_fmax)));
 }
 
 void TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& samples)
 {
-    int sampleCount = samples.size();
-    if (sampleCount <= 0) return;
+    int sample_count = std::min(int(DESIRED_SAMPLES * m_range / m_values[m_value]), int(samples.size()));
+    if (sample_count <= 0) return;
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-    int x = XMARGIN + w;
+    int x = XMARGIN + w + 1, i; // Overscan by 1 pixel to the right
     path.moveTo(x, YMARGIN + h);
-    for (int i = 0; i < sampleCount; ++i) {
-        double ratio = static_cast<double>(i) * m_values[m_value] / m_range / DESIRED_SAMPLES;
-        x = XMARGIN + w - static_cast<int>(w * ratio);
-        path.lineTo(x, y_value(samples.at(i)));
+    for (i = 1; i <= sample_count; ++i) {
+        if (i > 1) { // If i == 1, keep overscan to the right
+            double ratio = static_cast<double>(i) * m_values[m_value] / m_range / DESIRED_SAMPLES;
+            if (i == sample_count && ((m_value == m_new_value && ratio > 0.99) || (m_value != m_new_value && samples.size() == DESIRED_SAMPLES))) {
+                x = XMARGIN - 1; // Overscan by one pixel to the left
+            } else {
+                x = XMARGIN + static_cast<int>(w - w * ratio);
+            }
+        }
+        path.lineTo(x, y_value(samples.at(i - 1)));
     }
     path.lineTo(x, YMARGIN + h);
 }
 
-void TrafficGraphWidget::focusSlider(Qt::FocusReason reason)
+void TrafficGraphWidget::focusSlider()
 {
     QWidget* parent = parentWidget();
     if (parent) {
         QSlider* slider = parent->findChild<QSlider*>("sldGraphRange");
-        if (slider) slider->setFocus(reason);
+        if (slider) slider->setFocus(Qt::OtherFocusReason);
     }
 }
 
 void TrafficGraphWidget::mousePressEvent(QMouseEvent* event)
 {
-    focusSlider(Qt::MouseFocusReason);
     QWidget::mousePressEvent(event);
+    focusSlider();
     m_toggle = !m_toggle;
+    m_update = true;
     update();
-}
-
-void TrafficGraphWidget::mouseReleaseEvent(QMouseEvent* event)
-{
-    QWidget::mouseReleaseEvent(event);
-    focusSlider(Qt::MouseFocusReason);
-}
-
-void TrafficGraphWidget::focusInEvent(QFocusEvent* event)
-{
-    QWidget::focusInEvent(event);
-    // When widget gets focus through any means (like tab navigation)
-    focusSlider(Qt::OtherFocusReason);
 }
 
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent* event)
@@ -129,6 +123,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent* event)
     if (m_tt_point != closest_i || m_tt_in_series != is_in_series) {
         m_tt_point = closest_i;
         m_tt_in_series = is_in_series;
+        m_update = true;
         update(); // Calls paintEvent() to draw or delete the highlighted point
     }
     last_x = x;
@@ -140,207 +135,86 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
     int w = width() - XMARGIN * 2;
     double ratio = static_cast<double>(m_tt_point) * m_values[m_value] / m_range / DESIRED_SAMPLES;
     int x = XMARGIN + w - static_cast<int>(w * ratio);
-    float inSample = m_samples_in[m_value].at(m_tt_point);
-    float outSample = m_samples_out[m_value].at(m_tt_point);
-    float selectedSample = m_tt_in_series ? inSample : outSample;
-    int y = y_value(selectedSample);
+    float in_sample = m_samples_in[m_value].at(m_tt_point);
+    float out_sample = m_samples_out[m_value].at(m_tt_point);
+    float selected_sample = m_tt_in_series ? in_sample : out_sample;
+    int y = y_value(selected_sample);
     painter.setPen(Qt::yellow);
     painter.drawEllipse(QPointF(x, y), 3, 3);
-    QString strTime;
-    int64_t sampleTime;
+    QString str_tt;
+    int64_t sample_time;
     if (m_tt_point + 1 < m_time_stamp[m_value].size()) {
-        sampleTime = m_time_stamp[m_value].at(m_tt_point + 1);
-    } else {
-        strTime = "to ";
-        sampleTime = m_time_stamp[m_value].at(m_tt_point);
-    }
-    int age = GetTime() - sampleTime / 1000;
+        sample_time = m_time_stamp[m_value].at(m_tt_point + 1);
+    } else
+        sample_time = m_time_stamp[m_value].at(m_tt_point);
+    int age = GetTime() - sample_time / 1000;
     if (age < 60 * 60 * 23)
-        strTime += QString::fromStdString(FormatISO8601Time(sampleTime / 1000));
+        str_tt += QString::fromStdString(FormatISO8601Time(sample_time / 1000));
     else
-        strTime += QString::fromStdString(FormatISO8601DateTime(sampleTime / 1000));
-    int nDuration = (m_time_stamp[m_value].at(m_tt_point) - sampleTime);
-    if (nDuration > 0) {
-        if (nDuration > 9999)
-            strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{(nDuration + 500) / 1000});
+        str_tt += QString::fromStdString(FormatISO8601DateTime(sample_time / 1000));
+    int duration = (m_time_stamp[m_value].at(m_tt_point) - sample_time);
+    if (duration > 0) {
+        if (duration > 9999)
+            str_tt += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{(duration + 500) / 1000});
         else
-            strTime += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{nDuration * 1000});
+            str_tt += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{duration * 1000});
     }
-    QString strData = tr("In") + " " + GUIUtil::formatBytesps(m_samples_in[m_value].at(m_tt_point) * 1000) + " " + tr("Out") + " " + GUIUtil::formatBytesps(m_samples_out[m_value].at(m_tt_point) * 1000);
+    str_tt += "\n   " + tr("In") + " " + GUIUtil::formatBytesps(m_samples_in[m_value].at(m_tt_point) * 1000) +
+                      "\n" + tr("Out") + " " + GUIUtil::formatBytesps(m_samples_out[m_value].at(m_tt_point) * 1000);
+
     // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
-    QToolTip::showText(QPoint(x + m_x_offset, y + m_y_offset), strTime + "\n. " + strData);
-    QToolTip::showText(QPoint(x + m_x_offset, y + m_y_offset), strTime + "\n  " + strData);
+    QToolTip::showText(QPoint(x + m_x_offset, y + m_y_offset), str_tt + ".");
+    QToolTip::showText(QPoint(x + m_x_offset, y + m_y_offset), str_tt);
     m_tt_time = GetTime();
 }
 
-bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
+// Helper function to draw text with outline
+void drawOutlinedText(QPainter& painter, int x, int y, const QString& text, const QColor& textColor = Qt::white) {
+    // Save the painter state
+    painter.save();
 
-unsigned int TrafficGraphWidget::getCurrentRangeIndex() const { return m_new_value; }
+    // Draw the outline by drawing the text multiple times with small offsets
+    painter.setPen(QColor(0, 0, 0, 64));
+    for (int dx = -2; dx <= 2; dx++)
+        for (int dy = -2; dy <= 2; dy++)
+            painter.drawText(x + dx, y + dy, text);
 
-int TrafficGraphWidget::y_value(float value) const {
-    int h = height() - YMARGIN * 2;
-    if (m_fmax <= 0.0001f || value <= std::numeric_limits<float>::epsilon()) return YMARGIN + h;
-    float result = m_toggle ? pow(value, 0.30102) / pow(m_fmax, 0.30102) : value / m_fmax;
-    if (std::isnan(result) || std::isinf(result)) return YMARGIN + h;
-    return YMARGIN + h - (h * 1.0 * result);
+    // Draw the main text
+    painter.setPen(textColor);
+    painter.drawText(x, y, text);
+
+    // Restore the painter state
+    painter.restore();
 }
 
-void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
-    int sampleCount = std::min(int(DESIRED_SAMPLES * m_range / m_values[m_value]), int(samples.size()));
-    if (sampleCount <= 0 || m_range <= 0.0001f) return;
-
-    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2, x = XMARGIN + w;
-    path.moveTo(x, YMARGIN + h);
-    for(int i = 0; i < sampleCount; ++i) {
-        float sample = samples.at(i);
-        if (std::isnan(sample) || std::isinf(sample)) continue;
-        double ratio = static_cast<double>(i) * m_values[m_value] / m_range / DESIRED_SAMPLES;
-        if (std::isnan(ratio) || std::isinf(ratio)) continue;
-        x = XMARGIN + w - static_cast<int>(w * ratio);
-        path.lineTo(x, y_value(sample));
-    }
-    path.lineTo(x, YMARGIN + h);
-}
-
-void TrafficGraphWidget::mouseMoveEvent(QMouseEvent* event)
+void TrafficGraphWidget::paintEvent(QPaintEvent *)
 {
-    QWidget::mouseMoveEvent(event);
-    if (m_fmax <= 0.0f) return;
-    static int last_x = -1, last_y = -1;
-    QPointF pos = event->position();
-    QPointF globalPos = event->globalPosition();
-    int x = qRound(pos.x());
-    int y = qRound(pos.y());
-    m_x_offset = qRound(globalPos.x()) - x;
-    m_y_offset = qRound(globalPos.y()) - y;
-    if (last_x == x && last_y == y) return; // Do nothing if mouse hasn't moved
-    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = -1;
-    int sampleSize = m_time_stamp[m_value].size();
-    unsigned int smallest_distance = 50;
-    bool is_in_series = true;
-    if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3)
-        for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
-            float in_val = m_samples_in[m_value].at(test_i), out_val = m_samples_out[m_value].at(test_i);
-            int y_in = y_value(in_val), y_out = y_value(out_val);
-            unsigned int distance_in = abs(y - y_in), distance_out = abs(y - y_out);
-            unsigned int min_distance = std::min(distance_in, distance_out);
-            if (min_distance < smallest_distance) {
-                smallest_distance = min_distance;
-                closest_i = test_i;
-                is_in_series = (distance_in <= distance_out);
-            }
-        }
-    if (m_tt_point != closest_i || (m_tt_point >= 0 && closest_i >= 0 && m_tt_in_series != is_in_series)) {
-        m_tt_point = closest_i;
-        m_tt_in_series = is_in_series;
-        update(); // Calls paintEvent() to draw or delete the highlighted point
-    }
-    last_x = x; last_y = y;
-}
-
-void TrafficGraphWidget::focusSlider(Qt::FocusReason reason) {
-    // Find the slider in the parent hierarchy and give it focus
-    QWidget* parent = parentWidget();
-    while (parent) {
-        QSlider* slider = parent->findChild<QSlider*>("sldGraphRange");
-        if (slider) {
-            slider->setFocus(reason);
-            break;
-        }
-        parent = parent->parentWidget();
-    }
-}
-
-void TrafficGraphWidget::mousePressEvent(QMouseEvent *event) {
-    focusSlider(Qt::MouseFocusReason);
-    QWidget::mousePressEvent(event);
-    m_toggle = !m_toggle;
-    update();
-}
-
-void TrafficGraphWidget::mouseReleaseEvent(QMouseEvent *event) {
-    QWidget::mouseReleaseEvent(event);
-    focusSlider(Qt::MouseFocusReason);
-}
-
-void TrafficGraphWidget::focusInEvent(QFocusEvent *event) {
-    QWidget::focusInEvent(event);
-    focusSlider(Qt::OtherFocusReason);
-}
-
-void TrafficGraphWidget::drawTooltipPoint(QPainter& painter) {
-    int w = width() - XMARGIN * 2;
-    double ratio = static_cast<double>(m_tt_point) * m_values[m_value] / m_range / DESIRED_SAMPLES;
-    int x = XMARGIN + w - static_cast<int>(w * ratio);
-    if (m_tt_point >= m_samples_in[m_value].size() || m_tt_point >= m_samples_out[m_value].size()) {
-        QToolTip::hideText();
-        return;
-    }
-    float inSample = m_samples_in[m_value].at(m_tt_point);
-    float outSample = m_samples_out[m_value].at(m_tt_point);
-    float selectedSample = m_tt_in_series ? inSample : outSample;
-    int y = y_value(selectedSample);
-    painter.setPen(Qt::yellow);
-    painter.drawEllipse(QPointF(x, y), 3, 3);
-    QString strTime;
-    std::chrono::milliseconds sampleTime{0};
-    if (m_tt_point + 1 < m_time_stamp[m_value].size()) sampleTime = m_time_stamp[m_value].at(m_tt_point + 1);
-    else {
-        strTime = "to ";
-        sampleTime = m_time_stamp[m_value].at(m_tt_point);
-    }
-    int age = GetTime() - sampleTime.count() / 1000;
-    if (age < 60*60*23)
-        strTime += QString::fromStdString(FormatISO8601Time(sampleTime.count() / 1000));
-    else
-        strTime += QString::fromStdString(FormatISO8601DateTime(sampleTime.count() / 1000));
-    int nDuration = (m_time_stamp[m_value].at(m_tt_point) - sampleTime).count();
-    if (nDuration > 0) {
-        if (nDuration > 9999)
-            strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{(nDuration+500)/1000});
-        else
-            strTime += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{nDuration*1000});
-    }
-    QString strData = tr("In") + " " + GUIUtil::formatBytesps(m_samples_in[m_value].at(m_tt_point)*1000) + " " + tr("Out") + " " + GUIUtil::formatBytesps(m_samples_out[m_value].at(m_tt_point)*1000);
-    // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
-    QToolTip::showText(QPoint(x + m_x_offset, y + m_y_offset), strTime + "\n. " + strData);
-    QToolTip::showText(QPoint(x + m_x_offset, y + m_y_offset), strTime + "\n  " + strData);
-    m_tt_time = GetTime();
-}
-
-void TrafficGraphWidget::paintEvent(QPaintEvent *) {
+    m_update = false;
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
-    if (m_fmax <= 0.0001f) return;
+    if (m_fmax < 0.0001f) return;
 
     QColor axisCol(Qt::gray);
-    painter.setPen(axisCol);
-    int h = height() - YMARGIN * 2;
-    painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
+    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
 
     // decide what order of magnitude we are
-    int base = std::floor(std::log10(fMax));
+    int base = std::floor(std::log10(m_fmax));
     float val = std::pow(10.0f, base); // kB/s
-
-    const float yMarginText = 2.0;
 
     // draw lines
     painter.setPen(axisCol);
-    for(float y = val; y < fMax; y += val) {
+    for(float y = val; y < m_fmax; y += val) {
         int yy = y_value(y);
         painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
     }
-    painter.drawText(XMARGIN, y_value(val) - yMarginText, GUIUtil::formatBytesps(val * 1000));
 
-    // if we drew 10 or 3 fewer lines, break them up at the next lower order of magnitude
-    if (fMax / val <= (m_toggle ? 10.0f : 3.0f)) {
-        val = std::pow(10.0f, base - 1);
+    // if we drew 10 (or 3 when toggles) or fewer lines, break them up at the next lower order of magnitude
+    if (m_fmax / val <= (m_toggle ? 10.0f : 3.0f)) {
+        val /= 10;
         painter.setPen(axisCol.darker());
-        painter.drawText(XMARGIN, y_value(val) - yMarginText, GUIUtil::formatBytesps(val * 1000));
         int count = 1;
-        for (float y = val; y < (!m_toggle || fMax / val < 20 ? fMax : val*10); y += val, count++) {
+        for (float y = val; y < (!m_toggle || m_fmax / val < 20 ? m_fmax : val*10); y += val, count++) {
             // don't overwrite lines drawn above
             if (count % 10 == 0) continue;
             int yy = y_value(y);
@@ -349,7 +223,6 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         if (m_toggle) {
             int yy = y_value(val * 0.1);
             painter.setPen(axisCol.darker().darker());
-            painter.drawText(XMARGIN, yy - yMarginText, GUIUtil::formatBytesps(val * 100));
             painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
         }
     }
@@ -369,13 +242,27 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         painter.setPen(Qt::red);
         painter.drawPath(p);
     }
+
+    // Draw black lines to mask the bright overscanned edges
+    painter.setPen(Qt::black);
+    painter.drawLine(XMARGIN - 1, YMARGIN, XMARGIN - 1, YMARGIN + h);
+    painter.drawLine(XMARGIN + w + 1, YMARGIN, XMARGIN + w + 1, YMARGIN + h);
+
+    // Draw the bottom axis line and labels after the graph
+    painter.setPen(axisCol);
+    painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
+
+    // Draw outlined text for labels with proper vertical positioning
+    drawOutlinedText(painter, XMARGIN, y_value(val*10) - 2, GUIUtil::formatBytesps(val * 10000));
+    drawOutlinedText(painter, XMARGIN, y_value(val) - 2, GUIUtil::formatBytesps(val * 1000));
+    if (m_toggle) drawOutlinedText(painter, XMARGIN, y_value(val/10) - 2, GUIUtil::formatBytesps(val * 100));
+
     if (m_tt_point >= 0 && m_tt_point < m_time_stamp[m_value].size() && isVisible() && !window()->isMinimized())
         drawTooltipPoint(painter);
-    else
-        QToolTip::hideText();
+    else QToolTip::hideText();
 }
 
-void TrafficGraphWidget::update_fMax()
+void TrafficGraphWidget::update_fmax()
 {
     float tmax = 0.0f;
     for (const float f : m_samples_in[m_new_value])
@@ -452,9 +339,7 @@ void TrafficGraphWidget::updateStuff()
         }
     }
 
-    bool fUpdate = false;
-
-    // Check for new sample and update display if a new sample taken for current range
+    // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
         int64_t msecs_per_sample = static_cast<int64_t>(m_values[i]) * 60000 / DESIRED_SAMPLES;
         if (time_offset) {
@@ -469,49 +354,48 @@ void TrafficGraphWidget::updateStuff()
                     m_tt_point++; // Move the selected point to the left
                     if (m_tt_point >= DESIRED_SAMPLES) m_tt_point = -1;
                 }
-                fUpdate = true;
+                m_update = true;
             }
-            if (i == m_new_value) update_fMax();
+            if (i == m_new_value) update_fmax();
         }
     }
     time_offset = 0;
 
-    // Update display due to transtion between ranges or new fmax
+    // Update display due to transition between ranges or new fmax
     static float y_increment = 0, x_increment = 0;
-    if (update_num(m_new_fmax, fMax, y_increment, height() - YMARGIN * 2)) fUpdate = true;
+    if (update_num(m_new_fmax, m_fmax, y_increment, 300)) m_update = true;
     int next_m_value = m_value;
-    if (update_num(m_values[m_new_value], m_range, x_increment, width() - XMARGIN * 2)) {
+    if (update_num(m_values[m_new_value], m_range, x_increment, 500)) {
         if (m_values[m_new_value] > m_range && m_values[m_value] < m_range) {
             next_m_value = m_value + 1;
         } else if (m_value > 0 && m_values[m_new_value] <= m_range && m_values[m_value - 1] > m_range * 0.99)
             next_m_value = m_value - 1;
-        fUpdate = true;
+        m_update = true;
     } else if (m_value != m_new_value) {
         next_m_value = m_new_value;
-        fUpdate = true;
+        m_update = true;
     }
 
     if (next_m_value != m_value) {
-        if (m_tt_point >= 0 && m_tt_point < m_time_stamp[m_value].size()) {
-            m_tt_point = findClosestPointByTimestamp(m_value, m_tt_point, next_m_value);
-		} else
-            m_tt_point = -1;
+        m_tt_point = findClosestPointByTimestamp(m_value, m_tt_point, next_m_value);
         m_value = next_m_value;
     }
 
     static bool last_m_toggle = m_toggle;
-    if (!QToolTip::isVisible() || !isVisible() || window()->isMinimized()) {
+    if (!QToolTip::isVisible()) {
         if (m_tt_point >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
-            if (last_m_toggle == m_toggle) {
-                m_tt_point = -1;
-			} else
-                last_m_toggle = m_toggle;
-            fUpdate = true;
+            if (last_m_toggle == m_toggle) m_tt_point = 0;
+            else last_m_toggle = m_toggle;
+            m_update = true;
         }
-    } else if (m_tt_point >= 0 && GetTime() >= m_tt_time + 9)
-        fUpdate = true;
+    } else if (m_tt_point >= 0 && GetTime() >= m_tt_time + 9) m_update = true;
 
-    if (fUpdate) update();
+    if (m_update) update();
+    static bool graph_visible = false;
+    if (isVisible() && !window()->isMinimized()) {
+        if (!graph_visible) focusSlider();
+        graph_visible = true;
+    } else graph_visible = false;
 }
 
 void TrafficGraphWidget::updateRates(int i)
@@ -551,7 +435,7 @@ int TrafficGraphWidget::setGraphRange(int value)
         value--; // get the array marker
     int old_value = m_new_value;
     m_new_value = std::min(value, VALUES_SIZE - 1);
-    if (m_new_value != old_value) update_fMax();
+    if (m_new_value != old_value) update_fmax();
 
     return m_values[m_new_value];
 }
@@ -581,6 +465,10 @@ void TrafficGraphWidget::saveData()
             // Save the size of these samples
             fileout << VARINT(static_cast<uint32_t>(m_time_stamp[i].size()));
 
+            for (int j = 0; j < m_time_stamp[i].size(); j++) {
+                fileout << static_cast<uint64_t>(m_time_stamp[i].at(j));
+            }
+
             for (int j = 0; j < m_samples_in[i].size(); j++) {
                 float value = m_samples_in[i].at(j);
                 uint32_t uint_value;
@@ -594,9 +482,6 @@ void TrafficGraphWidget::saveData()
                 memcpy(&uint_value, &value, sizeof(float)); // IEEE 754
                 fileout << uint_value;
             }
-
-            for (int j = 0; j < m_time_stamp[i].size(); j++)
-                fileout << static_cast<uint64_t>(m_time_stamp[i].at(j));
 
             fileout << VARINT(static_cast<uint64_t>(m_offset[i]));
         }
@@ -634,6 +519,16 @@ bool TrafficGraphWidget::loadDataFromBinary()
             filein >> VARINT(samplesSize);
 
             for (unsigned int j = 0; j < samplesSize; j++) {
+                static uint64_t last_time_ms;
+                uint64_t time_ms;
+                filein >> time_ms;
+                if (!j) last_time_ms = time_ms;
+                if (time_ms > last_time_ms) return false; // Abort load if data invalid
+                m_time_stamp[i].push_back(static_cast<int64_t>(time_ms));
+                last_time_ms = time_ms;
+            }
+
+            for (unsigned int j = 0; j < samplesSize; j++) {
                 uint32_t uint_value;
                 filein >> uint_value;
                 float value;
@@ -649,20 +544,13 @@ bool TrafficGraphWidget::loadDataFromBinary()
                 m_samples_out[i].push_back(value);
             }
 
-            for (unsigned int j = 0; j < samplesSize; j++) {
-                uint64_t timeMs;
-                filein >> timeMs;
-                m_time_stamp[i].push_back(static_cast<int64_t>(timeMs));
-            }
-
             uint64_t offset;
             filein >> VARINT(offset);
             m_offset[i] = static_cast<int64_t>(offset);
         }
-
         filein.fclose();
-
         return true;
+
     } catch (const std::exception& e) {
         LogPrintf("TrafficGraphWidget: Error loading data: %s\n", e.what());
         return false;
@@ -673,16 +561,26 @@ bool TrafficGraphWidget::loadData()
 {
     bool success = loadDataFromBinary();
 
-    if (!success) return false;
+    if (!success) { // Zero the values
+        LogPrintf("TrafficGraphWidget: Saved traffic data was invalid.\n");
+        m_baseline_bytes_recv = m_baseline_bytes_sent = 0;
+        for (int i = 0; i < VALUES_SIZE; i++) {
+            m_samples_in[i].clear();
+            m_samples_out[i].clear();
+            m_time_stamp[i].clear();
+        }
+        return false;
+    }
 
     // If we successfully loaded data, determine the correct band to use
     int firstNonFullBand = VALUES_SIZE - 1;
 
-    for (int i = 0; i < VALUES_SIZE; i++)
+    for (int i = 0; i < VALUES_SIZE; i++) {
         if (m_time_stamp[i].size() < DESIRED_SAMPLES) {
             firstNonFullBand = i;
             break;
         }
+    }
 
     if (firstNonFullBand) { // not the first band
         m_value = firstNonFullBand - 1; // Minus one as we're bumping it
@@ -694,21 +592,21 @@ bool TrafficGraphWidget::loadData()
 
 int TrafficGraphWidget::findClosestPointByTimestamp(int src_range, int src_point, int dst_range) const
 {
-    if (src_point < 0 || stc_point >= m_time_stamp[src_range].size() ||
+    if (src_point < 0 || src_point >= m_time_stamp[src_range].size() ||
         m_time_stamp[dst_range].empty()) {
         return -1;
     }
 
     bool is_peak = false, is_dip = false;
     float src_value = m_tt_in_series ? m_samples_in[src_range].at(src_point) :
-				m_samples_out[src_range].at(src_point);
+                m_samples_out[src_range].at(src_point);
     int64_t src_timestamp = m_time_stamp[src_range].at(src_point);
 
     if (src_point > 0 && src_point < m_time_stamp[src_range].size() - 1) {
         float prev_value = m_tt_in_series ? m_samples_in[src_range].at(src_point - 1) :
-					m_samples_out[src_range].at(src_point - 1);
+                    m_samples_out[src_range].at(src_point - 1);
         float next_value = m_tt_in_series ? m_samples_in[src_range].at(src_point + 1) :
-					m_samples_out[src_range].at(src_point + 1);
+                    m_samples_out[src_range].at(src_point + 1);
 
         is_peak = src_value > prev_value && src_value > next_value;
         is_dip = src_value < prev_value && src_value < next_value;
@@ -717,7 +615,7 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int src_range, int src_point
     int dst_point = -1;
     int64_t min_difference = std::numeric_limits<int64_t>::max();
 
-	// Find the nearest point timestamp-wise
+    // Find the nearest point timestamp-wise
     for (int i = 0; i < m_time_stamp[dst_range].size(); ++i) {
         auto diff = std::abs(m_time_stamp[dst_range].at(i) - src_timestamp);
         if (diff < min_difference) {
@@ -726,19 +624,19 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int src_range, int src_point
         }
     }
 
-	// Exit early if no point found or not a peak nor a dip
-	if (dst_point < 0 || (!is_peak && !is_dip)) return dst_point;
+    // Exit early if no point found or not a peak nor a dip
+    if (dst_point < 0 || (!is_peak && !is_dip)) return dst_point;
 
-	// If a peak/dip, snap to the nearest peak/dip
+    // If a peak/dip, snap to the nearest peak/dip
     float dst_value = m_tt_in_series ? m_samples_in[dst_range].at(dst_point) :
-				m_samples_out[dst_range].at(dst_point);
+                m_samples_out[dst_range].at(dst_point);
     float best_value = dst_value;
-	int best_point = dst_point;
+    int best_point = dst_point;
     uint64_t avg_sample_interval = (m_values[dst_range] * 60 * 1000) / DESIRED_SAMPLES;
     int64_t time_window = avg_sample_interval * 3; // Stay within sample interval * 3
 
     for (int i = best_point - 3; i <= best_point + 3; ++i) {
-		if (i < 0 || i >= m_time_stamp[dst_range].size()) continue;
+        if (i < 0 || i >= m_time_stamp[dst_range].size()) continue;
         if (std::abs(m_time_stamp[dst_range].at(i) - src_timestamp) > time_window) continue;
         float value = m_tt_in_series ? m_samples_in[dst_range].at(i) : m_samples_out[dst_range].at(i);
         if (is_peak && value > best_value) {

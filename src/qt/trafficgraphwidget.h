@@ -38,8 +38,6 @@ protected:
     int y_value(float value) const;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
-    void mouseReleaseEvent(QMouseEvent* event) override;
-    void focusInEvent(QFocusEvent* event) override;
     int findClosestPoint(int x, int y, int rangeIndex) const;
     int findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const;
 
@@ -52,14 +50,14 @@ private:
     void paintPath(QPainterPath& path, const QQueue<float>& samples);
     bool loadDataFromBinary();
     bool loadData();
-    void update_fMax();
+    void update_fmax();
     void updateRates(int value);
-    void focusSlider(Qt::FocusReason reason);
+    void focusSlider();
     void drawTooltipPoint(QPainter& painter);
 
     QTimer* m_timer{nullptr};
-    float fMax{0.0001f};
-    float m_new_fmax{0.0001f};
+    float m_fmax{1.1f};
+    float m_new_fmax{1.1f};
     float m_range{0};
     QQueue<float> m_samples_in[VALUES_SIZE] = {};
     QQueue<float> m_samples_out[VALUES_SIZE] = {};
@@ -73,6 +71,7 @@ private:
     int m_new_value{0};
     bool m_bump_value{false};
     bool m_toggle{true}; // Default to logarithmic
+    bool m_update{false}; // whether to redraw graph
     int m_tt_point{-1};
     bool m_tt_in_series{true}; // true = in, false = out
     int m_x_offset{0};
