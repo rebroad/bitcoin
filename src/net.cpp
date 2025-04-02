@@ -2979,6 +2979,14 @@ uint64_t CConnman::GetTotalBytesSent() const
     return nTotalBytesSent;
 }
 
+void CConnman::SetTotalBytesRecv(uint64_t bytes) { nTotalBytesRecv.store(bytes); }
+
+void CConnman::SetTotalBytesSent(uint64_t bytes)
+{
+    LOCK(cs_totalBytesSent);
+    nTotalBytesSent = bytes;
+}
+
 ServiceFlags CConnman::GetLocalServices() const
 {
     return nLocalServices;
