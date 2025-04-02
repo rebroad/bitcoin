@@ -1023,8 +1023,9 @@ bool AppInitParameterInteraction(const ArgsManager& args)
         InitWarning(strprintf(_("Reducing -maxconnections from %d to %d, because of system limitations."), user_max_connection, nMaxConnections));
 
     // ********************************************************* Step 3: parameter-to-internal-flags
-    if (auto result{init::SetLoggingCategories(args)}; !result) return InitError(util::ErrorString(result));
-    if (auto result{init::SetLoggingLevel(args)}; !result) return InitError(util::ErrorString(result));
+    // Don't exit on error for logging categories, just proceed
+    init::SetLoggingCategories(args);
+    init::SetLoggingLevel(args);
 
     nConnectTimeout = args.GetIntArg("-timeout", DEFAULT_CONNECT_TIMEOUT);
     if (nConnectTimeout <= 0) {
