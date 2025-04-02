@@ -797,18 +797,25 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int sourceRange, int sourceP
     bool isPeak = false, isDip = false;
     float sourceValue = tt_in_series ? vSamplesIn[sourceRange].at(sourcePoint) : vSamplesOut[sourceRange].at(sourcePoint);
 
+    LogPrintf("findClosestPointByTimestamp: Source point %d in range %d (value: %.2f)\n", sourcePoint, sourceRange, sourceValue);
+    LogPrintf("findClosestPointByTimestamp: Source timestamp: %llu\n", vTimeStamp[sourceRange].at(sourcePoint).count());
+
     if (sourcePoint > 0 && sourcePoint < vTimeStamp[sourceRange].size() - 1) {
         float prevValue = tt_in_series ? vSamplesIn[sourceRange].at(sourcePoint - 1) : vSamplesOut[sourceRange].at(sourcePoint - 1);
         float nextValue = tt_in_series ? vSamplesIn[sourceRange].at(sourcePoint + 1) : vSamplesOut[sourceRange].at(sourcePoint + 1);
 
         isPeak = sourceValue > prevValue && sourceValue > nextValue;
         isDip = sourceValue < prevValue && sourceValue < nextValue;
+
+        LogPrintf("findClosestPointByTimestamp: Neighbor values: prev=%.2f, next=%.2f\n", prevValue, nextValue);
+        LogPrintf("findClosestPointByTimestamp: Is peak: %d, Is dip: %d\n", isPeak, isDip);
     }
 
     std::chrono::milliseconds sourceTimestamp = vTimeStamp[sourceRange].at(sourcePoint);
     int closestPoint = -1;
     std::chrono::milliseconds::rep minDifference = std::numeric_limits<std::chrono::milliseconds::rep>::max();
 
+    // First pass: find the closest point by timestamp
     for (int i = 0; i < vTimeStamp[targetRange].size(); ++i) {
         auto diff = std::abs(vTimeStamp[targetRange].at(i).count() - sourceTimestamp.count());
         if (diff < minDifference) {
@@ -817,28 +824,49 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int sourceRange, int sourceP
         }
     }
 
+    LogPrintf("findClosestPointByTimestamp: Initial closest point %d (time diff: %llu ms)\n", closestPoint, minDifference);
+    if (closestPoint >= 0) {
+        LogPrintf("findClosestPointByTimestamp: Closest point timestamp: %llu\n", vTimeStamp[targetRange].at(closestPoint).count());
+        LogPrintf("findClosestPointByTimestamp: Closest point value: %.2f\n",
+            tt_in_series ? vSamplesIn[targetRange].at(closestPoint) : vSamplesOut[targetRange].at(closestPoint));
+    }
+
     if (closestPoint >= 0 && (isPeak || isDip)) {
         float closestValue = tt_in_series ? vSamplesIn[targetRange].at(closestPoint) : vSamplesOut[targetRange].at(closestPoint);
+        int bestPoint = closestPoint;
+        float bestValue = closestValue;
 
-        for (int offset = -1; offset < 2; offset += 2) {
-            int neighborIndex = closestPoint + offset;
-            if (neighborIndex < 0 || neighborIndex >= vTimeStamp[targetRange].size()) continue;
+        // Calculate a reasonable time window based on the sampling rate
+        // For 7d range, we have DESIRED_SAMPLES points over 7 days
+        // This gives us the average time between samples
+        uint64_t avgSampleInterval = (values[targetRange] * 60 * 1000) / DESIRED_SAMPLES;
+        // Use 3x the average interval as our window
+        uint64_t timeWindow = avgSampleInterval * 3;
 
-            auto neighborTime = vTimeStamp[targetRange].at(neighborIndex);
-            auto timeDiff = std::abs(neighborTime.count() - sourceTimestamp.count());
+        LogPrintf("findClosestPointByTimestamp: Using time window of %llu ms (avg interval: %llu ms)\n", timeWindow, avgSampleInterval);
 
-            if (timeDiff <= minDifference * 2) {
-                float neighborValue = tt_in_series ? vSamplesIn[targetRange].at(neighborIndex) : vSamplesOut[targetRange].at(neighborIndex);
+        for (int i = 0; i < vTimeStamp[targetRange].size(); ++i) {
+            uint64_t timeDiff = static_cast<uint64_t>(std::abs(vTimeStamp[targetRange].at(i).count() - sourceTimestamp.count()));
+            if (timeDiff <= timeWindow) {
+                float currentValue = tt_in_series ? vSamplesIn[targetRange].at(i) : vSamplesOut[targetRange].at(i);
+                LogPrintf("findClosestPointByTimestamp: Point %d: time diff=%llu ms, value=%.2f\n", i, timeDiff, currentValue);
 
-                if (isPeak && neighborValue > closestValue) {
-                    closestPoint = neighborIndex;
-                    closestValue = neighborValue;
-                } else if (isDip && neighborValue < closestValue) {
-                    closestPoint = neighborIndex;
-                    closestValue = neighborValue;
+                if (isPeak && currentValue > bestValue) {
+                    LogPrintf("findClosestPointByTimestamp: Found better peak: point %d (%.2f > %.2f)\n", i, currentValue, bestValue);
+                    bestPoint = i;
+                    bestValue = currentValue;
+                } else if (isDip && currentValue < bestValue) {
+                    LogPrintf("findClosestPointByTimestamp: Found better dip: point %d (%.2f < %.2f)\n", i, currentValue, bestValue);
+                    bestPoint = i;
+                    bestValue = currentValue;
                 }
             }
         }
+
+        if (bestPoint != closestPoint) {
+            LogPrintf("findClosestPointByTimestamp: Changed from point %d to %d\n", closestPoint, bestPoint);
+        }
+        closestPoint = bestPoint;
     }
 
     return closestPoint;
