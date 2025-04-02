@@ -587,7 +587,6 @@ bool TrafficGraphWidget::loadDataFromBinary() {
             }
 
             filein >> VARINT(m_offset[i]);
-            else m_offset[i] = 0;
         }
 
         filein.fclose();
