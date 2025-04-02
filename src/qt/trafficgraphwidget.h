@@ -41,6 +41,7 @@ protected:
     int y_value(float value) const;
     void mouseMoveEvent(QMouseEvent *event) override;
     int ttpoint = -1;
+    bool tt_in_series = true; // true = in series, false = out series
     int x_offset = 0;
     int y_offset = 0;
     uint64_t tt_time = 0;

@@ -111,20 +111,22 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
     int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = -1;
     int sampleSize = vTimeStamp[m_value].size();
     unsigned int smallest_distance = 50;
+    bool is_in_series = true;
     if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3)
         for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
-            float val = floatmax(vSamplesIn[m_value].at(test_i), vSamplesOut[m_value].at(test_i));
-            int y_data = y_value(val);
-            unsigned int distance = abs(y - y_data);
-            if (distance < smallest_distance) {
-                smallest_distance = distance;
+            float in_val = vSamplesIn[m_value].at(test_i), out_val = vSamplesOut[m_value].at(test_i);
+            int y_in = y_value(in_val), y_out = y_value(out_val);
+            unsigned int distance_in = abs(y - y_in), distance_out = abs(y - y_out);
+            unsigned int min_distance = std::min(distance_in, distance_out);
+            if (min_distance < smallest_distance) {
+                smallest_distance = min_distance;
                 closest_i = test_i;
+                is_in_series = (distance_in <= distance_out);
             }
         }
-    //if (ttpoint != closest_i || closest_i != -1)
-    //    LogPrintf("i=%d h=%d x=%d y=%d smdist=%d cl_i=%d\n", i, h, x-XMARGIN, y-YMARGIN, smallest_distance, closest_i);
-    if (ttpoint != closest_i) {
+    if (ttpoint != closest_i || (ttpoint >= 0 && closest_i >= 0 && tt_in_series != is_in_series)) {
         ttpoint = closest_i;
+        tt_in_series = is_in_series;
         update(); // Calls paintEvent() to draw or delete the highlighted point
     }
     last_x = x; last_y = y;
@@ -258,8 +260,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
             QToolTip::hideText();
             return;
         }
-        int y = y_value(floatmax(inSample, outSample));
-        LogPrintf("%s: circle at %d,%d tt=%d m_range=%d\n", __FILE__, x, y, ttpoint, m_range);
+        float selectedSample = tt_in_series ? inSample : outSample;
+        int y = y_value(selectedSample);
+        LogPrintf("%s: circle at %d,%d tt=%d m_range=%d series=%s\n", __FILE__, x, y, ttpoint, m_range, 
+                  tt_in_series ? "in" : "out");
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
         std::chrono::milliseconds sampleTime{0};
@@ -281,7 +285,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
                 strTime += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{nDuration*1000});
         } else // REBTEMP
             strTime += QString::fromStdString(strprintf(" i=%d ttp=%d nDur=%d", m_value, ttpoint, nDuration));
-        QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn[m_value].at(ttpoint)*1000) + "\n" + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut[m_value].at(ttpoint)*1000);
+        QString strData = tr("In") + " " + GUIUtil::formatBytesps(vSamplesIn[m_value].at(ttpoint)*1000) + " " + tr("Out") + " " + GUIUtil::formatBytesps(vSamplesOut[m_value].at(ttpoint)*1000);
         // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n. " + strData);
         QToolTip::showText(QPoint(x + x_offset, y + y_offset), strTime + "\n  " + strData);
