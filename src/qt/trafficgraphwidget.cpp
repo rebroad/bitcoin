@@ -36,7 +36,6 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget *parent) :
 void TrafficGraphWidget::setClientModel(ClientModel *model) {
     if (model) {
         clientModel = model;
-        m_dataDir = model->dataDir();
         if (vSamplesIn[0].empty() && vSamplesOut[0].empty()) {
             // Load saved traffic data if available and the arrays are empty
             LogPrintf("vSamplesIn[0].empty()=%d\n", vSamplesIn[0].empty());
@@ -64,7 +63,7 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
         }
     } else {
         LogPrintf("%s: Saving data\n", __func__);
-        saveData(); // TODO might not need to cache the data_dir now that clientmodel moved to below
+        saveData();
         clientModel = model;
     }
 }
@@ -500,14 +499,13 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
 void TrafficGraphWidget::saveData() {
     LogPrintf("TrafficGraphWidget: saveData() called\n");
     try {
-        fs::path pathTrafficGraph = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata";
+        fs::path pathTrafficGraph = fs::path(clientModel->dataDir().toStdString().c_str()) / "trafficgraphdata.dat";
         LogPrintf("TrafficGraphWidget: Trying to save data to %s\n", fs::PathToString(pathTrafficGraph));
         FILE* file = fsbridge::fopen(pathTrafficGraph, "wb");
         if (!file) throw std::runtime_error("Failed to open file");
         CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
         if (fileout.IsNull()) throw std::runtime_error("File stream is null");
-        // Version
-        fileout << static_cast<int>(3); // Bumped to 3 for m_offset
+        fileout << static_cast<int>(1); // Version 1
 
         uint64_t totalBytesRecv = clientModel->node().getTotalBytesRecv();
         uint64_t totalBytesSent = clientModel->node().getTotalBytesSent();
@@ -547,31 +545,22 @@ void TrafficGraphWidget::saveData() {
 bool TrafficGraphWidget::loadDataFromBinary() {
     LogPrintf("TrafficGraphWidget: Attempting to load binary data file\n");
     try {
-        fs::path pathTrafficGraph = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata";
+        fs::path pathTrafficGraph = fs::path(clientModel->dataDir().toStdString().c_str()) / "trafficgraphdata.dat";
         FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
 
-        if (!file) {
-            LogPrintf("TrafficGraphWidget: Binary data file not found, attempting to load from CSV\n");
-            return loadDataFromCSV();
-        }
+        if (!file) return false;
         CAutoFile filein(file, SER_DISK, CLIENT_VERSION);
         if (filein.IsNull()) return false;
 
         int version;
         filein >> version;
         if (version < 1 || version > 3) {
-            LogPrintf("TrafficGraphWidget: Unsupported file version %d, expected 1 or 2\n", version);
+            LogPrintf("TrafficGraphWidget: Unsupported file version %d, expected 1, 2 or 3\n", version);
             return false;
         }
 
-        // Total bytes (version >= 2)
-        if (version >= 2) {
-            filein >> VARINT(m_totalBytesRecv) >> VARINT(m_totalBytesSent);
-            LogPrintf("TrafficGraphWidget: Read total bytes: recv=%u sent=%u\n", m_totalBytesRecv, m_totalBytesSent);
-        } else {
-            LogPrintf("TrafficGraphWidget: Version 1 file, will calculate totals from first non-full range\n");
-            m_totalBytesRecv = m_totalBytesSent = 0;
-        }
+        filein >> VARINT(m_totalBytesRecv) >> VARINT(m_totalBytesSent);
+        LogPrintf("TrafficGraphWidget: Read total bytes: recv=%u sent=%u\n", m_totalBytesRecv, m_totalBytesSent);
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
             unsigned int samplesSize;
@@ -584,7 +573,6 @@ bool TrafficGraphWidget::loadDataFromBinary() {
                 vSamplesIn[i].push_back(value);
             }
 
-            if (version < 3) filein >> VARINT(samplesSize);
             for (unsigned int j = 0; j < samplesSize; j++) {
                 uint32_t uint_value = ser_readdata32(filein);
                 float value;
@@ -592,177 +580,27 @@ bool TrafficGraphWidget::loadDataFromBinary() {
                 vSamplesOut[i].push_back(value);
             }
 
-            if (version < 3) filein >> VARINT(samplesSize);
             for (unsigned int j = 0; j < samplesSize; j++) {
                 uint64_t timeMs;
                 filein >> VARINT(timeMs);
                 vTimeStamp[i].push_back(std::chrono::milliseconds{static_cast<int64_t>(timeMs)});
             }
 
-            if (version >= 3) filein >> VARINT(m_offset[i]);
+            filein >> VARINT(m_offset[i]);
             else m_offset[i] = 0;
         }
 
         filein.fclose();
         LogPrintf("TrafficGraphWidget: Data loaded from %s\n", fs::PathToString(pathTrafficGraph));
 
-        // Version 1: Calculate totals
-        if (version == 1) {
-            int firstNonFullRange = -1;
-            for (int i = 0; i < VALUES_SIZE; i++) {
-                if (vTimeStamp[i].size() < DESIRED_SAMPLES) {
-                    firstNonFullRange = i;
-                    break;
-                }
-            }
-            if (firstNonFullRange == -1) firstNonFullRange = VALUES_SIZE - 1;
-
-            // Use double for intermediate calculations to maintain precision
-            double totalRecvBytes = 0.0, totalSentBytes = 0.0;
-            double msecs_per_sample = static_cast<double>(values[firstNonFullRange]) * 60000.0 / DESIRED_SAMPLES;
-            for (const float sample : vSamplesIn[firstNonFullRange])
-                if (sample >= 0.0f && std::isfinite(sample))
-                    totalRecvBytes += static_cast<double>(sample) * msecs_per_sample;
-            for (const float sample : vSamplesOut[firstNonFullRange])
-                if (sample >= 0.0f && std::isfinite(sample))
-                    totalSentBytes += static_cast<double>(sample) * msecs_per_sample;
-
-            if (totalRecvBytes <= std::numeric_limits<uint64_t>::max() && totalRecvBytes >= 0)
-                m_totalBytesRecv = static_cast<uint64_t>(totalRecvBytes);
-            else m_totalBytesRecv = std::numeric_limits<uint64_t>::max();
-            if (totalSentBytes <= std::numeric_limits<uint64_t>::max() && totalSentBytes >= 0)
-                m_totalBytesSent = static_cast<uint64_t>(totalSentBytes);
-            else m_totalBytesSent = std::numeric_limits<uint64_t>::max();
-        }
         return true;
     } catch (const std::exception& e) {
-        return loadDataFromCSV();
-    }
-}
-
-bool TrafficGraphWidget::loadDataFromCSV() {
-    LogPrintf("TrafficGraphWidget: Attempting to load data from CSV in the data directory\n");
-    try {
-        // Path to the CSV file
-        fs::path pathCSV = fs::path((m_dataDir).toStdString().c_str()) / "trafficgraphdata.csv";
-        QFile file(QString::fromStdString(fs::PathToString(pathCSV)));
-
-        // Check if file exists and can be opened
-        if (!file.exists()) {
-            LogPrintf("TrafficGraphWidget: CSV file not found\n");
-            return false;
-        }
-
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            LogPrintf("TrafficGraphWidget: CSV file exists but cannot be opened\n");
-            return false;
-        }
-
-        LogPrintf("TrafficGraphWidget: CSV file found and opened successfully\n");
-
-        QTextStream in(&file);
-        QString line;
-
-        // Variables to track current time range
-        int currentRange = -1;
-
-        // Clear existing data - in case the binary load partially succeeded
-        for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-            vSamplesIn[i].clear();
-            vSamplesOut[i].clear();
-            vTimeStamp[i].clear();
-        }
-
-        // Read the file line by line
-        while (!in.atEnd()) {
-            line = in.readLine().trimmed();
-
-            if (line.isEmpty()) continue;
-
-            // Check for time range headers
-            if (line.startsWith("#")) {
-                // Time Range header: "# Time Range X: Y minutes"
-                QRegExp rangeRegex("# Time Range (\\d+): (\\d+) minutes");
-                if (rangeRegex.indexIn(line) != -1) {
-                    currentRange = rangeRegex.cap(1).toInt();
-                    LogPrintf("TrafficGraphWidget: Found original format header for range %d\n", currentRange);
-
-                    // Validate range
-                    if (currentRange < 0 || currentRange >= VALUES_SIZE) {
-                        LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
-                        currentRange = -1; // Reset to invalid
-                    }
-                }
-                continue;
-            }
-
-            // Check for CSV DATA START format
-            QRegExp startRegex("CSV DATA START - RANGE (\\d+)");
-            if (startRegex.indexIn(line) != -1) {
-                currentRange = startRegex.cap(1).toInt();
-                LogPrintf("TrafficGraphWidget: Found CSV DATA START marker for range %d\n", currentRange);
-
-                // Validate range
-                if (currentRange < 0 || currentRange >= VALUES_SIZE) {
-                    LogPrintf("TrafficGraphWidget: Invalid range in CSV: %d\n", currentRange);
-                    currentRange = -1; // Reset to invalid
-                }
-                continue;
-            }
-
-            // Check for CSV DATA END format - we'll skip this line
-            if (line.startsWith("CSV DATA END")) continue;
-
-            // Process data rows only if we have a valid current range
-            if (currentRange >= 0 && currentRange < VALUES_SIZE) {
-                if (line.startsWith("index,")) continue;
-                QStringList parts = line.split(',');
-                if (parts.size() >= 4) {
-                    bool ok1, ok2, ok3, ok4;
-                    int index = parts[0].toInt(&ok1);
-                    uint64_t timestamp = parts[1].toLongLong(&ok2);
-                    float inRate = parts[2].toFloat(&ok3);
-                    float outRate = parts[3].toFloat(&ok4);
-                    if (!ok1 || !ok2 || !ok3 || !ok4) continue;
-                    Q_UNUSED(index);
-                    vTimeStamp[currentRange].push_back(std::chrono::milliseconds{timestamp});
-                    vSamplesIn[currentRange].push_back(inRate);
-                    vSamplesOut[currentRange].push_back(outRate);
-                }
-            }
-        }
-
-        file.close();
-
-        // Log how many data points were loaded for each time range
-        int totalDataPoints = 0;
-        for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-            if (!vSamplesIn[i].empty()) {
-            int count = vSamplesIn[i].size();
-            totalDataPoints += count;
-            LogPrintf("TrafficGraphWidget: Loaded %d data points for time range %d (%d minutes)\n",
-                count, i, values[i]);
-            }
-        }
-
-        if (totalDataPoints == 0) {
-            LogPrintf("TrafficGraphWidget: No data points were loaded from the CSV file\n");
-            return false;
-        }
-
-        LogPrintf("TrafficGraphWidget: Successfully loaded %d total data points from CSV file\n", totalDataPoints);
-        return true;
-    } catch (const std::exception& e) {
-        LogPrintf("TrafficGraphWidget: Error loading CSV data: %s\n", e.what());
         return false;
     }
 }
 
 bool TrafficGraphWidget::loadData() {
-    bool success = false;
-
-    // Try to load from binary file first, then fall back to CSV if that fails
-    if (!(success = loadDataFromBinary())) success = loadDataFromCSV();
+    bool success = loadDataFromBinary();
 
     if (!success) return false;
 

@@ -60,7 +60,6 @@ private:
 	uint64_t m_offset[VALUES_SIZE] = {};
     void saveData();
     bool loadDataFromBinary();
-    bool loadDataFromCSV();
     bool loadData();
     void update_fMax();
     void paintPath(QPainterPath &path, QQueue<float> &samples);
