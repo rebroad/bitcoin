@@ -260,7 +260,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *) {
         }
         float selectedSample = tt_in_series ? inSample : outSample;
         int y = y_value(selectedSample);
-        LogPrintf("%s: circle at %d,%d tt=%d m_range=%d series=%s\n", __FILE__, x, y, ttpoint, m_range, 
+        LogPrintf("%s: circle at %d,%d tt=%d m_range=%d series=%s\n", __FILE__, x, y, ttpoint, m_range,
                   tt_in_series ? "in" : "out");
         painter.drawEllipse(QPointF(x, y), 3, 3);
         QString strTime;
@@ -789,15 +789,26 @@ bool TrafficGraphWidget::loadData() {
 }
 
 int TrafficGraphWidget::findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const {
-    if (sourcePoint < 0 || sourcePoint >= vTimeStamp[sourceRange].size() || 
+    if (sourcePoint < 0 || sourcePoint >= vTimeStamp[sourceRange].size() ||
         vTimeStamp[targetRange].empty()) {
         return -1;
+    }
+
+    bool isPeak = false, isDip = false;
+    float sourceValue = tt_in_series ? vSamplesIn[sourceRange].at(sourcePoint) : vSamplesOut[sourceRange].at(sourcePoint);
+
+    if (sourcePoint > 0 && sourcePoint < vTimeStamp[sourceRange].size() - 1) {
+        float prevValue = tt_in_series ? vSamplesIn[sourceRange].at(sourcePoint - 1) : vSamplesOut[sourceRange].at(sourcePoint - 1);
+        float nextValue = tt_in_series ? vSamplesIn[sourceRange].at(sourcePoint + 1) : vSamplesOut[sourceRange].at(sourcePoint + 1);
+
+        isPeak = sourceValue > prevValue && sourceValue > nextValue;
+        isDip = sourceValue < prevValue && sourceValue < nextValue;
     }
 
     std::chrono::milliseconds sourceTimestamp = vTimeStamp[sourceRange].at(sourcePoint);
     int closestPoint = -1;
     std::chrono::milliseconds::rep minDifference = std::numeric_limits<std::chrono::milliseconds::rep>::max();
-    
+
     for (int i = 0; i < vTimeStamp[targetRange].size(); ++i) {
         auto diff = std::abs(vTimeStamp[targetRange].at(i).count() - sourceTimestamp.count());
         if (diff < minDifference) {
@@ -805,6 +816,30 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int sourceRange, int sourceP
             closestPoint = i;
         }
     }
-    
+
+    if (closestPoint >= 0 && (isPeak || isDip)) {
+        float closestValue = tt_in_series ? vSamplesIn[targetRange].at(closestPoint) : vSamplesOut[targetRange].at(closestPoint);
+
+        for (int offset = -1; offset < 2; offset += 2) {
+            int neighborIndex = closestPoint + offset;
+            if (neighborIndex < 0 || neighborIndex >= vTimeStamp[targetRange].size()) continue;
+
+            auto neighborTime = vTimeStamp[targetRange].at(neighborIndex);
+            auto timeDiff = std::abs(neighborTime.count() - sourceTimestamp.count());
+
+            if (timeDiff <= minDifference * 2) {
+                float neighborValue = tt_in_series ? vSamplesIn[targetRange].at(neighborIndex) : vSamplesOut[targetRange].at(neighborIndex);
+
+                if (isPeak && neighborValue > closestValue) {
+                    closestPoint = neighborIndex;
+                    closestValue = neighborValue;
+                } else if (isDip && neighborValue < closestValue) {
+                    closestPoint = neighborIndex;
+                    closestValue = neighborValue;
+                }
+            }
+        }
+    }
+
     return closestPoint;
 }
