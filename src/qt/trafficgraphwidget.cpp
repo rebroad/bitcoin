@@ -98,8 +98,6 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
     path.lineTo(x, YMARGIN + h);
 }
 
-float floatmax(float a, float b) { return (a > b ? a : b); }
-
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
     QWidget::mouseMoveEvent(event);
     if (fMax <= 0.0f) return;
@@ -797,29 +795,11 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int sourceRange, int sourceP
     }
 
     std::chrono::milliseconds sourceTimestamp = vTimeStamp[sourceRange].at(sourcePoint);
-    std::chrono::milliseconds sourceDuration;
-    if (sourcePoint + 1 < vTimeStamp[sourceRange].size())
-        sourceDuration = sourceTimestamp - vTimeStamp[sourceRange].at(sourcePoint + 1);
-    else {
-        uint64_t msecs_per_sample = static_cast<uint64_t>(values[sourceRange]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
-        sourceDuration = std::chrono::milliseconds(msecs_per_sample);
-    }
-    auto sourceMiddle = sourceTimestamp - (sourceDuration / 2);
     int closestPoint = -1;
     std::chrono::milliseconds::rep minDifference = std::numeric_limits<std::chrono::milliseconds::rep>::max();
     
     for (int i = 0; i < vTimeStamp[targetRange].size(); ++i) {
-        std::chrono::milliseconds targetTimestamp = vTimeStamp[targetRange].at(i);
-        std::chrono::milliseconds targetDuration;
-        if (i + 1 < vTimeStamp[targetRange].size())
-            targetDuration = targetTimestamp - vTimeStamp[targetRange].at(i + 1);
-        else {
-            uint64_t msecs_per_sample = static_cast<uint64_t>(values[targetRange]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
-            targetDuration = std::chrono::milliseconds(msecs_per_sample);
-        }
-        
-        auto targetMiddle = targetTimestamp - (targetDuration / 2);
-        auto diff = std::abs(targetMiddle.count() - sourceMiddle.count());
+        auto diff = std::abs(vTimeStamp[targetRange].at(i).count() - sourceTimestamp.count());
         if (diff < minDifference) {
             minDifference = diff;
             closestPoint = i;
