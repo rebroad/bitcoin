@@ -1166,58 +1166,62 @@ void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
 {
     static int64_t last_click_time = 0;
     static bool last_click_was_up = false;
-    unsigned int value = (slider_value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
-    if (!slider_in_use) {
-        // Avoid accidental boucing of direction
-        int64_t now = GetTimeMillis();
+    unsigned int range = (value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
+    bool bouncing = false;
+    if (!m_slider_in_use) {
+        // Avoid accidental oscillation of direction due to rapid mouse clicks
+        int64_t now = GetTime<std::chrono::milliseconds>().count();
         bool this_click_is_up = false;
-        bool bouncing = false;
-        if (slider_value > set_slider_value) this_click_is_up = true;
+        if (value > m_set_slider_value) this_click_is_up = true;
         if (now - last_click_time < 250 && this_click_is_up != last_click_was_up) {
             bouncing = true;
             ui->sldGraphRange->blockSignals(true);
-            ui->sldGraphRange->setValue(set_slider_value);
+            ui->sldGraphRange->setValue(m_set_slider_value);
             ui->sldGraphRange->blockSignals(false);
         }
         last_click_time = now;
         last_click_was_up = this_click_is_up;
-        set_slider_value = slider_value;
-        if (bouncing) return;
     }
-    set_slider_value = slider_value;
-    setTrafficGraphRange(value);
+    m_set_slider_value = value;
+    if (bouncing) return;
+    setTrafficGraphRange(range);
 }
 
-void RPCConsole::setTrafficGraphRange(unsigned int value)
+void RPCConsole::setTrafficGraphRange(int value)
 {
-    std::chrono::minutes mins = ui->trafficGraph->setGraphRange(value);
+    int mins = ui->trafficGraph->setGraphRange(value);
     if (value)
-        set_slider_value = (value - 1) * 200;
+        m_set_slider_value = (value - 1) * 200;
     else {
         // When bumping, calculate the proper slider position based on the traffic graph's new value
         unsigned int new_graph_value = ui->trafficGraph->getCurrentRangeIndex() + 1; // +1 because the index is 0-based
-        set_slider_value = (new_graph_value - 1) * 200;
+        m_set_slider_value = (new_graph_value - 1) * 200;
         ui->sldGraphRange->blockSignals(true);
-        ui->sldGraphRange->setValue(set_slider_value);
+        ui->sldGraphRange->setValue(m_set_slider_value);
         ui->sldGraphRange->blockSignals(false);
     }
-    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(mins));
+    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{mins}));
 }
 
 void RPCConsole::on_sldGraphRange_sliderReleased()
 {
-    ui->sldGraphRange->setValue(set_slider_value);
-    slider_in_use = false;
+    ui->sldGraphRange->setValue(m_set_slider_value);
+    m_slider_in_use = false;
 }
 
-void RPCConsole::on_sldGraphRange_sliderPressed() { slider_in_use = true; }
+void RPCConsole::on_sldGraphRange_sliderPressed() { m_slider_in_use = true; }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
-    if (!slider_in_use && ui->trafficGraph->GraphRangeBump())
+    if (!m_slider_in_use && ui->trafficGraph->GraphRangeBump())
         setTrafficGraphRange(0); // bump it up
-    ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
-    ui->lblBytesOut->setText(GUIUtil::formatBytes(totalBytesOut));
+
+    // Add baseline values to the current node values
+    quint64 totalIn = totalBytesIn + ui->trafficGraph->getBaselineBytesRecv();
+    quint64 totalOut = totalBytesOut + ui->trafficGraph->getBaselineBytesSent();
+
+    ui->lblBytesIn->setText(GUIUtil::formatBytes(totalIn));
+    ui->lblBytesOut->setText(GUIUtil::formatBytes(totalOut));
 }
 
 void RPCConsole::updateDetailWidget()
