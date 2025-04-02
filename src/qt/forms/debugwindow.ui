@@ -674,7 +674,7 @@
               <number>200</number>
              </property>
              <property name="pageStep">
-              <number>400</number>
+              <number>200</number>
              </property>
              <property name="value">
               <number>0</number>

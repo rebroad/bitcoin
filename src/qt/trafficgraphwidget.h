@@ -5,10 +5,10 @@
 #ifndef BITCOIN_QT_TRAFFICGRAPHWIDGET_H
 #define BITCOIN_QT_TRAFFICGRAPHWIDGET_H
 
-#include <QWidget>
-#include <QQueue>
 #include <QFile>
 #include <QKeyEvent>
+#include <QQueue>
+#include <QWidget>
 
 #include <chrono>
 
@@ -19,66 +19,71 @@ class QPaintEvent;
 class QTimer;
 QT_END_NAMESPACE
 
-#define VALUES_SIZE 13
+static constexpr int VALUES_SIZE = 13;
 
-class TrafficGraphWidget : public QWidget {
+class TrafficGraphWidget : public QWidget
+{
     Q_OBJECT
 
 public:
-    explicit TrafficGraphWidget(QWidget *parent = nullptr);
-    void setClientModel(ClientModel *model);
-    bool GraphRangeBump() const;
-    void exportData();
-    unsigned int getCurrentRangeIndex() const;
+    explicit TrafficGraphWidget(QWidget* parent = nullptr);
+    void setClientModel(ClientModel* model);
+    bool GraphRangeBump() const { return m_bump_value; }
+    unsigned int getCurrentRangeIndex() const { return m_new_value; }
+    quint64 getBaselineBytesRecv() const { return m_baseline_bytes_recv; }
+    quint64 getBaselineBytesSent() const { return m_baseline_bytes_sent; }
 
 protected:
-    void paintEvent(QPaintEvent *) override;
+    void paintEvent(QPaintEvent*) override;
     int y_value(float value) const;
-    void mouseMoveEvent(QMouseEvent *event) override;
-    void mousePressEvent(QMouseEvent *event) override;
-    void mouseReleaseEvent(QMouseEvent *event) override;
-    void focusInEvent(QFocusEvent *event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void focusInEvent(QFocusEvent* event) override;
     int findClosestPoint(int x, int y, int rangeIndex) const;
     int findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const;
 
 public Q_SLOTS:
     void updateStuff();
-    std::chrono::minutes setGraphRange(unsigned int value);
+    int setGraphRange(int value);
 
 private:
     void saveData();
+    void paintPath(QPainterPath& path, const QQueue<float>& samples);
     bool loadDataFromBinary();
     bool loadData();
     void update_fMax();
-    void paintPath(QPainterPath &path, QQueue<float> &samples);
     void updateRates(int value);
     void focusSlider(Qt::FocusReason reason);
     void drawTooltipPoint(QPainter& painter);
 
-    QTimer *m_timer{nullptr};
-    float m_fmax{0};
-    float m_new_fmax{0};
+    QTimer* m_timer{nullptr};
+    float fMax{0.0001f};
+    float m_new_fmax{0.0001f};
     float m_range{0};
+    QQueue<float> m_samples_in[VALUES_SIZE] = {};
+    QQueue<float> m_samples_out[VALUES_SIZE] = {};
+    QQueue<int64_t> m_time_stamp[VALUES_SIZE] = {};
+    quint64 m_last_bytes_in[VALUES_SIZE] = {};
+    quint64 m_last_bytes_out[VALUES_SIZE] = {};
+    int64_t m_last_time[VALUES_SIZE] = {};
+    ClientModel* m_client_model{nullptr};
+
     int m_value{0};
     int m_new_value{0};
     bool m_bump_value{false};
-    bool m_toggle{true};
+    bool m_toggle{true}; // Default to logarithmic
     int m_tt_point{-1};
-    bool m_tt_in_series{true}; // true = in series, false = out series
+    bool m_tt_in_series{true}; // true = in, false = out
     int m_x_offset{0};
     int m_y_offset{0};
     int64_t m_tt_time{0};
-    QQueue<float> m_samples_in[VALUES_SIZE] = {};
-    QQueue<float> m_samples_out[VALUES_SIZE] = {};
-    QQueue<std::chrono::milliseconds> m_time_stamp[VALUES_SIZE] = {};
-    quint64 m_last_bytes_in[VALUES_SIZE] = {};
-    quint64 m_last_bytes_out[VALUES_SIZE] = {};
-    std::chrono::milliseconds m_last_time[VALUES_SIZE] = {};
-    unsigned int m_values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
-    ClientModel *m_client_model{nullptr};
-    uint64_t m_total_bytes_recv{0};
-    uint64_t m_total_bytes_sent{0};
-    uint64_t m_offset[VALUES_SIZE] = {};
+    int m_values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
+    int64_t m_offset[VALUES_SIZE] = {};
+    std::string m_data_dir;
+    interfaces::Node* m_node;
+    quint64 m_baseline_bytes_recv{0};
+    quint64 m_baseline_bytes_sent{0};
 };
 
 #endif // BITCOIN_QT_TRAFFICGRAPHWIDGET_H
