@@ -69,35 +69,46 @@ class LoggingTest(BitcoinTestFramework):
         # just sanity check no crash here
         self.restart_node(0, [f"-debuglogfile={os.devnull}"])
 
-        self.log.info("Test -debug and -debugexclude raise when invalid values are passed")
+        self.log.info("Test -debug and -debugexclude with invalid values now just log a warning and continue")
         self.stop_node(0)
-        self.nodes[0].assert_start_raises_init_error(
-            extra_args=["-debug=abc"],
-            expected_msg="Error: Unsupported logging category -debug=abc.",
-            match=ErrorMatch.FULL_REGEX,
-        )
-        self.nodes[0].assert_start_raises_init_error(
-            extra_args=["-debugexclude=abc"],
-            expected_msg="Error: Unsupported logging category -debugexclude=abc.",
-            match=ErrorMatch.FULL_REGEX,
-        )
 
-        self.log.info("Test -loglevel raises when invalid values are passed")
-        self.nodes[0].assert_start_raises_init_error(
-            extra_args=["-loglevel=abc"],
-            expected_msg="Error: Unsupported global logging level -loglevel=abc. Valid values: info, debug, trace.",
-            match=ErrorMatch.FULL_REGEX,
-        )
-        self.nodes[0].assert_start_raises_init_error(
-            extra_args=["-loglevel=net:abc"],
-            expected_msg="Error: Unsupported category-specific logging level -loglevel=net:abc.",
-            match=ErrorMatch.PARTIAL_REGEX,
-        )
-        self.nodes[0].assert_start_raises_init_error(
-            extra_args=["-loglevel=net:info:abc"],
-            expected_msg="Error: Unsupported category-specific logging level -loglevel=net:info:abc.",
-            match=ErrorMatch.PARTIAL_REGEX,
-        )
+        # Start with invalid debug category - should start successfully
+        self.start_node(0, ["-debug=abc"])
+        # Check that debug.log contains a warning about the invalid category
+        with open(self.nodes[0].debug_log_path, 'r', encoding='utf-8') as f:
+            debug_log = f.read()
+        assert "Unsupported logging category -debug=abc" in debug_log
+
+        # Test with debugexclude
+        self.stop_node(0)
+        self.start_node(0, ["-debugexclude=abc"])
+        # Check that debug.log contains a warning about the invalid category
+        with open(self.nodes[0].debug_log_path, 'r', encoding='utf-8') as f:
+            debug_log = f.read()
+        assert "Unsupported logging category -debugexclude=abc" in debug_log
+
+        self.log.info("Test -loglevel with invalid values now just logs a warning and continues")
+        self.stop_node(0)
+
+        # Test with invalid global loglevel
+        self.start_node(0, ["-loglevel=abc"])
+        with open(self.nodes[0].debug_log_path, 'r', encoding='utf-8') as f:
+            debug_log = f.read()
+        assert "Unsupported global logging level -loglevel=abc" in debug_log
+
+        # Test with invalid category-specific loglevel
+        self.stop_node(0)
+        self.start_node(0, ["-loglevel=net:abc"])
+        with open(self.nodes[0].debug_log_path, 'r', encoding='utf-8') as f:
+            debug_log = f.read()
+        assert "Unsupported category-specific logging level -loglevel=net:abc" in debug_log
+
+        # Test with invalid format for category-specific loglevel
+        self.stop_node(0)
+        self.start_node(0, ["-loglevel=net:info:abc"])
+        with open(self.nodes[0].debug_log_path, 'r', encoding='utf-8') as f:
+            debug_log = f.read()
+        assert "Unsupported category-specific logging level -loglevel=net:info:abc" in debug_log
 
         self.log.info("Test that -nodebug,-debug=0,-debug=none clear previously specified debug options")
         disable_debug_options = [

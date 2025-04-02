@@ -62,13 +62,16 @@ util::Result<void> SetLoggingLevel(const ArgsManager& args)
             if (level_str.find_first_of(':', 3) == std::string::npos) {
                 // user passed a global log level, i.e. -loglevel=<level>
                 if (!LogInstance().SetLogLevel(level_str)) {
-                    return util::Error{strprintf(_("Unsupported global logging level %s=%s. Valid values: %s."), "-loglevel", level_str, LogInstance().LogLevelsString())};
+                    // Instead of returning an error, just log a warning and continue
+                    LogPrintf("Warning: Unsupported global logging level %s=%s. Valid values: %s.\n", "-loglevel", level_str.c_str(), LogInstance().LogLevelsString().c_str());
                 }
             } else {
                 // user passed a category-specific log level, i.e. -loglevel=<category>:<level>
                 const auto& toks = SplitString(level_str, ':');
                 if (!(toks.size() == 2 && LogInstance().SetCategoryLogLevel(toks[0], toks[1]))) {
-                    return util::Error{strprintf(_("Unsupported category-specific logging level %1$s=%2$s. Expected %1$s=<category>:<loglevel>. Valid categories: %3$s. Valid loglevels: %4$s."), "-loglevel", level_str, LogInstance().LogCategoriesString(), LogInstance().LogLevelsString())};
+                    // Instead of returning an error, just log a warning and continue
+                    LogPrintf("Warning: Unsupported category-specific logging level %s=%s. Expected %s=<category>:<loglevel>. Valid categories: %s. Valid loglevels: %s.\n",
+                        "-loglevel", level_str.c_str(), "-loglevel", LogInstance().LogCategoriesString().c_str(), LogInstance().LogLevelsString().c_str());
                 }
             }
         }
@@ -87,14 +90,16 @@ util::Result<void> SetLoggingCategories(const ArgsManager& args)
 
         for (const auto& cat : categories_to_process) {
             if (!LogInstance().EnableCategory(cat)) {
-                return util::Error{strprintf(_("Unsupported logging category %s=%s."), "-debug", cat)};
+                // Instead of returning an error, just log a warning and continue
+                LogPrintf("Warning: Unsupported logging category %s=%s.\n", "-debug", cat.c_str());
             }
         }
 
     // Now remove the logging categories which were explicitly excluded
     for (const std::string& cat : args.GetArgs("-debugexclude")) {
         if (!LogInstance().DisableCategory(cat)) {
-            return util::Error{strprintf(_("Unsupported logging category %s=%s."), "-debugexclude", cat)};
+            // Instead of returning an error, just log a warning and continue
+            LogPrintf("Warning: Unsupported logging category %s=%s.\n", "-debugexclude", cat.c_str());
         }
     }
     return {};
