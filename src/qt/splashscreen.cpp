@@ -57,11 +57,10 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
 
     QPainter pixPaint(&pixmap);
     // Use appropriate text color based on theme
-    if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
+    if (QApplication::palette().color(QPalette::Window).lightness() < 128)
         pixPaint.setPen(QApplication::palette().color(QPalette::WindowText));
-    } else {
+    else
         pixPaint.setPen(QColor(100,100,100));
-    }
 
     // draw a slightly radial gradient
     QRadialGradient gradient(QPoint(0,0), splashSize.width()/devicePixelRatio);
@@ -112,7 +111,7 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
         pixPaint.setFont(QFont(font, 12*fontFactor));
         titleVersionVSpace -= 5;
     }
-    pixPaint.drawText(textStartX, paddingTop+titleVersionVSpace, versionText);
+    pixPaint.drawText(textStartX,paddingTop+titleVersionVSpace,versionText);
 
     // draw copyright stuff
     {
@@ -134,7 +133,7 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
         boldFont.setWeight(QFont::Bold);
         pixPaint.setFont(boldFont);
         fm = pixPaint.fontMetrics();
-        pixPaint.drawText(textStartX, 15, titleAddText);
+        pixPaint.drawText(textStartX,15,titleAddText);
     }
 
     pixPaint.end();
@@ -256,11 +255,10 @@ void SplashScreen::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.drawPixmap(0, 0, pixmap);
     QRect r = rect().adjusted(5, 5, -5, -5);
-    if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
+    if (QApplication::palette().color(QPalette::Window).lightness() < 128)
         painter.setPen(QApplication::palette().color(QPalette::WindowText));
-    } else {
+    else
         painter.setPen(curColor);
-    }
     painter.drawText(r, curAlignment, curMessage);
 }
 
