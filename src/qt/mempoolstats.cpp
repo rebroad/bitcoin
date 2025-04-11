@@ -175,6 +175,7 @@ void MempoolStats::drawChart()
                 item_num = m_scene->addText(QString::number(grid_num), gridFont);
             else
                 item_num = m_scene->addText(GUIUtil::formatBytes(grid_num), gridFont);
+            item_num->setDefaultTextColor(Qt::white);
             item_num->setPos(GRAPH_PADDING_LEFT+maxwidth, lY-(item_num->boundingRect().height()/2));
         }
 
@@ -183,6 +184,7 @@ void MempoolStats::drawChart()
 
         // draw fee ranges
         QGraphicsTextItem *fee_range_title = m_scene->addText("Fee ranges\n(sat/b)", gridFont);
+        fee_range_title->setDefaultTextColor(Qt::white);
         fee_range_title->setPos(2, bottom+10);
 
         const qreal c_w = 10, c_h = 10, c_margin = 2;
@@ -221,6 +223,7 @@ void MempoolStats::drawChart()
             if (i+1 == static_cast<int>(m_clientmodel->m_mempool_feehist[0].second.size()))
                 fee_text->setText(QString::number(list_entry.fee_from)+"+");
             fee_text->setFont(gridFont);
+            fee_text->setBrush(QBrush(Qt::white));
             fee_text->setPos(4+c_w+2, c_y);
             m_scene->addItem(fee_text);
             connect(fee_text, &ClickableTextItem::objectClicked, [&fee_rect](QGraphicsItem*item) {
@@ -286,6 +289,7 @@ void MempoolStats::drawChart()
     }
 
     QGraphicsTextItem *item_num = m_scene->addText(total_text, gridFont);
+    item_num->setDefaultTextColor(Qt::white);
     item_num->setPos(GRAPH_PADDING_LEFT+(maxwidth/2), bottom);
 }
 

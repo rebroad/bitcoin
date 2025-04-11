@@ -56,12 +56,24 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
     pixmap.setDevicePixelRatio(devicePixelRatio);
 
     QPainter pixPaint(&pixmap);
-    pixPaint.setPen(QColor(100,100,100));
+    // Use appropriate text color based on theme
+    if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
+        pixPaint.setPen(QApplication::palette().color(QPalette::WindowText));
+    } else {
+        pixPaint.setPen(QColor(100,100,100));
+    }
 
     // draw a slightly radial gradient
     QRadialGradient gradient(QPoint(0,0), splashSize.width()/devicePixelRatio);
-    gradient.setColorAt(0, Qt::white);
-    gradient.setColorAt(1, QColor(247,247,247));
+    if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
+        // Dark mode
+        gradient.setColorAt(0, QApplication::palette().color(QPalette::Window));
+        gradient.setColorAt(1, QApplication::palette().color(QPalette::Base));
+    } else {
+        // Light mode
+        gradient.setColorAt(0, Qt::white);
+        gradient.setColorAt(1, QColor(247,247,247));
+    }
     QRect rGradient(QPoint(0,0), splashSize);
     pixPaint.fillRect(rGradient, gradient);
 
@@ -103,6 +115,11 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
         const int x = pixmap.width()/devicePixelRatio-titleTextWidth-paddingRight;
         const int y = paddingTop+titleCopyrightVSpace;
         QRect copyrightRect(x, y, pixmap.width() - x - paddingRight, pixmap.height() - y);
+        if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
+            pixPaint.setPen(QApplication::palette().color(QPalette::WindowText));
+        } else {
+            pixPaint.setPen(QColor(100,100,100));
+        }
         pixPaint.drawText(copyrightRect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, copyrightText);
     }
 
@@ -235,7 +252,11 @@ void SplashScreen::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.drawPixmap(0, 0, pixmap);
     QRect r = rect().adjusted(5, 5, -5, -5);
-    painter.setPen(curColor);
+    if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
+        painter.setPen(QApplication::palette().color(QPalette::WindowText));
+    } else {
+        painter.setPen(curColor);
+    }
     painter.drawText(r, curAlignment, curMessage);
 }
 

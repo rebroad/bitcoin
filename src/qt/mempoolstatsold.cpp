@@ -69,37 +69,41 @@ void MempoolStatsOld::drawChart() {
         // create labels (only once)
         titleItem = scene->addText(tr("Mempool Statistics"));
         titleItem->setFont(QFont(LABEL_FONT, LABEL_TITLE_SIZE, QFont::Light));
+        titleItem->setDefaultTextColor(Qt::white);
         titleLine = scene->addLine(0,0,100,100);
         titleLine->setPen(QPen(QColor(100,100,100, 200), 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
 
         cbShowMemUsage = new QCheckBox("Dynamic Memory Usage");
         cbShowMemUsage->setChecked(true);
-        cbShowMemUsage->setStyleSheet("background-color: rgb(255,255,255);");
+        cbShowMemUsage->setStyleSheet("QCheckBox { color: white; background-color: rgb(30,30,30); }");
         dynMemUsageSwitch = scene->addWidget(cbShowMemUsage);
         connect(cbShowMemUsage, SIGNAL(stateChanged(int)), this, SLOT(drawChart()));
         cbShowMemUsage->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
         dynMemUsageValueItem = scene->addText("N/A");
         dynMemUsageValueItem->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Bold));
+        dynMemUsageValueItem->setDefaultTextColor(Qt::white);
 
         cbShowNumTxns = new QCheckBox("Amount of Transactions");
         cbShowNumTxns->setChecked(true);
-        cbShowNumTxns->setStyleSheet("background-color: rgb(255,255,255);");
+        cbShowNumTxns->setStyleSheet("QCheckBox { color: white; background-color: rgb(30,30,30); }");
         txCountSwitch = scene->addWidget(cbShowNumTxns);
         scene->addItem(txCountSwitch);
         connect(cbShowNumTxns, SIGNAL(stateChanged(int)), this, SLOT(drawChart()));
         cbShowNumTxns->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
         txCountValueItem = scene->addText("N/A");
         txCountValueItem->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Bold));
+        txCountValueItem->setDefaultTextColor(Qt::white);
 
         cbShowMinFeerate = new QCheckBox("MinRelayFee per KB");
         cbShowMinFeerate->setChecked(true);
-        cbShowMinFeerate->setStyleSheet("background-color: rgb(255,255,255);");
+        cbShowMinFeerate->setStyleSheet("QCheckBox { color: white; background-color: rgb(30,30,30); }");
         minFeeSwitch = scene->addWidget(cbShowMinFeerate);
         scene->addItem(minFeeSwitch);
         connect(cbShowMinFeerate, SIGNAL(stateChanged(int)), this, SLOT(drawChart()));
         cbShowMinFeerate->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Light));
         minFeeValueItem = scene->addText(tr("N/A"));
         minFeeValueItem->setFont(QFont(LABEL_FONT, LABEL_KV_SIZE, QFont::Bold));
+        minFeeValueItem->setDefaultTextColor(Qt::white);
 
         noDataItem = scene->addText(tr("No Data available"));
         noDataItem->setFont(QFont(LABEL_FONT, LABEL_TITLE_SIZE, QFont::Light));
