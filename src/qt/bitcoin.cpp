@@ -227,31 +227,33 @@ BitcoinApplication::BitcoinApplication():
     RegisterMetaTypes();
     setQuitOnLastWindowClosed(false);
 
-    // Set up Qt6-like dark theme
-    setStyle("Fusion");
-    QPalette darkPalette;
-    darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
-    darkPalette.setColor(QPalette::WindowText, Qt::white);
-    darkPalette.setColor(QPalette::Base, QColor(25, 25, 25));
-    darkPalette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
-    darkPalette.setColor(QPalette::Text, Qt::white);
-    // Set disabled text color for menu items
-    QColor disabledTextColor = QColor(100, 100, 100);  // A darker gray that's clearly disabled
-    darkPalette.setColor(QPalette::Disabled, QPalette::Text, disabledTextColor);
-    darkPalette.setColor(QPalette::Disabled, QPalette::WindowText, disabledTextColor);
-    darkPalette.setColor(QPalette::Disabled, QPalette::ButtonText, disabledTextColor);
-    // Remove text shadow effect for disabled items
-    darkPalette.setColor(QPalette::Disabled, QPalette::Light, disabledTextColor);
-    darkPalette.setColor(QPalette::Disabled, QPalette::Midlight, disabledTextColor);
-    darkPalette.setColor(QPalette::Disabled, QPalette::Dark, disabledTextColor);
-    darkPalette.setColor(QPalette::Disabled, QPalette::Mid, disabledTextColor);
-    darkPalette.setColor(QPalette::Button, QColor(53, 53, 53));
-    darkPalette.setColor(QPalette::ButtonText, Qt::white);
-    darkPalette.setColor(QPalette::BrightText, Qt::red);
-    darkPalette.setColor(QPalette::Link, QColor(42, 130, 218));
-    darkPalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
-    darkPalette.setColor(QPalette::HighlightedText, Qt::black);
-    setPalette(darkPalette);
+    // Set up Qt6-like dark theme if system is in dark mode
+    if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
+        setStyle("Fusion");
+        QPalette darkPalette;
+        darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
+        darkPalette.setColor(QPalette::WindowText, Qt::white);
+        darkPalette.setColor(QPalette::Base, QColor(25, 25, 25));
+        darkPalette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
+        darkPalette.setColor(QPalette::Text, Qt::white);
+        // Set disabled text color for menu items
+        QColor disabledTextColor = QColor(100, 100, 100);  // A darker gray that's clearly disabled
+        darkPalette.setColor(QPalette::Disabled, QPalette::Text, disabledTextColor);
+        darkPalette.setColor(QPalette::Disabled, QPalette::WindowText, disabledTextColor);
+        darkPalette.setColor(QPalette::Disabled, QPalette::ButtonText, disabledTextColor);
+        // Remove text shadow effect for disabled items
+        darkPalette.setColor(QPalette::Disabled, QPalette::Light, disabledTextColor);
+        darkPalette.setColor(QPalette::Disabled, QPalette::Midlight, disabledTextColor);
+        darkPalette.setColor(QPalette::Disabled, QPalette::Dark, disabledTextColor);
+        darkPalette.setColor(QPalette::Disabled, QPalette::Mid, disabledTextColor);
+        darkPalette.setColor(QPalette::Button, QColor(53, 53, 53));
+        darkPalette.setColor(QPalette::ButtonText, Qt::white);
+        darkPalette.setColor(QPalette::BrightText, Qt::red);
+        darkPalette.setColor(QPalette::Link, QColor(42, 130, 218));
+        darkPalette.setColor(QPalette::Highlight, QColor(42, 130, 218));
+        darkPalette.setColor(QPalette::HighlightedText, Qt::black);
+        setPalette(darkPalette);
+    }
 }
 
 void BitcoinApplication::setupPlatformStyle()
