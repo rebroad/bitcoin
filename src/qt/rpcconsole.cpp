@@ -904,6 +904,12 @@ void RPCConsole::clear(bool keep_prompt)
 void RPCConsole::keyPressEvent(QKeyEvent *event)
 {
     if (windowType() != Qt::Widget && GUIUtil::IsEscapeOrBack(event->key())) {
+        // If we're in the Peers tab and a peer is selected, clear the selection instead of closing
+        if (ui->tabWidget->currentWidget() == ui->tab_peers && !ui->peerWidget->selectionModel()->selectedRows().isEmpty()) {
+            clearSelectedNode();
+            event->accept();
+            return;
+        }
         close();
     }
 }
@@ -1367,7 +1373,9 @@ void RPCConsole::unbanSelectedNode()
 
 void RPCConsole::clearSelectedNode()
 {
+    ui->peerWidget->setCurrentIndex(QModelIndex());
     ui->peerWidget->selectionModel()->clearSelection();
+    ui->peerWidget->clearSelection();
     cachedNodeids.clear();
     updateDetailWidget();
 }
