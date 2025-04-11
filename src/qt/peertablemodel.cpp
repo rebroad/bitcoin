@@ -146,7 +146,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         case MPpm:
             return QVariant(Qt::AlignCenter);
         case Subversion:
-            return {};
+            return QVariant(Qt::AlignLeft | Qt::AlignVCenter);
         } // no default case, so the compiler can warn about missing cases
         assert(false);
     } else if (role == StatsRole) {
@@ -161,9 +161,9 @@ QVariant PeerTableModel::headerData(int section, Qt::Orientation orientation, in
     if(orientation == Qt::Horizontal)
     {
         if(role == Qt::DisplayRole && section < columns.size())
-        {
             return columns[section];
-        }
+        if (static_cast<ColumnIndex>(section) == Subversion)
+            return QVariant(Qt::AlignLeft | Qt::AlignVCenter);
     }
     return QVariant();
 }

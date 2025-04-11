@@ -683,6 +683,7 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             ui->peerWidget->setColumnWidth(PeerTableModel::Ping, PING_COLUMN_WIDTH);
         }
         ui->peerWidget->horizontalHeader()->setStretchLastSection(true);
+        ui->peerWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
         ui->peerWidget->setItemDelegateForColumn(PeerTableModel::NetNodeId, new PeerIdViewDelegate(this));
 
         // create peer table context menu
