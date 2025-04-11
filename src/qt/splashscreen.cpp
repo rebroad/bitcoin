@@ -85,6 +85,11 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
 
     pixPaint.drawPixmap(rectIcon, icon);
 
+    // Calculate right edge of logo circle for text positioning
+    int logoRightEdge = rectIcon.right() - 30; // Subtract some padding from the actual edge
+    int textLeftMargin = 20; // Consistent margin between logo and text
+    int textStartX = logoRightEdge + textLeftMargin;
+
     // check font size and drawing with
     pixPaint.setFont(QFont(font, 33*fontFactor));
     QFontMetrics fm = pixPaint.fontMetrics();
@@ -96,23 +101,23 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
     pixPaint.setFont(QFont(font, 33*fontFactor));
     fm = pixPaint.fontMetrics();
     titleTextWidth  = GUIUtil::TextWidth(fm, titleText);
-    pixPaint.drawText(pixmap.width()/devicePixelRatio-titleTextWidth-paddingRight,paddingTop,titleText);
+    pixPaint.drawText(textStartX, paddingTop, titleText);
 
-    pixPaint.setFont(QFont(font, 15*fontFactor));
+    pixPaint.setFont(QFont(font, 18*fontFactor));
 
     // if the version string is too long, reduce size
     fm = pixPaint.fontMetrics();
     int versionTextWidth  = GUIUtil::TextWidth(fm, versionText);
     if(versionTextWidth > titleTextWidth+paddingRight-10) {
-        pixPaint.setFont(QFont(font, 10*fontFactor));
+        pixPaint.setFont(QFont(font, 12*fontFactor));
         titleVersionVSpace -= 5;
     }
-    pixPaint.drawText(pixmap.width()/devicePixelRatio-titleTextWidth-paddingRight+2,paddingTop+titleVersionVSpace,versionText);
+    pixPaint.drawText(textStartX, paddingTop+titleVersionVSpace, versionText);
 
     // draw copyright stuff
     {
-        pixPaint.setFont(QFont(font, 10*fontFactor));
-        const int x = pixmap.width()/devicePixelRatio-titleTextWidth-paddingRight;
+        pixPaint.setFont(QFont(font, 12*fontFactor));
+        const int x = textStartX;
         const int y = paddingTop+titleCopyrightVSpace;
         QRect copyrightRect(x, y, pixmap.width() - x - paddingRight, pixmap.height() - y);
         if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
@@ -125,12 +130,11 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
 
     // draw additional text if special network
     if(!titleAddText.isEmpty()) {
-        QFont boldFont = QFont(font, 10*fontFactor);
+        QFont boldFont = QFont(font, 12*fontFactor);
         boldFont.setWeight(QFont::Bold);
         pixPaint.setFont(boldFont);
         fm = pixPaint.fontMetrics();
-        int titleAddTextWidth  = GUIUtil::TextWidth(fm, titleAddText);
-        pixPaint.drawText(pixmap.width()/devicePixelRatio-titleAddTextWidth-10,15,titleAddText);
+        pixPaint.drawText(textStartX, 15, titleAddText);
     }
 
     pixPaint.end();
