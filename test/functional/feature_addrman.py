@@ -124,10 +124,13 @@ class AddrmanTest(BitcoinTestFramework):
         self.log.info("Check that corrupt addrman cannot be read (failed check)")
         self.stop_node(0)
         write_addrman(peers_dat, bucket_key=0)
-        self.nodes[0].assert_start_raises_init_error(
-            expected_msg=init_error("Corrupt data. Consistency check failed with code -16: .*"),
-            match=ErrorMatch.FULL_REGEX,
-        )
+        with self.nodes[0].assert_debug_log([
+                "Renamed corrupt peers.dat to peers.corrupt.dat",
+                "Created new peers.dat after corruption was detected",
+        ]):
+            self.start_node(0)
+        assert_equal(self.nodes[0].getnodeaddresses(), [])
+        assert os.path.exists(os.path.join(self.nodes[0].datadir, self.chain, "peers.corrupt.dat"))
 
         self.log.info("Check that missing addrman is recreated")
         self.stop_node(0)

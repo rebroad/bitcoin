@@ -198,9 +198,21 @@ std::optional<bilingual_str> LoadAddrman(const std::vector<bool>& asmap, const A
         LogPrintf("Creating peers.dat because the file was not found (%s)\n", fs::quoted(fs::PathToString(path_addr)));
         DumpPeerAddresses(args, *addrman);
     } catch (const std::exception& e) {
-        addrman = nullptr;
-        return strprintf(_("Invalid or corrupt peers.dat (%s). If you believe this is a bug, please report it to %s. As a workaround, you can move the file (%s) out of the way (rename, move, or delete) to have a new one created on the next start."),
-                         e.what(), PACKAGE_BUGREPORT, fs::quoted(fs::PathToString(path_addr)));
+        // Rename corrupt peers.dat to peers.corrupt.dat
+        const auto corrupt_path = args.GetDataDirNet() / "peers.corrupt.dat";
+        try {
+            if (fs::exists(path_addr)) {
+                fs::rename(path_addr, corrupt_path);
+                LogPrintf("Renamed corrupt peers.dat to peers.corrupt.dat\n");
+            }
+        } catch (const std::exception& rename_err) {
+            LogPrintf("Failed to rename corrupt peers.dat: %s\n", rename_err.what());
+        }
+
+        // Create new empty peers.dat
+        addrman = std::make_unique<AddrMan>(asmap, /* deterministic */ false, /* consistency_check_ratio */ check_addrman);
+        DumpPeerAddresses(args, *addrman);
+        LogPrintf("Created new peers.dat after corruption was detected\n");
     }
     return std::nullopt;
 }
