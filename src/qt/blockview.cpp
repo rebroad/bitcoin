@@ -103,6 +103,10 @@ GuiBlockView::GuiBlockView(const PlatformStyle *platformStyle, const NetworkStyl
     setWindowIcon(networkStyle->getTrayAndWindowIcon());
     resize(640, 640);
 
+    // Initialize physics timer
+    m_physics_timer.setInterval(int(m_physics_dt * 1000));  // Convert to milliseconds
+    connect(&m_physics_timer, &QTimer::timeout, this, &GuiBlockView::updatePhysics);
+
     QVBoxLayout * const layout = new QVBoxLayout(this);
     setLayout(layout);
 
@@ -361,42 +365,62 @@ void GuiBlockView::updateElements(bool instant)
     auto& bubbles = m_bubblegraph->bubbles;
     size_t total_txs_size{0};
     qreal limit_halfwidth{std::sqrt(::GetSerializeSize(TX_WITH_WITNESS(block))) * EXPECTED_WHITESPACE_PERCENT / 2};
+
+    // First pass: Create or update particles for all transactions
     for (size_t i = 1; i < block.vtx.size(); ++i) {
         auto& tx = *block.vtx[i];
-        auto& el = m_elements[tx.GetWitnessHash()];
-        QPointF preferred_loc;
-        double diameter;
         const auto tx_size = tx.GetTotalSize();
         total_txs_size += tx_size;
-        const bool fresh_bubble = !el.gi;
-        if (fresh_bubble) {
-            diameter = 2 * std::sqrt(tx_size / std::numbers::pi);
-        } else {
-            // preferred_loc = el.gi->pos();
-            diameter = el.gi->boundingRect().height();
+        const auto wtxid = tx.GetWitnessHash();
+
+        // Get or create particle
+        auto& particle = m_particles[wtxid];
+        particle.txid = wtxid;
+        particle.mass = std::sqrt(tx_size);  // Use sqrt of size as mass proxy
+
+        // Get or create scene element
+        auto& el = m_elements[wtxid];
+        particle.element = &el;
+
+        // Calculate target radius based on transaction size
+        const qreal target_radius = std::sqrt(tx_size / std::numbers::pi);
+        particle.target_radius = target_radius;
+
+        // If this is a new particle, start with small radius
+        if (particle.current_radius < 1.0) {
+            particle.current_radius = 1.0;
         }
-        Bubble proposed{ .pos = {}, .radius = diameter / 2, .el = &el, };
+
+        // Create bubble for layout
+        Bubble proposed{ .pos = {}, .radius = target_radius, .el = &el };
         qreal x_extremity{proposed.radius};
+
+        // Use existing layout algorithm
         if (bubbles.empty()) {
             proposed.pos.setY(-proposed.radius);
         }
         for (auto bubble_it = bubbles.rbegin(); bubble_it != bubbles.rend(); ++bubble_it) {
             const auto& centre = bubble_it->pos;
-            QPointF preferred_loc_rel(preferred_loc.x() - centre.x(), preferred_loc.y() - centre.y());
+            QPointF preferred_loc_rel(particle.position.x() - centre.x(),
+                                    particle.position.y() - centre.y());
             double preferred_angle;
             if (preferred_loc_rel.isNull()) {
                 preferred_angle = std::numbers::pi / 2;
             } else {
-                preferred_angle = std::atan2(preferred_loc.y() - centre.y(), preferred_loc.x() - centre.x());
+                preferred_angle = std::atan2(preferred_loc.y() - centre.y(),
+                                           preferred_loc.x() - centre.x());
             }
             const auto distance = bubble_it->radius + proposed.radius + TX_PADDING_NEXT;
             double angle = preferred_angle;
             bool found{false};
             while (true) {
-                proposed.pos = QPointF(centre.x() + (distance * std::cos(angle)), centre.y() + (distance * std::sin(angle)));
+                proposed.pos = QPointF(centre.x() + (distance * std::cos(angle)),
+                                     centre.y() + (distance * std::sin(angle)));
 
                 x_extremity = std::abs(proposed.pos.x()) + proposed.radius;
-                if (proposed.pos.y() < -proposed.radius && x_extremity <= limit_halfwidth && !any_overlap(proposed, bubbles)) {
+                if (proposed.pos.y() < -proposed.radius &&
+                    x_extremity <= limit_halfwidth &&
+                    !any_overlap(proposed, bubbles)) {
                     found = true;
                     break;
                 }
@@ -404,7 +428,8 @@ void GuiBlockView::updateElements(bool instant)
                 if (angle < preferred_angle) {
                     angle = preferred_angle + (preferred_angle - angle);
                 } else {
-                    angle = preferred_angle - (angle - preferred_angle) - (std::numbers::pi / RADIAN_DIVISOR);
+                    angle = preferred_angle - (angle - preferred_angle) -
+                           (std::numbers::pi / RADIAN_DIVISOR);
                 }
                 if (angle > preferred_angle + std::numbers::pi) {
                     break;
@@ -412,15 +437,51 @@ void GuiBlockView::updateElements(bool instant)
             }
             if (found) break;
         }
-        m_bubblegraph->min_x = std::min(m_bubblegraph->min_x, proposed.pos.x() - proposed.radius);
-        m_bubblegraph->max_x = std::max(m_bubblegraph->max_x, proposed.pos.x() + proposed.radius);
-        m_bubblegraph->min_y = std::min(m_bubblegraph->min_y, proposed.pos.y() - proposed.radius);
+
+        // Update particle target position
+        particle.target_pos = proposed.pos;
+
+        // If particle is new, set initial position
+        if (particle.position.isNull()) {
+            particle.position = proposed.pos;
+        }
+
+        m_bubblegraph->min_x = std::min(m_bubblegraph->min_x,
+                                      proposed.pos.x() - proposed.radius);
+        m_bubblegraph->max_x = std::max(m_bubblegraph->max_x,
+                                      proposed.pos.x() + proposed.radius);
+        m_bubblegraph->min_y = std::min(m_bubblegraph->min_y,
+                                      proposed.pos.y() - proposed.radius);
         bubbles.push_back(proposed);
         el.target_loc = proposed.pos;
     }
-    m_lbl_tx_count->setText(tr("%1 (%2)").arg(block.vtx.size() - 1).arg(tr("%1 kB").arg(total_txs_size / 1000.0, 0, 'f', 1)));
+
+    // Remove particles for transactions that are no longer present
+    for (auto it = m_particles.begin(); it != m_particles.end(); ) {
+        bool found = false;
+        for (size_t i = 1; i < block.vtx.size(); ++i) {
+            if (block.vtx[i]->GetWitnessHash() == it->first) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            it = m_particles.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    m_lbl_tx_count->setText(tr("%1 (%2)").arg(block.vtx.size() - 1)
+        .arg(tr("%1 kB").arg(total_txs_size / 1000.0, 0, 'f', 1)));
     updateBlockFees(m_block_fees);
     m_bubblegraph->instant = instant;
+
+    // Start physics simulation if in fluid mode
+    if (m_fluid_mode) {
+        m_physics_timer.start();
+    }
+
     QMetaObject::invokeMethod(this, "updateSceneInit", Qt::QueuedConnection);
 }
 
@@ -428,30 +489,54 @@ void GuiBlockView::updateSceneInit()
 {
     LOCK(m_mutex);
     if (!m_bubblegraph) return;
+
     for (auto& bubble : m_bubblegraph->bubbles) {
         auto& el = *bubble.el;
+        const auto wtxid = el.gi ? m_particles.find([&](const auto& p) {
+            return p.second.element == &el;
+        })->first : Wtxid();
+
         if (!el.gi) {
             const auto diameter = bubble.radius * 2;
-            auto gi = m_scene->addEllipse(0, 0, diameter, diameter, QPen(palette().window(), TX_PADDING_NEARBY));
+            auto gi = m_scene->addEllipse(0, 0, diameter, diameter,
+                                        QPen(palette().window(), TX_PADDING_NEARBY));
             el.gi = gi;
             gi->setBrush(QColor(Qt::blue));
-            gi->setPos(bubble.pos.x() - bubble.radius, m_bubblegraph->instant ? (bubble.pos.y() - bubble.radius) : offscreen);
+
+            // Set initial position based on fluid mode
+            if (m_fluid_mode) {
+                auto& particle = m_particles[wtxid];
+                gi->setPos(particle.position.x() - bubble.radius,
+                          particle.position.y() - bubble.radius);
+                gi->setScale(particle.current_radius / bubble.radius);
+            } else {
+                gi->setPos(bubble.pos.x() - bubble.radius,
+                          m_bubblegraph->instant ?
+                          (bubble.pos.y() - bubble.radius) : offscreen);
+            }
+        } else if (m_fluid_mode) {
+            // Update existing elements for fluid mode
+            auto& particle = m_particles[wtxid];
+            el.gi->setPos(particle.position.x() - bubble.radius,
+                         particle.position.y() - bubble.radius);
+            el.gi->setScale(particle.current_radius / bubble.radius);
         }
     }
+
+    // Clean up removed elements
     for (auto it = m_elements.begin(); it != m_elements.end(); ) {
         const auto& target_loc = it->second.target_loc;
         const auto gi = it->second.gi;
         bool delete_el{false};
-        if (target_loc.y() == offscreen || !gi /* never got a chance to exist */) {
+
+        if (target_loc.y() == offscreen || !gi) {
             delete_el = true;
-            // TODO: if confirmed, slide it off the bottom
-            // TODO: if conflicted, pop the bubble?
-            // TODO: if delayed, move off the top
-        } else {
+        } else if (!m_fluid_mode) {
             if (gi->y() == offscreen) {
                 gi->setY(m_bubblegraph->min_y - gi->boundingRect().height());
             }
         }
+
         if (delete_el) {
             if (gi) {
                 m_scene->removeItem(gi);
@@ -462,8 +547,12 @@ void GuiBlockView::updateSceneInit()
             ++it;
         }
     }
-    m_scene->setSceneRect(m_bubblegraph->min_x, m_bubblegraph->min_y, m_bubblegraph->max_x - m_bubblegraph->min_x, -m_bubblegraph->min_y);
-    if (!m_bubblegraph->instant) {
+
+    m_scene->setSceneRect(m_bubblegraph->min_x, m_bubblegraph->min_y,
+                         m_bubblegraph->max_x - m_bubblegraph->min_x,
+                         -m_bubblegraph->min_y);
+
+    if (!m_bubblegraph->instant && !m_fluid_mode) {
         m_frame_div = 4;
         updateScene();
         m_timer.start(100);
@@ -511,5 +600,76 @@ void GuiBlockView::updateScene()
     --m_frame_div;
     if (all_completed) {
         m_timer.stop();
+    }
+}
+
+void GuiBlockView::updatePhysics()
+{
+    LOCK(m_mutex);
+
+    if (!m_fluid_mode) {
+        return;
+    }
+
+    // Update all particles
+    for (auto& [txid, particle] : m_particles) {
+        particle.update(m_physics_dt, m_k_spring, m_k_damping);
+
+        // Update associated scene element position if it exists
+        if (particle.element && particle.element->gi) {
+            particle.element->gi->setPos(particle.position);
+
+            // Update the scale to match current radius
+            qreal scale = particle.current_radius / particle.target_radius;
+            particle.element->gi->setScale(scale);
+        }
+    }
+
+    // Resolve collisions
+    resolveCollisions();
+
+    // Request scene update
+    m_scene->update();
+}
+
+void GuiBlockView::resolveCollisions()
+{
+    LOCK(m_mutex);
+
+    const qreal collision_radius = 1.2;  // Slightly larger than visual radius
+
+    // Simple n^2 collision check for now
+    // TODO: Optimize with spatial partitioning in Phase 5
+    for (auto it1 = m_particles.begin(); it1 != m_particles.end(); ++it1) {
+        auto& p1 = it1->second;
+
+        for (auto it2 = std::next(it1); it2 != m_particles.end(); ++it2) {
+            auto& p2 = it2->second;
+
+            QPointF diff = p1.position - p2.position;
+            qreal dist = std::sqrt(QPointF::dotProduct(diff, diff));
+            qreal min_dist = (p1.current_radius + p2.current_radius) * collision_radius;
+
+            if (dist < min_dist && dist > 0) {  // Avoid division by zero
+                // Collision response
+                QPointF normal = diff / dist;
+                QPointF relative_velocity = p1.velocity - p2.velocity;
+                qreal impulse = QPointF::dotProduct(relative_velocity, normal);
+
+                if (impulse < 0) {  // Only if moving towards each other
+                    // Apply impulse
+                    qreal restitution = 0.5;  // Bouncy but with energy loss
+                    QPointF impulse_vector = normal * (1 + restitution) * impulse;
+
+                    p1.velocity -= impulse_vector / p1.mass;
+                    p2.velocity += impulse_vector / p2.mass;
+
+                    // Separation to prevent sticking
+                    QPointF separation = normal * (min_dist - dist) * 0.5;
+                    p1.position += separation;
+                    p2.position -= separation;
+                }
+            }
+        }
     }
 }

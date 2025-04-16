@@ -60,11 +60,50 @@ private:
         QGraphicsItem* gi;
         QPointF target_loc;
     };
+
+    struct TransactionParticle {
+        QPointF position;      // Current position
+        QPointF velocity;      // Current velocity
+        QPointF target_pos;    // Target position to move towards
+        qreal current_radius;  // Current visual radius
+        qreal target_radius;   // Target radius to grow/shrink to
+        qreal mass;           // Mass (could be based on fee rate)
+        SceneElement* element; // Associated scene element
+        Wtxid txid;           // Transaction ID
+
+        TransactionParticle() :
+            position(0, 0),
+            velocity(0, 0),
+            target_pos(0, 0),
+            current_radius(1.0),
+            target_radius(1.0),
+            mass(1.0),
+            element(nullptr)
+        {}
+
+        void update(qreal dt, qreal k_spring, qreal k_damping) {
+            // Spring-damper physics
+            QPointF spring_force = (target_pos - position) * k_spring;
+            QPointF damping_force = -velocity * k_damping;
+            QPointF acceleration = (spring_force + damping_force) / mass;
+
+            velocity += acceleration * dt;
+            position += velocity * dt;
+
+            // Radius animation
+            if (current_radius < target_radius) {
+                current_radius = std::min(target_radius,
+                    current_radius + (target_radius - current_radius) * dt * 2.0);
+            }
+        }
+    };
+
     struct Bubble {
         QPointF pos;
         double radius;
         SceneElement *el;
     };
+
     struct BubbleGraph {
         std::vector<Bubble> bubbles;
         qreal min_x{0};
@@ -84,11 +123,21 @@ private:
 
     BlockViewValidationInterface *m_validation_interface;
 
+    // Physics parameters
+    qreal m_k_spring{100.0};    // Spring constant
+    qreal m_k_damping{10.0};    // Damping constant
+    qreal m_physics_dt{1.0/60.0}; // Physics timestep (60 fps)
+    QTimer m_physics_timer;      // Timer for physics updates
+    std::map<Wtxid, TransactionParticle> m_particles GUARDED_BY(m_mutex);
+    bool m_fluid_mode{false};    // Whether fluid dynamics is enabled
+
     static bool any_overlap(const Bubble& proposed, const std::vector<Bubble>& others);
 
 protected:
     void updateElements(bool instant) EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
     void updateBlockFees(CAmount block_fees);
+    void updatePhysics();
+    void resolveCollisions() EXCLUSIVE_LOCKS_REQUIRED(m_mutex);
 
 protected Q_SLOTS:
     void updateDisplayUnit();
