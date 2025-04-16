@@ -109,6 +109,10 @@ private:
     QLabel *m_lbl_tx_count;
     QLabel *m_lbl_tx_fees;
     QCheckBox *m_fluid_mode_toggle;
+    QTimer m_physics_timer;
+    bool m_fluid_mode{false};
+    int m_frame_div{4};
+    bool m_block_changed{false};
 
     BlockViewValidationInterface *m_validation_interface;
 
@@ -116,9 +120,6 @@ private:
     qreal m_k_spring{100.0};    // Spring constant
     qreal m_k_damping{10.0};    // Damping constant
     qreal m_physics_dt{1.0/60.0}; // Physics timestep (60 fps)
-    QTimer m_physics_timer;      // Timer for physics updates
-    std::map<Wtxid, TransactionParticle> m_particles GUARDED_BY(m_mutex);
-    bool m_fluid_mode{false};    // Whether fluid dynamics is enabled
 
     static bool any_overlap(const Bubble& proposed, const std::vector<Bubble>& others);
 

@@ -323,25 +323,34 @@ bool GuiBlockView::any_overlap(const Bubble& proposed, const std::vector<Bubble>
     return false;
 }
 
-void GuiBlockView::setBlock(const std::shared_ptr<const CBlock>& block, const CAmount& block_subsidy)
+void GuiBlockView::setBlock(std::shared_ptr<const CBlock> block, const CAmount block_subsidy)
 {
     LogPrintf("GuiBlockView::setBlock: Setting block with subsidy=%d\n", block_subsidy);
     LOCK(m_mutex);
+    m_block_fees = [&] {
+        CAmount total{0};
+        Assert(!block->vtx.empty());
+        for (const auto& outp : block->vtx[0]->vout) {
+            total += outp.nValue;
+        }
+        return total - block_subsidy;
+    }();
     m_block = block;
-    m_block_subsidy = block_subsidy;
-    m_block_template = nullptr;
-    m_follow_tip = false;
-    updateScene();
+    m_block_template.reset();
+    m_block_changed = true;
+    updateElements(/*instant=*/ true);
 }
 
-void GuiBlockView::setBlock(const std::shared_ptr<node::CBlockTemplate>& blocktemplate)
+void GuiBlockView::setBlock(std::shared_ptr<const node::CBlockTemplate> blocktemplate)
 {
     LogPrintf("GuiBlockView::setBlock: Setting block template\n");
     LOCK(m_mutex);
-    m_block = nullptr;
+    const bool instant = (bool)m_block;  // force instant if changing from real block to template
+    m_block_fees = -blocktemplate->vTxFees.front();
+    m_block.reset();
     m_block_template = blocktemplate;
-    m_follow_tip = true;
-    updateScene();
+    m_block_changed = true;
+    updateElements(/*instant=*/ instant);
 }
 
 void GuiBlockView::updateBlockFees(CAmount block_fees)
@@ -553,17 +562,49 @@ void GuiBlockView::updateScene()
 {
     LogPrintf("GuiBlockView::updateScene: Updating scene\n");
     LOCK(m_mutex);
-    m_scene->clear();
-    m_scene->setSceneRect(0, 0, width(), height());
 
-    if (m_block) {
-        LogPrintf("GuiBlockView::updateScene: Rendering block\n");
-        renderBlock(*m_block, m_block_subsidy);
-    } else if (m_block_template) {
-        LogPrintf("GuiBlockView::updateScene: Rendering block template\n");
-        renderBlock(m_block_template->block, GetBlockSubsidy(GetHeight(), m_chainman->GetParams().GetConsensus()));
-    } else {
-        LogPrintf("GuiBlockView::updateScene: No block or template to render\n");
+    if (m_fluid_mode) {
+        // In fluid mode, let the physics simulation handle updates
+        return;
+    }
+
+    bool all_completed{true};
+    for (auto it = m_elements.begin(); it != m_elements.end(); ) {
+        const auto& target_loc = it->second.target_loc;
+        QGraphicsItem* gi = it->second.gi;
+        const auto radius = gi->boundingRect().width() / 2;
+        const QPointF current_loc(gi->pos().x() + radius, gi->pos().y() + radius);
+        bool delete_el{false};
+        if (target_loc != current_loc) {
+            // Get 25% closer each tick
+            QPointF new_loc(current_loc.x() + ((target_loc.x() - current_loc.x()) / m_frame_div),
+                            current_loc.y() + ((target_loc.y() - current_loc.y()) / m_frame_div));
+            if (std::abs(new_loc.x() - target_loc.x()) < TX_PADDING_NEXT) {
+                new_loc.setX(target_loc.x());
+            }
+            if (std::abs(new_loc.y() - target_loc.y()) < TX_PADDING_NEXT) {
+                new_loc.setY(target_loc.y());
+            }
+            gi->setPos(new_loc.x() - radius, new_loc.y() - radius);
+            if (new_loc == target_loc) {
+                if (target_loc.y() + radius < m_scene->sceneRect().y() || target_loc.y() - radius > 0) {
+                    delete_el = true;
+                }
+            } else {
+                all_completed = false;
+            }
+        }
+        if (delete_el) {
+            m_scene->removeItem(gi);
+            delete gi;
+            it = m_elements.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    --m_frame_div;
+    if (all_completed) {
+        m_timer.stop();
     }
 }
 
