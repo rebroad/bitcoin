@@ -138,13 +138,14 @@ void BlockAssembler::resetBlock()
 
 std::shared_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
 {
+    LogPrintf("BlockAssembler::CreateNewBlock: Starting block template creation\n");
     const auto time_start{SteadyClock::now()};
 
     resetBlock();
 
     pblocktemplate.reset(new CBlockTemplate());
-
     if (!pblocktemplate.get()) {
+        LogPrintf("BlockAssembler::CreateNewBlock: Failed to allocate block template\n");
         return nullptr;
     }
     CBlock* const pblock = &pblocktemplate->block; // pointer for convenience
@@ -161,6 +162,7 @@ std::shared_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CBlockIndex* pindexPrev = m_chainstate.m_chain.Tip();
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
+    LogPrintf("BlockAssembler::CreateNewBlock: Creating block at height=%d\n", nHeight);
 
     pblock->nVersion = m_chainstate.m_chainman.m_versionbitscache.ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
     // -regtest only: allow overriding block.nVersion with
@@ -178,6 +180,7 @@ std::shared_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
         LOCK(m_mempool->cs);
         addPriorityTxs(*m_mempool, nPackagesSelected);
         addPackageTxs(*m_mempool, nPackagesSelected, nDescendantsUpdated);
+        LogPrintf("BlockAssembler::CreateNewBlock: Selected %d packages, updated %d descendants\n", nPackagesSelected, nDescendantsUpdated);
     }
 
     const auto time_1{SteadyClock::now()};
@@ -203,7 +206,8 @@ std::shared_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblocktemplate->vTxFees[0] = -nFees;
 
     uint64_t nSerializeSize = GetSerializeSize(TX_WITH_WITNESS(*pblock));
-    LogPrintf("CreateNewBlock(): total size: %u block weight: %u txs: %u fees: %ld sigops %d\n", nSerializeSize, GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
+    LogPrintf("BlockAssembler::CreateNewBlock: Total size: %u block weight: %u txs: %u fees: %ld sigops %d\n", 
+              nSerializeSize, GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
 
     // Fill in header
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
@@ -215,6 +219,7 @@ std::shared_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     BlockValidationState state;
     if (m_options.test_block_validity && !TestBlockValidity(state, chainparams, m_chainstate, *pblock, pindexPrev,
                                                             /*fCheckPOW=*/false, /*fCheckMerkleRoot=*/false)) {
+        LogPrintf("BlockAssembler::CreateNewBlock: TestBlockValidity failed: %s\n", state.ToString());
         throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, state.ToString()));
     }
     const auto time_2{SteadyClock::now()};
@@ -224,7 +229,10 @@ std::shared_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
              Ticks<MillisecondsDouble>(time_2 - time_1),
              Ticks<MillisecondsDouble>(time_2 - time_start));
 
-    if (m_node.validation_signals) m_node.validation_signals->NewBlockTemplate(pblocktemplate);
+    if (m_node.validation_signals) {
+        LogPrintf("BlockAssembler::CreateNewBlock: Sending new block template signal\n");
+        m_node.validation_signals->NewBlockTemplate(pblocktemplate);
+    }
 
     return std::move(pblocktemplate);
 }
