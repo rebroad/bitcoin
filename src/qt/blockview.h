@@ -19,6 +19,7 @@
 #include <QGraphicsView>
 #include <QPointF>
 #include <QTimer>
+#include <cmath>  // Add cmath for std::pow
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
@@ -26,6 +27,7 @@ class QGraphicsItem;
 class QGraphicsScene;
 class QLabel;
 class QWidget;
+class QCheckBox;
 QT_END_NAMESPACE
 
 class CBlock;
@@ -81,21 +83,7 @@ private:
             element(nullptr)
         {}
 
-        void update(qreal dt, qreal k_spring, qreal k_damping) {
-            // Spring-damper physics
-            QPointF spring_force = (target_pos - position) * k_spring;
-            QPointF damping_force = -velocity * k_damping;
-            QPointF acceleration = (spring_force + damping_force) / mass;
-
-            velocity += acceleration * dt;
-            position += velocity * dt;
-
-            // Radius animation
-            if (current_radius < target_radius) {
-                current_radius = std::min(target_radius,
-                    current_radius + (target_radius - current_radius) * dt * 2.0);
-            }
-        }
+        void update(qreal dt, qreal k_spring, qreal k_damping);
     };
 
     struct Bubble {
@@ -120,6 +108,7 @@ private:
     QComboBox *m_block_chooser;
     QLabel *m_lbl_tx_count;
     QLabel *m_lbl_tx_fees;
+    QCheckBox *m_fluid_mode_toggle;
 
     BlockViewValidationInterface *m_validation_interface;
 
@@ -143,6 +132,7 @@ protected Q_SLOTS:
     void updateDisplayUnit();
     void updateSceneInit();
     void updateScene();
+    void onFluidModeToggled(bool checked);
 
 public:
     ClientModel *m_client_model{nullptr};
