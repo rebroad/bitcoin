@@ -79,18 +79,19 @@ public:
     }
 
     void NewBlockTemplate(const std::shared_ptr<node::CBlockTemplate>& blocktemplate) override {
-        LogPrintf("BlockViewValidationInterface::NewBlockTemplate: Received new block template\n");
+        LogPrintf("BlockView: Received new block template with %d transactions\n", blocktemplate->block.vtx.size());
         {
             LOCK(m_bv.m_mutex);
             if (m_bv.m_block) {
-                LogPrintf("BlockViewValidationInterface::NewBlockTemplate: Block exists, updating template but not rendering\n");
+                // Update cached template, but don't render it
                 m_bv.m_block_template = blocktemplate;
+                LogPrintf("BlockView: Updated cached template\n");
                 return;
             }
         }
 
-        LogPrintf("BlockViewValidationInterface::NewBlockTemplate: Setting and rendering new block template\n");
         m_bv.setBlock(blocktemplate);
+        LogPrintf("BlockView: Set new block template\n");
     }
 };
 
@@ -126,11 +127,14 @@ GuiBlockView::GuiBlockView(const PlatformStyle *platformStyle, const NetworkStyl
         m_follow_tip = false;
         auto ud = m_block_chooser->itemData(index).toInt();
         if (ud == -3) {
+            LogPrintf("BlockView: Selected preferred block template\n");
             m_block_chooser->setEditable(false);
             auto block_template = WITH_LOCK(m_mutex, return m_block_template);
             if (block_template) {
+                LogPrintf("BlockView: Found block template with %d transactions\n", block_template->block.vtx.size());
                 setBlock(block_template);
             } else {
+                LogPrintf("BlockView: No block template available\n");
                 clear();
             }
             return;
@@ -343,14 +347,15 @@ void GuiBlockView::setBlock(std::shared_ptr<const CBlock> block, const CAmount b
 
 void GuiBlockView::setBlock(std::shared_ptr<const node::CBlockTemplate> blocktemplate)
 {
-    LogPrintf("GuiBlockView::setBlock: Setting block template\n");
     LOCK(m_mutex);
+    LogPrintf("BlockView: Setting block template with %d transactions\n", blocktemplate->block.vtx.size());
     const bool instant = (bool)m_block;  // force instant if changing from real block to template
     m_block_fees = -blocktemplate->vTxFees.front();
     m_block.reset();
     m_block_template = blocktemplate;
     m_block_changed = true;
     updateElements(/*instant=*/ instant);
+    LogPrintf("BlockView: Updated elements for block template\n");
 }
 
 void GuiBlockView::updateBlockFees(CAmount block_fees)
