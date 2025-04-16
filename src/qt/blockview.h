@@ -120,6 +120,7 @@ private:
     qreal m_k_spring{100.0};    // Spring constant
     qreal m_k_damping{10.0};    // Damping constant
     qreal m_physics_dt{1.0/60.0}; // Physics timestep (60 fps)
+    std::map<Wtxid, TransactionParticle> m_particles GUARDED_BY(m_mutex);
 
     static bool any_overlap(const Bubble& proposed, const std::vector<Bubble>& others);
 
