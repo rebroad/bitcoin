@@ -407,8 +407,8 @@ void GuiBlockView::updateElements(bool instant)
             if (preferred_loc_rel.isNull()) {
                 preferred_angle = std::numbers::pi / 2;
             } else {
-                preferred_angle = std::atan2(preferred_loc.y() - centre.y(),
-                                           preferred_loc.x() - centre.x());
+                preferred_angle = std::atan2(preferred_loc_rel.y(),
+                                           preferred_loc_rel.x());
             }
             const auto distance = bubble_it->radius + proposed.radius + TX_PADDING_NEXT;
             double angle = preferred_angle;
@@ -489,54 +489,30 @@ void GuiBlockView::updateSceneInit()
 {
     LOCK(m_mutex);
     if (!m_bubblegraph) return;
-
     for (auto& bubble : m_bubblegraph->bubbles) {
         auto& el = *bubble.el;
-        const auto wtxid = el.gi ? m_particles.find([&](const auto& p) {
-            return p.second.element == &el;
-        })->first : Wtxid();
-
         if (!el.gi) {
             const auto diameter = bubble.radius * 2;
-            auto gi = m_scene->addEllipse(0, 0, diameter, diameter,
-                                        QPen(palette().window(), TX_PADDING_NEARBY));
+            auto gi = m_scene->addEllipse(0, 0, diameter, diameter, QPen(palette().window(), TX_PADDING_NEARBY));
             el.gi = gi;
             gi->setBrush(QColor(Qt::blue));
-
-            // Set initial position based on fluid mode
-            if (m_fluid_mode) {
-                auto& particle = m_particles[wtxid];
-                gi->setPos(particle.position.x() - bubble.radius,
-                          particle.position.y() - bubble.radius);
-                gi->setScale(particle.current_radius / bubble.radius);
-            } else {
-                gi->setPos(bubble.pos.x() - bubble.radius,
-                          m_bubblegraph->instant ?
-                          (bubble.pos.y() - bubble.radius) : offscreen);
-            }
-        } else if (m_fluid_mode) {
-            // Update existing elements for fluid mode
-            auto& particle = m_particles[wtxid];
-            el.gi->setPos(particle.position.x() - bubble.radius,
-                         particle.position.y() - bubble.radius);
-            el.gi->setScale(particle.current_radius / bubble.radius);
+            gi->setPos(bubble.pos.x() - bubble.radius, m_bubblegraph->instant ? (bubble.pos.y() - bubble.radius) : offscreen);
         }
     }
-
-    // Clean up removed elements
     for (auto it = m_elements.begin(); it != m_elements.end(); ) {
         const auto& target_loc = it->second.target_loc;
         const auto gi = it->second.gi;
         bool delete_el{false};
-
-        if (target_loc.y() == offscreen || !gi) {
+        if (target_loc.y() == offscreen || !gi /* never got a chance to exist */) {
             delete_el = true;
-        } else if (!m_fluid_mode) {
+            // TODO: if confirmed, slide it off the bottom
+            // TODO: if conflicted, pop the bubble?
+            // TODO: if delayed, move off the top
+        } else {
             if (gi->y() == offscreen) {
                 gi->setY(m_bubblegraph->min_y - gi->boundingRect().height());
             }
         }
-
         if (delete_el) {
             if (gi) {
                 m_scene->removeItem(gi);
@@ -547,12 +523,8 @@ void GuiBlockView::updateSceneInit()
             ++it;
         }
     }
-
-    m_scene->setSceneRect(m_bubblegraph->min_x, m_bubblegraph->min_y,
-                         m_bubblegraph->max_x - m_bubblegraph->min_x,
-                         -m_bubblegraph->min_y);
-
-    if (!m_bubblegraph->instant && !m_fluid_mode) {
+    m_scene->setSceneRect(m_bubblegraph->min_x, m_bubblegraph->min_y, m_bubblegraph->max_x - m_bubblegraph->min_x, -m_bubblegraph->min_y);
+    if (!m_bubblegraph->instant) {
         m_frame_div = 4;
         updateScene();
         m_timer.start(100);
