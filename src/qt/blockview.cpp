@@ -16,6 +16,7 @@
 #include <util/strencodings.h>
 #include <validation.h>
 #include <validationinterface.h>
+#include <interfaces/mining.h>
 
 #include <qt/bitcoinunits.h>
 #include <qt/clientmodel.h>
@@ -134,8 +135,35 @@ GuiBlockView::GuiBlockView(const PlatformStyle *platformStyle, const NetworkStyl
                 LogPrintf("BlockView: Found block template with %d transactions\n", block_template->block.vtx.size());
                 setBlock(block_template);
             } else {
-                LogPrintf("BlockView: No block template available\n");
-                clear();
+                LogPrintf("BlockView: No block template available, forcing generation\n");
+                // Force block template generation
+                auto chainman = getChainstateManager();
+                if (chainman) {
+                    auto node_ctx = m_client_model->node().context();
+                    if (node_ctx) {
+                        auto miner = interfaces::MakeMining(*node_ctx);
+                        if (miner) {
+                            CScript scriptPubKey = CScript() << OP_TRUE; // Dummy script
+                            block_template = miner->createNewBlock(scriptPubKey);
+                            if (block_template) {
+                                LogPrintf("BlockView: Generated new block template with %d transactions\n", block_template->block.vtx.size());
+                                setBlock(block_template);
+                            } else {
+                                LogPrintf("BlockView: Failed to generate block template\n");
+                                clear();
+                            }
+                        } else {
+                            LogPrintf("BlockView: Failed to create miner interface\n");
+                            clear();
+                        }
+                    } else {
+                        LogPrintf("BlockView: No node context available\n");
+                        clear();
+                    }
+                } else {
+                    LogPrintf("BlockView: No chain manager available\n");
+                    clear();
+                }
             }
             return;
         }
@@ -644,6 +672,10 @@ void GuiBlockView::updatePhysics()
 
     // Update all particles
     for (auto& [txid, particle] : m_particles) {
+        // Apply gravity (downward force)
+        const qreal gravity = 9.8; // Standard gravity
+        particle.velocity.setY(particle.velocity.y() + gravity * m_physics_dt);
+
         particle.update(m_physics_dt, m_k_spring, m_k_damping);
 
         // Apply boundary constraints
@@ -658,13 +690,13 @@ void GuiBlockView::updatePhysics()
             particle.velocity.setX(-particle.velocity.x() * 0.5);
         }
 
-        // Vertical boundaries
+        // Vertical boundaries with stronger damping at bottom
         if (particle.position.y() - radius < top_bound) {
             particle.position.setY(top_bound + radius);
-            particle.velocity.setY(-particle.velocity.y() * 0.5);
+            particle.velocity.setY(-particle.velocity.y() * 0.8); // More damping at bottom
         } else if (particle.position.y() + radius > bottom_bound) {
             particle.position.setY(bottom_bound - radius);
-            particle.velocity.setY(-particle.velocity.y() * 0.5);
+            particle.velocity.setY(-particle.velocity.y() * 0.8); // More damping at bottom
         }
 
         // Enforce horizontal spread limit
