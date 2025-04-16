@@ -19,10 +19,10 @@
 #include <QGraphicsView>
 #include <QPointF>
 #include <QTimer>
+#include <QComboBox>
 #include <cmath>  // Add cmath for std::pow
 
 QT_BEGIN_NAMESPACE
-class QComboBox;
 class QGraphicsItem;
 class QGraphicsScene;
 class QLabel;
@@ -154,6 +154,10 @@ public:
     void clear();
     void setBlock(std::shared_ptr<const CBlock> block, CAmount block_subsidy);
     void setBlock(std::shared_ptr<const node::CBlockTemplate> blocktemplate);
+
+    bool isViewingPreferredTemplate() const;
+
+    void onBlockChanged(int index);
 };
 
 #endif // BITCOIN_QT_BLOCKVIEW_H

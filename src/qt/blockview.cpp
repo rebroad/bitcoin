@@ -52,6 +52,26 @@ class BlockViewValidationInterface final : public CValidationInterface
 private:
     GuiBlockView& m_bv;
 
+    // Helper function to generate a new block template
+    void generateNewBlockTemplate() {
+        if (!m_bv.isViewingPreferredTemplate()) return; // Only if viewing preferred template
+
+        auto chainman = m_bv.getChainstateManager();
+        if (!chainman) return;
+
+        auto node_ctx = m_bv.m_client_model->node().context();
+        if (!node_ctx) return;
+
+        auto miner = interfaces::MakeMining(*node_ctx);
+        if (!miner) return;
+
+        CScript scriptPubKey = CScript() << OP_TRUE; // Dummy script
+        auto new_template = miner->createNewBlock(scriptPubKey);
+        if (new_template) {
+            m_bv.setBlock(new_template);
+        }
+    }
+
 public:
     explicit BlockViewValidationInterface(GuiBlockView& bv) : m_bv(bv) {}
 
@@ -94,6 +114,14 @@ public:
         m_bv.setBlock(blocktemplate);
         LogPrintf("BlockView: Set new block template\n");
     }
+
+    void TransactionAddedToMempool(const NewMempoolTransactionInfo& tx, uint64_t mempool_sequence) override {
+        generateNewBlockTemplate();
+    }
+
+    void TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) override {
+        generateNewBlockTemplate();
+    }
 };
 
 void GuiBlockView::updateBestBlock(const int height)
@@ -105,7 +133,7 @@ void GuiBlockView::updateBestBlock(const int height)
 }
 
 GuiBlockView::GuiBlockView(const PlatformStyle *platformStyle, const NetworkStyle *networkStyle, QWidget *parent) :
-    QDialog(parent, GUIUtil::dialog_flags | Qt::WindowMaximizeButtonHint)
+    QDialog(parent, GUIUtil::dialog_flags)
 {
     setWindowTitle(tr(PACKAGE_NAME) + " - " + tr("Block View") + " " + networkStyle->getTitleAddText());
     setWindowIcon(networkStyle->getTrayAndWindowIcon());
@@ -125,107 +153,7 @@ GuiBlockView::GuiBlockView(const PlatformStyle *platformStyle, const NetworkStyl
     m_block_chooser->setMinimumWidth(200);
     m_block_chooser->setMaximumWidth(200);
     connect(m_block_chooser, QOverload<int>::of(&QComboBox::currentIndexChanged), [=, this](const int index){
-        m_follow_tip = false;
-        auto ud = m_block_chooser->itemData(index).toInt();
-        if (ud == -3) {
-            LogPrintf("BlockView: Selected preferred block template\n");
-            m_block_chooser->setEditable(false);
-            auto block_template = WITH_LOCK(m_mutex, return m_block_template);
-            if (block_template) {
-                LogPrintf("BlockView: Found block template with %d transactions\n", block_template->block.vtx.size());
-                setBlock(block_template);
-            } else {
-                LogPrintf("BlockView: No block template available, forcing generation\n");
-                // Force block template generation
-                auto chainman = getChainstateManager();
-                if (chainman) {
-                    auto node_ctx = m_client_model->node().context();
-                    if (node_ctx) {
-                        auto miner = interfaces::MakeMining(*node_ctx);
-                        if (miner) {
-                            CScript scriptPubKey = CScript() << OP_TRUE; // Dummy script
-                            block_template = miner->createNewBlock(scriptPubKey);
-                            if (block_template) {
-                                LogPrintf("BlockView: Generated new block template with %d transactions\n", block_template->block.vtx.size());
-                                setBlock(block_template);
-                            } else {
-                                LogPrintf("BlockView: Failed to generate block template\n");
-                                clear();
-                            }
-                        } else {
-                            LogPrintf("BlockView: Failed to create miner interface\n");
-                            clear();
-                        }
-                    } else {
-                        LogPrintf("BlockView: No node context available\n");
-                        clear();
-                    }
-                } else {
-                    LogPrintf("BlockView: No chain manager available\n");
-                    clear();
-                }
-            }
-            return;
-        }
-
-        auto chainman = getChainstateManager();
-        if (!chainman) {
-            clear();
-            return;
-        }
-        auto& blockman = chainman->m_blockman;
-
-        CBlockIndex *pblockindex;
-        if (ud == -2) {
-            m_follow_tip = true;
-            pblockindex = WITH_LOCK(::cs_main, return chainman->ActiveChain().Tip());
-            if (!pblockindex) {
-                clear();
-                return;
-            }
-        } else if (ud == -1) {
-            m_block_chooser->setEditable(true);
-            m_block_chooser->clearEditText();
-            return;
-        } else {
-            auto qtxt = m_block_chooser->itemText(index);
-            auto txt = qtxt.toStdString();
-            auto blockhash{uint256::FromHex(txt)};
-            if (blockhash) {
-                LOCK(cs_main);
-                pblockindex = blockman.LookupBlockIndex(*blockhash);
-            } else if (auto height = ToIntegral<int>(txt)) {
-                LOCK(cs_main);
-                pblockindex = chainman->ActiveChain()[*height];
-            } else {
-                pblockindex = nullptr;
-            }
-            if (!pblockindex) {
-                clear();
-                QMessageBox::critical(this, tr("Invalid block"), tr("\"%1\" is not a valid block height or hash!").arg(qtxt));
-                m_block_chooser->removeItem(index);
-                return;
-            }
-        }
-
-        std::shared_ptr<CBlock> block = std::make_shared<CBlock>();
-        if ((!blockman.ReadBlockFromDisk(*block, *pblockindex)) || block->vtx.empty()) {
-            clear();
-            const bool is_pruned = WITH_LOCK(::cs_main, return blockman.IsBlockPruned(*pblockindex));
-            if (is_pruned) {
-                QMessageBox::critical(this, tr("Pruned block"), tr("Block %1 (%2) is pruned.").arg(pblockindex->nHeight).arg(QString::fromStdString(pblockindex->GetBlockHash().ToString())));
-            } else {
-                QMessageBox::critical(this, tr("Error reading block"), tr("Block %1 (%2) could not be loaded.").arg(pblockindex->nHeight).arg(QString::fromStdString(pblockindex->GetBlockHash().ToString())));
-            }
-            m_block_chooser->removeItem(index);
-            return;
-        }
-
-        m_block_chooser->setEditable(false);
-
-        const auto block_subsidy = GetBlockSubsidy(pblockindex->nHeight, chainman->GetParams().GetConsensus());
-
-        setBlock(block, block_subsidy);
+        onBlockChanged(index);
     });
     // Items initialized later, after ClientModel is available
 
@@ -672,11 +600,14 @@ void GuiBlockView::updatePhysics()
 
     // Update all particles
     for (auto& [txid, particle] : m_particles) {
-        // Apply gravity (downward force)
-        const qreal gravity = 9.8; // Standard gravity
-        particle.velocity.setY(particle.velocity.y() + gravity * m_physics_dt);
+        // Apply gravity (downward force) - normalize by mass
+        const qreal gravity = 98.0; // Increased gravity (10x stronger)
+        particle.velocity.setY(particle.velocity.y() + (gravity / particle.mass) * m_physics_dt);
 
-        particle.update(m_physics_dt, m_k_spring, m_k_damping);
+        // Increase spring constant for more responsive movement
+        const qreal k_spring = 20.0; // Increased from default
+        const qreal k_damping = 2.0; // Increased damping for stability
+        particle.update(m_physics_dt, k_spring, k_damping);
 
         // Apply boundary constraints
         const qreal radius = particle.current_radius;
@@ -727,9 +658,9 @@ void GuiBlockView::resolveCollisions()
 {
     LOCK(m_mutex);
 
-    const qreal collision_radius = 1.2;  // Slightly larger than visual radius
-    const qreal restitution = 0.7;       // Bouncy collisions
-    const qreal separation_force = 0.5;  // Moderate separation force
+    const qreal min_separation = TX_PADDING_NEXT;  // Minimum space between circles
+    const qreal restitution = 0.5;                 // Less bouncy collisions
+    const qreal separation_force = 1.0;            // Stronger separation force
 
     // Simple n^2 collision check for now
     // TODO: Optimize with spatial partitioning in Phase 5
@@ -741,7 +672,7 @@ void GuiBlockView::resolveCollisions()
 
             QPointF diff = p1.position - p2.position;
             qreal dist = std::sqrt(QPointF::dotProduct(diff, diff));
-            qreal min_dist = (p1.current_radius + p2.current_radius) * collision_radius;
+            qreal min_dist = (p1.current_radius + p2.current_radius) + min_separation;
 
             if (dist < min_dist) {
                 // Collision response
@@ -751,7 +682,7 @@ void GuiBlockView::resolveCollisions()
 
                 // Apply impulse if moving towards each other
                 if (impulse < 0) {
-                    // Apply impulse
+                    // Apply impulse with mass consideration
                     QPointF impulse_vector = normal * (1 + restitution) * impulse;
                     p1.velocity -= impulse_vector / p1.mass;
                     p2.velocity += impulse_vector / p2.mass;
@@ -763,9 +694,8 @@ void GuiBlockView::resolveCollisions()
                 p2.position -= separation / p2.mass;
 
                 // Ensure minimum padding between particles
-                const qreal padding = TX_PADDING_NEXT;
-                if (dist < padding) {
-                    QPointF padding_separation = normal * (padding - dist);
+                if (dist < min_separation) {
+                    QPointF padding_separation = normal * (min_separation - dist);
                     p1.position += padding_separation / p1.mass;
                     p2.position -= padding_separation / p2.mass;
                 }
@@ -812,4 +742,114 @@ void GuiBlockView::onFluidModeToggled(bool checked)
         }
         updateScene();
     }
+}
+
+void GuiBlockView::onBlockChanged(int index)
+{
+    m_follow_tip = false;
+    auto ud = m_block_chooser->itemData(index).toInt();
+    if (ud == -3) {
+        LogPrintf("BlockView: Selected preferred block template\n");
+        m_block_chooser->setEditable(false);
+        auto block_template = WITH_LOCK(m_mutex, return m_block_template);
+        if (block_template) {
+            LogPrintf("BlockView: Found block template with %d transactions\n", block_template->block.vtx.size());
+            setBlock(block_template);
+        } else {
+            LogPrintf("BlockView: No block template available, forcing generation\n");
+            // Force block template generation
+            auto chainman = getChainstateManager();
+            if (chainman) {
+                auto node_ctx = m_client_model->node().context();
+                if (node_ctx) {
+                    auto miner = interfaces::MakeMining(*node_ctx);
+                    if (miner) {
+                        CScript scriptPubKey = CScript() << OP_TRUE; // Dummy script
+                        block_template = miner->createNewBlock(scriptPubKey);
+                        if (block_template) {
+                            LogPrintf("BlockView: Generated new block template with %d transactions\n", block_template->block.vtx.size());
+                            setBlock(block_template);
+                        } else {
+                            LogPrintf("BlockView: Failed to generate block template\n");
+                            clear();
+                        }
+                    } else {
+                        LogPrintf("BlockView: Failed to create miner interface\n");
+                        clear();
+                    }
+                } else {
+                    LogPrintf("BlockView: No node context available\n");
+                    clear();
+                }
+            } else {
+                LogPrintf("BlockView: No chain manager available\n");
+                clear();
+            }
+        }
+        return;
+    }
+
+    auto chainman = getChainstateManager();
+    if (!chainman) {
+        clear();
+        return;
+    }
+    auto& blockman = chainman->m_blockman;
+
+    CBlockIndex *pblockindex;
+    if (ud == -2) {
+        m_follow_tip = true;
+        pblockindex = WITH_LOCK(::cs_main, return chainman->ActiveChain().Tip());
+        if (!pblockindex) {
+            clear();
+            return;
+        }
+    } else if (ud == -1) {
+        m_block_chooser->setEditable(true);
+        m_block_chooser->clearEditText();
+        return;
+    } else {
+        auto qtxt = m_block_chooser->itemText(index);
+        auto txt = qtxt.toStdString();
+        auto blockhash{uint256::FromHex(txt)};
+        if (blockhash) {
+            LOCK(cs_main);
+            pblockindex = blockman.LookupBlockIndex(*blockhash);
+        } else if (auto height = ToIntegral<int>(txt)) {
+            LOCK(cs_main);
+            pblockindex = chainman->ActiveChain()[*height];
+        } else {
+            pblockindex = nullptr;
+        }
+        if (!pblockindex) {
+            clear();
+            QMessageBox::critical(this, tr("Invalid block"), tr("\"%1\" is not a valid block height or hash!").arg(qtxt));
+            m_block_chooser->removeItem(index);
+            return;
+        }
+    }
+
+    std::shared_ptr<CBlock> block = std::make_shared<CBlock>();
+    if ((!blockman.ReadBlockFromDisk(*block, *pblockindex)) || block->vtx.empty()) {
+        clear();
+        const bool is_pruned = WITH_LOCK(::cs_main, return blockman.IsBlockPruned(*pblockindex));
+        if (is_pruned) {
+            QMessageBox::critical(this, tr("Pruned block"), tr("Block %1 (%2) is pruned.").arg(pblockindex->nHeight).arg(QString::fromStdString(pblockindex->GetBlockHash().ToString())));
+        } else {
+            QMessageBox::critical(this, tr("Error reading block"), tr("Block %1 (%2) could not be loaded.").arg(pblockindex->nHeight).arg(QString::fromStdString(pblockindex->GetBlockHash().ToString())));
+        }
+        m_block_chooser->removeItem(index);
+        return;
+    }
+
+    m_block_chooser->setEditable(false);
+
+    const auto block_subsidy = GetBlockSubsidy(pblockindex->nHeight, chainman->GetParams().GetConsensus());
+
+    setBlock(block, block_subsidy);
+}
+
+bool GuiBlockView::isViewingPreferredTemplate() const
+{
+    return m_block_chooser->currentData().toInt() == -3;
 }
