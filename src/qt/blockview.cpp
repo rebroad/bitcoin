@@ -609,6 +609,8 @@ void GuiBlockView::resolveCollisions()
     LOCK(m_mutex);
 
     const qreal collision_radius = 1.2;  // Slightly larger than visual radius
+    const qreal restitution = 0.7;       // Bouncy collisions
+    const qreal separation_force = 0.5;  // Moderate separation force
 
     // Simple n^2 collision check for now
     // TODO: Optimize with spatial partitioning in Phase 5
@@ -622,25 +624,24 @@ void GuiBlockView::resolveCollisions()
             qreal dist = std::sqrt(QPointF::dotProduct(diff, diff));
             qreal min_dist = (p1.current_radius + p2.current_radius) * collision_radius;
 
-            if (dist < min_dist && dist > 0) {  // Avoid division by zero
+            if (dist < min_dist) {
                 // Collision response
                 QPointF normal = diff / dist;
                 QPointF relative_velocity = p1.velocity - p2.velocity;
                 qreal impulse = QPointF::dotProduct(relative_velocity, normal);
 
-                if (impulse < 0) {  // Only if moving towards each other
+                // Apply impulse if moving towards each other
+                if (impulse < 0) {
                     // Apply impulse
-                    qreal restitution = 0.5;  // Bouncy but with energy loss
                     QPointF impulse_vector = normal * (1 + restitution) * impulse;
-
                     p1.velocity -= impulse_vector / p1.mass;
                     p2.velocity += impulse_vector / p2.mass;
-
-                    // Separation to prevent sticking
-                    QPointF separation = normal * (min_dist - dist) * 0.5;
-                    p1.position += separation;
-                    p2.position -= separation;
                 }
+
+                // Apply separation force
+                QPointF separation = normal * (min_dist - dist) * separation_force;
+                p1.position += separation / p1.mass;
+                p2.position -= separation / p2.mass;
             }
         }
     }
