@@ -36,9 +36,9 @@
 #include <QVBoxLayout>
 #include <QCheckBox>
 
-static constexpr qreal TX_PADDING_NEXT{4};
-static constexpr qreal TX_PADDING_NEARBY{2};
-static constexpr qreal EXPECTED_WHITESPACE_PERCENT{1.5};
+static constexpr qreal TX_PADDING_NEXT{8};
+static constexpr qreal TX_PADDING_NEARBY{4};
+static constexpr qreal EXPECTED_WHITESPACE_PERCENT{2.0};
 static constexpr auto RADIAN_DIVISOR{8};
 
 void ScalingGraphicsView::resizeEvent(QResizeEvent * const event)
