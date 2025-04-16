@@ -103,7 +103,6 @@ private:
     std::unique_ptr<BubbleGraph> m_bubblegraph GUARDED_BY(m_mutex);
     QGraphicsScene *m_scene;
     QTimer m_timer;
-    unsigned int m_frame_div;
 
     QComboBox *m_block_chooser;
     QLabel *m_lbl_tx_count;
@@ -111,8 +110,8 @@ private:
     QCheckBox *m_fluid_mode_toggle;
     QTimer m_physics_timer;
     bool m_fluid_mode{false};
-    int m_frame_div{4};
-    bool m_block_changed{false};
+    unsigned int m_frame_div{4};
+    bool m_block_changed GUARDED_BY(m_mutex){false};
 
     BlockViewValidationInterface *m_validation_interface;
 
@@ -139,7 +138,6 @@ protected Q_SLOTS:
 public:
     ClientModel *m_client_model{nullptr};
 
-    bool m_block_changed GUARDED_BY(m_mutex);
     CAmount m_block_fees GUARDED_BY(m_mutex) {-1};
     std::shared_ptr<const node::CBlockTemplate> m_block_template GUARDED_BY(m_mutex);
     std::shared_ptr<const CBlock> m_block GUARDED_BY(m_mutex);

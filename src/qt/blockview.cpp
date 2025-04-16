@@ -616,13 +616,26 @@ void GuiBlockView::updatePhysics()
         return;
     }
 
+    // Calculate boundary limits based on block size
+    const CBlock* current_block = nullptr;
+    if (m_block) {
+        current_block = m_block.get();
+    } else if (m_block_template) {
+        current_block = &m_block_template->block;
+    }
+
+    if (!current_block) {
+        return;  // No block to process
+    }
+
+    const qreal limit_halfwidth = std::sqrt(::GetSerializeSize(TX_WITH_WITNESS(*current_block))) * EXPECTED_WHITESPACE_PERCENT / 2;
+
     // Get scene boundaries
     const QRectF scene_rect = m_scene->sceneRect();
     const qreal left_bound = scene_rect.left();
     const qreal right_bound = scene_rect.right();
     const qreal top_bound = scene_rect.top();
     const qreal bottom_bound = scene_rect.bottom();
-    const qreal limit_halfwidth = std::sqrt(::GetSerializeSize(TX_WITH_WITNESS(m_block ? *m_block : m_block_template->block))) * EXPECTED_WHITESPACE_PERCENT / 2;
 
     // Update all particles
     for (auto& [txid, particle] : m_particles) {
@@ -755,8 +768,8 @@ void GuiBlockView::onFluidModeToggled(bool checked)
     } else {
         // Stop physics simulation
         m_physics_timer.stop();
-        // Reset particle positions to their target positions
-        for (auto& particle : m_particles) {
+        // Reset particle positions
+        for (auto& [txid, particle] : m_particles) {
             particle.position = particle.target_pos;
             particle.velocity = QPointF(0, 0);
         }
