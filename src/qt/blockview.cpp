@@ -33,6 +33,7 @@
 #include <QGraphicsView>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QCheckBox>
 
 static constexpr qreal TX_PADDING_NEXT{4};
 static constexpr qreal TX_PADDING_NEARBY{2};
@@ -54,6 +55,7 @@ public:
     explicit BlockViewValidationInterface(GuiBlockView& bv) : m_bv(bv) {}
 
     void BlockConnected(ChainstateRole role, const std::shared_ptr<const CBlock>& block_cached, const CBlockIndex* pblockindex) override {
+        LogPrintf("BlockViewValidationInterface::BlockConnected: height=%d\n", pblockindex->nHeight);
         m_bv.updateBestBlock(pblockindex->nHeight);
 
         if (!m_bv.m_follow_tip) return;
@@ -64,33 +66,37 @@ public:
         if (!block) {
             std::shared_ptr<CBlock> pblock = std::make_shared<CBlock>();
             if (!chainman->m_blockman.ReadBlockFromDisk(*pblock, *pblockindex)) {
-                // Indicate error somehow?
+                LogPrintf("BlockViewValidationInterface::BlockConnected: Failed to read block from disk\n");
                 return;
             }
             block = pblock;
         }
 
         const auto block_subsidy = GetBlockSubsidy(pblockindex->nHeight, chainman->GetParams().GetConsensus());
+        LogPrintf("BlockViewValidationInterface::BlockConnected: Setting block with subsidy=%d\n", block_subsidy);
 
         m_bv.setBlock(block, block_subsidy);
     }
 
     void NewBlockTemplate(const std::shared_ptr<node::CBlockTemplate>& blocktemplate) override {
+        LogPrintf("BlockViewValidationInterface::NewBlockTemplate: Received new block template\n");
         {
             LOCK(m_bv.m_mutex);
             if (m_bv.m_block) {
-                // Update cached template, but don't render it
+                LogPrintf("BlockViewValidationInterface::NewBlockTemplate: Block exists, updating template but not rendering\n");
                 m_bv.m_block_template = blocktemplate;
                 return;
             }
         }
 
+        LogPrintf("BlockViewValidationInterface::NewBlockTemplate: Setting and rendering new block template\n");
         m_bv.setBlock(blocktemplate);
     }
 };
 
 void GuiBlockView::updateBestBlock(const int height)
 {
+    LogPrintf("GuiBlockView::updateBestBlock: height=%d\n", height);
     QMetaObject::invokeMethod(m_block_chooser, [this, height]() {
         m_block_chooser->setItemText(1, tr("Newest block (%1)").arg(height));
     }, Qt::QueuedConnection);
@@ -114,7 +120,8 @@ GuiBlockView::GuiBlockView(const PlatformStyle *platformStyle, const NetworkStyl
     layout->addLayout(hlayout);
     hlayout->addWidget(new QLabel(tr("Displayed block: ")));
     m_block_chooser = new QComboBox(this);
-    hlayout->addWidget(m_block_chooser, 1);
+    m_block_chooser->setMinimumWidth(200);
+    m_block_chooser->setMaximumWidth(200);
     connect(m_block_chooser, QOverload<int>::of(&QComboBox::currentIndexChanged), [=, this](const int index){
         m_follow_tip = false;
         auto ud = m_block_chooser->itemData(index).toInt();
@@ -219,6 +226,18 @@ GuiBlockView::GuiBlockView(const PlatformStyle *platformStyle, const NetworkStyl
     connect(&m_timer, &QTimer::timeout, this, &GuiBlockView::updateScene);
 
     m_validation_interface = new BlockViewValidationInterface(*this);
+
+    // Create fluid mode toggle
+    m_fluid_mode_toggle = new QCheckBox(tr("Fluid Mode"), this);
+    m_fluid_mode_toggle->setChecked(m_fluid_mode);
+    connect(m_fluid_mode_toggle, &QCheckBox::toggled, this, &GuiBlockView::onFluidModeToggled);
+
+    // Add widgets to layout
+    QHBoxLayout* topLayout = new QHBoxLayout();
+    topLayout->addWidget(m_block_chooser);
+    topLayout->addWidget(m_fluid_mode_toggle);
+    topLayout->addStretch();
+    layout->addLayout(topLayout);
 }
 
 GuiBlockView::~GuiBlockView()
@@ -245,6 +264,7 @@ void GuiBlockView::setClientModel(ClientModel *model)
         updateDisplayUnit();
 
         if (m_block_chooser->count() == 0) {
+            LogPrintf("GuiBlockView::setClientModel: Initializing block chooser\n");
             m_block_chooser->addItem(tr("This node's preferred block template"), -3);
             m_block_chooser->addItem("", -2);
             m_block_chooser->addItem(tr("Specific block"), -1);
@@ -254,10 +274,12 @@ void GuiBlockView::setClientModel(ClientModel *model)
         auto chainman = getChainstateManager();
         if (chainman) {
             const auto pblockindex = WITH_LOCK(::cs_main, return chainman->ActiveChain().Tip());
+            LogPrintf("GuiBlockView::setClientModel: Updating best block height=%d\n", pblockindex->nHeight);
             updateBestBlock(pblockindex->nHeight);
         }
         auto& validation_signals = model->node().context()->validation_signals;
         if (validation_signals) {
+            LogPrintf("GuiBlockView::setClientModel: Registering validation interface\n");
             validation_signals->RegisterValidationInterface(m_validation_interface);
         }
     }
@@ -301,32 +323,25 @@ bool GuiBlockView::any_overlap(const Bubble& proposed, const std::vector<Bubble>
     return false;
 }
 
-void GuiBlockView::setBlock(std::shared_ptr<const CBlock> block, const CAmount block_subsidy)
+void GuiBlockView::setBlock(const std::shared_ptr<const CBlock>& block, const CAmount& block_subsidy)
 {
+    LogPrintf("GuiBlockView::setBlock: Setting block with subsidy=%d\n", block_subsidy);
     LOCK(m_mutex);
-    m_block_fees = [&] {
-        CAmount total{0};
-        Assert(!block->vtx.empty());
-        for (const auto& outp : block->vtx[0]->vout) {
-            total += outp.nValue;
-        }
-        return total - block_subsidy;
-    }();
     m_block = block;
-    m_block_template.reset();
-    m_block_changed = true;
-    updateElements(/*instant=*/ true);
+    m_block_subsidy = block_subsidy;
+    m_block_template = nullptr;
+    m_follow_tip = false;
+    updateScene();
 }
 
-void GuiBlockView::setBlock(std::shared_ptr<const node::CBlockTemplate> blocktemplate)
+void GuiBlockView::setBlock(const std::shared_ptr<node::CBlockTemplate>& blocktemplate)
 {
+    LogPrintf("GuiBlockView::setBlock: Setting block template\n");
     LOCK(m_mutex);
-    const bool instant = (bool)m_block;  // force instant if changing from real block to template
-    m_block_fees = -blocktemplate->vTxFees.front();
-    m_block.reset();
+    m_block = nullptr;
     m_block_template = blocktemplate;
-    m_block_changed = true;
-    updateElements(/*instant=*/ instant);
+    m_follow_tip = true;
+    updateScene();
 }
 
 void GuiBlockView::updateBlockFees(CAmount block_fees)
@@ -536,44 +551,19 @@ void GuiBlockView::updateSceneInit()
 
 void GuiBlockView::updateScene()
 {
+    LogPrintf("GuiBlockView::updateScene: Updating scene\n");
     LOCK(m_mutex);
-    bool all_completed{true};
-    for (auto it = m_elements.begin(); it != m_elements.end(); ) {
-        const auto& target_loc = it->second.target_loc;
-        QGraphicsItem* gi = it->second.gi;
-        const auto radius = gi->boundingRect().width() / 2;
-        const QPointF current_loc(gi->pos().x() + radius, gi->pos().y() + radius);
-        bool delete_el{false};
-        if (target_loc != current_loc) {
-            // Get 25% closer each tick
-            QPointF new_loc(current_loc.x() + ((target_loc.x() - current_loc.x()) / m_frame_div),
-                            current_loc.y() + ((target_loc.y() - current_loc.y()) / m_frame_div));
-            if (std::abs(new_loc.x() - target_loc.x()) < TX_PADDING_NEXT) {
-                new_loc.setX(target_loc.x());
-            }
-            if (std::abs(new_loc.y() - target_loc.y()) < TX_PADDING_NEXT) {
-                new_loc.setY(target_loc.y());
-            }
-            gi->setPos(new_loc.x() - radius, new_loc.y() - radius);
-            if (new_loc == target_loc) {
-                if (target_loc.y() + radius < m_scene->sceneRect().y() || target_loc.y() - radius > 0) {
-                    delete_el = true;
-                }
-            } else {
-                all_completed = false;
-            }
-        }
-        if (delete_el) {
-            m_scene->removeItem(gi);
-            delete gi;
-            it = m_elements.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    --m_frame_div;
-    if (all_completed) {
-        m_timer.stop();
+    m_scene->clear();
+    m_scene->setSceneRect(0, 0, width(), height());
+
+    if (m_block) {
+        LogPrintf("GuiBlockView::updateScene: Rendering block\n");
+        renderBlock(*m_block, m_block_subsidy);
+    } else if (m_block_template) {
+        LogPrintf("GuiBlockView::updateScene: Rendering block template\n");
+        renderBlock(m_block_template->block, GetBlockSubsidy(GetHeight(), m_chainman->GetParams().GetConsensus()));
+    } else {
+        LogPrintf("GuiBlockView::updateScene: No block or template to render\n");
     }
 }
 
@@ -693,7 +683,7 @@ void GuiBlockView::resolveCollisions()
     }
 }
 
-void TransactionParticle::update(qreal dt, qreal k_spring, qreal k_damping) {
+void GuiBlockView::TransactionParticle::update(qreal dt, qreal k_spring, qreal k_damping) {
     // Spring-damper physics
     QPointF spring_force = (target_pos - position) * k_spring;
     QPointF damping_force = -velocity * k_damping;
@@ -710,5 +700,25 @@ void TransactionParticle::update(qreal dt, qreal k_spring, qreal k_damping) {
         const qreal ease_factor = 1.0 - std::pow(1.0 - progress, growth_rate);
         current_radius = std::min(target_radius,
             current_radius + (target_radius - current_radius) * ease_factor * dt * 2.0);
+    }
+}
+
+void GuiBlockView::onFluidModeToggled(bool checked)
+{
+    m_fluid_mode = checked;
+    if (m_fluid_mode) {
+        // Start physics simulation if not already running
+        if (!m_physics_timer.isActive()) {
+            m_physics_timer.start(16); // ~60 FPS
+        }
+    } else {
+        // Stop physics simulation
+        m_physics_timer.stop();
+        // Reset particle positions to their target positions
+        for (auto& particle : m_particles) {
+            particle.position = particle.target_pos;
+            particle.velocity = QPointF(0, 0);
+        }
+        updateScene();
     }
 }
