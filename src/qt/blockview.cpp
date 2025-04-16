@@ -583,13 +583,49 @@ void GuiBlockView::updatePhysics()
         return;
     }
 
+    // Get scene boundaries
+    const QRectF scene_rect = m_scene->sceneRect();
+    const qreal left_bound = scene_rect.left();
+    const qreal right_bound = scene_rect.right();
+    const qreal top_bound = scene_rect.top();
+    const qreal bottom_bound = scene_rect.bottom();
+    const qreal limit_halfwidth = std::sqrt(::GetSerializeSize(TX_WITH_WITNESS(m_block ? *m_block : m_block_template->block))) * EXPECTED_WHITESPACE_PERCENT / 2;
+
     // Update all particles
     for (auto& [txid, particle] : m_particles) {
         particle.update(m_physics_dt, m_k_spring, m_k_damping);
 
+        // Apply boundary constraints
+        const qreal radius = particle.current_radius;
+
+        // Horizontal boundaries with limit_halfwidth constraint
+        if (particle.position.x() - radius < left_bound) {
+            particle.position.setX(left_bound + radius);
+            particle.velocity.setX(-particle.velocity.x() * 0.5); // Bounce with energy loss
+        } else if (particle.position.x() + radius > right_bound) {
+            particle.position.setX(right_bound - radius);
+            particle.velocity.setX(-particle.velocity.x() * 0.5);
+        }
+
+        // Vertical boundaries
+        if (particle.position.y() - radius < top_bound) {
+            particle.position.setY(top_bound + radius);
+            particle.velocity.setY(-particle.velocity.y() * 0.5);
+        } else if (particle.position.y() + radius > bottom_bound) {
+            particle.position.setY(bottom_bound - radius);
+            particle.velocity.setY(-particle.velocity.y() * 0.5);
+        }
+
+        // Enforce horizontal spread limit
+        if (std::abs(particle.position.x()) + radius > limit_halfwidth) {
+            const qreal sign = particle.position.x() > 0 ? 1.0 : -1.0;
+            particle.position.setX(sign * (limit_halfwidth - radius));
+            particle.velocity.setX(-particle.velocity.x() * 0.5);
+        }
+
         // Update associated scene element position if it exists
         if (particle.element && particle.element->gi) {
-            particle.element->gi->setPos(particle.position);
+            particle.element->gi->setPos(particle.position.x() - radius, particle.position.y() - radius);
 
             // Update the scale to match current radius
             qreal scale = particle.current_radius / particle.target_radius;
@@ -638,10 +674,18 @@ void GuiBlockView::resolveCollisions()
                     p2.velocity += impulse_vector / p2.mass;
                 }
 
-                // Apply separation force
+                // Apply separation force with padding
                 QPointF separation = normal * (min_dist - dist) * separation_force;
                 p1.position += separation / p1.mass;
                 p2.position -= separation / p2.mass;
+
+                // Ensure minimum padding between particles
+                const qreal padding = TX_PADDING_NEXT;
+                if (dist < padding) {
+                    QPointF padding_separation = normal * (padding - dist);
+                    p1.position += padding_separation / p1.mass;
+                    p2.position -= padding_separation / p2.mass;
+                }
             }
         }
     }
