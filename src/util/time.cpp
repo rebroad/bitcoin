@@ -75,11 +75,12 @@ void MockableSteadyClock::ClearMockTime()
 
 int64_t GetTime() { return GetTime<std::chrono::seconds>().count(); }
 
-int64_t GetTimeMillis()
+std::string FormatISO8601Time(int64_t nTime)
 {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()
-    ).count();
+    const std::chrono::sys_seconds secs{std::chrono::seconds{nTime}};
+    const auto days{std::chrono::floor<std::chrono::days>(secs)};
+    const std::chrono::hh_mm_ss hms{secs - days};
+    return strprintf("%02i:%02i:%02iZ", hms.hours().count(), hms.minutes().count(), hms.seconds().count());
 }
 
 std::string FormatISO8601DateTime(int64_t nTime)
