@@ -376,7 +376,7 @@ void GuiBlockView::updateElements(bool instant)
         // Get or create particle
         auto& particle = m_particles[wtxid];
         particle.txid = wtxid;
-        particle.mass = std::sqrt(tx_size);  // Use sqrt of size as mass proxy
+        particle.mass = tx_size;  // Mass proportional to transaction size
 
         // Get or create scene element
         auto& el = m_elements[wtxid];
@@ -389,6 +389,8 @@ void GuiBlockView::updateElements(bool instant)
         // If this is a new particle, start with small radius
         if (particle.current_radius < 1.0) {
             particle.current_radius = 1.0;
+            // Set initial velocity to create a nice entrance effect
+            particle.velocity = QPointF(0, -50);  // Start moving upward
         }
 
         // Create bubble for layout
@@ -688,5 +690,25 @@ void GuiBlockView::resolveCollisions()
                 }
             }
         }
+    }
+}
+
+void TransactionParticle::update(qreal dt, qreal k_spring, qreal k_damping) {
+    // Spring-damper physics
+    QPointF spring_force = (target_pos - position) * k_spring;
+    QPointF damping_force = -velocity * k_damping;
+    QPointF acceleration = (spring_force + damping_force) / mass;
+
+    velocity += acceleration * dt;
+    position += velocity * dt;
+
+    // Improved radius animation with easing
+    if (current_radius < target_radius) {
+        // Use a smooth easing function for radius growth
+        const qreal growth_rate = 3.0;  // Controls how quickly radius grows
+        const qreal progress = (target_radius - current_radius) / target_radius;
+        const qreal ease_factor = 1.0 - std::pow(1.0 - progress, growth_rate);
+        current_radius = std::min(target_radius,
+            current_radius + (target_radius - current_radius) * ease_factor * dt * 2.0);
     }
 }
