@@ -31,10 +31,9 @@ public:
         std::chrono::steady_clock::time_point start_time;
         struct rusage start_usage;
 
-        SectionTimer(PerfMonitor& m, const std::string& name) 
-            : monitor(m), section_name(name), 
-              thread_id(std::this_thread::get_id()),
-              start_time(std::chrono::steady_clock::now()) 
+        SectionTimer(PerfMonitor& m, const std::string& name)
+            : monitor(m), section_name(name), thread_id(std::this_thread::get_id()),
+              start_time(std::chrono::steady_clock::now())
         {
             getrusage(RUSAGE_THREAD, &start_usage);
         }
@@ -52,17 +51,15 @@ public:
                           (end_usage.ru_utime.tv_usec - start_usage.ru_utime.tv_usec);
             auto cpu_sys = (end_usage.ru_stime.tv_sec - start_usage.ru_stime.tv_sec) * 1000000 +
                          (end_usage.ru_stime.tv_usec - start_usage.ru_stime.tv_usec);
-            
+
             double cpu_percentage = 100.0 * (cpu_user + cpu_sys) / duration.count();
-            
+
             monitor.AddMeasurement(section_name, thread_id, duration, cpu_percentage);
         }
     };
 
-    void AddMeasurement(const std::string& section, 
-                       const std::thread::id& thread_id,
-                       std::chrono::microseconds duration,
-                       double cpu_percentage) {
+    void AddMeasurement(const std::string& section, const std::thread::id& thread_id,
+                       std::chrono::microseconds duration, double cpu_percentage) {
         std::lock_guard<std::mutex> lock(mutex);
         auto& stats = measurements[section][thread_id];
         stats.total_time += duration;
@@ -75,33 +72,26 @@ public:
 
     std::string GetStats() const {
         std::lock_guard<std::mutex> lock(mutex);
-        std::string result = "Performance Statistics:\n";
-        
+        std::string result = "";
+
         for (const auto& section : measurements) {
-            result += "\nSection: " + section.first + "\n";
+            result += section.first + " (" + std::to_string(std::hash<std::thread::id>{}(thread_stat.first)) + "): ";
             for (const auto& thread_stat : section.second) {
-                result += "  Thread " + std::to_string(std::hash<std::thread::id>{}(thread_stat.first)) + ":\n";
                 const auto& stats = thread_stat.second;
-                result += "    Total time: " + std::to_string(stats.total_time.count()) + "us\n";
-                result += "    Avg time: " + std::to_string(stats.total_time.count() / (stats.call_count ? stats.call_count : 1)) + "us\n";
-                result += "    Max time: " + std::to_string(stats.max_time.count()) + "us\n";
-                result += "    Min time: " + std::to_string(stats.min_time.count()) + "us\n";
-                result += "    Call count: " + std::to_string(stats.call_count) + "\n";
-                result += "    Avg CPU%: " + std::to_string(stats.cpu_usage) + "%\n";
+                                result += "avg/min/max=" +
+                                        std::to_string(stats.total_time.count() / (stats.call_count ? stats.call_count : 1)) + "us" +
+                                        "/" + std::to_string(stats.min_time.count()) + "us" +
+                                        "/" + std::to_string(stats.max_time.count()) + "us " +
+                                        "count=" + std::to_string(stats.call_count) + " " +
+                        "CPU%=" + std::to_string(stats.cpu_usage) + "\n";
             }
         }
         return result;
     }
 
-    void Reset() {
-        std::lock_guard<std::mutex> lock(mutex);
-        measurements.clear();
-    }
+    void Reset() { std::lock_guard<std::mutex> lock(mutex); measurements.clear(); }
 
-    static PerfMonitor& Instance() {
-        static PerfMonitor instance;
-        return instance;
-    }
+    static PerfMonitor& Instance() { static PerfMonitor instance; return instance; }
 
 private:
     mutable std::mutex mutex;
@@ -112,4 +102,4 @@ private:
 #define PERF_MONITOR(name) \
     PerfMonitor::SectionTimer perf_timer##__LINE__(PerfMonitor::Instance(), name)
 
-#endif // BITCOIN_UTIL_PERFMON_H 
+#endif // BITCOIN_UTIL_PERFMON_H
