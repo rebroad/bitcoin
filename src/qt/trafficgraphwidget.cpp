@@ -437,7 +437,7 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(int value) {
 
 void TrafficGraphWidget::saveData() {
     try {
-        fs::path pathTrafficGraph = gArgs.GetDataDirNet().string() / "trafficgraphdata.dat";
+        fs::path pathTrafficGraph = gArgs.GetDataDirNet() / "trafficgraphdata.dat";
         LogPrintf("TrafficGraphWidget: Saving data to %s\n", pathTrafficGraph.generic_string());
         FILE* file = fsbridge::fopen(pathTrafficGraph, "wb");
         if (!file) {
@@ -479,13 +479,13 @@ void TrafficGraphWidget::saveData() {
         fileout.fclose();
     } catch (const std::exception& e) {
         LogPrintf("TrafficGraphWidget: Error saving data: %s (path: %s)\n",
-                 e.what(), gArgs.GetDataDirNet().string());
+                 e.what(), gArgs.GetDataDirNet().generic_string());
     }
 }
 
 bool TrafficGraphWidget::loadDataFromBinary() {
     try {
-        fs::path pathTrafficGraph = gArgs.GetDataDirNet().string() / "trafficgraphdata.dat";
+        fs::path pathTrafficGraph = gArgs.GetDataDirNet() / "trafficgraphdata.dat";
         LogPrintf("TrafficGraphWidget: Attempting to load data from %s\n", pathTrafficGraph.generic_string());
 
         FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
