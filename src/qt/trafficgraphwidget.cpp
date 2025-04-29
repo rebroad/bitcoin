@@ -30,7 +30,7 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget* parent)
     m_timer->setInterval(75);
     m_timer->start();
     setMouseTracking(true);
-    setFocusPolicy(Qt::StrongFocus); // Make widget focusable to respond to keyboard events
+    setFocusPolicy(Qt::StrongFocus);
 }
 
 void TrafficGraphWidget::setClientModel(ClientModel *model)
@@ -95,11 +95,15 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event) {
     update();
 }
 
+void TrafficGraphWidget::mouseReleaseEvent(QFocusEvent *event) {
+    QWidget::mouseReleaseEvent(event);
+    focusSlider(Qt::OtherFocusReason);
+}
+
 void TrafficGraphWidget::focusInEvent(QFocusEvent *event) {
     QWidget::focusInEvent(event);
     focusSlider(Qt::OtherFocusReason);
 }
-
 
 void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
 {
@@ -147,13 +151,19 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter &painter)
     painter.setPen(Qt::yellow);
     painter.drawEllipse(QPointF(x, y), 3, 3);
     QString strTime;
-    int64_t sampleTime = m_time_stamp[m_value].at(m_tt_point);
+    int64_t sampleTime;
+    if (m_tt_point + 1 < m_time_stamp[m_value].size()) {
+        sampleTime = m_time_stamp[m_value].at(m_tt_point + 1);
+    } else {
+        strTime = "to ";
+        sampleTime = m_time_stamp[m_value].at(m_tt_point);
+    }
     int age = GetTime() - sampleTime/1000;
     if (age < 60*60*23)
-        strTime = QString::fromStdString(FormatISO8601Time(sampleTime/1000));
+        strTime += QString::fromStdString(FormatISO8601Time(sampleTime/1000));
     else
-        strTime = QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
-    auto nDuration = (m_time_stamp[m_value].at(m_tt_point) - sampleTime);
+        strTime += QString::fromStdString(FormatISO8601DateTime(sampleTime/1000));
+    int nDuration = (m_time_stamp[m_value].at(m_tt_point) - sampleTime);
     if (nDuration > 0) {
         if (nDuration > 9999)
             strTime += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{(nDuration+500)/1000});
@@ -172,7 +182,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
-    if (fMax <= 0.0f) return;
+    if(fMax <= 0.0f) return;
 
     QColor axisCol(Qt::gray);
     int h = height() - YMARGIN * 2;
@@ -296,13 +306,14 @@ bool update_num(float new_val, float &current, float &increment, int length)
 
 void TrafficGraphWidget::updateStuff() {
     if (!clientModel) return;
-    uint64_t expected_gap = m_timer->interval(), now = QDateTime::currentMSecsSinceEpoch();
+    int64_t expected_gap = m_timer->interval();
+    int64_t now = GetTime<std::chrono::milliseconds>().count();
     static uint64_t last_jump_time = 0;
-    uint64_t m_time_offset = 0;
+    int64_t m_time_offset = 0;
 
     if (!m_time_stamp[0].empty()) {
-        uint64_t last_time = m_time_stamp[0].front();
-        uint64_t actual_gap = now - last_time;
+        int64_t last_time = m_time_stamp[0].front();
+        int64_t actual_gap = now - last_time;
         if (actual_gap >= 1000 + expected_gap && last_time != last_jump_time) {
             m_time_offset = actual_gap - expected_gap;
             last_jump_time = last_time;
@@ -311,7 +322,7 @@ void TrafficGraphWidget::updateStuff() {
 
     bool fUpdate = false;
     for (int i = 0; i < VALUES_SIZE; i++) {
-        uint64_t msecs_per_sample = static_cast<uint64_t>(m_values[i]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
+        int64_t msecs_per_sample = static_cast<uint64_t>(m_values[i]) * static_cast<uint64_t>(60000) / DESIRED_SAMPLES;
         if (m_time_offset) {
             m_offset[i] += m_time_offset;
             if (m_offset[i] > now - m_last_time[i]) m_offset[i] = now - m_last_time[i];
@@ -319,7 +330,6 @@ void TrafficGraphWidget::updateStuff() {
         if (now > (m_last_time[i] + msecs_per_sample + m_offset[i] - expected_gap/2)) {
             m_offset[i] = 0;
             updateRates(i);
-            if (i == m_new_value) update_fMax();
             if (i == m_value) {
                 if (m_tt_point >= 0 && m_tt_point < DESIRED_SAMPLES) {
                     m_tt_point++; // Move the selected point to the left
@@ -327,6 +337,7 @@ void TrafficGraphWidget::updateStuff() {
                 }
                 fUpdate = true;
             }
+            if (i == m_new_value) update_fMax();
         }
     }
     m_time_offset = 0;

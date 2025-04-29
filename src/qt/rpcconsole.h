@@ -154,7 +154,7 @@ private:
     } const ts;
 
     void startExecutor();
-    void setTrafficGraphRange(unsigned int value);
+    void setTrafficGraphRange(int value);
     void WriteCommandHistory();
 
     enum ColumnWidths

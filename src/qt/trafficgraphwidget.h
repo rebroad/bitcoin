@@ -36,6 +36,7 @@ protected:
     int y_value(float value) const;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
     void focusInEvent(QFocusEvent *event) override;
     int findClosestPoint(int x, int y, int rangeIndex) const;
     int findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const;
