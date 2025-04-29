@@ -23,8 +23,8 @@ void UninterruptibleSleep(const std::chrono::microseconds& n) { std::this_thread
 
 static std::atomic<int64_t> nMockTime(0); //!< For testing
 
-uint64_t GetTime() {
-    uint64_t mocktime = nMockTime.load(std::memory_order_relaxed);
+int64_t GetTime() {
+    int64_t mocktime = nMockTime.load(std::memory_order_relaxed);
     if (mocktime) return mocktime;
 
     time_t now = time(nullptr);
@@ -111,17 +111,17 @@ std::chrono::seconds GetMockTime()
     return std::chrono::seconds(nMockTime.load(std::memory_order_relaxed));
 }
 
-uint64_t GetTimeMillis() {
-    return uint64_t{GetSystemTime<std::chrono::milliseconds>().count()};
+int64_t GetTimeMillis() {
+    return int64_t{GetSystemTime<std::chrono::milliseconds>().count()};
 }
 
-uint64_t GetTimeMicros() {
-    return uint64_t{GetSystemTime<std::chrono::microseconds>().count()};
+int64_t GetTimeMicros() {
+    return int64_t{GetSystemTime<std::chrono::microseconds>().count()};
 }
 
-uint64_t GetTimeSeconds()
+int64_t GetTimeSeconds()
 {
-    return uint64_t{GetSystemTime<std::chrono::seconds>().count()};
+    return int64_t{GetSystemTime<std::chrono::seconds>().count()};
 }
 
 std::string FormatISO8601DateTime(int64_t nTime) {
