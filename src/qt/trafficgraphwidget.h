@@ -64,7 +64,7 @@ private:
     bool m_bump_value{false};
     bool m_toggle{true};
     int m_tt_point{-1};
-    bool m_tt_in_series{true};
+    bool m_tt_in_series{true}; // true = in, false = out
     int m_x_offset{0};
     int m_y_offset{0};
     int64_t m_tt_time{0};

@@ -12,7 +12,6 @@
 #include <QPainterPath>
 #include <QColor>
 #include <QTimer>
-
 #include <QToolTip>
 #include <chrono>
 #include <cmath>
@@ -22,7 +21,7 @@
 #define XMARGIN                 10
 #define YMARGIN                 10
 
-TrafficGraphWidget::TrafficGraphWidget(QWidget* parent)
+TrafficGraphWidget::TrafficGraphWidget(QWidget *parent)
     : QWidget(parent)
 {
     m_timer = new QTimer(this);
@@ -30,12 +29,11 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget* parent)
     m_timer->setInterval(75);
     m_timer->start();
     setMouseTracking(true);
-    setFocusPolicy(Qt::StrongFocus);
+    setFocusPolicy(Qt::StrongFocus); // Make widget focusable to respond to keyboard events
 }
 
-void TrafficGraphWidget::setClientModel(ClientModel *model)
-{
-    if(model) {
+void TrafficGraphWidget::setClientModel(ClientModel *model) {
+    if (model) {
         if (m_samples_in[0].empty() && m_samples_out[0].empty()) {
             loadData();
 
@@ -54,14 +52,12 @@ bool TrafficGraphWidget::GraphRangeBump() const { return m_bump_value; }
 
 unsigned int TrafficGraphWidget::getCurrentRangeIndex() const { return m_new_value; }
 
-int TrafficGraphWidget::y_value(float value) const
-{
+int TrafficGraphWidget::y_value(float value) const {
     int h = height() - YMARGIN * 2;
     return YMARGIN + h - (h * 1.0 * (m_toggle ? (pow(value, 0.30102) / pow(fMax, 0.30102)) : (value / fMax)));
 }
 
-void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples)
-{
+void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
     int sampleCount = samples.size();
     if(sampleCount <= 0) return;
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
@@ -95,9 +91,9 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent *event) {
     update();
 }
 
-void TrafficGraphWidget::mouseReleaseEvent(QFocusEvent *event) {
+void TrafficGraphWidget::mouseReleaseEvent(QMouseEvent *event) {
     QWidget::mouseReleaseEvent(event);
-    focusSlider(Qt::OtherFocusReason);
+    focusSlider(Qt::MouseFocusReason);
 }
 
 void TrafficGraphWidget::focusInEvent(QFocusEvent *event) {
@@ -105,18 +101,16 @@ void TrafficGraphWidget::focusInEvent(QFocusEvent *event) {
     focusSlider(Qt::OtherFocusReason);
 }
 
-void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
-{
+void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event) {
     QWidget::mouseMoveEvent(event);
     static int last_x = -1, last_y = -1;
     int x = event->x(), y = event->y();
-    m_x_offset = event->globalX() - x;
-    m_y_offset = event->globalY() - y;
+    m_x_offset = event->globalX() - x; m_y_offset = event->globalY() - y;
     if (last_x == x && last_y == y) return; // Do nothing if mouse hasn't moved
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w;
-    unsigned int smallest_distance = 50; int closest_i = -1;
+    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = -1;
     int sampleSize = m_time_stamp[m_value].size();
+    unsigned int smallest_distance = 50;
     bool is_in_series = true;
     if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
         for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
@@ -139,8 +133,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent *event)
     last_x = x; last_y = y;
 }
 
-void TrafficGraphWidget::drawTooltipPoint(QPainter &painter)
-{
+void TrafficGraphWidget::drawTooltipPoint(QPainter &painter) {
     int w = width() - XMARGIN * 2;
     double ratio = static_cast<double>(m_tt_point) * m_values[m_value] / m_range / DESIRED_SAMPLES;
     int x = XMARGIN + w - static_cast<int>(w * ratio);
@@ -177,8 +170,7 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter &painter)
     m_tt_time = GetTime();
 }
 
-void TrafficGraphWidget::paintEvent(QPaintEvent *)
-{
+void TrafficGraphWidget::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
 
@@ -244,14 +236,11 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         QToolTip::hideText();
 }
 
-void TrafficGraphWidget::update_fMax()
-{
+void TrafficGraphWidget::update_fMax() {
     float tmax = 0.0f;
     for (const float f : m_samples_in[m_new_value]) if (f > tmax) tmax = f;
     for (const float f : m_samples_out[m_new_value]) if (f > tmax) tmax = f;
     m_new_fmax = tmax;
-    static float last_fMax = -1;
-    if (m_new_fmax != last_fMax) last_fMax = m_new_fmax;
 }
 
 /**
@@ -268,8 +257,7 @@ void TrafficGraphWidget::update_fMax()
  * - If moving too quickly, decelerate
  * - If close enough to target, snap to it
  */
-bool update_num(float new_val, float &current, float &increment, int length)
-{
+bool update_num(float new_val, float &current, float &increment, int length) {
     if (new_val <= 0 || current == new_val) return false;
 
     if (abs(increment) <= abs(0.8 * current) / length) { // allow equal to as current and increment could be zero
@@ -346,9 +334,9 @@ void TrafficGraphWidget::updateStuff() {
     if (update_num(m_new_fmax, fMax, y_increment, height() - YMARGIN * 2)) fUpdate = true;
     int next_m_value = m_value;
     if (update_num(m_values[m_new_value], m_range, x_increment, width() - XMARGIN * 2)) {
-        if (m_values[m_new_value] > m_range && m_values[m_value] < m_range)
+        if (m_values[m_new_value] > m_range && m_values[m_value] < m_range) {
             next_m_value = m_value + 1;
-        else if (m_value > 0 && m_values[m_new_value] <= m_range && m_values[m_value-1] > m_range * 0.99)
+        } else if (m_value > 0 && m_values[m_new_value] <= m_range && m_values[m_value-1] > m_range * 0.99)
             next_m_value = m_value - 1;
         fUpdate = true;
     } else if (m_value != m_new_value) {
@@ -376,8 +364,7 @@ void TrafficGraphWidget::updateStuff() {
     if (fUpdate) update();
 }
 
-void TrafficGraphWidget::updateRates(int i)
-{
+void TrafficGraphWidget::updateRates(int i) {
     int64_t now = GetTime<std::chrono::milliseconds>().count();
     int64_t actual_gap = now - m_last_time[i];
     quint64 bytesIn = clientModel->node().getTotalBytesRecv(),
@@ -403,8 +390,7 @@ void TrafficGraphWidget::updateRates(int i)
     }
 }
 
-std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value)
-{
+std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
     // value is the array marker plus 1 (as zero is reserved for bumping up)
     if (!value) { // bump
         m_bump_value = false;
