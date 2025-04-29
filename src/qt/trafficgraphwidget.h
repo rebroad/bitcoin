@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2020 The Bitcoin Core developers
+// Copyright (c) 2011-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,9 +11,6 @@
 #include <QKeyEvent>
 
 #include <chrono>
-#include <fs.h>
-#include <serialize.h>
-#include <streams.h>
 
 class ClientModel;
 
@@ -34,21 +31,13 @@ public:
     void exportData();
     unsigned int getCurrentRangeIndex() const;
 
-private:
-
 protected:
     void paintEvent(QPaintEvent *) override;
     int y_value(float value) const;
     void mouseMoveEvent(QMouseEvent *event) override;
-    int ttpoint = -1;
-    bool tt_in_series = true; // true = in series, false = out series
-    int x_offset = 0;
-    int y_offset = 0;
-    uint64_t tt_time = 0;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void focusInEvent(QFocusEvent *event) override;
-    bool fToggle = true;
     int findClosestPoint(int x, int y, int rangeIndex) const;
     int findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const;
 
@@ -57,7 +46,6 @@ public Q_SLOTS:
     std::chrono::minutes setGraphRange(unsigned int value);
 
 private:
-    uint64_t m_offset[VALUES_SIZE] = {};
     void saveData();
     bool loadDataFromBinary();
     bool loadData();
@@ -65,25 +53,32 @@ private:
     void paintPath(QPainterPath &path, QQueue<float> &samples);
     void updateRates(int value);
     void focusSlider(Qt::FocusReason reason);
+    void drawTooltipPoint(QPainter& painter);
 
-    QTimer *timer;
+    QTimer *m_timer{nullptr};
     float fMax{0};
-    float new_fMax{0};
+    float m_new_fmax{0};
     float m_range{0};
     int m_value{0};
     int m_new_value{0};
     bool m_bump_value{false};
-    QQueue<float> vSamplesIn[VALUES_SIZE] = {};
-    QQueue<float> vSamplesOut[VALUES_SIZE] = {};
-    QQueue<std::chrono::milliseconds> vTimeStamp[VALUES_SIZE] = {};
-    quint64 nLastBytesIn[VALUES_SIZE] = {};
-    quint64 nLastBytesOut[VALUES_SIZE] = {};
-    std::chrono::milliseconds nLastTime[VALUES_SIZE] = {};
-    unsigned int values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
-    ClientModel *clientModel;
-    QString m_dataDir;
-    uint64_t m_totalBytesRecv{0};
-    uint64_t m_totalBytesSent{0};
+    bool m_toggle{true};
+    int m_tt_point{-1};
+    bool m_tt_in_series{true}; // true = in, false = out
+    int m_x_offset{0};
+    int m_y_offset{0};
+    int64_t m_tt_time{0};
+    QQueue<float> m_samples_in[VALUES_SIZE] = {};
+    QQueue<float> m_samples_out[VALUES_SIZE] = {};
+    QQueue<int64_t> m_time_stamp[VALUES_SIZE] = {};
+    quint64 m_last_bytes_in[VALUES_SIZE] = {};
+    quint64 m_last_bytes_out[VALUES_SIZE] = {};
+    int64_t m_last_time[VALUES_SIZE] = {};
+    unsigned int m_values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
+    ClientModel *clientModel{nullptr};
+    uint64_t m_total_bytes_recv{0};
+    uint64_t m_total_bytes_sent{0};
+    uint64_t m_offset[VALUES_SIZE] = {};
 };
 
 #endif // BITCOIN_QT_TRAFFICGRAPHWIDGET_H
