@@ -605,8 +605,7 @@ bool RPCConsole::eventFilter(QObject* obj, QEvent *event)
         case Qt::Key_Down: if(obj == ui->lineEdit) { browseHistory(1); return true; } break;
         case Qt::Key_PageUp: /* pass paging keys to messages widget */
         case Qt::Key_PageDown:
-            if(obj == ui->lineEdit)
-            {
+            if(obj == ui->lineEdit) {
                 QApplication::postEvent(ui->messagesWidget, new QKeyEvent(*keyevt));
                 return true;
             }
@@ -837,7 +836,7 @@ void RPCConsole::setFontSize(int newSize)
 
     // clear console (reset icon sizes, default stylesheet) and re-add the content
     float oldPosFactor = 1.0 / ui->messagesWidget->verticalScrollBar()->maximum() * ui->messagesWidget->verticalScrollBar()->value();
-    clear(/* keep_prompt */ true);
+    clear(/*keep_prompt=*/true);
     ui->messagesWidget->setHtml(str);
     ui->messagesWidget->verticalScrollBar()->setValue(oldPosFactor * ui->messagesWidget->verticalScrollBar()->maximum());
 }
@@ -1139,11 +1138,9 @@ void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
         int64_t now = GetTimeMillis();
         bool this_click_is_up = false;
         bool bouncing = false;
-        if (slider_value > set_slider_value)
-            this_click_is_up = true;
+        if (slider_value > set_slider_value) this_click_is_up = true;
         if (now - last_click_time < 250 && this_click_is_up != last_click_was_up) {
-            LogPrintf("%s: ignoring snap %s (last was %s %dms ago)\n", __func__, this_click_is_up ? "UP":"DOWN",
-                last_click_was_up ? "UP":"DOWN", now - last_click_time);
+            LogPrintf("%s: ignoring snap %s (last was %s %dms ago)\n", __func__, this_click_is_up ? "UP":"DOWN", last_click_was_up ? "UP":"DOWN", now - last_click_time);
             bouncing = true;
             ui->sldGraphRange->blockSignals(true);
             ui->sldGraphRange->setValue(set_slider_value);
