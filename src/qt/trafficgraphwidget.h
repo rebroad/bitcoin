@@ -43,7 +43,7 @@ protected:
 
 public Q_SLOTS:
     void updateStuff();
-    std::chrono::minutes setGraphRange(unsigned int value);
+    std::chrono::minutes setGraphRange(int value);
 
 private:
     void saveData();
