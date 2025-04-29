@@ -229,7 +229,7 @@ struct Peer {
     std::atomic<int> m_starting_height{-1};
 
     /** The pong reply we're expecting, or 0 if no pong expected. */
-    std::atomic<uint64_t> m_ping_nonce_sent{0};
+    std::atomic<int64_t> m_ping_nonce_sent{0};
     /** When the last ping was sent, or 0 if no ping was ever sent */
     std::atomic<std::chrono::microseconds> m_ping_start{0us};
     /** Whether a ping has been requested by the user */
@@ -281,9 +281,9 @@ struct Peer {
     /** When m_addr_token_bucket was last updated */
     std::chrono::microseconds m_addr_token_timestamp{GetTime<std::chrono::microseconds>()};
     /** Total number of addresses that were dropped due to rate limiting. */
-    std::atomic<uint64_t> m_addr_rate_limited{0};
+    std::atomic<int64_t> m_addr_rate_limited{0};
     /** Total number of addresses that were processed (excludes rate-limited ones). */
-    std::atomic<uint64_t> m_addr_processed{0};
+    std::atomic<int64_t> m_addr_processed{0};
 
     /** Set of txids to reconsider once their parent transactions have been accepted **/
     std::set<uint256> m_orphan_work_set GUARDED_BY(g_cs_orphans);
@@ -442,7 +442,7 @@ private:
     std::chrono::seconds m_stale_tip_check_time{0s};
 
     /** Last time we had no connections */
-    uint64_t m_last_no_connections{GetTime()}; // REBTODO - move to net.cpp?
+    int64_t m_last_no_connections{GetTime()}; // REBTODO - move to net.cpp?
 
     /** Number of times net.cpp has run a ProcessMessages() loop */
     int64_t nNetClicks{0};
@@ -732,9 +732,9 @@ struct CNodeState {
     std::list<QueuedBlock> vBlocksInFlight;
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
     std::chrono::microseconds m_downloading_since{0us};
-    uint64_t m_download_report_clicks{0};
-    uint64_t tSipaDisconnect{0};
-    uint16_t nBlockPaused{0};
+    int64_t m_download_report_clicks{0};
+    int64_t tSipaDisconnect{0};
+    int16_t nBlockPaused{0};
     void BlockBlocked(int flag, const std::string& reason = "") {
         int nBefore = nBlockPaused;
         nBlockPaused |= (1 << flag);
@@ -752,37 +752,37 @@ struct CNodeState {
             LogPrint(BCLog::BLOCKBLOCK, "UNBLOCKED %d - active: %s peer=%d\n", flag, activeBlocks, m_id);
         } */
     }
-    unsigned int nBlocksInFlight{0};
+    int nBlocksInFlight{0};
     //! How many TXs are currently in flight
-    unsigned int nTxInFlight{0};
+    int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
-    unsigned int nBlockAfterTXs{0};
+    int nBlockAfterTXs{0};
     //! BlockBytes for this node
-    uint64_t nBlockBytes{0};
+    int64_t nBlockBytes{0};
     //! Last snapshot of nBlockBytes
-    uint64_t nBlockBytesSnap{0};
+    int64_t nBlockBytesSnap{0};
     //! Oldest snapshot of nBlockBytes
-    uint64_t nBlockBytesSnapOld{0};
+    int64_t nBlockBytesSnapOld{0};
     //! BlockTXs for this node
-    unsigned int nBlockTXs{0};
+    int nBlockTXs{0};
     //! Last snapshot of nBlockTXs
-    unsigned int nBlockTXsSnap{0};
+    int nBlockTXsSnap{0};
     //! Oldest snapshot of nBlockTXs
-    unsigned int nBlockTXsSnapOld{0};
+    int nBlockTXsSnapOld{0};
     //! BlockBytes for this node if we process the BLOCK
-    unsigned int nNextBlockBytes{0};
+    int nNextBlockBytes{0};
     //! BlockTXs for this node if we process the BLOCK
     unsigned int nNextBlockTXs{0};
     //! Number of blocks received while this node has been connected
     unsigned int nBlocksRecv{0};
     //! Time of last snapshot
-    uint64_t nBlockTimeSnap{0};
+    int64_t nBlockTimeSnap{0};
     //! Time of oldest snapshot
-    uint64_t nBlockTimeSnapOld{0};
+    int64_t nBlockTimeSnapOld{0};
     //! Last snapshot of nRecvBytes
-    uint64_t nRecvBytesSnap{0};
+    int64_t nRecvBytesSnap{0};
     //! Oldest snapshot of nRecvBytes
-    uint64_t nRecvBytesSnapOld{0};
+    int64_t nRecvBytesSnapOld{0};
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload{false};
     //! Whether this peer wants invs or headers (when possible) for block announcements.
@@ -1049,7 +1049,7 @@ void PeerManagerImpl::MaybeSetPeerAsAnnouncingHeaderAndIDs(NodeId nodeid)
         }
         m_connman.ForNode(nodeid, [this](CNode* pfrom) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
             AssertLockHeld(::cs_main);
-            uint64_t nCMPCTBLOCKVersion = 2;
+            int64_t nCMPCTBLOCKVersion = 2;
             if (lNodesAnnouncingHeaderAndIDs.size() >= 3) {
                 // As per BIP152, we only get 3 of our peers to announce
                 // blocks using compact encodings.
@@ -2889,7 +2889,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         int64_t nTime;
         CService addrMe;
-        uint64_t nNonce = 1;
+        int64_t nNonce = 1;
         ServiceFlags nServices;
         int nVersion;
         std::string cleanSubVer;
@@ -3127,7 +3127,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // We send this to non-NODE NETWORK peers as well, because
             // they may wish to request compact blocks from us
             bool fAnnounceUsingCMPCTBLOCK = false;
-            uint64_t nCMPCTBLOCKVersion = 2;
+            int64_t nCMPCTBLOCKVersion = 2;
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion));
             nCMPCTBLOCKVersion = 1;
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::SENDCMPCT, fAnnounceUsingCMPCTBLOCK, nCMPCTBLOCKVersion));
@@ -3144,7 +3144,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::SENDCMPCT) {
         bool fAnnounceUsingCMPCTBLOCK = false;
-        uint64_t nCMPCTBLOCKVersion = 0;
+        int64_t nCMPCTBLOCKVersion = 0;
         vRecv >> fAnnounceUsingCMPCTBLOCK >> nCMPCTBLOCKVersion;
         if (nCMPCTBLOCKVersion == 1 || nCMPCTBLOCKVersion == 2) {
             LOCK(cs_main);
@@ -3293,8 +3293,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         peer->m_addr_token_timestamp = current_time;
 
         const bool rate_limited = !pfrom.HasPermission(NetPermissionFlags::Addr);
-        uint64_t num_proc = 0;
-        uint64_t num_rate_limit = 0;
+        int64_t num_proc = 0;
+        int64_t num_rate_limit = 0;
         Shuffle(vAddr.begin(), vAddr.end(), FastRandomContext());
         for (CAddress& addr : vAddr)
         {
@@ -4045,7 +4045,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     State(pnode->GetId())->nNextBlockTXs = 0;
                 });
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
-                    NodeId nodeid; uint64_t nTime; unsigned int nSize;
+                    NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize)) req.indexes.push_back(i);
                     else if (!fSeenBefore) {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
@@ -4396,7 +4396,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::PING) {
         if (pfrom.GetCommonVersion() > BIP0031_VERSION) {
-            uint64_t nonce = 0;
+            int64_t nonce = 0;
             vRecv >> nonce;
             // Echo the message back with the nonce. This allows for two useful features:
             //
@@ -4416,7 +4416,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
     if (msg_type == NetMsgType::PONG) {
         const auto ping_end = time_received;
-        uint64_t nonce = 0;
+        int64_t nonce = 0;
         size_t nAvail = vRecv.in_avail();
         bool bPingFinished = false;
         std::string sProblem;
@@ -4943,7 +4943,7 @@ void PeerManagerImpl::MaybeSendPing(CNode& node_to, Peer& peer, std::chrono::mic
     }
 
     if (pingSend) {
-        uint64_t nonce = 0;
+        int64_t nonce = 0;
         while (nonce == 0) {
             GetRandBytes((unsigned char*)&nonce, sizeof(nonce));
         }

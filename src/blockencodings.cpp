@@ -188,7 +188,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     return READ_STATUS_OK;
 }
 
-bool PartiallyDownloadedBlock::IsTxAvailable(size_t index, NodeId *nodeid/*=nullptr*/, uint64_t *nTime/*=nullptr*/, unsigned int *nSize/*=nullptr*/) const {
+bool PartiallyDownloadedBlock::IsTxAvailable(size_t index, NodeId *nodeid/*=nullptr*/, int64_t *nTime/*=nullptr*/, unsigned int *nSize/*=nullptr*/) const {
     if (header.IsNull()) return false;
 
     assert(index < txn_available.size());

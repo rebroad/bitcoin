@@ -1419,7 +1419,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         bilingual_str strLoadError;
 
         uiInterface.InitMessage(_("Loading block index…").translated);
-        const uint64_t load_block_index_start_time = GetTimeMillis();
+        const int64_t load_block_index_start_time = GetTimeMillis();
         std::optional<ChainstateLoadingError> maybe_load_error;
         try {
             maybe_load_error = LoadChainstate(fReset,
@@ -1492,7 +1492,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
                                                             chainparams.GetConsensus(),
                                                             check_blocks,
                                                             args.GetIntArg("-checklevel", DEFAULT_CHECKLEVEL),
-                                                            /*get_unix_time_seconds=*/static_cast<uint64_t(*)()>(GetTime));
+                                                            /*get_unix_time_seconds=*/static_cast<int64_t(*)()>(GetTime));
             } catch (const std::exception& e) {
                 LogPrintf("%s\n", e.what());
                 maybe_verify_error = ChainstateLoadVerifyError::ERROR_GENERIC_FAILURE;
@@ -1513,7 +1513,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
                 }
             } else {
                 fLoaded = true;
-                LogPrintf(" block index %15ums\n", GetTimeMillis() - load_block_index_start_time);
+                LogPrintf(" block index %15dms\n", GetTimeMillis() - load_block_index_start_time);
             }
         }
 
