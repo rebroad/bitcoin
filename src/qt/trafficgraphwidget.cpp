@@ -45,7 +45,6 @@ void TrafficGraphWidget::setClientModel(ClientModel *model) {
             }
         }
     } else {
-        LogPrintf("%s: Saving data\n", __func__);
         saveData();
     }
     clientModel = model;
@@ -75,15 +74,10 @@ void TrafficGraphWidget::paintPath(QPainterPath &path, QQueue<float> &samples) {
 }
 
 void TrafficGraphWidget::focusSlider(Qt::FocusReason reason) {
-    // Find the slider in the parent hierarchy and give it focus
     QWidget* parent = parentWidget();
-    while (parent) {
+    if (parent) {
         QSlider* slider = parent->findChild<QSlider*>("sldGraphRange");
-        if (slider) {
-            slider->setFocus(reason);
-            break;
-        }
-        parent = parent->parentWidget();
+        if (slider) slider->setFocus(reason);
     }
 }
 
@@ -146,8 +140,7 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter &painter) {
     float outSample = m_samples_out[m_value].at(m_tt_point);
     float selectedSample = m_tt_in_series ? inSample : outSample;
     int y = y_value(selectedSample);
-    LogPrintf("%s: circle at %d,%d tt=%d m_range=%d series=%s\n", __FILE__, x, y, m_tt_point, m_range,
-              m_tt_in_series ? "in" : "out");
+    LogPrintf("%s: circle at %d,%d tt=%d m_range=%d series=%s\n", __FILE__, x, y, m_tt_point, m_range, m_tt_in_series ? "in" : "out");
     painter.setPen(Qt::yellow);
     painter.drawEllipse(QPointF(x, y), 3, 3);
     QString strTime;
@@ -424,7 +417,7 @@ void TrafficGraphWidget::updateRates(int i) {
     }
 }
 
-std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
+std::chrono::minutes TrafficGraphWidget::setGraphRange(int value) {
     // value is the array marker plus 1 (as zero is reserved for bumping up)
     if (!value) { // bump
         m_bump_value = false;
@@ -443,67 +436,79 @@ std::chrono::minutes TrafficGraphWidget::setGraphRange(unsigned int value) {
 }
 
 void TrafficGraphWidget::saveData() {
-    fs::path file = gArgs.GetDataDirNet() / "traffic.dat";
-    LogPrintf("TrafficGraphWidget: Saving data to %s\n", file.generic_string());
     try {
-        FILE* fileout = fsbridge::fopen(file, "wb");
-        if (!fileout) throw std::runtime_error("Failed to open file");
-        AutoFile afile{fileout};
-        if (afile.IsNull()) throw std::runtime_error("File stream is null");
-        afile << static_cast<int>(1); // Version 1
+        fs::path pathTrafficGraph = gArgs.GetDataDirNet().toStdString() / "trafficgraphdata.dat";
+        LogPrintf("TrafficGraphWidget: Saving data to %s\n", pathTrafficGraph.generic_string());
+        FILE* file = fsbridge::fopen(pathTrafficGraph, "wb");
+        if (!file) {
+            LogPrintf("TrafficGraphWidget: Failed to open file for writing: %s\n", pathTrafficGraph.generic_string());
+            throw std::runtime_error("Failed to open file");
+        }
+        AutoFile fileout(file);
+        if (fileout.IsNull()) throw std::runtime_error("File stream is null");
+        fileout << static_cast<uint32_t>(1); // Version 1
 
         uint64_t totalBytesRecv = clientModel->node().getTotalBytesRecv();
         uint64_t totalBytesSent = clientModel->node().getTotalBytesSent();
-        afile << VARINT(totalBytesRecv) << VARINT(totalBytesSent);
+        fileout << VARINT(totalBytesRecv) << VARINT(totalBytesSent);
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
             // Save the size of these samples
-            afile << VARINT(static_cast<uint32_t>(m_time_stamp[i].size()));
+            fileout << VARINT(static_cast<uint32_t>(m_time_stamp[i].size()));
 
             for (int j = 0; j < m_samples_in[i].size(); j++) {
                 float value = m_samples_in[i].at(j);
                 uint32_t uint_value;
                 memcpy(&uint_value, &value, sizeof(float)); // IEEE 754
-                afile << uint_value;
+                fileout << uint_value;
             }
 
             for (int j = 0; j < m_samples_out[i].size(); j++) {
                 float value = m_samples_out[i].at(j);
                 uint32_t uint_value;
                 memcpy(&uint_value, &value, sizeof(float)); // IEEE 754
-                afile << uint_value;
+                fileout << uint_value;
             }
 
             for (int j = 0; j < m_time_stamp[i].size(); j++)
-                afile << VARINT(static_cast<uint64_t>(m_time_stamp[i].at(j)));
+                fileout << VARINT(static_cast<uint64_t>(m_time_stamp[i].at(j)));
 
-            afile << VARINT(m_offset[i]);
+            fileout << VARINT(m_offset[i]);
         }
+
+        fileout.fclose();
     } catch (const std::exception& e) {
-        LogPrintf("%s: Error saving traffic data: %s\n", __func__, e.what());
+        LogPrintf("TrafficGraphWidget: Error saving data: %s (path: %s)\n",
+                 e.what(), gArgs.GetDataDirNet().toStdString());
     }
 }
 
 bool TrafficGraphWidget::loadDataFromBinary() {
-    fs::path file = gArgs.GetDataDirNet() / "traffic.dat";
     try {
-        FILE* filein = fsbridge::fopen(file, "rb");
-        if (!filein) return false;
-        AutoFile afile{filein};
-        if (afile.IsNull()) return false;
+        fs::path pathTrafficGraph = gArgs.GetDataDirNet().toStdString() / "trafficgraphdata.dat";
+        LogPrintf("TrafficGraphWidget: Attempting to load data from %s\n", pathTrafficGraph.generic_string());
+
+        FILE* file = fsbridge::fopen(pathTrafficGraph, "rb");
+        if (!file) {
+            LogPrintf("TrafficGraphWidget: File not found or could not be opened\n");
+            return false;
+        }
+        AutoFile filein(file);
+        if (filein.IsNull()) return false;
+
         int version;
-        afile >> version;
+        filein >> version;
         if (version < 1 || version > 3) return false;
 
-        afile >> VARINT(m_total_bytes_recv) >> VARINT(m_total_bytes_sent);
+        filein >> VARINT(m_total_bytes_recv) >> VARINT(m_total_bytes_sent);
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-            unsigned int samplesSize;
-            afile >> VARINT(samplesSize);
+            uint32_t samplesSize;
+            filein >> VARINT(samplesSize);
 
             for (unsigned int j = 0; j < samplesSize; j++) {
                 uint32_t uint_value;
-                afile >> uint_value;
+                filein >> uint_value;
                 float value;
                 memcpy(&value, &uint_value, sizeof(float));
                 m_samples_in[i].push_back(value);
@@ -511,7 +516,7 @@ bool TrafficGraphWidget::loadDataFromBinary() {
 
             for (unsigned int j = 0; j < samplesSize; j++) {
                 uint32_t uint_value;
-                afile >> uint_value;
+                filein >> uint_value;
                 float value;
                 memcpy(&value, &uint_value, sizeof(float));
                 m_samples_out[i].push_back(value);
@@ -519,16 +524,18 @@ bool TrafficGraphWidget::loadDataFromBinary() {
 
             for (unsigned int j = 0; j < samplesSize; j++) {
                 uint64_t timeMs;
-                afile >> VARINT(timeMs);
-                m_time_stamp[i].push_back(timeMs);
+                filein >> VARINT(timeMs);
+                m_time_stamp[i].push_back(static_cast<int64_t>(timeMs));
             }
 
-            afile >> VARINT(m_offset[i]);
+            filein >> VARINT(m_offset[i]);
         }
+
+        filein.fclose();
 
         return true;
     } catch (const std::exception& e) {
-        LogPrintf("%s: Error loading traffic data: %s\n", __func__, e.what());
+        LogPrintf("TrafficGraphWidget: Error loading data: %s\n", e.what());
         return false;
     }
 }
