@@ -80,9 +80,10 @@ typedef int32_t ssize_t;
 #endif
 #endif
 
-#if HAVE_DECL_STRNLEN == 0
+// Only declare strnlen if it's not already declared
+#if !HAVE_DECL_STRNLEN
 size_t strnlen( const char *start, size_t max_len);
-#endif // HAVE_DECL_STRNLEN
+#endif
 
 #ifndef WIN32
 typedef void* sockopt_arg_type;

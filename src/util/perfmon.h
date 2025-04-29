@@ -75,14 +75,14 @@ public:
         std::string result = "";
 
         for (const auto& section : measurements) {
-            result += section.first + " (" + std::to_string(std::hash<std::thread::id>{}(thread_stat.first)) + "): ";
             for (const auto& thread_stat : section.second) {
+                result += section.first + " (thread " + std::to_string(std::hash<std::thread::id>{}(thread_stat.first)) + "): ";
                 const auto& stats = thread_stat.second;
-                                result += "avg/min/max=" +
-                                        std::to_string(stats.total_time.count() / (stats.call_count ? stats.call_count : 1)) + "us" +
-                                        "/" + std::to_string(stats.min_time.count()) + "us" +
-                                        "/" + std::to_string(stats.max_time.count()) + "us " +
-                                        "count=" + std::to_string(stats.call_count) + " " +
+                result += "avg/min/max=" +
+                        std::to_string(stats.total_time.count() / (stats.call_count ? stats.call_count : 1)) + "us" +
+                        "/" + std::to_string(stats.min_time.count()) + "us" +
+                        "/" + std::to_string(stats.max_time.count()) + "us " +
+                        "count=" + std::to_string(stats.call_count) + " " +
                         "CPU%=" + std::to_string(stats.cpu_usage) + "\n";
             }
         }
