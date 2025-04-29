@@ -1,0 +1,115 @@
+#ifndef BITCOIN_UTIL_PERFMON_H
+#define BITCOIN_UTIL_PERFMON_H
+
+#include <atomic>
+#include <chrono>
+#include <map>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
+#include <sys/time.h>
+#include <sys/resource.h>
+
+// Forward declare logging function
+void LogPerfStats();
+
+class PerfMonitor {
+public:
+    struct ThreadStats {
+        std::chrono::microseconds total_time{0};
+        std::chrono::microseconds max_time{0};
+        std::chrono::microseconds min_time{std::chrono::microseconds::max()};
+        uint64_t call_count{0};
+        double cpu_usage{0.0};  // CPU usage percentage
+    };
+
+    struct SectionTimer {
+        PerfMonitor& monitor;
+        std::string section_name;
+        std::thread::id thread_id;
+        std::chrono::steady_clock::time_point start_time;
+        struct rusage start_usage;
+
+        SectionTimer(PerfMonitor& m, const std::string& name) 
+            : monitor(m), section_name(name), 
+              thread_id(std::this_thread::get_id()),
+              start_time(std::chrono::steady_clock::now()) 
+        {
+            getrusage(RUSAGE_THREAD, &start_usage);
+        }
+
+        ~SectionTimer() {
+            auto end_time = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+                end_time - start_time);
+
+            struct rusage end_usage;
+            getrusage(RUSAGE_THREAD, &end_usage);
+
+            // Calculate CPU time (user + system) in microseconds
+            auto cpu_user = (end_usage.ru_utime.tv_sec - start_usage.ru_utime.tv_sec) * 1000000 +
+                          (end_usage.ru_utime.tv_usec - start_usage.ru_utime.tv_usec);
+            auto cpu_sys = (end_usage.ru_stime.tv_sec - start_usage.ru_stime.tv_sec) * 1000000 +
+                         (end_usage.ru_stime.tv_usec - start_usage.ru_stime.tv_usec);
+            
+            double cpu_percentage = 100.0 * (cpu_user + cpu_sys) / duration.count();
+            
+            monitor.AddMeasurement(section_name, thread_id, duration, cpu_percentage);
+        }
+    };
+
+    void AddMeasurement(const std::string& section, 
+                       const std::thread::id& thread_id,
+                       std::chrono::microseconds duration,
+                       double cpu_percentage) {
+        std::lock_guard<std::mutex> lock(mutex);
+        auto& stats = measurements[section][thread_id];
+        stats.total_time += duration;
+        stats.max_time = std::max(stats.max_time, duration);
+        stats.min_time = std::min(stats.min_time, duration);
+        stats.call_count++;
+        // Running average of CPU usage
+        stats.cpu_usage = (stats.cpu_usage * (stats.call_count - 1) + cpu_percentage) / stats.call_count;
+    }
+
+    std::string GetStats() const {
+        std::lock_guard<std::mutex> lock(mutex);
+        std::string result = "Performance Statistics:\n";
+        
+        for (const auto& section : measurements) {
+            result += "\nSection: " + section.first + "\n";
+            for (const auto& thread_stat : section.second) {
+                result += "  Thread " + std::to_string(std::hash<std::thread::id>{}(thread_stat.first)) + ":\n";
+                const auto& stats = thread_stat.second;
+                result += "    Total time: " + std::to_string(stats.total_time.count()) + "us\n";
+                result += "    Avg time: " + std::to_string(stats.total_time.count() / (stats.call_count ? stats.call_count : 1)) + "us\n";
+                result += "    Max time: " + std::to_string(stats.max_time.count()) + "us\n";
+                result += "    Min time: " + std::to_string(stats.min_time.count()) + "us\n";
+                result += "    Call count: " + std::to_string(stats.call_count) + "\n";
+                result += "    Avg CPU%: " + std::to_string(stats.cpu_usage) + "%\n";
+            }
+        }
+        return result;
+    }
+
+    void Reset() {
+        std::lock_guard<std::mutex> lock(mutex);
+        measurements.clear();
+    }
+
+    static PerfMonitor& Instance() {
+        static PerfMonitor instance;
+        return instance;
+    }
+
+private:
+    mutable std::mutex mutex;
+    std::map<std::string, std::map<std::thread::id, ThreadStats>> measurements;
+};
+
+// Macro for easy performance monitoring
+#define PERF_MONITOR(name) \
+    PerfMonitor::SectionTimer perf_timer##__LINE__(PerfMonitor::Instance(), name)
+
+#endif // BITCOIN_UTIL_PERFMON_H 

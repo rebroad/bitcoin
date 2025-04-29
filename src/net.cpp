@@ -34,6 +34,7 @@
 #include <torcontrol.h>
 #include <util/trace.h>
 #include <util/translation.h>
+#include <util/perfmon.h>
 
 #ifdef WIN32
 #include <string.h>
@@ -644,6 +645,7 @@ void CNode::CopyStats(CNodeStats& stats) {
 
 bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
 {
+    PERF_MONITOR("net_receive_msg_bytes");
     complete = false;
     const auto time = GetTime<std::chrono::microseconds>();
     LOCK(cs_vRecv);
@@ -1598,6 +1600,7 @@ void CConnman::SocketEvents(const std::vector<CNode*>& nodes,
 
 void CConnman::SocketHandler()
 {
+    PERF_MONITOR("net_socket_handler");
     std::set<SOCKET> recv_set;
     std::set<SOCKET> send_set;
     std::set<SOCKET> error_set;
@@ -1939,12 +1942,16 @@ void CConnman::SocketHandlerListening(const std::set<SOCKET>& recv_set)
 
 void CConnman::ThreadSocketHandler()
 {
+    PERF_MONITOR("net_socket_handler_thread");
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::NET);
     while (!interruptNet)
     {
-        DisconnectNodes();
-        NotifyNumConnectionsChanged();
-        SocketHandler();
+        {
+            PERF_MONITOR("net_socket_handler_iteration");
+            DisconnectNodes();
+            NotifyNumConnectionsChanged();
+            SocketHandler();
+        }
     }
 }
 
@@ -1959,6 +1966,7 @@ void CConnman::WakeMessageHandler()
 
 void CConnman::ThreadDNSAddressSeed()
 {
+    PERF_MONITOR("net_dns_seed_thread");
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::INITIALIZATION_DNS_SEED);
     FastRandomContext rng;
     std::vector<std::string> seeds = Params().DNSSeeds();
@@ -2142,6 +2150,7 @@ int CConnman::GetExtraBlockRelayCount() const
 
 void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 {
+    PERF_MONITOR("net_open_connections_thread");
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::NET_OPEN_CONNECTION);
     // Connect to specific addresses
     if (!connect.empty())
@@ -2548,6 +2557,7 @@ std::vector<AddedNodeInfo> CConnman::GetAddedNodeInfo() const
 
 void CConnman::ThreadOpenAddedConnections()
 {
+    PERF_MONITOR("net_open_added_connections_thread");
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::NET_ADD_CONNECTION);
     while (true)
     {
@@ -2601,10 +2611,13 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
     }
 }
 
-void CConnman::ThreadMessageHandler() {
+void CConnman::ThreadMessageHandler()
+{
+    PERF_MONITOR("net_message_handler_thread");
     SetSyscallSandboxPolicy(SyscallSandboxPolicy::MESSAGE_HANDLER);
     while (!flagInterruptMsgProc || nBlocksToBeProcessed > 0)
     {
+        PERF_MONITOR("net_message_handler_iteration");
         bool fMoreWork = false;
 
         {
@@ -2649,6 +2662,7 @@ void CConnman::ThreadMessageHandler() {
 
 void CConnman::ThreadI2PAcceptIncoming()
 {
+    PERF_MONITOR("net_i2p_accept_thread");
     static constexpr auto err_wait_begin = 1s;
     static constexpr auto err_wait_cap = 5min;
     auto err_wait = err_wait_begin;
@@ -2688,6 +2702,7 @@ void CConnman::ThreadI2PAcceptIncoming()
 
 bool CConnman::BindListenPort(const CService& addrBind, bilingual_str& strError, NetPermissionFlags permissions)
 {
+    PERF_MONITOR("net_bind_listen_port");
     int nOne = 1;
 
     // Create socket for listening for incoming connections
@@ -3149,6 +3164,7 @@ bool CConnman::RemoveAddedNode(const std::string& strNode)
 
 size_t CConnman::GetNodeCount(ConnectionDirection flags) const
 {
+    PERF_MONITOR("net_get_node_count");
     LOCK(m_nodes_mutex);
     if (flags == ConnectionDirection::Both) // Shortcut if we want total
         return m_nodes.size();

@@ -73,6 +73,8 @@ public:
 
     interfaces::Node& node() const { assert(m_node); return *m_node; }
 
+    void setupPerfMonitoring();
+
 public Q_SLOTS:
     void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
     /// Request core shutdown

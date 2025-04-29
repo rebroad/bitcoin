@@ -641,6 +641,7 @@ libbitcoin_util_a_SOURCES = \
   util/syscall_sandbox.cpp \
   util/time.cpp \
   util/tokenpipe.cpp \
+  util/perfmon.cpp \
   $(BITCOIN_CORE_H)
 
 if USE_LIBEVENT

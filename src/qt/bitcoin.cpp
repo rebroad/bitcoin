@@ -7,6 +7,7 @@
 #endif
 
 #include <qt/bitcoin.h>
+#include <util/perfmon.h>
 
 #include <chainparams.h>
 #include <init.h>
@@ -227,6 +228,10 @@ BitcoinApplication::BitcoinApplication():
     RegisterMetaTypes();
     setQuitOnLastWindowClosed(false);
 
+    // Set up performance monitoring
+    setupPerfMonitoring();
+
+
     // Set up Qt6-like dark theme if system is in dark mode
     if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
         setStyle("Fusion");
@@ -288,6 +293,7 @@ void BitcoinApplication::createPaymentServer()
 
 void BitcoinApplication::createOptionsModel(bool resetSettings)
 {
+    PERF_MONITOR("qt_create_options_model");
     optionsModel = new OptionsModel(this, resetSettings);
 }
 
@@ -358,6 +364,7 @@ void BitcoinApplication::InitPruneSetting(int64_t prune_MiB)
 
 void BitcoinApplication::requestInitialize()
 {
+    PERF_MONITOR("qt_request_initialize");
     qDebug() << __func__ << ": Requesting initialize";
     startThread();
     Q_EMIT requestedInitialize();
@@ -365,6 +372,7 @@ void BitcoinApplication::requestInitialize()
 
 void BitcoinApplication::requestShutdown()
 {
+    PERF_MONITOR("qt_request_shutdown");
     for (const auto w : QGuiApplication::topLevelWindows()) {
         w->hide();
     }
@@ -407,6 +415,7 @@ void BitcoinApplication::requestShutdown()
 
 void BitcoinApplication::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info)
 {
+    PERF_MONITOR("qt_initialize_result");
     qDebug() << __func__ << ": Initialization result: " << success;
     // Set exit result.
     returnValue = success ? EXIT_SUCCESS : EXIT_FAILURE;
@@ -702,4 +711,16 @@ int GuiMain(int argc, char* argv[])
         app.handleRunawayException(QString::fromStdString(app.node().getWarnings().translated));
     }
     return rv;
+}
+
+// Add periodic stats logging
+void BitcoinApplication::setupPerfMonitoring()
+{
+    QTimer* perfTimer = new QTimer(this);
+    perfTimer->setInterval(60000); // Log stats every minute
+    connect(perfTimer, &QTimer::timeout, []() {
+        LogPerfStats();
+        PerfMonitor::Instance().Reset(); // Reset stats after logging
+    });
+    perfTimer->start();
 }

@@ -8,6 +8,7 @@
 #include <qt/guiutil.h>
 #include <util/system.h>
 #include <util/threadnames.h>
+#include <util/perfmon.h>
 
 #include <exception>
 
@@ -40,12 +41,16 @@ void InitExecutor::handleRunawayException(const std::exception* e)
 void InitExecutor::initialize()
 {
     GUIUtil::ObjectInvoke(&m_context, [this] {
+        PERF_MONITOR("qt_init_thread");
         try {
             util::ThreadRename("qt-init");
             qDebug() << "Running initialization in thread";
             interfaces::BlockAndHeaderTipInfo tip_info;
-            bool rv = m_node.appInitMain(&tip_info);
-            Q_EMIT initializeResult(rv, tip_info);
+            {
+                PERF_MONITOR("qt_init_main");
+                bool rv = m_node.appInitMain(&tip_info);
+                Q_EMIT initializeResult(rv, tip_info);
+            }
         } catch (const std::exception& e) {
             handleRunawayException(&e);
         } catch (...) {
