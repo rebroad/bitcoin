@@ -113,7 +113,7 @@ unsigned int TxOrphanage::LimitOrphans(unsigned int max_orphans) {
     if (nNextSweep <= nNow) {
         // Sweep out expired orphan pool entries:
         int nErased = 0;
-        uint64_t nMinExpTime = nNow + ORPHAN_TX_EXPIRE_TIME - ORPHAN_TX_EXPIRE_INTERVAL;
+        int64_t nMinExpTime = nNow + ORPHAN_TX_EXPIRE_TIME - ORPHAN_TX_EXPIRE_INTERVAL;
         std::map<uint256, OrphanTx>::iterator iter = m_orphans.begin();
         while (iter != m_orphans.end())
         {
