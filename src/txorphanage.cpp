@@ -108,8 +108,8 @@ unsigned int TxOrphanage::LimitOrphans(unsigned int max_orphans) {
     AssertLockHeld(g_cs_orphans);
 
     unsigned int nEvicted = 0;
-    static uint64_t nNextSweep;
-    uint64_t nNow = GetTime();
+    static int64_t nNextSweep;
+    int64_t nNow = GetTime();
     if (nNextSweep <= nNow) {
         // Sweep out expired orphan pool entries:
         int nErased = 0;

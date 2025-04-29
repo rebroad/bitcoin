@@ -58,7 +58,7 @@ protected:
     struct OrphanTx {
         CTransactionRef tx;
         NodeId fromPeer;
-        uint64_t nTimeExpire;
+        int64_t nTimeExpire;
         size_t list_pos;
     };
 

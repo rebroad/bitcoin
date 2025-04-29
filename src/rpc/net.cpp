@@ -839,7 +839,7 @@ static RPCHelpMan listbanned()
 
     banmap_t banMap;
     node.banman->GetBanned(banMap);
-    const uint64_t current_time{GetTime()};
+    const int64_t current_time{GetTime()};
 
     UniValue bannedAddresses(UniValue::VARR);
     for (const auto& entry : banMap)
