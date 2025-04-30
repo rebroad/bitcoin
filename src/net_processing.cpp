@@ -4309,7 +4309,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             int nBIF;
             WITH_LOCK(cs_main, nBIF = State(pfrom.GetId())->nBlocksInFlight);
             int nLBT = int(GetTime() - count_seconds(pfrom.m_last_block_time));
-            if (nBIF > 3 || nLBT < 60) {
+            if (nBIF == 0 || nLBT < 60) {
                 pfrom.nRecvBytesSnapOld = 0;
                 pfrom.nMempoolBytes = 0;
                 pfrom.nMempoolTXs = 0;
@@ -5053,7 +5053,7 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
         currentFilter = MAX_MONEY;
         if (pto.m_tx_relay->lastSentFeeFilter != MAX_FILTER)
             pto.m_tx_relay->m_next_send_feefilter = 0us;
-    } else {
+    } /*else {
         if (pto.m_tx_relay->lastSentFeeFilter == MAX_FILTER) {
             // Send the current filter if we sent MAX_FILTER previously
             // and made it out of IBD.
@@ -5063,7 +5063,7 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, std::chrono::microseconds c
                 LogPrintf("Setting nRecvBytesSnapOld=0 peer=%d\n", pto.GetId());
             }
         }
-    }
+    }*/
     if (current_time > pto.m_tx_relay->m_next_send_feefilter) {
         CAmount filterToSend = g_filter_rounder.round(currentFilter);
         // We always have a fee filter of at least minRelayTxFee
