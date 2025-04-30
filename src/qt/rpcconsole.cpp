@@ -476,11 +476,6 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     platformStyle(_platformStyle)
 {
     ui->setupUi(this);
-
-    // Enable keyboard focus for the slider
-    ui->sldGraphRange->setFocusPolicy(Qt::StrongFocus);
-    ui->sldGraphRange->installEventFilter(this);
-
     QSettings settings;
 #ifdef ENABLE_WALLET
     if (WalletModel::isWalletEnabled()) {
@@ -502,14 +497,28 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
 
     constexpr QChar nonbreaking_hyphen(8209);
     const std::vector<QString> CONNECTION_TYPE_DOC{
+        //: Explanatory text for an inbound peer connection.
         tr("Inbound: initiated by peer"),
+        /*: Explanatory text for an outbound peer connection that
+            relays all network information. This is the default behavior for
+            outbound connections. */
         tr("Outbound Full Relay: default"),
+        /*: Explanatory text for an outbound peer connection that relays
+            network information about blocks and not transactions or addresses. */
         tr("Outbound Block Relay: does not relay transactions or addresses"),
+        /*: Explanatory text for an outbound peer connection that was
+            established manually through one of several methods. The numbered
+            arguments are stand-ins for the methods available to establish
+            manual connections. */
         tr("Outbound Manual: added using RPC %1 or %2/%3 configuration options")
             .arg("addnode")
             .arg(QString(nonbreaking_hyphen) + "addnode")
             .arg(QString(nonbreaking_hyphen) + "connect"),
+        /*: Explanatory text for a short-lived outbound peer connection that
+            is used to test the aliveness of known addresses. */
         tr("Outbound Feeler: short-lived, for testing addresses"),
+        /*: Explanatory text for a short-lived outbound peer connection that is used
+            to request addresses from a peer. */
         tr("Outbound Address Fetch: short-lived, for soliciting addresses")};
     const QString list{"<ul><li>" + Join(CONNECTION_TYPE_DOC, QString("</li><li>")) + "</li></ul>"};
     ui->peerConnectionTypeLabel->setToolTip(ui->peerConnectionTypeLabel->toolTip().arg(list));
@@ -605,7 +614,7 @@ bool RPCConsole::eventFilter(QObject* obj, QEvent *event)
         case Qt::Key_Down: if(obj == ui->lineEdit) { browseHistory(1); return true; } break;
         case Qt::Key_PageUp: /* pass paging keys to messages widget */
         case Qt::Key_PageDown:
-            if(obj == ui->lineEdit) {
+            if (obj == ui->lineEdit) {
                 QApplication::postEvent(ui->messagesWidget, new QKeyEvent(*keyevt));
                 return true;
             }
@@ -613,7 +622,7 @@ bool RPCConsole::eventFilter(QObject* obj, QEvent *event)
         case Qt::Key_Return:
         case Qt::Key_Enter:
             // forward these events to lineEdit
-            if(obj == autoCompleter->popup()) {
+            if (obj == autoCompleter->popup()) {
                 QApplication::postEvent(ui->lineEdit, new QKeyEvent(*keyevt));
                 autoCompleter->popup()->hide();
                 return true;
@@ -1128,71 +1137,63 @@ void RPCConsole::scrollToEnd()
     scrollbar->setValue(scrollbar->maximum());
 }
 
-void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
+void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
     static int64_t last_click_time = 0;
     static bool last_click_was_up = false;
-    unsigned int value = (slider_value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
-    if (!slider_in_use) {
-        // Avoid accidental boucing of direction
-        int64_t now = GetTimeMillis();
+    unsigned int range = (value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
+    bool bouncing = false;
+    if (!m_slider_in_use) {
+        // Avoid accidental oscillation of direction due to rapid mouse clicks
+        int64_t now = GetTime<std::chrono::milliseconds>().count();
         bool this_click_is_up = false;
-        bool bouncing = false;
-        if (slider_value > set_slider_value) this_click_is_up = true;
+        if (value > m_set_slider_value) this_click_is_up = true;
         if (now - last_click_time < 250 && this_click_is_up != last_click_was_up) {
             LogPrintf("%s: ignoring snap %s (last was %s %dms ago)\n", __func__, this_click_is_up ? "UP":"DOWN", last_click_was_up ? "UP":"DOWN", now - last_click_time);
             bouncing = true;
             ui->sldGraphRange->blockSignals(true);
-            ui->sldGraphRange->setValue(set_slider_value);
+            ui->sldGraphRange->setValue(m_set_slider_value);
             ui->sldGraphRange->blockSignals(false);
         } else
-            LogPrintf("%s: snap slider_val=%d->%d %s (last:%s) value=%d\n", __func__, set_slider_value, slider_value, this_click_is_up ? "UP":"DOWN", last_click_was_up ? "UP":"DOWN", value);
+            LogPrintf("%s: snap slider_val=%d->%d %s (last:%s) range=%d\n", __func__, m_set_slider_value, value, this_click_is_up ? "UP":"DOWN", last_click_was_up ? "UP":"DOWN", range);
         last_click_time = now;
         last_click_was_up = this_click_is_up;
-        set_slider_value = slider_value;
-        if (bouncing) return;
     }
-    set_slider_value = slider_value;
-    setTrafficGraphRange(value);
+    m_set_slider_value = value;
+    if (bouncing) return;
+    setTrafficGraphRange(range);
 }
 
-void RPCConsole::setTrafficGraphRange(unsigned int value)
+void RPCConsole::setTrafficGraphRange(int value)
 {
-    std::chrono::minutes mins = ui->trafficGraph->setGraphRange(value);
+    int mins = ui->trafficGraph->setGraphRange(value);
     if (value)
-        set_slider_value = (value - 1) * 200;
+        m_set_slider_value = (value - 1) * 200;
     else {
         // When bumping, calculate the proper slider position based on the traffic graph's new value
         unsigned int new_graph_value = ui->trafficGraph->getCurrentRangeIndex() + 1; // +1 because the index is 0-based
-        set_slider_value = (new_graph_value - 1) * 200;
+        m_set_slider_value = (new_graph_value - 1) * 200;
         ui->sldGraphRange->blockSignals(true);
-        ui->sldGraphRange->setValue(set_slider_value);
+        ui->sldGraphRange->setValue(m_set_slider_value);
         ui->sldGraphRange->blockSignals(false);
     }
-    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(mins));
-    if (!slider_in_use) // As too much debug otherwise
-        LogPrintf("%s: value=%d slider=%d mins=%d %s\n", __func__, value, set_slider_value, mins.count(), slider_in_use ? "":"SNAP");
+    ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{mins}));
+    if (!m_slider_in_use) // As too much debug otherwise
+        LogPrintf("%s: value=%d slider=%d mins=%d %s\n", __func__, value, m_set_slider_value, mins, m_slider_in_use ? "":"SNAP");
 }
 
 void RPCConsole::on_sldGraphRange_sliderReleased()
 {
-    LogPrintf("%s: hello\n", __func__);
-    ui->sldGraphRange->setValue(set_slider_value); // Snap the slider to where this value is
-    slider_in_use = false;
+    ui->sldGraphRange->setValue(m_set_slider_value);
+    m_slider_in_use = false;
 }
 
-void RPCConsole::on_sldGraphRange_sliderPressed()
-{
-    LogPrintf("%s: hello\n", __func__);
-    slider_in_use = true;
-}
+void RPCConsole::on_sldGraphRange_sliderPressed() { m_slider_in_use = true; }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
-    if (!slider_in_use && ui->trafficGraph->GraphRangeBump()) {
-        LogPrintf("%s: Bump it up!\n", __func__);
+    if (!m_slider_in_use && ui->trafficGraph->GraphRangeBump())
         setTrafficGraphRange(0); // bump it up
-    }
     ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
     ui->lblBytesOut->setText(GUIUtil::formatBytes(totalBytesOut));
 }
