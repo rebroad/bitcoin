@@ -151,8 +151,8 @@ bool g_parallel_script_checks{false};
 bool fRequireStandard = true;
 bool fCheckBlockIndex = false;
 bool fCheckpointsEnabled = DEFAULT_CHECKPOINTS_ENABLED;
-uint64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
-uint64_t nIBDTimeRemaining = std::numeric_limits<int64_t>::max();
+int64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
+int64_t nIBDTimeRemaining = std::numeric_limits<int64_t>::max();
 
 uint256 hashAssumeValid;
 arith_uint256 nMinimumChainWork;
@@ -1500,7 +1500,7 @@ bool CChainState::IsInitialBlockDownload() const
     static bool fPrev = true;
     bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
     bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
-    uint64_t nIBDTimeThreshold = gArgs.GetIntArg("-ibdtimethreshold", DEFAULT_IBD_TIME_THRESHOLD / 60) * 60;
+    int64_t nIBDTimeThreshold = gArgs.GetIntArg("-ibdtimethreshold", DEFAULT_IBD_TIME_THRESHOLD / 60) * 60;
     bool fNew = false;
     if (fImporting || fReindex)
         fNew = true;
@@ -1508,10 +1508,16 @@ bool CChainState::IsInitialBlockDownload() const
         fNew = true;
     else if (fDownloadBlocks && fUpdateChain && m_chain.Tip()->nChainWork < nMinimumChainWork)
         fNew = true;
-    else if (fDownloadBlocks && fUpdateChain && nIBDTimeRemaining > nIBDTimeThreshold &&
-            m_chain.Tip()->GetBlockTime() < (GetTime() - nMaxTipAge)) {
-        if (!fPrev) LogPrintf("%s: Setting to true as tip age is over %s old.\n", __func__, strAge(nMaxTipAge));
-        fPrev = fNew = true;
+    else {
+        int64_t now = GetTime(); static int64_t nLastIBDAlmostFinished = 0;
+        if (fDownloadBlocks && fUpdateChain && nIBDTimeRemaining > nIBDTimeThreshold &&
+                now > nLastIBDAlmostFinished + nIBDTimeThreshold &&
+                m_chain.Tip()->GetBlockTime() < (now - nMaxTipAge)) {
+            if (!fPrev)
+				LogPrintf("%s: Setting to true: tip age=%s. IBD_time_remaining=%s\n", __func__,
+                        strAge(now - m_chain.Tip()->GetBlockTime()), strAge(nIBDTimeRemaining));
+            fPrev = fNew = true;
+        } else if (nIBDTimeRemaining <= nIBDTimeThreshold) nLastIBDAlmostFinished = now;
     }
 
     if (fNew != fPrev) {
@@ -3694,17 +3700,15 @@ int ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& h
             if (ppindex) {
                 if (*ppindex && !pindex)
                     LogPrintf("%s: !pindex ppindex=%s%s\n", __func__, strHeight(*ppindex), accepted ? " accepted" : " not accepted!");
-                else
-                    *ppindex = pindex;
+                else *ppindex = pindex;
             }
-            if (!accepted)
-                return nCount;
+            if (!accepted) return nCount;
         }
     }
     if (NotifyHeaderTip(ActiveChainstate())) {
         if (ActiveChainstate().IsInitialBlockDownload() && ppindex && *ppindex) {
             const CBlockIndex& last_accepted{**ppindex};
-            const uint64_t blocks_left{(GetTime() - last_accepted.GetBlockTime()) / chainparams.GetConsensus().nPowTargetSpacing};
+            const int64_t blocks_left{(GetTime() - last_accepted.GetBlockTime()) / chainparams.GetConsensus().nPowTargetSpacing};
             const double progress{100.0 * last_accepted.nHeight / (last_accepted.nHeight + blocks_left)};
             LogPrintf("Synchronizing blockheaders, height: %d (~%.2f%%)\n", last_accepted.nHeight, progress);
         }

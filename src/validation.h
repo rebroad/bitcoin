@@ -125,10 +125,10 @@ extern bool fCheckpointsEnabled;
 /** A fee rate smaller than this is considered zero fee (for relaying, mining and transaction creation) */
 extern CFeeRate minRelayTxFee;
 /** Maximum age of tip in seconds to consider node in initial block download */
-extern uint64_t nMaxTipAge;
+extern int64_t nMaxTipAge;
 
 /** Estimated time remaining in seconds until IBD is completed */
-extern uint64_t nIBDTimeRemaining;
+extern int64_t nIBDTimeRemaining;
 
 /** Block hash whose ancestors we will assume to have valid scripts without checking them. */
 extern uint256 hashAssumeValid;
