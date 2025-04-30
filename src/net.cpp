@@ -1671,11 +1671,11 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 LOCK(pnode->cs_vRecv);
                 nRecvBytes = pnode->nRecvBytes;
             }
-            /*uint64_t nSendBytes;
+            uint64_t nSendBytes;
             {
                 LOCK(pnode->cs_vSend);
                 nSendBytes = pnode->nSendBytes;
-            }*/
+            }
             unsigned int nMempoolBytes = pnode->nMempoolBytes - pnode->nMempoolBytesSnapOld;
             unsigned int nMempoolTXs = pnode->nMempoolTXs - pnode->nMempoolTXsSnapOld;
             if ((pnode->nLastBlock >= now - 60) || (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000)) nPeersIBD++;
@@ -1696,8 +1696,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                     nLowestPct = nMempoolPct;
                     worstNodePct = pnode->GetId();
                     worstNodePctBPct = nBlockPct;
-                } else if (nMempoolPct < nSecondLowestPct)
-                    nSecondLowestPct = nMempoolPct;
+                } else if (nMempoolPct < nSecondLowestPct) nSecondLowestPct = nMempoolPct;
                 // REBTODO - Rather than check nBlockPct > 0, instead check if we've received a block since TimeConn+60
                 if (nBlockPct && nBlockPct < nLowestBPct) {
                     nSecondLowestBPct = nLowestBPct;
@@ -1729,7 +1728,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 float nRecvBps = 0; float nSendBps = 0;
                 if(now > m_connected) {
                     nRecvBps = 8 * (float)nRecvBytes / (now - m_connected);
-                    nSendBps = 8 * (float)nRecvBytes / (now - m_connected);
+                    nSendBps = 8 * (float)nSendBytes / (now - m_connected);
                 }
                 if ((now - m_connected >= 120) && (nMempoolPct < 10) && ((nRecvBps > 120) || (nSendBps > 1200))) {
                     if (!pnode->HasPermission(NetPermissionFlags::NoBan)) {
