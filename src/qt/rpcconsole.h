@@ -143,10 +143,9 @@ private:
     } const ts;
 
     void startExecutor();
-    void setTrafficGraphRange(unsigned int value);
+    void setTrafficGraphRange(int value);
 
-    enum ColumnWidths
-    {
+    enum ColumnWidths {
         ADDRESS_COLUMN_WIDTH = 200,
         SUBVERSION_COLUMN_WIDTH = 150,
         PING_COLUMN_WIDTH = 80,
@@ -173,8 +172,8 @@ private:
     bool m_is_executing{false};
     QByteArray m_peer_widget_header_state;
     QByteArray m_banlist_widget_header_state;
-    bool slider_in_use{false};
-    int set_slider_value{0};
+    bool m_slider_in_use{false};
+    int m_set_slider_value{0};
 
     /** Update UI with latest network info from model. */
     void updateNetworkState();
