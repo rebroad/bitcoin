@@ -2001,7 +2001,7 @@ static RPCHelpMan getdustutxos()
         }
 
         current_count++;
-        
+
         // Log progress every 5 seconds
         int64_t current_time = GetTimeMillis();
         if (current_time - last_log_time > 5000) {
@@ -2598,7 +2598,7 @@ static RPCHelpMan savemempool()
     }
 
     UniValue ret(UniValue::VOBJ);
-    ret.pushKV("filename", fs::path((args.GetDataDirNet() / "mempool.dat")).u8string());
+    ret.pushKV("filename", fs::path((args.GetDataDirNet() / "mempool.dat")).utf8string());
 
     return ret;
 },
@@ -2963,7 +2963,7 @@ static RPCHelpMan dumptxoutset()
         node, node.chainman->ActiveChainstate(), afile, path, temppath);
     fs::rename(temppath, path);
 
-    result.pushKV("path", path.u8string());
+    result.pushKV("path", path.utf8string());
     return result;
 },
     };
