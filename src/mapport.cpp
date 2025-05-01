@@ -39,9 +39,9 @@ static constexpr auto PORT_MAPPING_RETRY_PERIOD{5min};
 
 static bool ProcessPCP()
 {
-    // The same nonce is used for all mappings, this is allowed by the spec, and simplifies keeping track of them.
+    // Get random bytes for nonce
     PCPMappingNonce pcp_nonce;
-    GetRandBytes(pcp_nonce);
+    GetRandBytes(pcp_nonce.data(), pcp_nonce.size());
 
     bool ret = false;
     bool no_resources = false;
@@ -54,7 +54,7 @@ static bool ProcessPCP()
     // Local functor to handle result from PCP/NATPMP mapping.
     auto handle_mapping = [&](std::variant<MappingResult, MappingError> &res) -> void {
         if (MappingResult* mapping = std::get_if<MappingResult>(&res)) {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Info, "portmap: Added mapping %s\n", mapping->ToString());
+            LogPrint(BCLog::NET, "portmap: Added mapping %s\n", mapping->ToString());
             AddLocal(mapping->external, LOCAL_MAPPED);
             ret = true;
             actual_lifetime = std::min(actual_lifetime, mapping->lifetime);
@@ -74,9 +74,9 @@ static bool ProcessPCP()
         // IPv4
         std::optional<CNetAddr> gateway4 = QueryDefaultGateway(NET_IPV4);
         if (!gateway4) {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "portmap: Could not determine IPv4 default gateway\n");
+            LogPrint(BCLog::NET, "portmap: Could not determine IPv4 default gateway\n");
         } else {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "portmap: gateway [IPv4]: %s\n", gateway4->ToStringAddr());
+            LogPrint(BCLog::NET, "portmap: gateway [IPv4]: %s\n", gateway4->ToString());
 
             // Open a port mapping on whatever local address we have toward the gateway.
             struct in_addr inaddr_any;
@@ -84,7 +84,7 @@ static bool ProcessPCP()
             auto res = PCPRequestPortMap(pcp_nonce, *gateway4, CNetAddr(inaddr_any), private_port, requested_lifetime);
             MappingError* pcp_err = std::get_if<MappingError>(&res);
             if (pcp_err && *pcp_err == MappingError::UNSUPP_VERSION) {
-                LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "portmap: Got unsupported PCP version response, falling back to NAT-PMP\n");
+                LogPrint(BCLog::NET, "portmap: Got unsupported PCP version response, falling back to NAT-PMP\n");
                 res = NATPMPRequestPortMap(*gateway4, private_port, requested_lifetime);
             }
             handle_mapping(res);
@@ -93,9 +93,9 @@ static bool ProcessPCP()
         // IPv6
         std::optional<CNetAddr> gateway6 = QueryDefaultGateway(NET_IPV6);
         if (!gateway6) {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "portmap: Could not determine IPv6 default gateway\n");
+            LogPrint(BCLog::NET, "portmap: Could not determine IPv6 default gateway\n");
         } else {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Debug, "portmap: gateway [IPv6]: %s\n", gateway6->ToStringAddr());
+            LogPrint(BCLog::NET, "portmap: gateway [IPv6]: %s\n", gateway6->ToString());
 
             // Try to open pinholes for all routable local IPv6 addresses.
             for (const auto &addr: GetLocalAddresses()) {
@@ -107,19 +107,21 @@ static bool ProcessPCP()
 
         // Log message if we got NO_RESOURCES.
         if (no_resources) {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Warning, "portmap: At least one mapping failed because of a NO_RESOURCES error. This usually indicates that the port is already used on the router. If this is the only instance of bitcoin running on the network, this will resolve itself automatically. Otherwise, you might want to choose a different P2P port to prevent this conflict.\n");
+            LogPrintf("portmap: At least one mapping failed because of a NO_RESOURCES error. This usually indicates that the port is already used on the router. If this is the only instance of bitcoin running on the network, this will resolve itself automatically. Otherwise, you might want to choose a different P2P port to prevent this conflict.\n");
         }
 
         // Sanity-check returned lifetime.
         if (actual_lifetime < 30) {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Warning, "portmap: Got impossibly short mapping lifetime of %d seconds\n", actual_lifetime);
+            LogPrintf("portmap: Got impossibly short mapping lifetime of %d seconds\n", actual_lifetime);
             return false;
         }
         // RFC6887 11.2.1 recommends that clients send their first renewal packet at a time chosen with uniform random
         // distribution in the range 1/2 to 5/8 of expiration time.
         std::chrono::seconds sleep_time_min(actual_lifetime / 2);
         std::chrono::seconds sleep_time_max(actual_lifetime * 5 / 8);
-        sleep_time = sleep_time_min + FastRandomContext().randrange<std::chrono::milliseconds>(sleep_time_max - sleep_time_min);
+        FastRandomContext rng;
+        auto range = sleep_time_max - sleep_time_min;
+        sleep_time = sleep_time_min + std::chrono::milliseconds(rng.randrange(range.count()));
     } while (ret && g_mapport_interrupt.sleep_for(sleep_time));
 
     // We don't delete the mappings when the thread is interrupted because this would add additional complexity, so
