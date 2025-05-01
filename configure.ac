@@ -146,12 +146,6 @@ AC_ARG_ENABLE([usdt],
   [use_usdt=$enableval],
   [use_usdt=yes])
 
-AC_ARG_ENABLE([upnp-default],
-  [AS_HELP_STRING([--enable-upnp-default],
-  [if UPNP is enabled, turn it on at startup (default is no)])],
-  [use_upnp_default=$enableval],
-  [use_upnp_default=no])
-
 AC_ARG_WITH([natpmp],
             [AS_HELP_STRING([--with-natpmp],
                             [enable NAT-PMP (default is yes if libnatpmp is found)])],
@@ -1261,7 +1255,6 @@ if test "$enable_fuzz" = "yes"; then
   bitcoin_enable_qt_dbus=no
   use_bench=no
   use_external_signer=no
-  use_upnp=no
   use_natpmp=no
   use_zmq=no
   enable_fuzz_binary=yes
@@ -1350,7 +1343,6 @@ if test "$use_usdt" != "no"; then
 fi
 
 if test "$build_bitcoin_cli$build_bitcoin_tx$build_bitcoin_util$build_bitcoind$bitcoin_enable_qt$use_bench$use_tests" = "nonononononono"; then
-  use_upnp=no
   use_natpmp=no
   use_zmq=no
 fi
@@ -1739,7 +1731,6 @@ AM_CONDITIONAL([ENABLE_ARM_SHANI], [test "$enable_arm_shani" = "yes"])
 AM_CONDITIONAL([USE_ASM], [test "$use_asm" = "yes"])
 AM_CONDITIONAL([WORDS_BIGENDIAN], [test "$ac_cv_c_bigendian" = "yes"])
 AM_CONDITIONAL([USE_NATPMP], [test "$use_natpmp" = "yes"])
-AM_CONDITIONAL([USE_UPNP], [test "$use_upnp" = "yes"])
 
 dnl for minisketch
 AM_CONDITIONAL([ENABLE_CLMUL], [test "$enable_clmul" = "yes"])
@@ -1799,11 +1790,8 @@ AC_SUBST(LIBTOOL_APP_LDFLAGS)
 AC_SUBST(USE_SQLITE)
 AC_SUBST(USE_BDB)
 AC_SUBST(ENABLE_EXTERNAL_SIGNER)
-AC_SUBST(USE_UPNP)
 AC_SUBST(USE_QRCODE)
 AC_SUBST(TESTDEFS)
-AC_SUBST(MINIUPNPC_CPPFLAGS)
-AC_SUBST(MINIUPNPC_LIBS)
 AC_SUBST(NATPMP_CPPFLAGS)
 AC_SUBST(NATPMP_LIBS)
 AC_SUBST(HAVE_GMTIME_R)
@@ -1888,7 +1876,6 @@ else
 fi
 echo "  with fuzz binary = $enable_fuzz_binary"
 echo "  with bench      = $use_bench"
-echo "  with upnp       = $use_upnp"
 echo "  with natpmp     = $use_natpmp"
 echo "  use asm         = $use_asm"
 echo "  USDT tracing    = $use_usdt"

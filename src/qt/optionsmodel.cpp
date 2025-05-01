@@ -311,8 +311,6 @@ QVariant OptionsModel::data(const QModelIndex & index, int role) const
             return m_show_tray_icon;
         case MinimizeToTray:
             return fMinimizeToTray;
-        case MapPortUPnP:
-            return false;
         case MapPortNatpmp:
 #ifdef USE_NATPMP
             return settings.value("fUseNatpmp");
@@ -397,8 +395,6 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
         case MinimizeToTray:
             fMinimizeToTray = value.toBool();
             settings.setValue("fMinimizeToTray", fMinimizeToTray);
-            break;
-        case MapPortUPnP: // core option - can be changed on-the-fly
             break;
         case MapPortNatpmp: // core option - can be changed on-the-fly
             settings.setValue("fUseNatpmp", value.toBool());

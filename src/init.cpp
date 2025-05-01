@@ -1678,7 +1678,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 
     Discover();
 
-    // Map ports with UPnP or NAT-PMP.
+    // Map ports with NAT-PMP.
     StartMapPort(args.GetBoolArg(gArgs.GetBoolArg("-natpmp", DEFAULT_NATPMP));
 
     CConnman::Options connOptions;

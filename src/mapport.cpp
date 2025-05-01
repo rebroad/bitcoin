@@ -30,7 +30,7 @@
 #include <string>
 #include <thread>
 
-#if defined(USE_NATPMP) || defined(USE_UPNP)
+#if defined(USE_NATPMP)
 static CThreadInterrupt g_mapport_interrupt;
 static std::thread g_mapport_thread;
 static std::atomic_uint g_mapport_enabled_protos{MapPortProtoFlag::NONE};
@@ -224,7 +224,7 @@ void StopMapPort()
     }
 }
 
-#else  // #if defined(USE_NATPMP) || defined(USE_UPNP)
+#else  // #if defined(USE_NATPMP)
 void StartMapPort(bool use_upnp, bool use_natpmp)
 {
     // Intentionally left blank.
@@ -237,4 +237,4 @@ void StopMapPort()
 {
     // Intentionally left blank.
 }
-#endif // #if defined(USE_NATPMP) || defined(USE_UPNP)
+#endif // #if defined(USE_NATPMP)
