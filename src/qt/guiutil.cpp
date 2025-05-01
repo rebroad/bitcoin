@@ -661,12 +661,23 @@ void setClipboard(const QString& str)
 
 fs::path QStringToPath(const QString &path)
 {
+#if __cplusplus >= 202002L
+    // In C++20, construct via std::filesystem::path first
+    return fs::path(std::filesystem::path(path.toStdString()));
+#else
     return fs::u8path(path.toStdString());
+#endif
 }
 
 QString PathToQString(const fs::path &path)
 {
+#if __cplusplus >= 202002L
+    // In C++20, u8string() returns std::u8string (char8_t), so we need to convert it
+    const auto& u8str = path.u8string();
+    return QString::fromStdString(std::string(reinterpret_cast<const char*>(u8str.c_str()), u8str.length()));
+#else
     return QString::fromStdString(path.u8string());
+#endif
 }
 
 QString NetworkToQString(Network net)
