@@ -1401,11 +1401,11 @@ QString RPCConsole::tabTitle(TabTypes tab_type) const
 QKeySequence RPCConsole::tabShortcut(TabTypes tab_type) const
 {
     switch (tab_type) {
-    case TabTypes::INFO: return QKeySequence(Qt::CTRL + Qt::Key_I);
-    case TabTypes::CONSOLE: return QKeySequence(Qt::CTRL + Qt::Key_T);
-    case TabTypes::MEMPOOL: return QKeySequence(Qt::CTRL + Qt::Key_M);
-    case TabTypes::GRAPH: return QKeySequence(Qt::CTRL + Qt::Key_N);
-    case TabTypes::PEERS: return QKeySequence(Qt::CTRL + Qt::Key_P);
+    case TabTypes::INFO: return QKeySequence(tr("Ctrl+I"));
+    case TabTypes::CONSOLE: return QKeySequence(tr("Ctrl+T"));
+    case TabTypes::MEMPOOL: return QKeySequence(tr("Ctrl+M"));
+    case TabTypes::GRAPH: return QKeySequence(tr("Ctrl+N"));
+    case TabTypes::PEERS: return QKeySequence(tr("Ctrl+P"));
     } // no default case, so the compiler can warn about missing cases
 
     assert(false);
