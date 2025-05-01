@@ -32,13 +32,11 @@ uint64_t static inline ReadLE64(const unsigned char* ptr)
 {
     uint64_t x;
     memcpy((char*)&x, ptr, 8);
-    return le64toh(x);
     return le64toh_internal(x);
 }
 
 void static inline WriteLE16(unsigned char* ptr, uint16_t x)
 {
-    uint16_t v = htole16(x);
     uint16_t v = htole16_internal(x);
     memcpy(ptr, (char*)&v, 2);
 }
