@@ -40,7 +40,6 @@ Optional dependencies:
 
  Library     | Purpose          | Description
  ------------|------------------|----------------------
- libnatpmp   | NAT-PMP Support  | Firewall-jumping support
  libdb4.8    | Berkeley DB      | Wallet storage (only needed when legacy wallet enabled)
  qt          | GUI              | GUI toolkit (only needed when GUI enabled)
  libqrencode | QR codes in GUI  | QR code generation (only needed when GUI enabled)
@@ -93,10 +92,6 @@ executables, which are based on BerkeleyDB 4.8. If you do not care about wallet 
 `--with-incompatible-bdb` to configure. Otherwise, you can build Berkeley DB [yourself](#berkeley-db).
 
 To build Bitcoin Core without wallet, see [*Disable-wallet mode*](#disable-wallet-mode)
-
-Optional port mapping libraries (see: `--with-natpmp`, `--enable-natpmp-default`):
-
-    sudo apt install libnatpmp-dev
 
 ZMQ dependencies (provides ZMQ API):
 
@@ -155,10 +150,6 @@ pass `--with-incompatible-bdb` to configure. Otherwise, you can build Berkeley D
 
 To build Bitcoin Core without wallet, see [*Disable-wallet mode*](#disable-wallet-mode)
 
-Optional port mapping libraries (see: `--natpmp`, `--enable-natpmp-default`):
-
-    sudo dnf install libnatpmp-devel
-
 ZMQ dependencies (provides ZMQ API):
 
     sudo dnf install zeromq-devel
@@ -192,17 +183,6 @@ Notes
 -----
 The release is built with GCC and then "strip bitcoind" to strip the debug
 symbols, which reduces the executable size by about 90%.
-
-libnatpmp
----------
-
-[libnatpmp](https://miniupnp.tuxfamily.org/libnatpmp.html) may be used for NAT-PMP port mapping. It can be downloaded
-from [here](https://miniupnp.tuxfamily.org/files/). NAT-PMP support is compiled in and
-turned off by default. See the configure options for NAT-PMP behavior desired:
-
-    --without-natpmp          No NAT-PMP support, libnatpmp not required
-    --disable-natpmp-default  (the default) NAT-PMP support turned off by default at runtime
-    --enable-natpmp-default   NAT-PMP support turned on by default at runtime
 
 Berkeley DB
 -----------
