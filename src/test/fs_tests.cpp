@@ -19,8 +19,8 @@ BOOST_AUTO_TEST_CASE(fsbridge_pathtostring)
 {
     std::string u8_str = "fs_tests_₿_🏃";
     BOOST_CHECK_EQUAL(fs::PathToString(fs::PathFromString(u8_str)), u8_str);
-    BOOST_CHECK_EQUAL(fs::u8path(u8_str).u8string(), u8_str);
-    BOOST_CHECK_EQUAL(fs::PathFromString(u8_str).u8string(), u8_str);
+    BOOST_CHECK_EQUAL(fs::u8path(u8_str).utf8string(), u8_str);
+    BOOST_CHECK_EQUAL(fs::PathFromString(u8_str).utf8string(), u8_str);
     BOOST_CHECK_EQUAL(fs::PathToString(fs::u8path(u8_str)), u8_str);
 #ifndef WIN32
     // On non-windows systems, verify that arbitrary byte strings containing

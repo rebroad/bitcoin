@@ -62,7 +62,7 @@ public:
 #if __cplusplus < 202002L
     return std::filesystem::u8path(utf8_str);
 #else
-    return std::filesystem::path(std::u8string{utf8_str.begin(), utf8_str.end()});
+    return std::filesystem::path(std::utf8string{utf8_str.begin(), utf8_str.end()});
 #endif
  }
 
@@ -131,7 +131,7 @@ static inline std::string PathToString(const path& path)
     // not always valid UTF-8, so plain string methods which do not transform
     // the path there are used.
 #ifdef WIN32
-    return path.u8string();
+    return path.utd8string();
 #else
     static_assert(std::is_same<path::string_type, std::string>::value, "PathToString not implemented on this platform");
     return path.std::filesystem::path::string();
