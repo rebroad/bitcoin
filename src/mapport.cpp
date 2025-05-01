@@ -138,9 +138,9 @@ static void ThreadMapPort()
         ok = false;
 
 		// High priority protocol
-		if (g_mapport_enables_protos & MapPortProtoFlag::PCP) {
+		if (g_mapport_enabled_protos & MapPortProtoFlag::PCP) {
 			g_mapport_current_proto = MapPortProtoFlag::PCP;
-			of = ProcessPCP();
+			ok = ProcessPCP();
 			if (ok) continue;
 		}
 
