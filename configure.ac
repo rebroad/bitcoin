@@ -77,8 +77,8 @@ AC_ARG_WITH([seccomp],
   [seccomp_found=$withval],
   [seccomp_found=auto])
 
-dnl Require C++17 compiler (no GNU extensions)
-AX_CXX_COMPILE_STDCXX([17], [noext], [mandatory])
+dnl Require C++20 compiler (no GNU extensions)
+AX_CXX_COMPILE_STDCXX([20], [noext], [mandatory])
 
 dnl Check if -latomic is required for <std::atomic>
 CHECK_ATOMIC

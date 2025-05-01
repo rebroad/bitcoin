@@ -102,4 +102,10 @@
 #define bitcoin_le64toh(x) (x)
 #endif
 
+inline BSWAP_CONSTEXPR uint64_t htole64_internal(uint64_t host_64bits)
+{
+    if constexpr (std::endian::native == std::endian::big) return internal_bswap_64(host_64bits);
+        else return host_64bits;
+}
+
 #endif // BITCOIN_COMPAT_ENDIAN_H
