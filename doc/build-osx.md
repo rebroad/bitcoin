@@ -168,7 +168,7 @@ Skip if you do not need this functionality.
 brew install libnatpmp
 ```
 
-Note: UPnP and NAT-PMP support will be compiled in and disabled by default.
+Note: NAT-PMP support will be compiled in and disabled by default.
 Check out the [further configuration](#further-configuration) section for more information.
 
 ---
