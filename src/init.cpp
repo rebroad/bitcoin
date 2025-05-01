@@ -1675,7 +1675,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     Discover();
 
     // Map ports with NAT-PMP.
-    StartMapPort(args.GetBoolArg(gArgs.GetBoolArg("-natpmp", DEFAULT_NATPMP));
+    StartMapPort(args.GetBoolArg("-natpmp", DEFAULT_NATPMP));
 
     CConnman::Options connOptions;
     connOptions.nLocalServices = nLocalServices;
