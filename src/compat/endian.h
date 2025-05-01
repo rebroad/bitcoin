@@ -5,7 +5,9 @@
 #ifndef BITCOIN_COMPAT_ENDIAN_H
 #define BITCOIN_COMPAT_ENDIAN_H
 
+#if __cplusplus >= 202002L
 #include <bit>
+#endif
 #include <stdint.h>
 
 // If we're not using autotools, try to detect system endian functions
