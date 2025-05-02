@@ -1162,7 +1162,7 @@ void RPCConsole::scrollToEnd()
     scrollbar->setValue(scrollbar->maximum());
 }
 
-void RPCConsole::on_sldGraphRange_valueChanged(int slider_value)
+void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
     static int64_t last_click_time = 0;
     static bool last_click_was_up = false;
