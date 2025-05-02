@@ -344,7 +344,7 @@ void TrafficGraphWidget::updateStuff()
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
         int64_t msecs_per_sample = static_cast<int64_t>(m_values[i]) * 60000 / DESIRED_SAMPLES;
-        int64_t last_time = m_time_stamp[i].empty() ? now : m_time_stamp[i].front();
+        int64_t last_time = m_time_stamp[i].empty() ? now - msecs_per_sample : m_time_stamp[i].front();
         if (time_offset) {
             m_offset[i] += time_offset;
             if (m_offset[i] > now - last_time) m_offset[i] = now - last_time;
