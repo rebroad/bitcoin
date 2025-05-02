@@ -63,7 +63,7 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
     for (i = 1; i <= sample_count; ++i) {
         if (i > 1) { // If i == 1, keep overscan to the right
             double ratio = static_cast<double>(i) * m_values[m_value] / m_range / DESIRED_SAMPLES;
-            if (i == sample_count && ((m_value == m_new_value && ratio > 0.99) || (m_value != m_new_value && samples.size() == DESIRED_SAMPLES))) {
+            if (i == sample_count && samples.size() >= DESIRED_SAMPLES && ((m_value == m_new_value && ratio > 0.99) || (m_value != m_new_value))) {
                 x = XMARGIN - 1; // Overscan by one pixel to the left
             } else {
                 x = XMARGIN + static_cast<int>(w - w * ratio);
@@ -177,12 +177,11 @@ void drawOutlinedText(QPainter& painter, int y, const QString& text, int opacity
 
     // Draw the outline by drawing the text multiple times with small offsets
     if (opacity) {
-        printf("%s: Opacity = %d\n", __func__, opacity);
         painter.setPen(QColor(0, 0, 0, opacity));
         for (int dx = -2; dx <= 2; dx++)
             for (int dy = -2; dy <= 2; dy++)
                 painter.drawText(XMARGIN + dx, y + dy, text);
-    } else printf("%s: Skipping outline\n", __func__);
+    }
 
     // Draw the main text
     painter.setPen(Qt::white);
@@ -258,9 +257,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
     static int opacity = 0; // Opacity of the black outline around the text
-    if (x < 70 && opacity < 64) opacity++;
+    if (x < 70 && opacity < 48) opacity++;
     else if (x > 70) opacity = 0;
-    printf("%s: x=%d opacity=%d\n", __func__, x, opacity);
 
     // Draw outlined text for labels with proper vertical positioning
     drawOutlinedText(painter, y_value(val*10) - 2, GUIUtil::formatBytesps(val * 10000), opacity);
