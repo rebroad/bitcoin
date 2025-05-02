@@ -105,7 +105,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent* event)
     m_y_offset = qRound(globalPos.y()) - y;
     if (last_x == x && last_y == y) return; // Do nothing if mouse hasn't moved
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = -1;
+    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = 0;
     int sampleSize = m_time_stamp[m_value].size();
     unsigned int smallest_distance = 50;
     bool is_in_series = true;
@@ -117,7 +117,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent* event)
             unsigned int min_distance = std::min(distance_in, distance_out);
             if (min_distance < smallest_distance) {
                 smallest_distance = min_distance;
-                closest_i = test_i;
+                closest_i = test_i + 1;
                 is_in_series = (distance_in <= distance_out);
             }
         }
@@ -145,24 +145,24 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
     painter.drawEllipse(QPointF(x, y), 3, 3);
     QString str_tt;
     int64_t sample_time;
-    if (m_tt_point + 1 < m_time_stamp[m_value].size()) {
-        sample_time = m_time_stamp[m_value].at(m_tt_point + 1);
-    } else
+    if (m_tt_point < m_time_stamp[m_value].size()) {
         sample_time = m_time_stamp[m_value].at(m_tt_point);
+    } else
+        sample_time = m_time_stamp[m_value].at(m_tt_point - 1);
     int age = GetTime() - sample_time / 1000;
     if (age < 60 * 60 * 23)
         str_tt += QString::fromStdString(FormatISO8601Time(sample_time / 1000));
     else
         str_tt += QString::fromStdString(FormatISO8601DateTime(sample_time / 1000));
-    int duration = (m_time_stamp[m_value].at(m_tt_point) - sample_time);
+    int duration = (m_time_stamp[m_value].at(m_tt_point - 1) - sample_time);
     if (duration > 0) {
         if (duration > 9999)
             str_tt += " +" + GUIUtil::formatDurationStr(std::chrono::seconds{(duration + 500) / 1000});
         else
             str_tt += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{duration * 1000});
     }
-    str_tt += "\n   " + tr("In") + " " + GUIUtil::formatBytesps(m_samples_in[m_value].at(m_tt_point) * 1000) +
-                      "\n" + tr("Out") + " " + GUIUtil::formatBytesps(m_samples_out[m_value].at(m_tt_point) * 1000);
+    str_tt += "\n   " + tr("In") + " " + GUIUtil::formatBytesps(m_samples_in[m_value].at(m_tt_point-1) * 1000) +
+                    "\n" + tr("Out") + " " + GUIUtil::formatBytesps(m_samples_out[m_value].at(m_tt_point-1) * 1000);
 
     // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
     QToolTip::showText(QPoint(x + m_x_offset, y + m_y_offset), str_tt + ".");
@@ -267,7 +267,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     drawOutlinedText(painter, y_value(val) - 2, GUIUtil::formatBytesps(val * 1000), opacity);
     if (m_toggle) drawOutlinedText(painter, y_value(val/10) - 2, GUIUtil::formatBytesps(val * 100), opacity);
 
-    if (m_tt_point >= 0 && m_tt_point < m_time_stamp[m_value].size() && isVisible() && !window()->isMinimized())
+    if (m_tt_point && m_tt_point <= m_time_stamp[m_value].size() && isVisible() && !window()->isMinimized())
         drawTooltipPoint(painter);
     else QToolTip::hideText();
 }
@@ -361,9 +361,9 @@ void TrafficGraphWidget::updateStuff()
             m_offset[i] = 0;
             updateRates(i, last_time);
             if (i == m_value) {
-                if (m_tt_point >= 0 && m_tt_point < DESIRED_SAMPLES) {
+                if (m_tt_point && m_tt_point <= DESIRED_SAMPLES) {
                     m_tt_point++; // Move the selected point to the left
-                    if (m_tt_point >= DESIRED_SAMPLES) m_tt_point = -1;
+                    if (m_tt_point > DESIRED_SAMPLES) m_tt_point = 0;
                 }
                 m_update = true;
             }
@@ -388,18 +388,18 @@ void TrafficGraphWidget::updateStuff()
     }
 
     if (next_m_value != m_value) {
-        m_tt_point = findClosestPointByTimestamp(m_value, m_tt_point, next_m_value);
+        m_tt_point = findClosestPointByTimestamp(next_m_value);
         m_value = next_m_value;
     }
 
     static bool last_m_toggle = m_toggle;
     if (!QToolTip::isVisible()) {
-        if (m_tt_point >= 0) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
+        if (m_tt_point) { // Remove the yellow circle if the ToolTip has gone due to mouse moving elsewhere.
             if (last_m_toggle == m_toggle) m_tt_point = 0;
             else last_m_toggle = m_toggle;
             m_update = true;
         }
-    } else if (m_tt_point >= 0 && GetTime() >= m_tt_time + 9) m_update = true;
+    } else if (m_tt_point && GetTime() >= m_tt_time + 9) m_update = true;
 
     if (m_update) update();
     static bool graph_visible = false;
@@ -426,8 +426,7 @@ void TrafficGraphWidget::updateRates(int i, int64_t last_time)
     if (fFull[i] == 0 && m_time_stamp[i].size() <= DESIRED_SAMPLES)
         fFull[i] = -1;
     while (m_time_stamp[i].size() > DESIRED_SAMPLES) {
-        if (m_tt_point < 0 && m_value == i && i < VALUES_SIZE - 1 && fFull[i] < 0)
-            m_bump_value = true;
+        if (m_value == i && i < VALUES_SIZE - 1 && fFull[i] < 0) m_bump_value = true;
         fFull[i] = 1;
         m_samples_in[i].pop_back();
         m_samples_out[i].pop_back();
@@ -600,29 +599,31 @@ bool TrafficGraphWidget::loadData()
     return true;
 }
 
-int TrafficGraphWidget::findClosestPointByTimestamp(int src_range, int src_point, int dst_range) const
+int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
 {
-    if (src_point < 0 || src_point >= m_time_stamp[src_range].size() ||
+
+    if (!m_tt_point || m_tt_point > m_time_stamp[m_value].size() ||
         m_time_stamp[dst_range].empty()) {
-        return -1;
+        return 0;
     }
-
+ 
+	int src_point = m_tt_point - 1;
     bool is_peak = false, is_dip = false;
-    float src_value = m_tt_in_series ? m_samples_in[src_range].at(src_point) :
-                m_samples_out[src_range].at(src_point);
-    int64_t src_timestamp = m_time_stamp[src_range].at(src_point);
+    float src_value = m_tt_in_series ? m_samples_in[m_value].at(src_point) :
+                m_samples_out[m_value].at(src_point);
+    int64_t src_timestamp = m_time_stamp[m_value].at(src_point);
 
-    if (src_point > 0 && src_point < m_time_stamp[src_range].size() - 1) {
-        float prev_value = m_tt_in_series ? m_samples_in[src_range].at(src_point - 1) :
-                    m_samples_out[src_range].at(src_point - 1);
-        float next_value = m_tt_in_series ? m_samples_in[src_range].at(src_point + 1) :
-                    m_samples_out[src_range].at(src_point + 1);
+    if (src_point > 0 && src_point < m_time_stamp[m_value].size() - 1) {
+        float prev_value = m_tt_in_series ? m_samples_in[m_value].at(src_point - 1) :
+                    m_samples_out[m_value].at(src_point - 1);
+        float next_value = m_tt_in_series ? m_samples_in[m_value].at(src_point + 1) :
+                    m_samples_out[m_value].at(src_point + 1);
 
         is_peak = src_value > prev_value && src_value > next_value;
         is_dip = src_value < prev_value && src_value < next_value;
     }
 
-    int dst_point = -1;
+    int dst_point = 0;
     int64_t min_difference = std::numeric_limits<int64_t>::max();
 
     // Find the nearest point timestamp-wise
@@ -630,12 +631,12 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int src_range, int src_point
         auto diff = std::abs(m_time_stamp[dst_range].at(i) - src_timestamp);
         if (diff < min_difference) {
             min_difference = diff;
-            dst_point = i;
+            dst_point = i + 1;
         }
     }
 
     // Exit early if no point found or not a peak nor a dip
-    if (dst_point < 0 || (!is_peak && !is_dip)) return dst_point;
+    if (!dst_point || (!is_peak && !is_dip)) return dst_point;
 
     // If a peak/dip, snap to the nearest peak/dip
     float dst_value = m_tt_in_series ? m_samples_in[dst_range].at(dst_point) :
@@ -650,10 +651,10 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int src_range, int src_point
         if (std::abs(m_time_stamp[dst_range].at(i) - src_timestamp) > time_window) continue;
         float value = m_tt_in_series ? m_samples_in[dst_range].at(i) : m_samples_out[dst_range].at(i);
         if (is_peak && value > best_value) {
-            dst_point = i;
+            dst_point = i + 1;
             best_value = value;
         } else if (is_dip && value < best_value) {
-            dst_point = i;
+            dst_point = i + 1;
             best_value = value;
         }
     }
