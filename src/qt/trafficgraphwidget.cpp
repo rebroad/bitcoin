@@ -243,7 +243,6 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     if (!m_samples_out[m_value].empty()) {
         QPainterPath p;
         x = paintPath(p, m_samples_out[m_value]);
-        printf("%s: x: %d\n", __func__, x);
         painter.fillPath(p, QColor(255, 0, 0, 128));
         painter.setPen(Qt::red);
         painter.drawPath(p);
@@ -261,6 +260,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     static int opacity = 0; // Opacity of the black outline around the text
     if (x < 70 && opacity < 64) opacity++;
     else if (x > 70) opacity = 0;
+    printf("%s: x=%d opacity=%d\n", __func__, x, opacity);
 
     // Draw outlined text for labels with proper vertical positioning
     drawOutlinedText(painter, y_value(val*10) - 2, GUIUtil::formatBytesps(val * 10000), opacity);
