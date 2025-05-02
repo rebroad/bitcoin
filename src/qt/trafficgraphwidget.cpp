@@ -257,7 +257,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
     static int opacity = 0; // Opacity of the black outline around the text
-    if (x < 70 && opacity < 48) opacity++;
+    if (x < 70 && opacity < 48) opacity += 4;
     else if (x > 70) opacity = 0;
 
     // Draw outlined text for labels with proper vertical positioning
