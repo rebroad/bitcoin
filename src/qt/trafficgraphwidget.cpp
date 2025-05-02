@@ -176,7 +176,7 @@ void drawOutlinedText(QPainter& painter, int y, const QString& text, int opacity
     painter.save();
 
     // Draw the outline by drawing the text multiple times with small offsets
-    if (!opacity) {
+    if (opacity) {
         printf("%s: Opacity = %d\n", __func__, opacity);
         painter.setPen(QColor(0, 0, 0, opacity));
         for (int dx = -2; dx <= 2; dx++)
