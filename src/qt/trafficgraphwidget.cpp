@@ -346,9 +346,9 @@ void TrafficGraphWidget::updateStuff()
         int64_t msecs_per_sample = static_cast<int64_t>(m_values[i]) * 60000 / DESIRED_SAMPLES;
         if (time_offset) {
             m_offset[i] += time_offset;
-            if (m_offset[i] > now - m_last_time[i]) m_offset[i] = now - m_last_time[i];
+            if (m_offset[i] > now -(m_time_stamp[i].front())) m_offset[i] = now - m_time_stamp[i].front();
         }
-        if (now > (m_last_time[i] + msecs_per_sample + m_offset[i] - expected_gap / 2)) {
+        if (now > ((m_time_stamp[i].front()) + msecs_per_sample + m_offset[i] - expected_gap / 2)) {
             m_offset[i] = 0;
             updateRates(i);
             if (i == m_value) {
@@ -403,7 +403,7 @@ void TrafficGraphWidget::updateStuff()
 void TrafficGraphWidget::updateRates(int i)
 {
     int64_t now = GetTime<std::chrono::milliseconds>().count();
-    int64_t actual_gap = now - m_last_time[i];
+    int64_t actual_gap = now - m_time_stamp[i].front();
     quint64 bytesIn = m_client_model->node().getTotalBytesRecv() + m_baseline_bytes_recv,
             bytesOut = m_client_model->node().getTotalBytesSent() + m_baseline_bytes_sent;
     float in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - m_last_bytes_in[i]) / actual_gap;
@@ -411,7 +411,6 @@ void TrafficGraphWidget::updateRates(int i)
     m_samples_in[i].push_front(in_rate_kilobytes_per_msec);
     m_samples_out[i].push_front(out_rate_kilobytes_per_msec);
     m_time_stamp[i].push_front(now);
-    m_last_time[i] = now;
     m_last_bytes_in[i] = bytesIn;
     m_last_bytes_out[i] = bytesOut;
     static int8_t fFull[VALUES_SIZE] = {};
