@@ -64,7 +64,6 @@ private:
     QQueue<int64_t> m_time_stamp[VALUES_SIZE] = {};
     quint64 m_last_bytes_in[VALUES_SIZE] = {};
     quint64 m_last_bytes_out[VALUES_SIZE] = {};
-    int64_t m_last_time[VALUES_SIZE] = {};
     ClientModel* m_client_model{nullptr};
 
     int m_value{0};
@@ -72,7 +71,7 @@ private:
     bool m_bump_value{false};
     bool m_toggle{true}; // Default to logarithmic
     bool m_update{false}; // whether to redraw graph
-    int m_tt_point{-1};
+    int m_tt_point{0}; // 0 = no tooltip (array index + 1)
     bool m_tt_in_series{true}; // true = in, false = out
     int m_x_offset{0};
     int m_y_offset{0};
