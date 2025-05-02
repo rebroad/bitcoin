@@ -176,7 +176,7 @@ void drawOutlinedText(QPainter& painter, int y, const QString& text, int opacity
     painter.save();
 
     // Draw the outline by drawing the text multiple times with small offsets
-    if (opacity < 255) {
+    if (!opacity) {
         printf("%s: Opacity = %d\n", __func__, opacity);
         painter.setPen(QColor(0, 0, 0, opacity));
         for (int dx = -2; dx <= 2; dx++)
@@ -258,9 +258,9 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.setPen(axisCol);
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
-    static int opacity = 255; // Opacity of the black outline around the text
-    if (x < 70 && opacity > 64) opacity--;
-    else if (x > 70) opacity = 255;
+    static int opacity = 0; // Opacity of the black outline around the text
+    if (x < 70 && opacity < 64) opacity++;
+    else if (x > 70) opacity = 0;
 
     // Draw outlined text for labels with proper vertical positioning
     drawOutlinedText(painter, y_value(val*10) - 2, GUIUtil::formatBytesps(val * 10000), opacity);
