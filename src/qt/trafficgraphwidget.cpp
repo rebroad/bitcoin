@@ -344,13 +344,14 @@ void TrafficGraphWidget::updateStuff()
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
         int64_t msecs_per_sample = static_cast<int64_t>(m_values[i]) * 60000 / DESIRED_SAMPLES;
+        int64_t last_time = m_time_stamp[i].empty() ? now : m_time_stamp[i].front();
         if (time_offset) {
             m_offset[i] += time_offset;
-            if (m_offset[i] > now -(m_time_stamp[i].front())) m_offset[i] = now - m_time_stamp[i].front();
+            if (m_offset[i] > now - last_time) m_offset[i] = now - last_time;
         }
-        if (now > ((m_time_stamp[i].front()) + msecs_per_sample + m_offset[i] - expected_gap / 2)) {
+        if (now > (last_time + msecs_per_sample + m_offset[i] - expected_gap / 2)) {
             m_offset[i] = 0;
-            updateRates(i);
+            updateRates(i, last_time);
             if (i == m_value) {
                 if (m_tt_point >= 0 && m_tt_point < DESIRED_SAMPLES) {
                     m_tt_point++; // Move the selected point to the left
@@ -400,10 +401,10 @@ void TrafficGraphWidget::updateStuff()
     } else graph_visible = false;
 }
 
-void TrafficGraphWidget::updateRates(int i)
+void TrafficGraphWidget::updateRates(int i, int64_t last_time)
 {
     int64_t now = GetTime<std::chrono::milliseconds>().count();
-    int64_t actual_gap = now - m_time_stamp[i].front();
+    int64_t actual_gap = now - last_time;
     quint64 bytesIn = m_client_model->node().getTotalBytesRecv() + m_baseline_bytes_recv,
             bytesOut = m_client_model->node().getTotalBytesSent() + m_baseline_bytes_sent;
     float in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - m_last_bytes_in[i]) / actual_gap;

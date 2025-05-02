@@ -51,7 +51,7 @@ private:
     bool loadDataFromBinary();
     bool loadData();
     void update_fmax();
-    void updateRates(int value);
+    void updateRates(int, int64_t);
     void focusSlider();
     void drawTooltipPoint(QPainter& painter);
 
