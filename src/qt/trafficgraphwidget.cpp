@@ -229,21 +229,22 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         }
     }
 
-    if (m_samples_in[m_value].empty() || m_samples_out[m_value].empty()) return;
-
     painter.setRenderHint(QPainter::Antialiasing);
-    QPainterPath p;
-
-    paintPath(p, m_samples_in[m_value]);
-    painter.fillPath(p, QColor(0, 255, 0, 128));
-    painter.setPen(Qt::green);
-    painter.drawPath(p);
-
-    int x = paintPath(p, m_samples_out[m_value]);
-    printf("%s: x: %d\n", __func__, x);
-    painter.fillPath(p, QColor(255, 0, 0, 128));
-    painter.setPen(Qt::red);
-    painter.drawPath(p);
+    if (!m_samples_in[m_value].empty()) {
+        QPainterPath p;
+        paintPath(p, m_samples_in[m_value]);
+        painter.fillPath(p, QColor(0, 255, 0, 128));
+        painter.setPen(Qt::green);
+        painter.drawPath(p);
+	}
+    if (!m_samples_out[m_value].empty()) {
+        QPainterPath p;
+        int x = paintPath(p, m_samples_out[m_value]);
+        printf("%s: x: %d\n", __func__, x);
+        painter.fillPath(p, QColor(255, 0, 0, 128));
+        painter.setPen(Qt::red);
+        painter.drawPath(p);
+	}
 
     // Draw black lines to mask the bright overscanned edges
     painter.setPen(Qt::black);
