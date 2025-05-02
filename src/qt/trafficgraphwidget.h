@@ -47,7 +47,7 @@ public Q_SLOTS:
 
 private:
     void saveData();
-    void paintPath(QPainterPath& path, const QQueue<float>& samples);
+    int paintPath(QPainterPath& path, const QQueue<float>& samples);
     bool loadDataFromBinary();
     bool loadData();
     void update_fmax();
