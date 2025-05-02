@@ -35,11 +35,11 @@ public:
 
 protected:
     void paintEvent(QPaintEvent*) override;
-    int y_value(float value) const;
-    void mouseMoveEvent(QMouseEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
-    int findClosestPoint(int x, int y, int rangeIndex) const;
-    int findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const;
+    int y_value(float) const;
+    void mouseMoveEvent(QMouseEvent*) override;
+    void mousePressEvent(QMouseEvent*) override;
+    int findClosestPoint(int, int, int) const;
+    int findClosestPointByTimestamp(int, int, int) const;
 
 public Q_SLOTS:
     void updateStuff();
@@ -47,13 +47,13 @@ public Q_SLOTS:
 
 private:
     void saveData();
-    int paintPath(QPainterPath& path, const QQueue<float>& samples);
+    int paintPath(QPainterPath&, const QQueue<float>&);
     bool loadDataFromBinary();
     bool loadData();
     void update_fmax();
     void updateRates(int, int64_t);
     void focusSlider();
-    void drawTooltipPoint(QPainter& painter);
+    void drawTooltipPoint(QPainter&);
 
     QTimer* m_timer{nullptr};
     float m_fmax{1.1f};
