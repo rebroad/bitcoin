@@ -134,9 +134,9 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
 {
     int w = width() - XMARGIN * 2;
     double ratio = static_cast<double>(m_tt_point) * m_values[m_value] / m_range / DESIRED_SAMPLES;
-    int x = XMARGIN + w - static_cast<int>(w * ratio);
-    float in_sample = m_samples_in[m_value].at(m_tt_point);
-    float out_sample = m_samples_out[m_value].at(m_tt_point);
+    int x = XMARGIN + static_cast<int>(w - w * ratio);
+    float in_sample = m_samples_in[m_value].at(m_tt_point-1);
+    float out_sample = m_samples_out[m_value].at(m_tt_point-1);
     float selected_sample = m_tt_in_series ? in_sample : out_sample;
     int y = y_value(selected_sample);
     painter.setPen(Qt::yellow);
