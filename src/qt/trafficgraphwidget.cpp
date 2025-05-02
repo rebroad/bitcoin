@@ -53,10 +53,10 @@ int TrafficGraphWidget::y_value(float value) const
     return YMARGIN + h - (h * 1.0 * (m_toggle ? (std::pow(value, 0.30102) / std::pow(m_fmax, 0.30102)) : (value / m_fmax)));
 }
 
-void TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& samples)
+int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& samples)
 {
     int sample_count = std::min(int(DESIRED_SAMPLES * m_range / m_values[m_value]), int(samples.size()));
-    if (sample_count <= 0) return;
+    if (sample_count <= 0) return 0;
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int x = XMARGIN + w + 1, i; // Overscan by 1 pixel to the right
     path.moveTo(x, YMARGIN + h);
@@ -72,6 +72,8 @@ void TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& samp
         path.lineTo(x, y_value(samples.at(i - 1)));
     }
     path.lineTo(x, YMARGIN + h);
+
+    return x;
 }
 
 void TrafficGraphWidget::focusSlider()
@@ -227,21 +229,21 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         }
     }
 
+    if (m_samples_in[m_value].empty() || m_samples_out[m_value].empty()) return;
+
     painter.setRenderHint(QPainter::Antialiasing);
-    if (!m_samples_in[m_value].empty()) {
-        QPainterPath p;
-        paintPath(p, m_samples_in[m_value]);
-        painter.fillPath(p, QColor(0, 255, 0, 128));
-        painter.setPen(Qt::green);
-        painter.drawPath(p);
-    }
-    if (!m_samples_out[m_value].empty()) {
-        QPainterPath p;
-        paintPath(p, m_samples_out[m_value]);
-        painter.fillPath(p, QColor(255, 0, 0, 128));
-        painter.setPen(Qt::red);
-        painter.drawPath(p);
-    }
+    QPainterPath p;
+
+    paintPath(p, m_samples_in[m_value]);
+    painter.fillPath(p, QColor(0, 255, 0, 128));
+    painter.setPen(Qt::green);
+    painter.drawPath(p);
+
+    int x = paintPath(p, m_samples_out[m_value]);
+    printf("%s: x: %d\n", __func__, x);
+    painter.fillPath(p, QColor(255, 0, 0, 128));
+    painter.setPen(Qt::red);
+    painter.drawPath(p);
 
     // Draw black lines to mask the bright overscanned edges
     painter.setPen(Qt::black);
