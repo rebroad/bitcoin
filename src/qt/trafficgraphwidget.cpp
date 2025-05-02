@@ -171,21 +171,23 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
 }
 
 // Helper function to draw text with outline
-void drawOutlinedText(QPainter& painter, int x, int y, const QString& text, const QColor& textColor = Qt::white) {
-    // Save the painter state
+void drawOutlinedText(QPainter& painter, int y, const QString& text, int opacity)
+{
     painter.save();
 
     // Draw the outline by drawing the text multiple times with small offsets
-    painter.setPen(QColor(0, 0, 0, 64));
-    for (int dx = -2; dx <= 2; dx++)
-        for (int dy = -2; dy <= 2; dy++)
-            painter.drawText(x + dx, y + dy, text);
+    if (opacity < 255) {
+        printf("%s: Opacity = %d\n", __func__, opacity);
+        painter.setPen(QColor(0, 0, 0, opacity));
+        for (int dx = -2; dx <= 2; dx++)
+            for (int dy = -2; dy <= 2; dy++)
+                painter.drawText(XMARGIN + dx, y + dy, text);
+    } else printf("%s: Skipping outline\n", __func__);
 
     // Draw the main text
-    painter.setPen(textColor);
-    painter.drawText(x, y, text);
+    painter.setPen(Qt::white);
+    painter.drawText(XMARGIN, y, text);
 
-    // Restore the painter state
     painter.restore();
 }
 
@@ -236,15 +238,16 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.fillPath(p, QColor(0, 255, 0, 128));
         painter.setPen(Qt::green);
         painter.drawPath(p);
-	}
+    }
+    int x = 0;
     if (!m_samples_out[m_value].empty()) {
         QPainterPath p;
-        int x = paintPath(p, m_samples_out[m_value]);
+        x = paintPath(p, m_samples_out[m_value]);
         printf("%s: x: %d\n", __func__, x);
         painter.fillPath(p, QColor(255, 0, 0, 128));
         painter.setPen(Qt::red);
         painter.drawPath(p);
-	}
+    }
 
     // Draw black lines to mask the bright overscanned edges
     painter.setPen(Qt::black);
@@ -255,10 +258,14 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.setPen(axisCol);
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
+    static int opacity = 255; // Opacity of the black outline around the text
+    if (x < 70 && opacity > 64) opacity--;
+    else if (x > 70) opacity = 255;
+
     // Draw outlined text for labels with proper vertical positioning
-    drawOutlinedText(painter, XMARGIN, y_value(val*10) - 2, GUIUtil::formatBytesps(val * 10000));
-    drawOutlinedText(painter, XMARGIN, y_value(val) - 2, GUIUtil::formatBytesps(val * 1000));
-    if (m_toggle) drawOutlinedText(painter, XMARGIN, y_value(val/10) - 2, GUIUtil::formatBytesps(val * 100));
+    drawOutlinedText(painter, y_value(val*10) - 2, GUIUtil::formatBytesps(val * 10000), opacity);
+    drawOutlinedText(painter, y_value(val) - 2, GUIUtil::formatBytesps(val * 1000), opacity);
+    if (m_toggle) drawOutlinedText(painter, y_value(val/10) - 2, GUIUtil::formatBytesps(val * 100), opacity);
 
     if (m_tt_point >= 0 && m_tt_point < m_time_stamp[m_value].size() && isVisible() && !window()->isMinimized())
         drawTooltipPoint(painter);
