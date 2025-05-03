@@ -55,7 +55,7 @@ int TrafficGraphWidget::y_value(float value) const
 
 int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& samples)
 {
-    int sample_count = std::min(int(DESIRED_SAMPLES * m_range / m_values[m_value]), int(samples.size()));
+    int sample_count = std::min(int(DESIRED_SAMPLES * m_range / m_values[m_value] + 0.5), int(samples.size()));
     if (sample_count <= 0) return 0;
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int x = XMARGIN + w, i;
