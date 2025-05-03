@@ -63,7 +63,7 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
     for (i = 1; i <= sample_count; ++i) {
         if (i > 1) { // x is already calculated for the first sample
             double ratio = static_cast<double>(i) * m_values[m_value] / m_range / DESIRED_SAMPLES;
-            x = XMARGIN + static_cast<int>(w - w * ratio);
+            x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
             if (i == sample_count) {
                             double nr = static_cast<double>(i + 1) * m_values[m_value] / m_range / DESIRED_SAMPLES;
                 int nxr = static_cast<int>(w - w * nr + 0.5);
@@ -141,7 +141,7 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
 {
     int w = width() - XMARGIN * 2;
     double ratio = static_cast<double>(m_tt_point) * m_values[m_value] / m_range / DESIRED_SAMPLES;
-    int x = XMARGIN + static_cast<int>(w - w * ratio);
+    int x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
     float in_sample = m_samples_in[m_value].at(m_tt_point-1);
     float out_sample = m_samples_out[m_value].at(m_tt_point-1);
     float selected_sample = m_tt_in_series ? in_sample : out_sample;
@@ -340,8 +340,6 @@ void TrafficGraphWidget::updateStuff()
     if (!m_client_model) return;
     int64_t expected_gap = m_timer->interval();
     int64_t now = GetTime<std::chrono::milliseconds>().count();
-    static int64_t last_jump_time = 0;
-    int64_t time_offset = 0;
 
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
