@@ -475,7 +475,6 @@ void TrafficGraphWidget::saveData()
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
             fileout << VARINT(m_last_bytes_in[i]) << VARINT(m_last_bytes_out[i]) << m_last_time[i];
 
-            // Save the size of these samples
             fileout << VARINT(static_cast<uint16_t>(m_time_stamp[i].size()));
 
             for (int j = 0; j < m_time_stamp[i].size(); j++) {
