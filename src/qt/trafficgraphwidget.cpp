@@ -65,10 +65,11 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
             double ratio = static_cast<double>(i) * m_values[m_value] / m_range / DESIRED_SAMPLES;
             x = XMARGIN + static_cast<int>(w - w * ratio);
             if (i == sample_count) {
-			    double nr = static_cast<double>(i + 1) * m_values[m_value] / m_range / DESIRED_SAMPLES;
+                            double nr = static_cast<double>(i + 1) * m_values[m_value] / m_range / DESIRED_SAMPLES;
                 int nxr = static_cast<int>(w - w * nr + 0.5);
-                printf("%s: i=%d, ratio=%f, x=%d, nr=%f, nxr=%d, m_value=%d, m_range=%f, m_new_value=%d\n",
-                    __func__, i, ratio, x - XMARGIN, nr, nxr, m_values[m_value], m_range, m_values[m_new_value]);
+                                if ((int)m_range != m_values[m_value] && (int)m_range != m_values[m_new_value])
+                    printf("%s: i=%d, ratio=%f, x=%d, nr=%f, nxr=%d, m_value=%d, m_range=%f, m_new_value=%d\n",
+                        __func__, i, ratio, x - XMARGIN, nr, nxr, m_values[m_value], m_range, m_values[m_new_value]);
                 if (samples.size() >= DESIRED_SAMPLES && ((m_value == m_new_value && ratio > 0.99) || (m_value != m_new_value)))
                     x = XMARGIN - 1; // Overscan by one pixel to the left
             }
@@ -472,8 +473,10 @@ void TrafficGraphWidget::saveData()
         fileout << VARINT(m_baseline_bytes_recv) << VARINT(m_baseline_bytes_sent);
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
+            fileout << VARINT(m_last_bytes_in[i]) << VARINT(m_last_bytes_out[i]) << m_last_time[i];
+
             // Save the size of these samples
-            fileout << VARINT(static_cast<uint32_t>(m_time_stamp[i].size()));
+            fileout << VARINT(static_cast<uint16_t>(m_time_stamp[i].size()));
 
             for (int j = 0; j < m_time_stamp[i].size(); j++) {
                 fileout << static_cast<uint64_t>(m_time_stamp[i].at(j));
@@ -525,7 +528,9 @@ bool TrafficGraphWidget::loadDataFromBinary()
         filein >> VARINT(m_baseline_bytes_recv) >> VARINT(m_baseline_bytes_sent);
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-            uint32_t samplesSize;
+            filein >> VARINT(m_last_bytes_in[i]) >> VARINT(m_last_bytes_out[i]) >> m_last_time[i];
+
+            uint16_t samplesSize;
             filein >> VARINT(samplesSize);
 
             for (unsigned int j = 0; j < samplesSize; j++) {
@@ -607,8 +612,8 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
         m_time_stamp[dst_range].empty()) {
         return 0;
     }
- 
-	int src_point = m_tt_point - 1;
+
+        int src_point = m_tt_point - 1;
     bool is_peak = false, is_dip = false;
     float src_value = m_tt_in_series ? m_samples_in[m_value].at(src_point) :
                 m_samples_out[m_value].at(src_point);
