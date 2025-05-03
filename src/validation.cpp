@@ -496,47 +496,39 @@ public:
          */
         const bool m_package_submission;
 
+        ATMPArgs(const CChainParams& chainparams, int64_t accept_time, NodeId nodeid,
+                bool bypass_limits, std::vector<COutPoint>& coins_to_uncache,
+                bool test_accept, bool allow_bip125_replacement, bool package_submission)
+            : m_chainparams(chainparams)
+            , m_accept_time(accept_time)
+            , m_nodeid(nodeid)
+            , m_bypass_limits(bypass_limits)
+            , m_coins_to_uncache(coins_to_uncache)
+            , m_test_accept(test_accept)
+            , m_allow_bip125_replacement(allow_bip125_replacement)
+            , m_package_submission(package_submission)
+        {}
+
         /** Parameters for single transaction mempool validation. */
         static ATMPArgs SingleAccept(const CChainParams& chainparams, int64_t accept_time, NodeId nodeid,
                                      bool bypass_limits, std::vector<COutPoint>& coins_to_uncache,
                                      bool test_accept) {
-            return ATMPArgs{/* m_chainparams */ chainparams,
-                            /* m_accept_time */ accept_time,
-                            /* m_nodeid */ nodeid,
-                            /* m_bypass_limits */ bypass_limits,
-                            /* m_coins_to_uncache */ coins_to_uncache,
-                            /* m_test_accept */ test_accept,
-                            /* m_allow_bip125_replacement */ true,
-                            /* m_package_submission */ false,
-            };
+            return ATMPArgs(chainparams, accept_time, nodeid, bypass_limits, coins_to_uncache,
+                          test_accept, true, false);
         }
 
         /** Parameters for test package mempool validation through testmempoolaccept. */
         static ATMPArgs PackageTestAccept(const CChainParams& chainparams, int64_t accept_time,
                                           std::vector<COutPoint>& coins_to_uncache) {
-            return ATMPArgs{/* m_chainparams */ chainparams,
-                            /* m_accept_time */ accept_time,
-                            /* m_nodeid */ -3,
-                            /* m_bypass_limits */ false,
-                            /* m_coins_to_uncache */ coins_to_uncache,
-                            /* m_test_accept */ true,
-                            /* m_allow_bip125_replacement */ false,
-                            /* m_package_submission */ false, // not submitting to mempool
-            };
+            return ATMPArgs(chainparams, accept_time, -3, false, coins_to_uncache,
+                          true, false, false);
         }
 
         /** Parameters for child-with-unconfirmed-parents package validation. */
         static ATMPArgs PackageChildWithParents(const CChainParams& chainparams, int64_t accept_time,
                                                 std::vector<COutPoint>& coins_to_uncache) {
-            return ATMPArgs{/* m_chainparams */ chainparams,
-                            /* m_accept_time */ accept_time,
-                            /* m_nodeid */ -3,
-                            /* m_bypass_limits */ false,
-                            /* m_coins_to_uncache */ coins_to_uncache,
-                            /* m_test_accept */ false,
-                            /* m_allow_bip125_replacement */ false,
-                            /* m_package_submission */ true,
-            };
+            return ATMPArgs(chainparams, accept_time, -3, false, coins_to_uncache,
+                          false, false, true);
         }
         // No default ctor to avoid exposing details to clients and allowing the possibility of
         // mixing up the order of the arguments. Use static functions above instead.
