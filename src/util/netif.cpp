@@ -14,6 +14,7 @@
 
 #if defined(__linux__)
 #include <linux/rtnetlink.h>
+#include <sys/socket.h>
 #elif defined(__FreeBSD__)
 #include <osreldate.h>
 #if __FreeBSD_version >= 1400000
@@ -39,11 +40,12 @@ namespace {
 std::optional<CNetAddr> QueryDefaultGatewayImpl(sa_family_t family)
 {
     // Create a netlink socket.
-    auto sock{CreateSock(AF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE)};
-    if (!sock) {
-        LogPrintLevel(BCLog::NET, BCLog::Level::Error, "socket(AF_NETLINK): %s\n", NetworkErrorString(errno));
+    SOCKET sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
+    if (sock < 0) {
+        LogPrint(BCLog::NET, "socket(AF_NETLINK): %s\n", NetworkErrorString(errno));
         return std::nullopt;
     }
+    Sock sock_wrapper{sock};
 
     // Send request.
     struct {
@@ -77,8 +79,8 @@ std::optional<CNetAddr> QueryDefaultGatewayImpl(sa_family_t family)
     request.dst_hdr.nla_type = RTA_DST;
     request.dst_hdr.nla_len = sizeof(nlattr) + dst_data_len;
 
-    if (sock->Send(&request, request.hdr.nlmsg_len, 0) != static_cast<ssize_t>(request.hdr.nlmsg_len)) {
-        LogPrintLevel(BCLog::NET, BCLog::Level::Error, "send() to netlink socket: %s\n", NetworkErrorString(errno));
+    if (sock_wrapper.Send(&request, request.hdr.nlmsg_len, 0) != static_cast<ssize_t>(request.hdr.nlmsg_len)) {
+        LogPrint(BCLog::NET, "send() to netlink socket: %s\n", NetworkErrorString(errno));
         return std::nullopt;
     }
 
@@ -86,10 +88,10 @@ std::optional<CNetAddr> QueryDefaultGatewayImpl(sa_family_t family)
     char response[4096];
     int64_t recv_result;
     do {
-        recv_result = sock->Recv(response, sizeof(response), 0);
+        recv_result = sock_wrapper.Recv(response, sizeof(response), 0);
     } while (recv_result < 0 && (errno == EINTR || errno == EAGAIN));
     if (recv_result < 0) {
-        LogPrintLevel(BCLog::NET, BCLog::Level::Error, "recv() from netlink socket: %s\n", NetworkErrorString(errno));
+        LogPrint(BCLog::NET, "recv() from netlink socket: %s\n", NetworkErrorString(errno));
         return std::nullopt;
     }
 
@@ -140,7 +142,7 @@ std::optional<CNetAddr> QueryDefaultGatewayImpl(sa_family_t family)
     destination_address.si_family = family;
     status = GetBestInterfaceEx((sockaddr*)&destination_address, &best_if_idx);
     if (status != NO_ERROR) {
-        LogPrintLevel(BCLog::NET, BCLog::Level::Error, "Could not get best interface for default route: %s\n", NetworkErrorString(status));
+        LogPrint(BCLog::NET, "Could not get best interface for default route: %s\n", NetworkErrorString(status));
         return std::nullopt;
     }
 
@@ -148,7 +150,7 @@ std::optional<CNetAddr> QueryDefaultGatewayImpl(sa_family_t family)
     // Leave interface_luid at all-zeros to use interface index instead.
     status = GetBestRoute2(&interface_luid, best_if_idx, nullptr, &destination_address, 0, &best_route, &best_source_address);
     if (status != NO_ERROR) {
-        LogPrintLevel(BCLog::NET, BCLog::Level::Error, "Could not get best route for default route for interface index %d: %s\n",
+        LogPrint(BCLog::NET, "Could not get best route for default route for interface index %d: %s\n",
                 best_if_idx, NetworkErrorString(status));
         return std::nullopt;
     }
@@ -192,12 +194,12 @@ std::optional<CNetAddr> QueryDefaultGatewayImpl(sa_family_t family)
     // The size of the available data is determined by calling sysctl() with oldp=nullptr. See sysctl(3).
     size_t l = 0;
     if (sysctl(/*name=*/mib, /*namelen=*/sizeof(mib) / sizeof(int), /*oldp=*/nullptr, /*oldlenp=*/&l, /*newp=*/nullptr, /*newlen=*/0) < 0) {
-        LogPrintLevel(BCLog::NET, BCLog::Level::Error, "Could not get sysctl length of routing table: %s\n", SysErrorString(errno));
+        LogPrint(BCLog::NET, "Could not get sysctl length of routing table: %s\n", SysErrorString(errno));
         return std::nullopt;
     }
     std::vector<std::byte> buf(l);
     if (sysctl(/*name=*/mib, /*namelen=*/sizeof(mib) / sizeof(int), /*oldp=*/buf.data(), /*oldlenp=*/&l, /*newp=*/nullptr, /*newlen=*/0) < 0) {
-        LogPrintLevel(BCLog::NET, BCLog::Level::Error, "Could not get sysctl data of routing table: %s\n", SysErrorString(errno));
+        LogPrint(BCLog::NET, "Could not get sysctl data of routing table: %s\n", SysErrorString(errno));
         return std::nullopt;
     }
     // Iterate over messages (each message is a routing table entry).
