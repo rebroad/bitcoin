@@ -340,7 +340,7 @@ void TrafficGraphWidget::updateStuff()
     for (int i = 0; i < VALUES_SIZE; i++) {
         int64_t msecs_per_sample = static_cast<int64_t>(m_values[i]) * 60000 / DESIRED_SAMPLES;
         if (now > (m_last_time[i] + msecs_per_sample - expected_gap / 2)) {
-            updateRates(i, m_last_time[i]);
+            updateRates(i);
             if (i == m_value) {
                 if (m_tt_point && m_tt_point <= DESIRED_SAMPLES) {
                     m_tt_point++; // Move the selected point to the left
@@ -389,10 +389,10 @@ void TrafficGraphWidget::updateStuff()
     } else graph_visible = false;
 }
 
-void TrafficGraphWidget::updateRates(int i, int64_t last_time)
+void TrafficGraphWidget::updateRates(int i)
 {
     int64_t now = GetTime<std::chrono::milliseconds>().count();
-    int64_t actual_gap = now - last_time;
+    int64_t actual_gap = now - m_last_time[i];
     quint64 bytesIn = m_client_model->node().getTotalBytesRecv() + m_baseline_bytes_recv,
             bytesOut = m_client_model->node().getTotalBytesSent() + m_baseline_bytes_sent;
     float in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - m_last_bytes_in[i]) / actual_gap;
@@ -587,7 +587,7 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
         return 0;
     }
 
-        int src_point = m_tt_point - 1;
+    int src_point = m_tt_point - 1;
     bool is_peak = false, is_dip = false;
     float src_value = m_tt_in_series ? m_samples_in[m_value].at(src_point) :
                 m_samples_out[m_value].at(src_point);
