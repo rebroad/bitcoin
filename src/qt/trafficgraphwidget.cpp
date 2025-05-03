@@ -343,23 +343,10 @@ void TrafficGraphWidget::updateStuff()
     static int64_t last_jump_time = 0;
     int64_t time_offset = 0;
 
-    if (m_last_time[0]) {
-        int64_t actual_gap = now - m_last_time[0];
-        if (actual_gap >= 1000 + expected_gap && m_last_time[0] != last_jump_time) {
-            time_offset = actual_gap - expected_gap;
-            last_jump_time = m_last_time[0];
-        }
-    }
-
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
         int64_t msecs_per_sample = static_cast<int64_t>(m_values[i]) * 60000 / DESIRED_SAMPLES;
-        if (time_offset) {
-            m_offset[i] += time_offset;
-            if (m_offset[i] > now - m_last_time[i]) m_offset[i] = now - m_last_time[i];
-        }
-        if (now > (m_last_time[i] + msecs_per_sample + m_offset[i] - expected_gap / 2)) {
-            m_offset[i] = 0;
+        if (now > (m_last_time[i] + msecs_per_sample - expected_gap / 2)) {
             updateRates(i, m_last_time[i]);
             if (i == m_value) {
                 if (m_tt_point && m_tt_point <= DESIRED_SAMPLES) {
@@ -371,7 +358,6 @@ void TrafficGraphWidget::updateStuff()
             if (i == m_new_value) update_fmax();
         }
     }
-    time_offset = 0;
 
     // Update display due to transition between ranges or new fmax
     static float y_increment = 0, x_increment = 0;
@@ -494,8 +480,6 @@ void TrafficGraphWidget::saveData()
                 memcpy(&uint_value, &value, sizeof(float)); // IEEE 754
                 fileout << uint_value;
             }
-
-            fileout << VARINT(static_cast<uint64_t>(m_offset[i]));
         }
 
         fileout.fclose();
@@ -557,10 +541,6 @@ bool TrafficGraphWidget::loadDataFromBinary()
                 memcpy(&value, &uint_value, sizeof(float));
                 m_samples_out[i].push_back(value);
             }
-
-            uint64_t offset;
-            filein >> VARINT(offset);
-            m_offset[i] = static_cast<int64_t>(offset);
         }
         filein.fclose();
         return true;

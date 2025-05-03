@@ -77,7 +77,6 @@ private:
     int m_y_offset{0};
     int64_t m_tt_time{0};
     int m_values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
-    int64_t m_offset[VALUES_SIZE] = {};
     std::string m_data_dir;
     interfaces::Node* m_node;
     quint64 m_baseline_bytes_recv{0};
