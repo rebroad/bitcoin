@@ -579,6 +579,7 @@ bool TrafficGraphWidget::loadData()
         LogPrintf("TrafficGraphWidget: Saved traffic data was invalid.\n");
         m_baseline_bytes_recv = m_baseline_bytes_sent = 0;
         for (int i = 0; i < VALUES_SIZE; i++) {
+            m_last_bytes_in[i] = m_last_bytes_out[i] = m_last_time[i] = 0;
             m_samples_in[i].clear();
             m_samples_out[i].clear();
             m_time_stamp[i].clear();
