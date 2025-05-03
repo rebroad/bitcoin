@@ -69,7 +69,7 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
 				int old_x = x;
                 if (x <= XMARGIN) x = XMARGIN - 1; // Overscan by one pixel to the left
                 if (samples.size() >= DESIRED_SAMPLES) {
-                    if ((m_value == m_new_value && ratio > 0.99) printf("1st ");
+                    if (m_value == m_new_value && ratio > 0.99) printf("1st ");
                     if (m_value != m_new_value) printf("2nd ");
                 }
                 if ((int)m_range != m_values[m_value] && (int)m_range != m_values[m_new_value])
