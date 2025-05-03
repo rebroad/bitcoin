@@ -342,26 +342,24 @@ void TrafficGraphWidget::updateStuff()
     static int64_t last_jump_time = 0;
     int64_t time_offset = 0;
 
-    if (!m_time_stamp[0].empty()) {
-        int64_t last_time = m_time_stamp[0].front();
-        int64_t actual_gap = now - last_time;
-        if (actual_gap >= 1000 + expected_gap && last_time != last_jump_time) {
+    if (m_last_time[0]) {
+        int64_t actual_gap = now - m_last_time[0];
+        if (actual_gap >= 1000 + expected_gap && m_last_time[0] != last_jump_time) {
             time_offset = actual_gap - expected_gap;
-            last_jump_time = last_time;
+            last_jump_time = m_last_time[0];
         }
     }
 
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
         int64_t msecs_per_sample = static_cast<int64_t>(m_values[i]) * 60000 / DESIRED_SAMPLES;
-        int64_t last_time = m_time_stamp[i].empty() ? now - msecs_per_sample : m_time_stamp[i].front();
         if (time_offset) {
             m_offset[i] += time_offset;
-            if (m_offset[i] > now - last_time) m_offset[i] = now - last_time;
+            if (m_offset[i] > now - m_last_time[i]) m_offset[i] = now - m_last_time[i];
         }
-        if (now > (last_time + msecs_per_sample + m_offset[i] - expected_gap / 2)) {
+        if (now > (m_last_time[i] + msecs_per_sample + m_offset[i] - expected_gap / 2)) {
             m_offset[i] = 0;
-            updateRates(i, last_time);
+            updateRates(i, m_last_time[i]);
             if (i == m_value) {
                 if (m_tt_point && m_tt_point <= DESIRED_SAMPLES) {
                     m_tt_point++; // Move the selected point to the left
@@ -424,6 +422,7 @@ void TrafficGraphWidget::updateRates(int i, int64_t last_time)
     m_time_stamp[i].push_front(now);
     m_last_bytes_in[i] = bytesIn;
     m_last_bytes_out[i] = bytesOut;
+    m_last_time[i] = now;
     static int8_t fFull[VALUES_SIZE] = {};
     if (fFull[i] == 0 && m_time_stamp[i].size() <= DESIRED_SAMPLES)
         fFull[i] = -1;

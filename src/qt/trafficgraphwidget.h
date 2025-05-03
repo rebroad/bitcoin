@@ -63,6 +63,7 @@ private:
     QQueue<int64_t> m_time_stamp[VALUES_SIZE] = {};
     quint64 m_last_bytes_in[VALUES_SIZE] = {};
     quint64 m_last_bytes_out[VALUES_SIZE] = {};
+    int64_t m_last_time[VALUES_SIZE] = {};
     ClientModel* m_client_model{nullptr};
 
     int m_value{0};
