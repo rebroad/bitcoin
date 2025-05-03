@@ -66,16 +66,11 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
             double ratio = static_cast<double>(i) * m_values[m_value] / m_range / DESIRED_SAMPLES;
             x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
             if (i == sample_count) {
-                double nr = static_cast<double>(i + 1) * m_values[m_value] / m_range / DESIRED_SAMPLES;
-                int nxr = static_cast<int>(w - w * nr + 0.5);
 				int old_x = x;
-                if (samples.size() >= DESIRED_SAMPLES && ((m_value == m_new_value && ratio > 0.99) || (m_value != m_new_value))) {
-                    path.lineTo(x, y_value(samples.at(i - 1)));
-                    x = XMARGIN - 1; // Overscan by one pixel to the left
-                }
+                if (x <= XMARGIN) x = XMARGIN - 1; // Overscan by one pixel to the left
                 if ((int)m_range != m_values[m_value] && (int)m_range != m_values[m_new_value])
-                    printf("%s: i=%d, ratio=%f, ox=%d x=%d, nr=%f, nxr=%d, m_value=%d, m_range=%f, m_new_value=%d\n",
-                        __func__, i, ratio, old_x - XMARGIN, x - XMARGIN, nr, nxr, m_values[m_value], m_range, m_values[m_new_value]);
+                    printf("%s: i=%d, ratio=%f, ox=%d x=%d, m_value=%d, m_range=%f, m_new_value=%d\n",
+                        __func__, i, ratio, old_x - XMARGIN, x - XMARGIN, m_values[m_value], m_range, m_values[m_new_value]);
             }
         }
         path.lineTo(x, y_value(samples.at(i - 1)));
