@@ -58,10 +58,10 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
     int sample_count = std::min(int(DESIRED_SAMPLES * m_range / m_values[m_value]), int(samples.size()));
     if (sample_count <= 0) return 0;
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-    int x = XMARGIN + w + 1, i; // Overscan by 1 pixel to the right
+    int x = XMARGIN + w, i;
     path.moveTo(x, YMARGIN + h);
     for (i = 1; i <= sample_count; ++i) {
-        if (i > 1) { // If i == 1, keep overscan to the right
+        if (i > 1) { // x is already calculated for the first sample
             double ratio = static_cast<double>(i) * m_values[m_value] / m_range / DESIRED_SAMPLES;
             x = XMARGIN + static_cast<int>(w - w * ratio);
             if (i == sample_count) {
