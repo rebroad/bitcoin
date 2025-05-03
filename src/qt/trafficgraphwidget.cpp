@@ -440,6 +440,7 @@ int TrafficGraphWidget::setGraphRange(int value)
 
 void TrafficGraphWidget::saveData()
 {
+    if (m_time_stamp[0].empty()) return; // Don't save if no data
     try {
         fs::path pathTrafficGraph = fs::path(m_data_dir.c_str()) / "trafficgraph.dat";
         FILE* file = fsbridge::fopen(pathTrafficGraph, "wb");
