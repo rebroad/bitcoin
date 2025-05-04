@@ -194,9 +194,10 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 {
     m_timing.paint_start = std::chrono::steady_clock::now();
 
-    // Calculate time since last paint
+    // Calculate time since last paint start
     m_timing.paint_interval = std::chrono::duration_cast<std::chrono::milliseconds>(
-            m_timing.paint_start - m_timing.paint_end).count();
+            m_timing.paint_start - m_timing.prev_paint_start).count();
+    m_timing.prev_paint_start = m_timing.paint_start;
 
     m_update = false;
     QPainter painter(this);
@@ -353,9 +354,10 @@ void TrafficGraphWidget::updateStuff()
     int64_t expected_gap = m_timer->interval();
     int64_t now = GetTime<std::chrono::milliseconds>().count();
 
-    // Calculate time since last update
+    // Calculate time since last update start
     m_timing.update_interval = std::chrono::duration_cast<std::chrono::milliseconds>(
-            m_timing.update_start - m_timing.update_end).count();
+            m_timing.update_start - m_timing.prev_update_start).count();
+    m_timing.prev_update_start = m_timing.update_start;
 
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
@@ -675,4 +677,6 @@ void TrafficGraphWidget::logTimingData()
     printf("TrafficGraphWidget: update_int=%ldms paint_int=%ldms - update_dur=%ldms paint_dur=%ldms\n",
         m_timing.update_interval, m_timing.paint_interval,
         m_timing.update_duration, m_timing.paint_duration);
+    m_timing.update_interval = m_timing.paint_interval = 0;
+    m_timing.update_duration = m_timing.paint_duration = 0;
 }

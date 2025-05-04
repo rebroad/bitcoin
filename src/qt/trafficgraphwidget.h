@@ -60,8 +60,10 @@ private:
         std::chrono::steady_clock::time_point update_end;
         std::chrono::steady_clock::time_point paint_start;
         std::chrono::steady_clock::time_point paint_end;
-        int64_t update_interval{0};  // Time between updates
-        int64_t paint_interval{0};   // Time between paints
+        std::chrono::steady_clock::time_point prev_update_start;  // Track previous start time
+        std::chrono::steady_clock::time_point prev_paint_start;   // Track previous start time
+        int64_t update_interval{0};  // Time between update starts
+        int64_t paint_interval{0};   // Time between paint starts
         int64_t update_duration{0};  // Time spent in updateStuff
         int64_t paint_duration{0};   // Time spent in paintEvent
     } m_timing;
