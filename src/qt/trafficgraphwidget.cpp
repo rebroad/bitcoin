@@ -272,7 +272,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     else QToolTip::hideText();
 }
 
-void TrafficGraphWidget::update_fmax()
+void TrafficGraphWidget::updateFmax()
 {
     float tmax = 0.0f;
     for (const float f : m_samples_in[m_new_value])
@@ -350,7 +350,7 @@ void TrafficGraphWidget::updateStuff()
                 }
                 m_update = true;
             }
-            if (i == m_new_value) update_fmax();
+            if (i == m_new_value) updateFmax();
         }
     }
 
@@ -427,12 +427,12 @@ int TrafficGraphWidget::setGraphRange(int value)
         value--; // get the array marker
     int old_value = m_new_value;
     m_new_value = std::min(value, VALUES_SIZE - 1);
-    if (m_new_value != old_value) update_fmax();
+    if (m_new_value != old_value) updateFmax();
 
     return m_values[m_new_value];
 }
 
-void TrafficGraphWidget::SaveData()
+void TrafficGraphWidget::saveData()
 {
     if (m_time_stamp[0].empty() || m_data_dir.empty()) return;
     try {
@@ -486,7 +486,7 @@ void TrafficGraphWidget::SaveData()
     }
 }
 
-bool TrafficGraphWidget::LoadDataFromBinary()
+bool TrafficGraphWidget::loadDataFromBinary()
 {
     try {
         fs::path pathTrafficGraph = fs::path(m_data_dir.c_str()) / "trafficgraph.dat";

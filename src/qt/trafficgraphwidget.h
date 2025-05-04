@@ -49,7 +49,7 @@ private:
     int paintPath(QPainterPath&, const QQueue<float>&);
     bool loadDataFromBinary();
     bool loadData();
-    void update_fmax();
+    void updateFmax();
     void updateRates(int);
     void focusSlider();
     void drawTooltipPoint(QPainter&);
