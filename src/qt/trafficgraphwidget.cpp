@@ -672,7 +672,7 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
 void TrafficGraphWidget::logTimingData()
 {
     // Only log if we have meaningful data
-    LogPrintf("TrafficGraphWidget: update_int=%lldms paint_int=%lldms - update_dur=%lldms paint_dur=%lldms\n",
+    printf("TrafficGraphWidget: update_int=%ldms paint_int=%ldms - update_dur=%ldms paint_dur=%ldms\n",
         m_timing.update_interval, m_timing.paint_interval,
         m_timing.update_duration, m_timing.paint_duration);
 }
