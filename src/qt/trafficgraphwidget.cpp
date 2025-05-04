@@ -71,7 +71,7 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
             if (i == sample_count-1 && (x <= XMARGIN || (samples.size() >= DESIRED_SAMPLES && ratio < 1.0))) {
                 path.lineTo(x, y_value(samples.at(i)));
                 x--; // Overscan by one pixel to the left
-
+            }
         }
         path.lineTo(x, y_value(samples.at(i)));
     }
