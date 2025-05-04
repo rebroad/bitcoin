@@ -65,7 +65,7 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
         { // x is already calculated for the first sample
             double ratio = static_cast<double>(i) * m_values[m_value] / m_range / (DESIRED_SAMPLES - 1);
             x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
-            if (i < 1) printf("%s: i=%d, x=%d, w=%d, ratio=%f, m_value=%d, m_range=%f\n",
+            if (i < 1) printf("%s: i=%d, x=%d, w=%d, ratio=%d, m_value=%d, m_range=%f\n",
                  __func__, i, x, w, ratio, m_values[m_value], m_range);
             if (i == sample_count && (x <= XMARGIN || (samples.size() >= DESIRED_SAMPLES && ratio < 1.0)))
                 x = XMARGIN - 1; // Overscan by one pixel to the left
@@ -136,7 +136,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent* event)
 void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
 {
     int w = width() - XMARGIN * 2;
-    double ratio = static_cast<double>(m_tt_point) * m_values[m_value] / m_range / DESIRED_SAMPLES;
+    double ratio = static_cast<double>(m_tt_point-1) * m_values[m_value] / m_range / (DESIRED_SAMPLES-1);
     int x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
     float in_sample = m_samples_in[m_value].at(m_tt_point-1);
     float out_sample = m_samples_out[m_value].at(m_tt_point-1);
