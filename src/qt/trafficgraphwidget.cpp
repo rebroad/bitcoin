@@ -60,15 +60,17 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
     int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
     int x = XMARGIN + w, i;
     path.moveTo(x + 1, YMARGIN + h); // Overscan by 1 pixel to hide bright line
-    for (i = 1; i <= sample_count; ++i) {
-        if (i < 2) path.lineTo(x + 1, y_value(samples.at(0))); // Overscan by 1 pixel to the right
-        else { // x is already calculated for the first sample
-            double ratio = static_cast<double>(i) * m_values[m_value] / m_range / DESIRED_SAMPLES;
+    for (i = 0; i < sample_count; ++i) {
+        if (i < 1) path.lineTo(x + 1, y_value(samples.at(0))); // Overscan by 1 pixel to the right
+        { // x is already calculated for the first sample
+            double ratio = static_cast<double>(i) * m_values[m_value] / m_range / (DESIRED_SAMPLES - 1);
             x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
+            if (i < 1) printf("%s: i=%d, x=%d, w=%d, ratio=%f, m_value=%d, m_range=%f\n",
+                 __func__, i, x, w, ratio, m_values[m_value], m_range);
             if (i == sample_count && (x <= XMARGIN || (samples.size() >= DESIRED_SAMPLES && ratio < 1.0)))
                 x = XMARGIN - 1; // Overscan by one pixel to the left
         }
-        path.lineTo(x, y_value(samples.at(i - 1)));
+        path.lineTo(x, y_value(samples.at(i)));
     }
     path.lineTo(x, YMARGIN + h);
 
@@ -430,7 +432,7 @@ int TrafficGraphWidget::setGraphRange(int value)
     return m_values[m_new_value];
 }
 
-void TrafficGraphWidget::saveData()
+void TrafficGraphWidget::SaveData()
 {
     if (m_time_stamp[0].empty() || m_data_dir.empty()) return;
     try {
@@ -484,7 +486,7 @@ void TrafficGraphWidget::saveData()
     }
 }
 
-bool TrafficGraphWidget::loadDataFromBinary()
+bool TrafficGraphWidget::LoadDataFromBinary()
 {
     try {
         fs::path pathTrafficGraph = fs::path(m_data_dir.c_str()) / "trafficgraph.dat";
@@ -505,7 +507,7 @@ bool TrafficGraphWidget::loadDataFromBinary()
         filein >> VARINT(m_baseline_bytes_recv) >> VARINT(m_baseline_bytes_sent);
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-            filein >> VARINT(m_last_bytes_in[i]) >> VARINT(m_last_bytes_out[i]) >> m_last_time[i];
+            filein >> VARINT(m_last_bytes_in[i]) >> VARINT(m_last_bytes_out[i]);
 
             uint16_t samplesSize;
             filein >> VARINT(samplesSize);
