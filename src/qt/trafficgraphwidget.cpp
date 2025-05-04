@@ -265,7 +265,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     drawOutlinedText(painter, y_value(val) - 2, GUIUtil::formatBytesps(val * 1000), opacity);
     if (m_toggle) drawOutlinedText(painter, y_value(val/10) - 2, GUIUtil::formatBytesps(val * 100), opacity);
 
-    if (m_tt_point && m_tt_point <= m_time_stamp[m_value].size() && isVisible() && !window()->isMinimized())
+    if (m_tt_point && m_tt_point <= m_time_stamp[m_value].size())
         drawTooltipPoint(painter);
     else QToolTip::hideText();
 }
@@ -453,7 +453,7 @@ void TrafficGraphWidget::saveData()
         fileout << VARINT(m_baseline_bytes_recv) << VARINT(m_baseline_bytes_sent);
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-            fileout << VARINT(m_last_bytes_in[i]) << VARINT(m_last_bytes_out[i]) << m_last_time[i];
+            fileout << VARINT(m_last_bytes_in[i]) << VARINT(m_last_bytes_out[i]);
 
             fileout << VARINT(static_cast<uint16_t>(m_time_stamp[i].size()));
 
@@ -514,7 +514,7 @@ bool TrafficGraphWidget::loadDataFromBinary()
                 static uint64_t last_time_ms;
                 uint64_t time_ms;
                 filein >> time_ms;
-                if (!j) last_time_ms = time_ms;
+                if (!j) m_last_time[i] = last_time_ms = time_ms;
                 if (time_ms > last_time_ms) return false; // Abort load if data invalid
                 m_time_stamp[i].push_back(static_cast<int64_t>(time_ms));
                 last_time_ms = time_ms;
