@@ -38,6 +38,7 @@ protected:
     int y_value(float) const;
     void mouseMoveEvent(QMouseEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
+    void mouseLeaveEvent(QEvent*) override;
     int findClosestPointByTimestamp(int) const;
 
 public Q_SLOTS:
