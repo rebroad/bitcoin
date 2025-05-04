@@ -148,7 +148,7 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
         sample_time = m_time_stamp[m_value].at(m_tt_point);
     if (!sample_time) // Either the oldest sample or the first ever sample
         sample_time = m_time_stamp[m_value].at(m_tt_point - 1);
-    int age = GetTime() - sample_time / 1000;
+    int age = std::chrono::duration_cast<std::chrono::seconds>(SteadyClock::now().time_since_epoch()).count() - sample_time / 1000;
     if (age < 60 * 60 * 23)
         str_tt += QString::fromStdString(FormatISO8601Time(sample_time / 1000));
     else
@@ -336,13 +336,19 @@ void TrafficGraphWidget::updateStuff()
     if (!m_client_model) return;
 
     int64_t expected_gap = m_timer->interval();
-    int64_t now = GetTime<std::chrono::milliseconds>().count();
+    int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(SteadyClock::now().time_since_epoch()).count();
+    bool latest_bytes = false;
+    quint64 bytes_in, bytes_out;
 
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
         int64_t msecs_per_sample = static_cast<int64_t>(m_values[i]) * 60000 / DESIRED_SAMPLES;
         if (now > (m_last_time[i] + msecs_per_sample - expected_gap / 2)) {
-            updateRates(i);
+            if (!latest_bytes) {
+                bytes_in = m_client_model->node().getTotalBytesRecv() + m_baseline_bytes_recv;
+                bytes_out = m_client_model->node().getTotalBytesSent() + m_baseline_bytes_sent;
+            }
+            updateRates(i, now, bytes_in, bytes_out);
             if (i == m_value) {
                 if (m_tt_point && m_tt_point <= DESIRED_SAMPLES) {
                     m_tt_point++; // Move the selected point to the left
@@ -391,19 +397,16 @@ void TrafficGraphWidget::updateStuff()
     } else graph_visible = false;
 }
 
-void TrafficGraphWidget::updateRates(int i)
+void TrafficGraphWidget::updateRates(int i, int64_t now, quint64 bytes_in, quint64 bytes_out)
 {
-    int64_t now = GetTime<std::chrono::milliseconds>().count();
     int64_t actual_gap = now - m_last_time[i];
-    quint64 bytesIn = m_client_model->node().getTotalBytesRecv() + m_baseline_bytes_recv,
-            bytesOut = m_client_model->node().getTotalBytesSent() + m_baseline_bytes_sent;
-    float in_rate_kilobytes_per_msec = static_cast<float>(bytesIn - m_last_bytes_in[i]) / actual_gap;
-    float out_rate_kilobytes_per_msec = static_cast<float>(bytesOut - m_last_bytes_out[i]) / actual_gap;
+    float in_rate_kilobytes_per_msec = static_cast<float>(bytes_in - m_last_bytes_in[i]) / actual_gap;
+    float out_rate_kilobytes_per_msec = static_cast<float>(bytes_out - m_last_bytes_out[i]) / actual_gap;
     m_samples_in[i].push_front(in_rate_kilobytes_per_msec);
     m_samples_out[i].push_front(out_rate_kilobytes_per_msec);
     m_time_stamp[i].push_front(now);
-    m_last_bytes_in[i] = bytesIn;
-    m_last_bytes_out[i] = bytesOut;
+    m_last_bytes_in[i] = bytes_in;
+    m_last_bytes_out[i] = bytes_out;
     m_last_time[i] = now;
     static int8_t fFull[VALUES_SIZE] = {};
     if (fFull[i] == 0 && m_time_stamp[i].size() <= DESIRED_SAMPLES)

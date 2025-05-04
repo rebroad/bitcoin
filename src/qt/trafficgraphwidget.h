@@ -42,7 +42,7 @@ protected:
 
 public Q_SLOTS:
     void updateStuff();
-    int setGraphRange(int value);
+    int setGraphRange(int);
 
 private:
     void saveData();
@@ -50,7 +50,7 @@ private:
     bool loadDataFromBinary();
     bool loadData();
     void updateFmax();
-    void updateRates(int);
+    void updateRates(int, int64_t, quint64, quint64);
     void focusSlider();
     void drawTooltipPoint(QPainter&);
 
