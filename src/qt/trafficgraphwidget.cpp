@@ -348,7 +348,6 @@ void TrafficGraphWidget::updateStuff()
     int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(SteadyClock::now().time_since_epoch()).count();
     bool latest_bytes = false;
     quint64 bytes_in, bytes_out;
-    int total_updates = 0; std::string str_updates;
 
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
@@ -359,8 +358,6 @@ void TrafficGraphWidget::updateStuff()
                 bytes_out = m_client_model->node().getTotalBytesSent() + m_baseline_bytes_sent;
             }
             updateRates(i, now, bytes_in, bytes_out);
-            total_updates++;
-            str_updates += std::to_string(i) + " ";
             if (i == m_value) {
                 if (m_tt_point && m_tt_point <= DESIRED_SAMPLES) {
                     m_tt_point++; // Move the selected point to the left
@@ -371,8 +368,6 @@ void TrafficGraphWidget::updateStuff()
             if (i == m_new_value) updateFmax();
         }
     }
-
-    if (total_updates > 0) printf("%s: total_updates: %d: %s\n", __func__, total_updates, str_updates.c_str());
 
     // Update display due to transition between ranges or new fmax
     static float y_increment = 0, x_increment = 0;
