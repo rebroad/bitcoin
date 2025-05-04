@@ -192,13 +192,6 @@ void DrawOutlinedText(QPainter& painter, int y, const QString& text, int opacity
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *)
 {
-    m_timing.paint_start = std::chrono::steady_clock::now();
-
-    // Calculate time since last paint start
-    m_timing.paint_interval = std::chrono::duration_cast<std::chrono::milliseconds>(
-            m_timing.paint_start - m_timing.prev_paint_start).count();
-    m_timing.prev_paint_start = m_timing.paint_start;
-
     m_update = false;
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
@@ -276,10 +269,6 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     if (m_tt_point && m_tt_point <= m_time_stamp[m_value].size())
         drawTooltipPoint(painter);
     else QToolTip::hideText();
-
-    m_timing.paint_end = std::chrono::steady_clock::now();
-    m_timing.paint_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            m_timing.paint_end - m_timing.paint_start).count();
 }
 
 void TrafficGraphWidget::updateFmax()
@@ -344,20 +333,10 @@ bool UpdateNum(float target, float& current, float& increment, int length)
 
 void TrafficGraphWidget::updateStuff()
 {
-    m_timing.update_start = std::chrono::steady_clock::now();
-
-    if (!m_client_model) {
-        m_timing.update_end = std::chrono::steady_clock::now();
-        return;
-    }
+    if (!m_client_model) return;
 
     int64_t expected_gap = m_timer->interval();
     int64_t now = GetTime<std::chrono::milliseconds>().count();
-
-    // Calculate time since last update start
-    m_timing.update_interval = std::chrono::duration_cast<std::chrono::milliseconds>(
-            m_timing.update_start - m_timing.prev_update_start).count();
-    m_timing.prev_update_start = m_timing.update_start;
 
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
@@ -410,12 +389,6 @@ void TrafficGraphWidget::updateStuff()
         if (!graph_visible) focusSlider();
         graph_visible = true;
     } else graph_visible = false;
-
-    m_timing.update_end = std::chrono::steady_clock::now();
-    m_timing.update_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            m_timing.update_end - m_timing.update_start).count();
-
-    logTimingData();
 }
 
 void TrafficGraphWidget::updateRates(int i)
@@ -669,14 +642,4 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
     }
 
     return dst_point;
-}
-
-void TrafficGraphWidget::logTimingData()
-{
-    // Only log if we have meaningful data
-    printf("TrafficGraphWidget: update_int=%ldms paint_int=%ldms - update_dur=%ldms paint_dur=%ldms\n",
-        m_timing.update_interval, m_timing.paint_interval,
-        m_timing.update_duration, m_timing.paint_duration);
-    m_timing.update_interval = m_timing.paint_interval = 0;
-    m_timing.update_duration = m_timing.paint_duration = 0;
 }
