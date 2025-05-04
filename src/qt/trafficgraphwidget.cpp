@@ -62,17 +62,11 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
     path.moveTo(x + 1, YMARGIN + h); // Overscan by 1 pixel to hide bright line
     for (i = 0; i < sample_count; ++i) {
         if (i < 1) path.lineTo(x + 1, y_value(samples.at(0))); // Overscan by 1 pixel to the right
-        { // x is already calculated for the first sample
-            double ratio = static_cast<double>(i) * m_values[m_value] / m_range / (DESIRED_SAMPLES - 1);
-            x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
-            int old_x = x;
-            if (i == sample_count-1 && (x <= XMARGIN || (samples.size() >= DESIRED_SAMPLES && ratio < 1.0))) {
-                path.lineTo(x, y_value(samples.at(i)));
-                x = XMARGIN - 1; // Overscan by one pixel to the left
-            }
-            if (i == sample_count-1)
-                printf("%s: i=%d, x=%d->%d, w=%d, ratio=%f, m_value=%d, m_range=%f\n",
-                    __func__, i, old_x, x, w, ratio, m_values[m_value], m_range);
+        double ratio = static_cast<double>(i) * m_values[m_value] / m_range / (DESIRED_SAMPLES - 1);
+        x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
+        if (i == sample_count-1 && (x <= XMARGIN || (samples.size() >= DESIRED_SAMPLES && ratio < 1.0))) {
+            path.lineTo(x, y_value(samples.at(i)));
+            x = XMARGIN - 1; // Overscan by one pixel to the left
         }
         path.lineTo(x, y_value(samples.at(i)));
     }
@@ -678,10 +672,7 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
 void TrafficGraphWidget::logTimingData()
 {
     // Only log if we have meaningful data
-    if (m_timing.update_interval > 0 || m_timing.paint_interval > 0) {
-        LogPrintf("TrafficGraphWidget: update[%lldms/%lldms] paint[%lldms/%lldms] - update_dur=%lldms paint_dur=%lldms\n",
-            m_timing.update_interval, m_timer->interval(),
-            m_timing.paint_interval, 75,
-            m_timing.update_duration, m_timing.paint_duration);
-    }
+    LogPrintf("TrafficGraphWidget: update_int=%lldms paint_int=%lldms - update_dur=%lldms paint_dur=%lldms\n",
+        m_timing.update_interval, m_timing.paint_interval,
+        m_timing.update_duration, m_timing.paint_duration);
 }

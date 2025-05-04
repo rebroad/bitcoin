@@ -1164,27 +1164,7 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
-    static int64_t last_click_time = 0;
-    static bool last_click_was_up = false;
-    unsigned int range = (value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
-    bool bouncing = false;
-    if (!m_slider_in_use) {
-        // Avoid accidental oscillation of direction due to rapid mouse clicks
-        int64_t now = GetTime<std::chrono::milliseconds>().count();
-        bool this_click_is_up = false;
-        if (value > m_set_slider_value) this_click_is_up = true;
-        if (now - last_click_time < 250 && this_click_is_up != last_click_was_up) {
-            bouncing = true;
-            ui->sldGraphRange->blockSignals(true);
-            ui->sldGraphRange->setValue(m_set_slider_value);
-            ui->sldGraphRange->blockSignals(false);
-        }
-        last_click_time = now;
-        last_click_was_up = this_click_is_up;
-    }
-    m_set_slider_value = value;
-    if (bouncing) return;
-    setTrafficGraphRange(range);
+    setTrafficGraphRange((value + 100) / 200 + 1);
 }
 
 void RPCConsole::setTrafficGraphRange(int value)
