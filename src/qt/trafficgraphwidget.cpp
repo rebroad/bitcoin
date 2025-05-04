@@ -294,38 +294,38 @@ void TrafficGraphWidget::update_fmax()
  * - If moving too quickly, decelerate
  * - If close enough to target, snap to it
  */
-bool update_num(float new_val, float& current, float& increment, int length)
+bool UpdateNum(float target, float& current, float& increment, int length)
 {
-    if (new_val <= 0 || current == new_val) return false;
+    if (target <= 0 || current == target) return false;
 
     if (abs(increment) <= abs(0.8 * current) / length) { // allow equal to as current and increment could be zero
-        if (new_val > current)
+        if (target > current)
             increment = 1.0 * (current + 1) / length; // +1s are to get it started even if current is zero
         else
             increment = -1.0 * (current + 1) / length;
-        if (abs(increment) > abs(new_val - current)) { // Only check this when creating an increment
-            increment = 0; // Nothing to do!
-            current = new_val;
+        if (abs(increment) > abs(target - current)) { // Only check this when creating an increment
+            increment = 0; // We have arrived at the target
+            current = target;
             return true;
         }
     } else {
-        if (((increment > 0) && (current + increment * 2 > new_val)) ||
-                ((increment < 0) && (current + increment * 2 < new_val))) {
-            increment = increment / 2; // Keep the momentum going even if new_val is elsewhere.
+        if (((increment > 0) && (current + increment * 2 > target)) ||
+                ((increment < 0) && (current + increment * 2 < target))) {
+            increment = increment / 2; // Keep the momentum going even if target is elsewhere.
         } else {
-            if (((increment > 0) && (current + increment * 8 < new_val)) ||
-                    ((increment < 0) && (current + increment * 8 > new_val)))
+            if (((increment > 0) && (current + increment * 8 < target)) ||
+                    ((increment < 0) && (current + increment * 8 > target)))
                 increment = increment * 2;
         }
     }
     if (abs(increment) < 0.8 * current / length) {
-        if ((increment >= 0 && new_val > current) || (increment <= 0 && new_val < current)) {
-            current = new_val;
+        if ((increment >= 0 && target > current) || (increment <= 0 && target < current)) {
+            current = target;
             increment = 0;
         }
     } else
         current += increment;
-    if (current <= 0.0f) current = 0.0001f;
+    if (current <= 0.0f) current = 0.0001f; // For fmax = 0, still show a graph
 
     return true;
 }
@@ -354,12 +354,12 @@ void TrafficGraphWidget::updateStuff()
 
     // Update display due to transition between ranges or new fmax
     static float y_increment = 0, x_increment = 0;
-    if (update_num(m_new_fmax, m_fmax, y_increment, 300)) m_update = true;
+    if (UpdateNum(m_new_fmax, m_fmax, y_increment, 300)) m_update = true;
     int next_m_value = m_value;
-    if (update_num(m_values[m_new_value], m_range, x_increment, 500)) {
+    if (UpdateNum(m_values[m_new_value], m_range, x_increment, 500)) {
         if (m_values[m_new_value] > m_range && m_values[m_value] < m_range) {
             next_m_value = m_value + 1;
-        } else if (m_value > 0 && m_values[m_new_value] <= m_range && m_values[m_value - 1] > m_range * 0.99)
+        } else if (m_new_value < m_value && m_values[m_value - 1] > m_range * 0.99)
             next_m_value = m_value - 1;
         m_update = true;
     } else if (m_value != m_new_value) {
