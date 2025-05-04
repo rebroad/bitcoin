@@ -68,8 +68,10 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
             if (i < 1 || i == sample_count-1)
                 printf("%s: i=%d, x=%d, w=%d, ratio=%f, m_value=%d, m_range=%f\n",
                     __func__, i, x, w, ratio, m_values[m_value], m_range);
-            if (i == sample_count-1 && (x <= XMARGIN || (samples.size() >= DESIRED_SAMPLES && ratio < 1.0)))
-                x = XMARGIN - 1; // Overscan by one pixel to the left
+            if (i == sample_count-1 && (x <= XMARGIN || (samples.size() >= DESIRED_SAMPLES && ratio < 1.0))) {
+                path.lineTo(x, y_value(samples.at(i)));
+                x--; // Overscan by one pixel to the left
+
         }
         path.lineTo(x, y_value(samples.at(i)));
     }
@@ -252,7 +254,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
     // Draw black lines to mask the bright overscanned edges
     painter.setPen(Qt::black);
-    painter.drawLine(XMARGIN - 1, YMARGIN, XMARGIN - 1, YMARGIN + h);
+    painter.drawLine(x, YMARGIN, XMARGIN - 1, YMARGIN + h);
     painter.drawLine(XMARGIN + w + 1, YMARGIN, XMARGIN + w + 1, YMARGIN + h);
 
     // Draw the bottom axis line and labels after the graph
