@@ -523,6 +523,8 @@ bool TrafficGraphWidget::loadDataFromBinary()
 
         filein >> VARINT(m_baseline_bytes_recv) >> VARINT(m_baseline_bytes_sent);
 
+        int64_t current_time = std::chrono::duration_cast<std::chrono::milliseconds>(SteadyClock::now().time_since_epoch()).count();
+
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
             filein >> VARINT(m_last_bytes_in[i]) >> VARINT(m_last_bytes_out[i]);
 
@@ -534,7 +536,7 @@ bool TrafficGraphWidget::loadDataFromBinary()
                 uint64_t time_ms;
                 filein >> time_ms;
                 if (!j) m_last_time[i] = last_time_ms = time_ms;
-                if (time_ms > last_time_ms) return false; // Abort load if data invalid
+                if (time_ms > last_time_ms || time_ms > current_time) return false; // Abort load if data invalid or in future
                 m_time_stamp[i].push_back(static_cast<int64_t>(time_ms));
                 last_time_ms = time_ms;
             }
