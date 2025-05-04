@@ -143,10 +143,10 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
     painter.setPen(Qt::yellow);
     painter.drawEllipse(QPointF(x, y), 3, 3);
     QString str_tt;
-    int64_t sample_time;
-    if (m_tt_point < m_time_stamp[m_value].size()) {
+    int64_t sample_time = 0;
+    if (m_tt_point < m_time_stamp[m_value].size())
         sample_time = m_time_stamp[m_value].at(m_tt_point);
-    } else
+    if (!sample_time) // Either the oldest sample or the first ever sample
         sample_time = m_time_stamp[m_value].at(m_tt_point - 1);
     int age = GetTime() - sample_time / 1000;
     if (age < 60 * 60 * 23)
