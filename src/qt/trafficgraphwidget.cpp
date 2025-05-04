@@ -266,7 +266,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
     static int opacity = 0; // Opacity of the black outline around the text
-    if (x < 1) opacity = 64; // TODO - simpler equation
+    if (x < 1) opacity = 64;
     else if (x < 70 && opacity < 64) opacity += 4;
     else if (x > 70) opacity = 0;
 
