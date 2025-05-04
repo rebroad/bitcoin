@@ -176,7 +176,7 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
 }
 
 // Helper function to draw text with outline
-void drawOutlinedText(QPainter& painter, int y, const QString& text, int opacity)
+void DrawOutlinedText(QPainter& painter, int y, const QString& text, int opacity)
 {
     painter.save();
 
@@ -263,13 +263,14 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
 
     static int opacity = 0; // Opacity of the black outline around the text
-    if (x < 70 && opacity < 64) opacity += 4;
+    if (x < 1) opacity = 64;
+    else if (x < 70 && opacity < 64) opacity += 4;
     else if (x > 70) opacity = 0;
 
     // Draw outlined text for labels with proper vertical positioning
-    drawOutlinedText(painter, y_value(val*10) - 2, GUIUtil::formatBytesps(val * 10000), opacity);
-    drawOutlinedText(painter, y_value(val) - 2, GUIUtil::formatBytesps(val * 1000), opacity);
-    if (m_toggle) drawOutlinedText(painter, y_value(val/10) - 2, GUIUtil::formatBytesps(val * 100), opacity);
+    DrawOutlinedText(painter, y_value(val*10) - 2, GUIUtil::formatBytesps(val * 10000), opacity);
+    DrawOutlinedText(painter, y_value(val) - 2, GUIUtil::formatBytesps(val * 1000), opacity);
+    if (m_toggle) DrawOutlinedText(painter, y_value(val/10) - 2, GUIUtil::formatBytesps(val * 100), opacity);
 
     if (m_tt_point && m_tt_point <= m_time_stamp[m_value].size())
         drawTooltipPoint(painter);
