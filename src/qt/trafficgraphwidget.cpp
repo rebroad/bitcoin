@@ -93,9 +93,9 @@ void TrafficGraphWidget::mousePressEvent(QMouseEvent* event)
     update();
 }
 
-void TrafficGraphWidget::mouseLeaveEvent(QEvent* event)
+void TrafficGraphWidget::leaveEvent(QEvent* event)
 {
-    QWidget::mouseLeaveEvent(event);
+    QWidget::leaveEvent(event);
     if (!m_tt_point) return;
     m_tt_point = 0;
     m_update = true;
