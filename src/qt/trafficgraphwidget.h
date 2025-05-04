@@ -54,6 +54,20 @@ private:
     void focusSlider();
     void drawTooltipPoint(QPainter&);
 
+    // Timing instrumentation
+    struct TimingData {
+        std::chrono::steady_clock::time_point update_start;
+        std::chrono::steady_clock::time_point update_end;
+        std::chrono::steady_clock::time_point paint_start;
+        std::chrono::steady_clock::time_point paint_end;
+        int64_t update_interval{0};  // Time between updates
+        int64_t paint_interval{0};   // Time between paints
+        int64_t update_duration{0};  // Time spent in updateStuff
+        int64_t paint_duration{0};   // Time spent in paintEvent
+    } m_timing;
+
+    void logTimingData();
+
     QTimer* m_timer{nullptr};
     float m_fmax{1.1f};
     float m_new_fmax{1.1f};
