@@ -64,7 +64,7 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
         if (i < 1) path.lineTo(x + 1, y_value(samples.at(0))); // Overscan by 1 pixel to the right
         double ratio = static_cast<double>(i) * m_values[m_value] / m_range / (DESIRED_SAMPLES - 1);
         x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
-        if (i == sample_count-1 && (x <= XMARGIN || (samples.size() >= DESIRED_SAMPLES && ratio < 1.0))) {
+        if (i == sample_count-1 && (x == XMARGIN || (samples.size() >= DESIRED_SAMPLES && ratio < 1.0))) {
             path.lineTo(x, y_value(samples.at(i)));
             x = XMARGIN - 1; // Overscan by one pixel to the left
         }
@@ -158,9 +158,9 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
     if (!sample_time) // Either the oldest sample or the first ever sample
         sample_time = m_time_stamp[m_value].at(m_tt_point - 1);
     int age = std::chrono::duration_cast<std::chrono::seconds>(SteadyClock::now().time_since_epoch()).count() - sample_time / 1000;
-    if (age < 60 * 60 * 23)
-        str_tt += QString::fromStdString(FormatISO8601Time(sample_time / 1000));
-    else
+    //if (age < 60 * 60 * 23)
+    //    str_tt += QString::fromStdString(FormatISO8601Time(sample_time / 1000));
+    //else
         str_tt += QString::fromStdString(FormatISO8601DateTime(sample_time / 1000));
     int duration = (m_time_stamp[m_value].at(m_tt_point - 1) - sample_time);
     if (duration > 0) {
@@ -203,7 +203,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 {
     m_update = false;
     QPainter painter(this);
-    painter.fillRect(rect(), Qt::black);
+    painter.fillRect(rect().adjusted(10, 0, 0, 0), Qt::black);
 
     if (m_fmax < 0.0001f) return;
 
@@ -256,10 +256,9 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.drawPath(p);
     }
 
-    // Draw black lines to mask the bright overscanned edges
-    painter.setPen(Qt::black);
-    painter.drawLine(XMARGIN - 1, YMARGIN, XMARGIN - 1, YMARGIN + h);
-    painter.drawLine(XMARGIN + w + 1, YMARGIN, XMARGIN + w + 1, YMARGIN + h);
+    // Draw the left and right black margins to mask the bright overscanned edges
+    painter.fillRect(QRect(0, 0, 10, height()), Qt::black);
+    painter.fillRect(QRect(width() - 10, 0, 10, height()), Qt::black);
 
     // Draw the bottom axis line and labels after the graph
     painter.setPen(axisCol);
