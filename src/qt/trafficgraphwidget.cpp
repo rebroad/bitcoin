@@ -238,7 +238,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         }
     }
 
-    painter.setRenderHint(QPainter::Antialiasing);
+    //painter.setRenderHint(QPainter::Antialiasing);
     if (m_samples_in[m_value].size()) {
         QPainterPath p;
         paintPath(p, m_samples_in[m_value]);
