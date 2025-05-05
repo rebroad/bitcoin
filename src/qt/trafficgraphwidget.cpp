@@ -28,7 +28,6 @@ TrafficGraphWidget::TrafficGraphWidget(QWidget* parent)
     m_timer->setInterval(75);
     m_timer->start();
     setMouseTracking(true);
-    setFocusPolicy(Qt::StrongFocus); // Make widget focusable to respond to keyboard events
 }
 
 void TrafficGraphWidget::setClientModel(ClientModel *model)
