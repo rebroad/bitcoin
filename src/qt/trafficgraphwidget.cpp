@@ -256,13 +256,13 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.drawPath(p);
     }
 
-    // Draw black lines to mask the overscanned edges of the graph
-    painter.fillRect(0, 0, XMARGIN, hgt, Qt::black);
-    painter.fillRect(wid - XMARGIN, 0, XMARGIN, hgt, Qt::black);
-
     // Draw the bottom axis line and labels after the graph
     painter.setPen(axisCol);
     painter.drawLine(XMARGIN, hgt - YMARGIN, wid - XMARGIN, hgt - YMARGIN);
+
+    // Draw black lines to mask the overscanned edges of the graph
+    painter.fillRect(0, 0, XMARGIN, hgt, Qt::black);
+    painter.fillRect(wid - XMARGIN, 0, XMARGIN, hgt, Qt::black);
     painter.restore(); // Turn off antialiasing
 
     static int opacity = 0; // Opacity of the black outline around the text
