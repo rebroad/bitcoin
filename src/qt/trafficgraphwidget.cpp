@@ -203,12 +203,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 {
     m_update = false;
     QPainter painter(this);
-    painter.fillRect(rect().adjusted(10, 0, 0, 0), Qt::black);
+    painter.fillRect(rect(), Qt::black);
 
     if (m_fmax < 0.0001f) return;
 
     QColor axisCol(Qt::gray);
-    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
+    int hgt = height(), wid = width();
 
     // decide what order of magnitude we are
     int base = std::floor(std::log10(m_fmax));
@@ -218,7 +218,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.setPen(axisCol);
     for(float y = val; y < m_fmax; y += val) {
         int yy = y_value(y);
-        painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
+        painter.drawLine(XMARGIN, yy, wid - XMARGIN, yy);
     }
 
     // if we drew 10 (or 3 when toggles) or fewer lines, break them up at the next lower order of magnitude
@@ -230,12 +230,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
             // don't overwrite lines drawn above
             if (count % 10 == 0) continue;
             int yy = y_value(y);
-            painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
+            painter.drawLine(XMARGIN, yy, wid - XMARGIN, yy);
         }
         if (m_toggle) {
             int yy = y_value(val * 0.1);
             painter.setPen(axisCol.darker().darker());
-            painter.drawLine(XMARGIN, yy, width() - XMARGIN, yy);
+            painter.drawLine(XMARGIN, yy, wid - XMARGIN, yy);
         }
     }
 
@@ -257,12 +257,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     }
 
     // Draw the left and right black margins to mask the bright overscanned edges
-    painter.fillRect(QRect(0, 0, 10, height()), Qt::black);
-    painter.fillRect(QRect(width() - 10, 0, 10, height()), Qt::black);
+    painter.fillRect(QRect(0, 0, XMARGIN, hgt), Qt::black);
+    painter.fillRect(QRect(wid - XMARGIN, 0, XMARGIN, hgt), Qt::black);
 
     // Draw the bottom axis line and labels after the graph
     painter.setPen(axisCol);
-    painter.drawLine(XMARGIN, YMARGIN + h, width() - XMARGIN, YMARGIN + h);
+    painter.drawLine(XMARGIN, hgt - YMARGIN, wid - XMARGIN, hgt - YMARGIN);
 
     static int opacity = 0; // Opacity of the black outline around the text
     if (x < 1) opacity = 64;
