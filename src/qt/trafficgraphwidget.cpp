@@ -157,7 +157,7 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
         sample_time = m_time_stamp[m_value].at(m_tt_point);
     if (!sample_time) // Either the oldest sample or the first ever sample
         sample_time = m_time_stamp[m_value].at(m_tt_point - 1);
-    int age = std::chrono::duration_cast<std::chrono::seconds>(SteadyClock::now().time_since_epoch()).count() - sample_time / 1000;
+    //int age = std::chrono::duration_cast<std::chrono::seconds>(SteadyClock::now().time_since_epoch()).count() - sample_time / 1000;
     //if (age < 60 * 60 * 23)
     //    str_tt += QString::fromStdString(FormatISO8601Time(sample_time / 1000));
     //else
@@ -517,7 +517,7 @@ bool TrafficGraphWidget::loadDataFromBinary()
 
         filein >> VARINT(m_baseline_bytes_recv) >> VARINT(m_baseline_bytes_sent);
 
-        int64_t current_time = std::chrono::duration_cast<std::chrono::milliseconds>(SteadyClock::now().time_since_epoch()).count();
+        uint64_t current_time = std::chrono::duration_cast<std::chrono::milliseconds>(SteadyClock::now().time_since_epoch()).count();
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
             filein >> VARINT(m_last_bytes_in[i]) >> VARINT(m_last_bytes_out[i]);
