@@ -347,7 +347,7 @@ void TrafficGraphWidget::updateStuff()
     int64_t expected_gap = m_timer->interval();
     int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(SystemClock::now().time_since_epoch()).count();
     bool latest_bytes = false;
-    quint64 bytes_in, bytes_out;
+    quint64 bytes_in = 0, bytes_out = 0;
 
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
