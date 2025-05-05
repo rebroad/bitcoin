@@ -257,7 +257,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     }
 
     // Mask the overscanned edges of the graph
-    painter.fillRect(QRect(x, 0, XMARGIN, hgt), Qt::black);
+    if (x < XMARGIN)
+        painter.fillRect(QRect(x, 0, XMARGIN - x, hgt), Qt::black);
     painter.fillRect(QRect(wid - XMARGIN, 0, 1, hgt), Qt::black);
 
     // Draw the bottom axis line and labels after the graph
