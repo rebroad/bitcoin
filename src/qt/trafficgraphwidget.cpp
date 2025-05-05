@@ -156,7 +156,7 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
         sample_time = m_time_stamp[m_value].at(m_tt_point);
     if (!sample_time) // Either the oldest sample or the first ever sample
         sample_time = m_time_stamp[m_value].at(m_tt_point - 1);
-    int age = std::chrono::duration_cast<std::chrono::seconds>(SystemClock::now().time_since_epoch()).count() - sample_time / 1000;
+    int age = TicksSinceEpoch<std::chrono::seconds>(SystemClock::now()) - sample_time / 1000;
     if (age < 60 * 60 * 23)
         str_tt += QString::fromStdString(FormatISO8601Time(sample_time / 1000));
     else
@@ -345,7 +345,7 @@ void TrafficGraphWidget::updateStuff()
     if (!m_client_model) return;
 
     int64_t expected_gap = m_timer->interval();
-    int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(SystemClock::now().time_since_epoch()).count();
+    int64_t now = TicksSinceEpoch<std::chrono::milliseconds>(SystemClock::now());
     bool latest_bytes = false;
     quint64 bytes_in = 0, bytes_out = 0;
 
@@ -519,7 +519,7 @@ bool TrafficGraphWidget::loadDataFromBinary()
 
         filein >> VARINT(m_baseline_bytes_recv) >> VARINT(m_baseline_bytes_sent);
 
-        uint64_t current_time = std::chrono::duration_cast<std::chrono::milliseconds>(SystemClock::now().time_since_epoch()).count();
+        uint64_t current_time = TicksSinceEpoch<std::chrono::milliseconds>(SystemClock::now());
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
             filein >> VARINT(m_last_bytes_in[i]) >> VARINT(m_last_bytes_out[i]);
