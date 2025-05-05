@@ -240,7 +240,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     }
 
     painter.setRenderHint(QPainter::Antialiasing);
-    if (!m_samples_in[m_value].empty()) {
+    if (m_samples_in[m_value].size()) {
         QPainterPath p;
         paintPath(p, m_samples_in[m_value]);
         painter.fillPath(p, QColor(0, 255, 0, 128));
@@ -248,7 +248,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.drawPath(p);
     }
     int x = 0;
-    if (!m_samples_out[m_value].empty()) {
+    if (m_samples_out[m_value].size()) {
         QPainterPath p;
         x = paintPath(p, m_samples_out[m_value]);
         painter.fillPath(p, QColor(255, 0, 0, 128));
@@ -596,7 +596,6 @@ bool TrafficGraphWidget::loadData()
 
 int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
 {
-
     if (!m_tt_point || m_tt_point > m_time_stamp[m_value].size() ||
         m_time_stamp[dst_range].empty()) {
         return 0;
