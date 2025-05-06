@@ -248,11 +248,11 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.drawPath(p);
     }
 
-    // Draw black lines to mask the overscanned edges of the graph
+    // Draw black bars and lines to mask the overscanned edges of the graph
+    painter.fillRect(0, 0, XMARGIN - 1, hgt, Qt::black);
+    painter.fillRect(wid - XMARGIN + 1, 0, XMARGIN, hgt, Qt::black);
     painter.setPen(Qt::black);
-    painter.drawLine(XMARGIN - 1, 0, XMARGIN - 1, hgt);
-    painter.drawLine(XMARGIN, 0, XMARGIN, hgt);
-    painter.drawLine(wid - XMARGIN + 1, 0, wid - XMARGIN + 1, hgt);
+    painter.drawLine(XMARGIN, 0, XMARGIN, hgt); // Antialiased lines to create some blur
     painter.drawLine(wid - XMARGIN, 0, wid - XMARGIN, hgt);
 
     // Draw the bottom axis line after the graph
