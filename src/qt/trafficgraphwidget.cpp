@@ -180,22 +180,18 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
 // Helper function to draw text with outline
 void DrawOutlinedText(QPainter& painter, int y, const QString& text, int opacity)
 {
-    painter.save();
-
     // Draw the outline by drawing the text multiple times with small offsets
     if (opacity) {
         painter.setPen(QColor(0, 0, 0, opacity));
         for (int dx = -2; dx <= 2; dx++)
             for (int dy = -2; dy <= 2; dy++)
                 if (dx != 0 || dy != 0)
-                    painter.drawText(XMARGIN + dx, y + dy, text);
+                    painter.drawText(XMARGIN + dx, y + dy - 2, text);
     }
 
     // Draw the main text
     painter.setPen(Qt::white);
-    painter.drawText(XMARGIN, y, text);
-
-    painter.restore();
+    painter.drawText(XMARGIN, y - 2, text);
 }
 
 void TrafficGraphWidget::paintEvent(QPaintEvent *)
@@ -203,7 +199,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     m_update = false;
     QPainter painter(this);
     int hgt = height(), wid = width();
-    painter.fillRect(XMARGIN, 0, wid - XMARGIN * 2, hgt, Qt::black);
+    painter.fillRect(rect(), Qt::black);
 
     // decide what order of magnitude we are
     int base = std::floor(std::log10(m_fmax));
@@ -252,25 +248,27 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.drawPath(p);
     }
 
-    // Draw the bottom axis line and labels after the graph
+    // Draw black lines to mask the overscanned edges of the graph
+    painter.setPen(Qt::black);
+    painter.drawLine(XMARGIN - 1, 0, XMARGIN - 1, hgt);
+    painter.drawLine(XMARGIN, 0, XMARGIN, hgt);
+    painter.drawLine(wid - XMARGIN + 1, 0, wid - XMARGIN + 1, hgt);
+    painter.drawLine(wid - XMARGIN, 0, wid - XMARGIN, hgt);
+
+    // Draw the bottom axis line after the graph
     painter.setPen(axisCol);
     painter.setRenderHint(QPainter::Antialiasing, false);
     painter.drawLine(XMARGIN, hgt - YMARGIN, wid - XMARGIN, hgt - YMARGIN);
-
-    // Draw black bars to mask the overscanned edges of the graph
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.fillRect(0, 0, XMARGIN - 1, hgt, Qt::black);
-    painter.fillRect(wid - XMARGIN + 1, 0, XMARGIN - 1, hgt, Qt::black);
 
     static int opacity = 0; // Opacity of the black outline around the text
     if (x < 1) opacity = 64;
     else if (x < 70 && opacity < 64) opacity += 4;
     else if (x > 70) opacity = 0;
 
-    // Draw outlined text for labels with proper vertical positioning
-    DrawOutlinedText(painter, yValue(val*10) - 2, GUIUtil::formatBytesps(val * 10000), opacity);
-    DrawOutlinedText(painter, yValue(val) - 2, GUIUtil::formatBytesps(val * 1000), opacity);
-    if (m_toggle) DrawOutlinedText(painter, yValue(val/10) - 2, GUIUtil::formatBytesps(val * 100), opacity);
+    // Draw outlined text for speed labels
+    DrawOutlinedText(painter, yValue(val*10), GUIUtil::formatBytesps(val * 10000), opacity);
+    DrawOutlinedText(painter, yValue(val), GUIUtil::formatBytesps(val * 1000), opacity);
+    if (m_toggle) DrawOutlinedText(painter, yValue(val/10), GUIUtil::formatBytesps(val * 100), opacity);
 
     if (m_tt_point && m_tt_point <= m_time_stamp[m_value].size())
         drawTooltipPoint(painter);
