@@ -1193,7 +1193,7 @@ void RPCConsole::on_sldGraphRange_sliderPressed() { m_slider_in_use = true; }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
-    if (!m_slider_in_use && ui->trafficGraph->GraphRangeBump())
+    if (!m_slider_in_use && ui->trafficGraph->graphRangeBump())
         setTrafficGraphRange(0); // bump it up
 
     // Add baseline values to the current node values

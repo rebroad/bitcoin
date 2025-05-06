@@ -28,14 +28,14 @@ class TrafficGraphWidget : public QWidget
 public:
     explicit TrafficGraphWidget(QWidget* parent = nullptr);
     void setClientModel(ClientModel* model);
-    bool GraphRangeBump() const { return m_bump_value; }
+    bool graphRangeBump() const { return m_bump; }
     unsigned int getCurrentRangeIndex() const { return m_new_value; }
     quint64 getBaselineBytesRecv() const { return m_baseline_bytes_recv; }
     quint64 getBaselineBytesSent() const { return m_baseline_bytes_sent; }
 
 protected:
     void paintEvent(QPaintEvent*) override;
-    int y_value(float) const;
+    int yValue(float) const;
     void mouseMoveEvent(QMouseEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
     void leaveEvent(QEvent*) override;
@@ -68,7 +68,7 @@ private:
     ClientModel* m_client_model{nullptr};
     int m_value{0};
     int m_new_value{0};
-    bool m_bump_value{false};
+    bool m_bump{false};
     bool m_toggle{true}; // Default to logarithmic
     bool m_update{false}; // whether to redraw graph
     int m_tt_point{0}; // 0 = no tooltip (array index + 1)

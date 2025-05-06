@@ -46,7 +46,7 @@ void TrafficGraphWidget::setClientModel(ClientModel *model)
     }
 }
 
-int TrafficGraphWidget::y_value(float value) const
+int TrafficGraphWidget::yValue(float value) const
 {
     int h = height() - YMARGIN * 2;
     return YMARGIN + h - (h * 1.0 * (m_toggle ? (std::pow(value, 0.30102) / std::pow(m_fmax, 0.30102)) : (value / m_fmax)));
@@ -60,14 +60,14 @@ int TrafficGraphWidget::paintPath(QPainterPath& path, const QQueue<float>& sampl
     int x = XMARGIN + w, i;
     path.moveTo(x + 1, YMARGIN + h); // Overscan by 1 pixel to hide bright line
     for (i = 0; i <= sample_count; ++i) {
-        if (i < 1) path.lineTo(x + 1, y_value(samples.at(0))); // Overscan by 1 pixel to the right
+        if (i < 1) path.lineTo(x + 1, yValue(samples.at(0))); // Overscan by 1 pixel to the right
         double ratio = static_cast<double>(i) * m_values[m_value] / m_range / (DESIRED_SAMPLES - 1);
         x = XMARGIN + static_cast<int>(w - w * ratio + 0.5);
         if (i == sample_count && (sample_count < samples.size() - 1 || samples.size() >= DESIRED_SAMPLES)) {
-            path.lineTo(x, y_value(samples.at(i)));
+            path.lineTo(x, yValue(samples.at(i)));
             x = XMARGIN - 1; // Overscan by one pixel to the left
         }
-        path.lineTo(x, y_value(samples.at(i)));
+        path.lineTo(x, yValue(samples.at(i)));
     }
     path.lineTo(x, YMARGIN + h);
 
@@ -119,7 +119,7 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent* event)
     if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
         for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
             float in_val = m_samples_in[m_value].at(test_i), out_val = m_samples_out[m_value].at(test_i);
-            int y_in = y_value(in_val), y_out = y_value(out_val);
+            int y_in = yValue(in_val), y_out = yValue(out_val);
             unsigned int distance_in = abs(y - y_in), distance_out = abs(y - y_out);
             unsigned int min_distance = std::min(distance_in, distance_out);
             if (min_distance < smallest_distance) {
@@ -147,7 +147,7 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
     float in_sample = m_samples_in[m_value].at(m_tt_point-1);
     float out_sample = m_samples_out[m_value].at(m_tt_point-1);
     float selected_sample = m_tt_in_series ? in_sample : out_sample;
-    int y = y_value(selected_sample);
+    int y = yValue(selected_sample);
     painter.setPen(Qt::yellow);
     painter.drawEllipse(QPointF(x, y), 3, 3);
     QString str_tt;
@@ -213,7 +213,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     QColor axisCol(Qt::gray);
     painter.setPen(axisCol);
     for(float y = val; y < m_fmax; y += val) {
-        int yy = y_value(y);
+        int yy = yValue(y);
         painter.drawLine(XMARGIN, yy, wid - XMARGIN, yy);
     }
 
@@ -225,11 +225,11 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         for (float y = val; y < (!m_toggle || m_fmax / val < 20 ? m_fmax : val*10); y += val, count++) {
             // don't overwrite lines drawn above
             if (count % 10 == 0) continue;
-            int yy = y_value(y);
+            int yy = yValue(y);
             painter.drawLine(XMARGIN, yy, wid - XMARGIN, yy);
         }
         if (m_toggle) {
-            int yy = y_value(val * 0.1);
+            int yy = yValue(val * 0.1);
             painter.setPen(axisCol.darker().darker());
             painter.drawLine(XMARGIN, yy, wid - XMARGIN, yy);
         }
@@ -259,8 +259,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
     // Draw black bars to mask the overscanned edges of the graph
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.fillRect(0, 0, XMARGIN, hgt, Qt::black);
-    painter.fillRect(wid - XMARGIN, 0, XMARGIN, hgt, Qt::black);
+    painter.fillRect(0, 0, XMARGIN - 1, hgt, Qt::black);
+    painter.fillRect(wid - XMARGIN + 1, 0, XMARGIN - 1, hgt, Qt::black);
 
     static int opacity = 0; // Opacity of the black outline around the text
     if (x < 1) opacity = 64;
@@ -268,9 +268,9 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     else if (x > 70) opacity = 0;
 
     // Draw outlined text for labels with proper vertical positioning
-    DrawOutlinedText(painter, y_value(val*10) - 2, GUIUtil::formatBytesps(val * 10000), opacity);
-    DrawOutlinedText(painter, y_value(val) - 2, GUIUtil::formatBytesps(val * 1000), opacity);
-    if (m_toggle) DrawOutlinedText(painter, y_value(val/10) - 2, GUIUtil::formatBytesps(val * 100), opacity);
+    DrawOutlinedText(painter, yValue(val*10) - 2, GUIUtil::formatBytesps(val * 10000), opacity);
+    DrawOutlinedText(painter, yValue(val) - 2, GUIUtil::formatBytesps(val * 1000), opacity);
+    if (m_toggle) DrawOutlinedText(painter, yValue(val/10) - 2, GUIUtil::formatBytesps(val * 100), opacity);
 
     if (m_tt_point && m_tt_point <= m_time_stamp[m_value].size())
         drawTooltipPoint(painter);
@@ -415,12 +415,11 @@ void TrafficGraphWidget::updateRates(int i, int64_t now, quint64 bytes_in, quint
     m_last_bytes_in[i] = bytes_in;
     m_last_bytes_out[i] = bytes_out;
     m_last_time[i] = now;
-    static int8_t fFull[VALUES_SIZE] = {};
-    if (fFull[i] == 0 && m_time_stamp[i].size() <= DESIRED_SAMPLES)
-        fFull[i] = -1;
+    static int8_t full[VALUES_SIZE] = {};
+    if (full[i] == 0 && m_time_stamp[i].size() <= DESIRED_SAMPLES) full[i] = -1;
     while (m_time_stamp[i].size() > DESIRED_SAMPLES) {
-        if (m_value == i && i < VALUES_SIZE - 1 && fFull[i] < 0) m_bump_value = true;
-        fFull[i] = 1;
+        if (m_value == i && i < VALUES_SIZE - 1 && full[i] < 0) m_bump = true;
+        full[i] = 1;
         m_samples_in[i].pop_back();
         m_samples_out[i].pop_back();
         m_time_stamp[i].pop_back();
@@ -431,7 +430,7 @@ int TrafficGraphWidget::setGraphRange(int value)
 {
     // value is the array marker plus 1 (as zero is reserved for bumping up)
     if (!value) { // bump
-        m_bump_value = false;
+        m_bump = false; // Clear the bump flag
         value = m_value + 1;
     } else
         value--; // get the array marker
@@ -587,7 +586,7 @@ bool TrafficGraphWidget::loadData()
 
     if (firstNonFullBand) { // not the first band
         m_value = firstNonFullBand - 1; // Minus one as we're bumping it
-        m_bump_value = true;
+        m_bump = true; // Set the slider to the new range
     }
 
     return true;
