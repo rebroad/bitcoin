@@ -203,7 +203,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     m_update = false;
     QPainter painter(this);
     int hgt = height(), wid = width();
-    painter.fillRect(XMARGIN, YMARGIN, wid - XMARGIN * 2, hgt - YMARGIN, Qt::black);
+    painter.fillRect(XMARGIN, 0, wid - XMARGIN * 2, hgt, Qt::black);
 
     // decide what order of magnitude we are
     int base = std::floor(std::log10(m_fmax));
@@ -258,7 +258,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.drawLine(XMARGIN, hgt - YMARGIN, wid - XMARGIN, hgt - YMARGIN);
 
     // Draw black bars to mask the overscanned edges of the graph
-    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::Antialiasing);
     painter.fillRect(0, 0, XMARGIN, hgt, Qt::black);
     painter.fillRect(wid - XMARGIN, 0, XMARGIN, hgt, Qt::black);
 
