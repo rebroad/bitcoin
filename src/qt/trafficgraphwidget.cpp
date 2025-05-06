@@ -374,15 +374,14 @@ void TrafficGraphWidget::updateStuff()
             next_m_value = m_value + 1;
         } else if (m_new_value < m_value && m_values[m_value - 1] > m_range * 0.99)
             next_m_value = m_value - 1;
-        m_update = true;
     } else if (m_value != m_new_value) {
         next_m_value = m_new_value;
-        m_update = true;
     }
 
     if (next_m_value != m_value) {
         m_tt_point = findClosestPointByTimestamp(next_m_value);
         m_value = next_m_value;
+        m_update = true;
     }
 
     static bool last_m_toggle = m_toggle;
