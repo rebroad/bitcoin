@@ -202,18 +202,15 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 {
     m_update = false;
     QPainter painter(this);
-    painter.fillRect(rect(), Qt::black);
-
-    if (m_fmax < 0.0001f) return;
-
-    QColor axisCol(Qt::gray);
     int hgt = height(), wid = width();
+    painter.fillRect(XMARGIN, YMARGIN, wid - XMARGIN * 2, hgt - YMARGIN, Qt::black);
 
     // decide what order of magnitude we are
     int base = std::floor(std::log10(m_fmax));
     float val = std::pow(10.0f, base); // kB/s
 
     // draw lines
+    QColor axisCol(Qt::gray);
     painter.setPen(axisCol);
     for(float y = val; y < m_fmax; y += val) {
         int yy = y_value(y);
@@ -238,7 +235,6 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         }
     }
 
-    painter.save();
     painter.setRenderHint(QPainter::Antialiasing);
     if (m_samples_in[m_value].size()) {
         QPainterPath p;
@@ -258,12 +254,13 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
 
     // Draw the bottom axis line and labels after the graph
     painter.setPen(axisCol);
+    painter.setRenderHint(QPainter::Antialiasing, false);
     painter.drawLine(XMARGIN, hgt - YMARGIN, wid - XMARGIN, hgt - YMARGIN);
 
-    // Draw black lines to mask the overscanned edges of the graph
+    // Draw black bars to mask the overscanned edges of the graph
+    painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(0, 0, XMARGIN, hgt, Qt::black);
     painter.fillRect(wid - XMARGIN, 0, XMARGIN, hgt, Qt::black);
-    painter.restore(); // Turn off antialiasing
 
     static int opacity = 0; // Opacity of the black outline around the text
     if (x < 1) opacity = 64;
