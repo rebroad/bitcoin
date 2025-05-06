@@ -252,8 +252,8 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.fillRect(0, 0, XMARGIN - 1, hgt, Qt::black);
     painter.fillRect(wid - XMARGIN + 1, 0, XMARGIN, hgt, Qt::black);
     painter.setPen(Qt::black);
-    painter.drawLine(XMARGIN, 0, XMARGIN, hgt); // Antialiased lines to create some blur
-    painter.drawLine(wid - XMARGIN, 0, wid - XMARGIN, hgt);
+    painter.drawLine(XMARGIN - 1, 0, XMARGIN - 1, hgt); // Antialiased lines to create some blur
+    painter.drawLine(wid - XMARGIN + 1, 0, wid - XMARGIN + 1, hgt);
 
     // Draw the bottom axis line after the graph
     painter.setPen(axisCol);
