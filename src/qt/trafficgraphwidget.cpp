@@ -288,7 +288,7 @@ void TrafficGraphWidget::updateFmax()
 /**
  * Smoothly updates a value with acceleration/deceleration for animation.
  *
- * @param new_val The target value to approach
+ * @param target The target value to approach
  * @param current The current value that will be updated
  * @param increment The current rate of change (velocity), updated by this function
  * @param length The scale factor for controlling animation speed
