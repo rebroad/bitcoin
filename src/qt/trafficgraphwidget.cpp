@@ -614,7 +614,9 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
     }
 
     int dst_point = 0;
-    int64_t min_difference = std::numeric_limits<int64_t>::max();
+    uint64_t avg_sample_interval = (m_values[dst_range] * 60 * 1000) / DESIRED_SAMPLES;
+    int64_t time_window = avg_sample_interval * 3; // Stay within sample interval * 3
+    int64_t min_difference = time_window * 2;
 
     // Find the nearest point timestamp-wise
     for (int i = 0; i < m_time_stamp[dst_range].size(); ++i) {
@@ -633,10 +635,8 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
                 m_samples_out[dst_range].at(dst_point - 1);
     float best_value = dst_value;
     int best_point = dst_point - 1;
-    uint64_t avg_sample_interval = (m_values[dst_range] * 60 * 1000) / DESIRED_SAMPLES;
-    int64_t time_window = avg_sample_interval * 3; // Stay within sample interval * 3
 
-    for (int i = best_point - 2; i <= best_point + 2; ++i) {
+    for (int i = best_point - 3; i <= best_point + 3; ++i) {
         if (i < 0 || i >= m_time_stamp[dst_range].size()) continue;
         if (std::abs(m_time_stamp[dst_range].at(i) - src_timestamp) > time_window) continue;
         float value = m_tt_in_series ? m_samples_in[dst_range].at(i) : m_samples_out[dst_range].at(i);
