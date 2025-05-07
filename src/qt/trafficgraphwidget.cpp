@@ -282,7 +282,7 @@ void TrafficGraphWidget::updateFmax()
         if (f > tmax) tmax = f;
     for (const float f : m_samples_out[m_new_value])
         if (f > tmax) tmax = f;
-    m_new_fmax = tmax;
+    m_new_fmax = std::max(tmax, 0.0001f);
 }
 
 /**
@@ -317,7 +317,7 @@ bool UpdateNum(float target, float& current, float& increment, int length)
     } else {
         // Adjust increment based on distance to target
         if ((increment > 0 && current + increment * 2 > target) ||
-            (increment < 0 && current + increment * 2 < target)) {
+                   (increment < 0 && current + increment * 2 < target)) {
             increment *= 0.5f;
         } else if ((increment > 0 && current + increment * 8 < target) ||
                    (increment < 0 && current + increment * 8 > target)) {
