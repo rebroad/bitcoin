@@ -301,36 +301,40 @@ void TrafficGraphWidget::updateFmax()
  */
 bool UpdateNum(float target, float& current, float& increment, int length)
 {
-    if (target <= 0 || current == target) return false;
+    if (current == target) return false;
 
-    if (abs(increment) <= abs(0.8 * current) / length) { // allow equal to as current and increment could be zero
-        if (target > current)
-            increment = 1.0 * (current + 1) / length; // +1s are to get it started even if current is zero
-        else
-            increment = -1.0 * (current + 1) / length;
-        if (abs(increment) > abs(target - current)) { // Only check this when creating an increment
+    const float threshold = abs(0.8f * current) / length;
+    const float diff = target - current;
+
+    // Initialize or adjust increment based on current state
+    if (abs(increment) <= threshold) {
+        increment = (diff + (diff > 0 ? 1.0f : -1.0f)) / length;
+        if (abs(increment) > abs(diff)) {
             increment = 0; // We have arrived at the target
             current = target;
             return true;
         }
     } else {
-        if (((increment > 0) && (current + increment * 2 > target)) ||
-                ((increment < 0) && (current + increment * 2 < target))) {
-            increment = increment / 2; // Keep the momentum going even if target is elsewhere.
-        } else {
-            if (((increment > 0) && (current + increment * 8 < target)) ||
-                    ((increment < 0) && (current + increment * 8 > target)))
-                increment = increment * 2;
+        // Adjust increment based on distance to target
+        if ((increment > 0 && current + increment * 2 > target) ||
+            (increment < 0 && current + increment * 2 < target)) {
+            increment *= 0.5f;
+        } else if ((increment > 0 && current + increment * 8 < target) ||
+                   (increment < 0 && current + increment * 8 > target)) {
+            increment *= 2.0f;
         }
     }
-    if (abs(increment) < 0.8 * current / length) {
-        if ((increment >= 0 && target > current) || (increment <= 0 && target < current)) {
-            current = target;
-            increment = 0;
-        }
-    } else
+
+    // Update current value if increment is significant
+    if (abs(increment) >= threshold) {
         current += increment;
-    if (current <= 0.0f) current = 0.0001f; // For fmax = 0, still show a graph
+    } else if ((increment >= 0 && target > current) || (increment <= 0 && target < current)) {
+        current = target;
+        increment = 0;
+    }
+
+    // Ensure minimum value for graph display
+    if (current <= 0.0f) current = 0.0001f;
 
     return true;
 }
@@ -615,7 +619,7 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
 
     int dst_point = 0;
     uint64_t avg_sample_interval = (m_values[dst_range] * 60 * 1000) / DESIRED_SAMPLES;
-    int64_t time_window = avg_sample_interval * 3; // Stay within sample interval * 3
+    int64_t time_window = avg_sample_interval * 3;
     int64_t min_difference = time_window * 2;
 
     // Find the nearest point timestamp-wise
@@ -630,7 +634,7 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
     // Exit early if no point found or not a peak nor a dip
     if (!dst_point || (!is_peak && !is_dip)) return dst_point;
 
-    // If a peak/dip, snap to the nearest peak/dip
+    // If a peak/dip, snap to a nearby peak/dip if one exists
     float dst_value = m_tt_in_series ? m_samples_in[dst_range].at(dst_point - 1) :
                 m_samples_out[dst_range].at(dst_point - 1);
     float best_value = dst_value;
