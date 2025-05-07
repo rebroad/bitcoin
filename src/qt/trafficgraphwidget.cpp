@@ -307,9 +307,9 @@ bool UpdateNum(float target, float& current, float& increment, int length)
     const float diff = target - current;
 
     // Initialize or adjust increment based on current state
-    if (abs(increment) <= threshold) {
-        increment = (diff * (diff > 0 ? 1.0f : -1.0f)) / length;
-        if (abs(increment) > abs(diff)) {
+    if (abs(increment) <= threshold) { // allow equal to as current and increment could be zero
+        increment = ((current + 1) * (diff > 0 ? 1.0f : -1.0f)) / length; // +1s are to get it started even if current is zero
+        if (abs(increment) > abs(diff)) { // Only check this when creating an increment
             increment = 0; // We have arrived at the target
             current = target;
             return true;
