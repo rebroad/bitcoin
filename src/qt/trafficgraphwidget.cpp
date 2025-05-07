@@ -308,7 +308,7 @@ bool UpdateNum(float target, float& current, float& increment, int length)
 
     // Initialize or adjust increment based on current state
     if (abs(increment) <= threshold) {
-        increment = (diff + (diff > 0 ? 1.0f : -1.0f)) / length;
+        increment = (diff * (diff > 0 ? 1.0f : -1.0f)) / length;
         if (abs(increment) > abs(diff)) {
             increment = 0; // We have arrived at the target
             current = target;
