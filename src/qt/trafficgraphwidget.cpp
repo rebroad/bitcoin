@@ -176,14 +176,16 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
 }
 
 // Helper function to draw text with outline
-void DrawOutlinedText(QPainter& painter, int y, const QString& text)
+void DrawOutlinedText(QPainter& painter, int y, const QString& text, int opacity)
 {
     // Draw the outline by drawing the text multiple times with small offsets
-    painter.setPen(Qt::black);
-    for (int dx = -1; dx <= 1; dx++)
-        for (int dy = -1; dy <= 1; dy++)
-            if (dx != 0 || dy != 0)
-                painter.drawText(XMARGIN + dx, y + dy - 2, text);
+    if (opacity) {
+        painter.setPen(Qt::black);
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+                if (dx != 0 || dy != 0)
+                    painter.drawText(XMARGIN + dx, y + dy - 2, text);
+    }
 
     // Draw the main text
     painter.setPen(Qt::white);
@@ -256,10 +258,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.setRenderHint(QPainter::Antialiasing, false);
     painter.drawLine(XMARGIN, hgt - YMARGIN, wid - XMARGIN, hgt - YMARGIN);
 
+    int opacity = 0; // Opacity of the black outline around the text
+    if (x < 70) opacity = 255;
     // Draw outlined text for speed labels
-    DrawOutlinedText(painter, yValue(val*10), GUIUtil::formatBytesps(val * 10000));
-    DrawOutlinedText(painter, yValue(val), GUIUtil::formatBytesps(val * 1000));
-    if (m_toggle) DrawOutlinedText(painter, yValue(val/10), GUIUtil::formatBytesps(val * 100));
+    DrawOutlinedText(painter, yValue(val*10), GUIUtil::formatBytesps(val * 10000, opacity));
+    DrawOutlinedText(painter, yValue(val), GUIUtil::formatBytesps(val * 1000, opacity));
+    if (m_toggle) DrawOutlinedText(painter, yValue(val/10), GUIUtil::formatBytesps(val * 100, opacity));
 
     if (m_tt_point && m_tt_point <= m_time_stamp[m_value].size()) drawTooltipPoint(painter);
     else QToolTip::hideText();
