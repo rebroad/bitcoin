@@ -111,22 +111,20 @@ void TrafficGraphWidget::mouseMoveEvent(QMouseEvent* event)
     m_x_offset = qRound(globalPos.x()) - x;
     m_y_offset = qRound(globalPos.y()) - y;
     if (last_x == x && last_y == y) return; // Do nothing if mouse hasn't moved
-    int h = height() - YMARGIN * 2, w = width() - XMARGIN * 2;
-    int i = (w + XMARGIN - x) * DESIRED_SAMPLES / w, closest_i = 0;
+    int w = width() - XMARGIN * 2;
+    int i = (w + XMARGIN - x) * (DESIRED_SAMPLES - 1) / w, closest_i = 0;
     int sampleSize = m_time_stamp[m_value].size();
     unsigned int smallest_distance = 50;
     bool is_in_series = true;
-    if (sampleSize && i >= -10 && i < sampleSize + 2 && y <= h + YMARGIN + 3) {
-        for (int test_i = std::max(i - 2, 0); test_i < std::min(i + 10, sampleSize); test_i++) {
-            float in_val = m_samples_in[m_value].at(test_i), out_val = m_samples_out[m_value].at(test_i);
-            int y_in = yValue(in_val), y_out = yValue(out_val);
-            unsigned int distance_in = abs(y - y_in), distance_out = abs(y - y_out);
-            unsigned int min_distance = std::min(distance_in, distance_out);
-            if (min_distance < smallest_distance) {
-                smallest_distance = min_distance;
-                closest_i = test_i + 1;
-                is_in_series = (distance_in <= distance_out);
-            }
+    for (int test_i = std::max(i - 3, 0); test_i < std::min(i + 9, sampleSize); test_i++) {
+        float in_val = m_samples_in[m_value].at(test_i), out_val = m_samples_out[m_value].at(test_i);
+        int y_in = yValue(in_val), y_out = yValue(out_val);
+        unsigned int distance_in = abs(y - y_in), distance_out = abs(y - y_out);
+        unsigned int min_distance = std::min(distance_in, distance_out) + abs(test_i - i);
+        if (min_distance < smallest_distance) {
+            smallest_distance = min_distance;
+            closest_i = test_i + 1;
+            is_in_series = (distance_in < distance_out);
         }
     }
     if (m_tt_point != closest_i || m_tt_in_series != is_in_series) {
