@@ -261,9 +261,9 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     int opacity = 0; // Opacity of the black outline around the text
     if (x < 70) opacity = 255;
     // Draw outlined text for speed labels
-    DrawOutlinedText(painter, yValue(val*10), GUIUtil::formatBytesps(val * 10000, opacity));
-    DrawOutlinedText(painter, yValue(val), GUIUtil::formatBytesps(val * 1000, opacity));
-    if (m_toggle) DrawOutlinedText(painter, yValue(val/10), GUIUtil::formatBytesps(val * 100, opacity));
+    DrawOutlinedText(painter, yValue(val*10), GUIUtil::formatBytesps(val * 10000), opacity);
+    DrawOutlinedText(painter, yValue(val), GUIUtil::formatBytesps(val * 1000), opacity);
+    if (m_toggle) DrawOutlinedText(painter, yValue(val/10), GUIUtil::formatBytesps(val * 100), opacity);
 
     if (m_tt_point && m_tt_point <= m_time_stamp[m_value].size()) drawTooltipPoint(painter);
     else QToolTip::hideText();
