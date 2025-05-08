@@ -180,9 +180,9 @@ void DrawOutlinedText(QPainter& painter, int y, const QString& text, int opacity
 {
     // Draw the outline by drawing the text multiple times with small offsets
     if (opacity) {
-        painter.setPen(QColor(0, 0, 0, opacity));
-        for (int dx = -2; dx <= 2; dx++)
-            for (int dy = -2; dy <= 2; dy++)
+        painter.setPen(Qt::black);
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
                 if (dx != 0 || dy != 0)
                     painter.drawText(XMARGIN + dx, y + dy - 2, text);
     }
