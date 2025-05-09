@@ -5,10 +5,11 @@
 #ifndef BITCOIN_QT_TRAFFICGRAPHWIDGET_H
 #define BITCOIN_QT_TRAFFICGRAPHWIDGET_H
 
-#include <QWidget>
-#include <QQueue>
+#include <interfaces/node.h>
 #include <QFile>
 #include <QKeyEvent>
+#include <QQueue>
+#include <QWidget>
 
 #include <chrono>
 
@@ -28,36 +29,36 @@ class TrafficGraphWidget : public QWidget
 public:
     explicit TrafficGraphWidget(QWidget* parent = nullptr);
     void setClientModel(ClientModel* model);
-    bool GraphRangeBump() const { return m_bump_value; }
-    void exportData();
+    bool graphRangeBump() const { return m_bump; }
     unsigned int getCurrentRangeIndex() const { return m_new_value; }
+    quint64 getBaselineBytesRecv() const { return m_baseline_bytes_recv; }
+    quint64 getBaselineBytesSent() const { return m_baseline_bytes_sent; }
 
 protected:
     void paintEvent(QPaintEvent*) override;
-    int y_value(float value) const;
-    void mouseMoveEvent(QMouseEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
-    void mouseReleaseEvent(QMouseEvent* event) override;
-    void focusInEvent(QFocusEvent* event) override;
-    int findClosestPoint(int x, int y, int rangeIndex) const;
-    int findClosestPointByTimestamp(int sourceRange, int sourcePoint, int targetRange) const;
+    int yValue(float) const;
+    void mouseMoveEvent(QMouseEvent*) override;
+    void mousePressEvent(QMouseEvent*) override;
+    void leaveEvent(QEvent*) override;
+    int findClosestPointByTimestamp(int) const;
 
 public Q_SLOTS:
     void updateStuff();
-    int setGraphRange(int value);
+    int setGraphRange(int);
 
 private:
     void saveData();
-    void paintPath(QPainterPath& path, const QQueue<float>& samples);
+    int paintPath(QPainterPath&, const QQueue<float>&);
     bool loadDataFromBinary();
     bool loadData();
-    void update_fMax();
-    void updateRates(int value);
-    void focusSlider(Qt::FocusReason reason);
-    void drawTooltipPoint(QPainter& painter);
+    void updateFmax();
+    void updateRates(int, int64_t, quint64, quint64);
+    void focusSlider();
+    void drawTooltipPoint(QPainter&);
 
     QTimer* m_timer{nullptr};
-    float fMax{0.0f};
+    float m_fmax{1.1f};
+    float m_new_fmax{1.1f};
     float m_range{0};
     QQueue<float> m_samples_in[VALUES_SIZE] = {};
     QQueue<float> m_samples_out[VALUES_SIZE] = {};
@@ -66,22 +67,21 @@ private:
     quint64 m_last_bytes_out[VALUES_SIZE] = {};
     int64_t m_last_time[VALUES_SIZE] = {};
     ClientModel* m_client_model{nullptr};
-
-    float m_new_fmax{0};
     int m_value{0};
     int m_new_value{0};
-    bool m_bump_value{false};
-    bool m_toggle{true};
-    int m_tt_point{-1};
+    bool m_bump{false};
+    bool m_toggle{true}; // Default to logarithmic
+    bool m_update{false}; // whether to redraw graph
+    int m_tt_point{0}; // 0 = no tooltip (array index + 1)
     bool m_tt_in_series{true}; // true = in, false = out
     int m_x_offset{0};
     int m_y_offset{0};
     int64_t m_tt_time{0};
     int m_values[VALUES_SIZE] = {5, 10, 20, 45, 90, 3*60, 6*60, 12*60, 24*60, 3*24*60, 7*24*60, 14*24*60, 28*24*60};
-    int64_t m_offset[VALUES_SIZE] = {};
     std::string m_data_dir;
-    uint64_t m_total_bytes_recv{0};
-    uint64_t m_total_bytes_sent{0};
+    interfaces::Node* m_node;
+    quint64 m_baseline_bytes_recv{0};
+    quint64 m_baseline_bytes_sent{0};
     int64_t m_last_save_ms{0};
 };
 
