@@ -1139,29 +1139,7 @@ void RPCConsole::scrollToEnd()
 
 void RPCConsole::on_sldGraphRange_valueChanged(int value)
 {
-    static int64_t last_click_time = 0;
-    static bool last_click_was_up = false;
-    unsigned int range = (value + 100) / 200 + 1; // minimum of 1, 0 reserve for scale bump
-    bool bouncing = false;
-    if (!m_slider_in_use) {
-        // Avoid accidental oscillation of direction due to rapid mouse clicks
-        int64_t now = GetTime<std::chrono::milliseconds>().count();
-        bool this_click_is_up = false;
-        if (value > m_set_slider_value) this_click_is_up = true;
-        if (now - last_click_time < 250 && this_click_is_up != last_click_was_up) {
-            LogPrintf("%s: ignoring snap %s (last was %s %dms ago)\n", __func__, this_click_is_up ? "UP":"DOWN", last_click_was_up ? "UP":"DOWN", now - last_click_time);
-            bouncing = true;
-            ui->sldGraphRange->blockSignals(true);
-            ui->sldGraphRange->setValue(m_set_slider_value);
-            ui->sldGraphRange->blockSignals(false);
-        } else
-            LogPrintf("%s: snap slider_val=%d->%d %s (last:%s) range=%d\n", __func__, m_set_slider_value, value, this_click_is_up ? "UP":"DOWN", last_click_was_up ? "UP":"DOWN", range);
-        last_click_time = now;
-        last_click_was_up = this_click_is_up;
-    }
-    m_set_slider_value = value;
-    if (bouncing) return;
-    setTrafficGraphRange(range);
+    setTrafficGraphRange((value + 100) / 200 + 1);
 }
 
 void RPCConsole::setTrafficGraphRange(int value)
@@ -1192,10 +1170,15 @@ void RPCConsole::on_sldGraphRange_sliderPressed() { m_slider_in_use = true; }
 
 void RPCConsole::updateTrafficStats(quint64 totalBytesIn, quint64 totalBytesOut)
 {
-    if (!m_slider_in_use && ui->trafficGraph->GraphRangeBump())
+    if (!m_slider_in_use && ui->trafficGraph->graphRangeBump())
         setTrafficGraphRange(0); // bump it up
-    ui->lblBytesIn->setText(GUIUtil::formatBytes(totalBytesIn));
-    ui->lblBytesOut->setText(GUIUtil::formatBytes(totalBytesOut));
+
+    // Add baseline values to the current node values
+    quint64 totalIn = totalBytesIn + ui->trafficGraph->getBaselineBytesRecv();
+    quint64 totalOut = totalBytesOut + ui->trafficGraph->getBaselineBytesSent();
+
+    ui->lblBytesIn->setText(GUIUtil::formatBytes(totalIn));
+    ui->lblBytesOut->setText(GUIUtil::formatBytes(totalOut));
 }
 
 void RPCConsole::updateDetailWidget()
