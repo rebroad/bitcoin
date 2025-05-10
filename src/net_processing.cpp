@@ -5210,7 +5210,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             const CBlockIndex *pBestIndex = nullptr; // last header queued for delivery
             ProcessBlockAvailability(pto->GetId()); // ensure pindexBestKnownBlock is up-to-date
 
-            const CBlockIndex* pindex;
+            const CBlockIndex* pindex = NULL;
             if (!fRevertToInv) {
                 bool fFoundStartingHeader = false;
                 // Try to find first header that our peer doesn't have, and
