@@ -41,7 +41,7 @@ std::optional<CNetAddr> QueryDefaultGatewayImpl(sa_family_t family)
 {
     // Create a netlink socket.
     SOCKET sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
-    if (sock < 0) {
+    if (sock == INVALID_SOCKET) {
         LogPrint(BCLog::NET, "socket(AF_NETLINK): %s\n", NetworkErrorString(errno));
         return std::nullopt;
     }
