@@ -521,13 +521,27 @@ bool TrafficGraphWidget::loadDataFromBinary()
 
         int version;
         filein >> version;
-        if (version < 1 || version > 2) return false;
+        if (version < 1 || version > 1) return false;
 
         filein >> VARINT(m_baseline_bytes_recv) >> VARINT(m_baseline_bytes_sent);
 
+        uint64_t current_time = TicksSinceEpoch<std::chrono::milliseconds>(SystemClock::now());
+
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
-            uint32_t samplesSize;
+            filein >> VARINT(m_last_bytes_in[i]) >> VARINT(m_last_bytes_out[i]); // TODO could be derived
+
+            uint16_t samplesSize;
             filein >> VARINT(samplesSize);
+
+            for (unsigned int j = 0; j < samplesSize; j++) {
+                static uint64_t last_time_ms;
+                uint64_t time_ms;
+                filein >> time_ms;
+                if (!j) m_last_time[i] = last_time_ms = time_ms;
+                if (time_ms > last_time_ms || time_ms > current_time) return false; // Abort load if data invalid or in future
+                m_time_stamp[i].push_back(static_cast<int64_t>(time_ms));
+                last_time_ms = time_ms;
+            }
 
             for (unsigned int j = 0; j < samplesSize; j++) {
                 uint32_t uint_value;
@@ -544,20 +558,10 @@ bool TrafficGraphWidget::loadDataFromBinary()
                 memcpy(&value, &uint_value, sizeof(float));
                 m_samples_out[i].push_back(value);
             }
-
-            for (unsigned int j = 0; j < samplesSize; j++) {
-                uint64_t timeMs;
-                filein >> VARINT(timeMs);
-                m_time_stamp[i].push_back(static_cast<int64_t>(timeMs));
-            }
-
-            uint64_t offset;
-            filein >> VARINT(offset);
         }
-
         filein.fclose();
-
         return true;
+
     } catch (const std::exception& e) {
         LogPrintf("TrafficGraphWidget: Error loading data: %s\n", e.what());
         return false;
