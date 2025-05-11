@@ -525,7 +525,7 @@ bool TrafficGraphWidget::loadDataFromBinary()
 
         filein >> VARINT(m_baseline_bytes_recv) >> VARINT(m_baseline_bytes_sent);
 
-        uint64_t current_time = TicksSinceEpoch<std::chrono::milliseconds>(SystemClock::now());
+        uint64_t current_time = GetTimeMillis();
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
             filein >> VARINT(m_last_bytes_in[i]) >> VARINT(m_last_bytes_out[i]); // TODO could be derived
