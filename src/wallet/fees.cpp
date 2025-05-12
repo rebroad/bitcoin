@@ -12,7 +12,11 @@
 namespace wallet {
 CAmount GetRequiredFee(const CWallet& wallet, unsigned int nTxBytes)
 {
-    return GetRequiredFeeRate(wallet).GetFee(nTxBytes);
+    CFeeRate rate = GetRequiredFeeRate(wallet);
+    printf("[DEBUG] GetRequiredFee: rate = %ld, nTxBytes = %u\n", (long)rate.GetFeePerK(), nTxBytes);
+    CAmount fee = rate.GetFee(nTxBytes);
+    printf("[DEBUG] GetRequiredFee: fee = %ld\n", (long)fee);
+    return fee;
 }
 
 
@@ -23,7 +27,10 @@ CAmount GetMinimumFee(const CWallet& wallet, unsigned int nTxBytes, const CCoinC
 
 CFeeRate GetRequiredFeeRate(const CWallet& wallet)
 {
-    return std::max(wallet.m_min_fee, wallet.chain().relayMinFee());
+    printf("[DEBUG] GetRequiredFeeRate: wallet.m_min_fee = %ld, relayMinFee = %ld\n", (long)wallet.m_min_fee.GetFeePerK(), (long)wallet.chain().relayMinFee().GetFeePerK());
+    CFeeRate r = std::max(wallet.m_min_fee, wallet.chain().relayMinFee());
+    printf("[DEBUG] GetRequiredFeeRate: returning %ld\n", (long)r.GetFeePerK());
+    return r;
 }
 
 CFeeRate GetMinimumFeeRate(const CWallet& wallet, const CCoinControl& coin_control, FeeCalculation* feeCalc)
@@ -78,6 +85,7 @@ CFeeRate GetMinimumFeeRate(const CWallet& wallet, const CCoinControl& coin_contr
         feerate_needed = required_feerate;
         if (feeCalc) feeCalc->reason = FeeReason::REQUIRED;
     }
+    printf("[DEBUG] GetMinimumFeeRate: feerate_needed = %ld, required_feerate = %ld\n", (long)feerate_needed.GetFeePerK(), (long)required_feerate.GetFeePerK());
     return feerate_needed;
 }
 
