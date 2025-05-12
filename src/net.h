@@ -85,6 +85,20 @@ static constexpr bool DEFAULT_FIXEDSEEDS{true};
 static const size_t DEFAULT_MAXRECEIVEBUFFER = 5 * 1000;
 static const size_t DEFAULT_MAXSENDBUFFER    = 1 * 1000;
 
+/**
+ * Special NodeId values for mempool and transaction source tracking:
+ *  -1: "extra" (not from a peer, e.g. extra txs for compact block relay)
+ *  -2: loaded from disk (LoadMempool)
+ *  -3: "package" (package mempool acceptance)
+ *  -4: "reorg" (reorg recovery)
+ * -10: wallet-originated transactions (zero-fee allowed)
+ */
+static constexpr NodeId NODEID_EXTRA = -1;
+static constexpr NodeId NODEID_LOADED = -2;
+static constexpr NodeId NODEID_PACKAGE = -3;
+static constexpr NodeId NODEID_REORG = -4;
+static constexpr NodeId NODEID_WALLET_ORIGIN = -10;
+
 typedef int64_t NodeId;
 
 struct AddedNodeInfo
@@ -151,7 +165,7 @@ enum class ConnectionType {
      *   evict only if this longer-known peer is offline.
      * - move node addresses from New to Tried table, so that we have more
      *   connectable addresses in our AddrMan.
-     * Note that in the literature ("Eclipse Attacks on Bitcoin’s Peer-to-Peer Network")
+     * Note that in the literature ("Eclipse Attacks on Bitcoin's Peer-to-Peer Network")
      * only the latter feature is referred to as "feeler connections",
      * although in our codebase feeler connections encompass test-before-evict as well.
      * We make these connections approximately every FEELER_INTERVAL:
