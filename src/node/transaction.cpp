@@ -30,7 +30,7 @@ static TransactionError HandleATMPError(const TxValidationState& state, std::str
     }
 }
 
-TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef tx, std::string& err_string, const CAmount& max_tx_fee, bool relay, bool wait_callback)
+TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef tx, std::string& err_string, const CAmount& max_tx_fee, bool relay, bool wait_callback, NodeId nodeid)
 {
     // BroadcastTransaction can be called by either sendrawtransaction RPC or the wallet.
     // chainman, mempool and peerman are initialized before the RPC server and wallet are started
@@ -71,7 +71,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
             if (max_tx_fee > 0) {
                 // First, call ATMP with test_accept and check the fee. If ATMP
                 // fails here, return error immediately.
-                const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, -1, /*test_accept=*/ true);
+                const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, nodeid, /*test_accept=*/ true);
                 if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                     return HandleATMPError(result.m_state, err_string);
                 } else if (result.m_base_fees.value() > max_tx_fee) {
@@ -79,7 +79,7 @@ TransactionError BroadcastTransaction(NodeContext& node, const CTransactionRef t
                 }
             }
             // Try to submit the transaction to the mempool.
-            const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, -1, /*test_accept=*/ false);
+            const MempoolAcceptResult result = node.chainman->ProcessTransaction(tx, nodeid, /*test_accept=*/ false);
             if (result.m_result_type != MempoolAcceptResult::ResultType::VALID) {
                 return HandleATMPError(result.m_state, err_string);
             }
