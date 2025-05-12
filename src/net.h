@@ -85,6 +85,8 @@ static constexpr bool DEFAULT_FIXEDSEEDS{true};
 static const size_t DEFAULT_MAXRECEIVEBUFFER = 5 * 1000;
 static const size_t DEFAULT_MAXSENDBUFFER    = 1 * 1000;
 
+typedef int64_t NodeId;
+
 /**
  * Special NodeId values for mempool and transaction source tracking:
  *  -1: "extra" (not from a peer, e.g. extra txs for compact block relay)
@@ -98,8 +100,6 @@ static constexpr NodeId NODEID_LOADED = -2;
 static constexpr NodeId NODEID_PACKAGE = -3;
 static constexpr NodeId NODEID_REORG = -4;
 static constexpr NodeId NODEID_WALLET_ORIGIN = -10;
-
-typedef int64_t NodeId;
 
 struct AddedNodeInfo
 {
