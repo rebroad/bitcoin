@@ -339,7 +339,7 @@ void CChainState::MaybeUpdateMempoolForReorg(
     while (it != disconnectpool.queuedTx.get<insertion_order>().rend()) {
         // ignore validation errors in resurrected transactions
         if (!fAddToMempool || (*it)->IsCoinBase() ||
-            AcceptToMemoryPool(*this, *it, GetTime(), -4,
+            AcceptToMemoryPool(*this, *it, GetTime(), NODEID_REORG,
                 /*bypass_limits=*/true, /*test_accept=*/false).m_result_type !=
                     MempoolAcceptResult::ResultType::VALID) {
             // If the transaction doesn't make it in to the mempool, remove any
@@ -520,14 +520,14 @@ public:
         /** Parameters for test package mempool validation through testmempoolaccept. */
         static ATMPArgs PackageTestAccept(const CChainParams& chainparams, int64_t accept_time,
                                           std::vector<COutPoint>& coins_to_uncache) {
-            return ATMPArgs(chainparams, accept_time, -3, false, coins_to_uncache,
+            return ATMPArgs(chainparams, accept_time, NODEID_PACKAGE, false, coins_to_uncache,
                           true, false, false);
         }
 
         /** Parameters for child-with-unconfirmed-parents package validation. */
         static ATMPArgs PackageChildWithParents(const CChainParams& chainparams, int64_t accept_time,
                                                 std::vector<COutPoint>& coins_to_uncache) {
-            return ATMPArgs(chainparams, accept_time, -3, false, coins_to_uncache,
+            return ATMPArgs(chainparams, accept_time, NODEID_PACKAGE, false, coins_to_uncache,
                           false, false, true);
         }
         // No default ctor to avoid exposing details to clients and allowing the possibility of
@@ -4670,7 +4670,7 @@ bool LoadMempool(CTxMemPool& pool, const char* filename, CChainState& active_cha
             }
             if (nTime > nNow - nExpiryTimeout) {
                 LOCK(cs_main);
-                const auto& accepted = AcceptToMemoryPool(active_chainstate, tx, nTime, -2, /*bypass_limits=*/false, /*test_accept=*/false);
+                const auto& accepted = AcceptToMemoryPool(active_chainstate, tx, nTime, NODEID_LOADED, /*bypass_limits=*/false, /*test_accept=*/false);
                 if (accepted.m_result_type == MempoolAcceptResult::ResultType::VALID) {
                     ++count;
                 } else {

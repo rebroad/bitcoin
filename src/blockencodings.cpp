@@ -131,7 +131,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 if (txn_available[idit->second]) {
                     haveandnotnull++;
                     txn_available[idit->second].reset();
-                    txn_peer[idit->second] = -1; // For extra RESET1
+                    txn_peer[idit->second] = NODEID_EXTRA; // For extra RESET1
                     txn_time[idit->second] = GetTime()+10;
                     mempool_count--;
                 } else
@@ -169,7 +169,7 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
                 if (txn_available[idit->second] &&
                         txn_available[idit->second]->GetWitnessHash() != extra_txn[i].second.first->GetWitnessHash()) {
                     txn_available[idit->second].reset();
-                    txn_peer[idit->second] = -1; // For extra RESET2
+                    txn_peer[idit->second] = NODEID_EXTRA; // For extra RESET2
                     txn_time[idit->second] = GetTime()+20;
                     mempool_count--;
                     extra_count--;
