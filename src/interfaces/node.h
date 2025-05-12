@@ -216,7 +216,7 @@ public:
     virtual bool getUnspentOutput(const COutPoint& output, Coin& coin) = 0;
 
     //! Broadcast transaction.
-    virtual TransactionError broadcastTransaction(CTransactionRef tx, CAmount max_tx_fee, std::string& err_string) = 0;
+    virtual TransactionError broadcastTransaction(CTransactionRef tx, CAmount max_tx_fee, std::string& err_string, NodeId nodeid) = 0;
 
     //! Get wallet loader.
     virtual WalletLoader& walletLoader() = 0;

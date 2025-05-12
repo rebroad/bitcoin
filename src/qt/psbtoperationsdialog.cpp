@@ -15,6 +15,7 @@
 #include <qt/guiutil.h>
 #include <qt/optionsmodel.h>
 #include <util/strencodings.h>
+#include <net.h>
 
 #include <fstream>
 #include <iostream>
@@ -117,7 +118,7 @@ void PSBTOperationsDialog::broadcastTransaction()
     CTransactionRef tx = MakeTransactionRef(mtx);
     std::string err_string;
     TransactionError error =
-        m_client_model->node().broadcastTransaction(tx, DEFAULT_MAX_RAW_TX_FEE_RATE.GetFeePerK(), err_string);
+        m_client_model->node().broadcastTransaction(tx, DEFAULT_MAX_RAW_TX_FEE_RATE.GetFeePerK(), err_string, NODEID_WALLET_ORIGIN);
 
     if (error == TransactionError::OK) {
         showStatus(tr("Transaction broadcast successfully! Transaction ID: %1")

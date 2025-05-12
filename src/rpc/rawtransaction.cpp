@@ -44,6 +44,7 @@
 #include <stdint.h>
 
 #include <univalue.h>
+#include <net.h>
 
 using node::AnalyzePSBT;
 using node::BroadcastTransaction;
@@ -915,7 +916,7 @@ static RPCHelpMan sendrawtransaction()
     std::string err_string;
     AssertLockNotHeld(cs_main);
     NodeContext& node = EnsureAnyNodeContext(request.context);
-    const TransactionError err = BroadcastTransaction(node, tx, err_string, max_raw_tx_fee, /*relay*/ true, /*wait_callback*/ true);
+    const TransactionError err = BroadcastTransaction(node, tx, err_string, max_raw_tx_fee, /*relay*/ true, /*wait_callback*/ true, NODEID_WALLET_ORIGIN);
     if (TransactionError::OK != err) {
         throw JSONRPCTransactionError(err, err_string);
     }

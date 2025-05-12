@@ -7,6 +7,7 @@
 
 #include <primitives/transaction.h> // For CTransactionRef
 #include <util/settings.h>          // For util::SettingsValue
+#include <net.h>
 
 #include <functional>
 #include <memory>

@@ -45,6 +45,7 @@
 #include <optional>
 
 #include <boost/algorithm/string/replace.hpp>
+#include <net.h>
 
 using interfaces::FoundBlock;
 
