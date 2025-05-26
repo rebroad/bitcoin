@@ -2914,6 +2914,9 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
         walletInstance->WalletLogPrintf("m_address_book.size() = %u\n",  walletInstance->m_address_book.size());
     }
 
+    // Set minimum fee to 0 for wallet-originated transactions
+    walletInstance->m_min_fee = CFeeRate(0);
+
     return walletInstance;
 }
 
