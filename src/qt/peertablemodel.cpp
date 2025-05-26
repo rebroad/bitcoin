@@ -225,5 +225,7 @@ void PeerTableModel::refresh()
 
     const auto top_left = index(0, 0);
     const auto bottom_right = index(rowCount() - 1, columnCount() - 1);
-    Q_EMIT dataChanged(top_left, bottom_right);
+    // Only emit dataChanged if both indices are valid
+    if (top_left.isValid() && bottom_right.isValid())
+        Q_EMIT dataChanged(top_left, bottom_right);
 }
