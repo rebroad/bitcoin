@@ -18,8 +18,18 @@ PeerTableSortProxy::PeerTableSortProxy(QObject* parent)
 
 bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelIndex& right_index) const
 {
-    const CNodeStats left_stats = Assert(sourceModel()->data(left_index, PeerTableModel::StatsRole).value<CNodeCombinedStats*>())->nodeStats;
-    const CNodeStats right_stats = Assert(sourceModel()->data(right_index, PeerTableModel::StatsRole).value<CNodeCombinedStats*>())->nodeStats;
+    auto left_data = sourceModel()->data(left_index, PeerTableModel::StatsRole);
+    auto right_data = sourceModel()->data(right_index, PeerTableModel::StatsRole);
+
+    if (!left_data.isValid() || !right_data.isValid()) return false
+
+    auto left_stats_ptr = left_data.value<CNodeCombinedStats*>();
+    auto right_stats_ptr = right_data.value<CNodeCombinedStats*>();
+
+    if (!left_stats_ptr || !right_stats_ptr) return false;
+
+    const CNodeStats& left_stats = left_stats_ptr->nodeStats;
+    const CNodeStats& right_stats = right_stats_ptr->nodeStats;
 
     switch (static_cast<PeerTableModel::ColumnIndex>(left_index.column())) {
     case PeerTableModel::NetNodeId:
