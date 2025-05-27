@@ -10,6 +10,9 @@
 #include <vector>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <unistd.h> // for sysconf
+#include <sched.h>  // for sched_getcpu
+#include <algorithm> // for std::find and std::sort
 
 // Forward declare logging function
 void LogPerfStats();
@@ -22,6 +25,7 @@ public:
         std::chrono::microseconds min_time{std::chrono::microseconds::max()};
         uint64_t call_count{0};
         double cpu_usage{0.0};  // CPU usage percentage
+        std::vector<int> core_affinity; // Track which cores this thread has run on
     };
 
     struct SectionTimer {
@@ -54,12 +58,18 @@ public:
 
             double cpu_percentage = 100.0 * (cpu_user + cpu_sys) / duration.count();
 
-            monitor.AddMeasurement(section_name, thread_id, duration, cpu_percentage);
+            // Get current CPU core (approximate since thread might move between cores)
+            int current_core = sched_getcpu();
+            if (current_core >= 0) {
+                monitor.AddMeasurement(section_name, thread_id, duration, cpu_percentage, current_core);
+            } else {
+                monitor.AddMeasurement(section_name, thread_id, duration, cpu_percentage);
+            }
         }
     };
 
     void AddMeasurement(const std::string& section, const std::thread::id& thread_id,
-                       std::chrono::microseconds duration, double cpu_percentage) {
+                       std::chrono::microseconds duration, double cpu_percentage, int core = -1) {
         std::lock_guard<std::mutex> lock(mutex);
         auto& stats = measurements[section][thread_id];
         stats.total_time += duration;
@@ -68,6 +78,15 @@ public:
         stats.call_count++;
         // Running average of CPU usage
         stats.cpu_usage = (stats.cpu_usage * (stats.call_count - 1) + cpu_percentage) / stats.call_count;
+
+        // Add core to affinity list if not already present
+        if (core >= 0) {
+            auto it = std::find(stats.core_affinity.begin(), stats.core_affinity.end(), core);
+            if (it == stats.core_affinity.end()) {
+                stats.core_affinity.push_back(core);
+                std::sort(stats.core_affinity.begin(), stats.core_affinity.end());
+            }
+        }
     }
 
     std::string GetStats() const {
@@ -83,7 +102,17 @@ public:
                         "/" + std::to_string(stats.min_time.count()) + "us" +
                         "/" + std::to_string(stats.max_time.count()) + "us " +
                         "count=" + std::to_string(stats.call_count) + " " +
-                        "CPU%=" + std::to_string(stats.cpu_usage) + "\n";
+                        "CPU%=" + std::to_string(stats.cpu_usage);
+
+                if (!stats.core_affinity.empty()) {
+                    result += " (cores: ";
+                    for (size_t i = 0; i < stats.core_affinity.size(); ++i) {
+                        if (i > 0) result += ",";
+                        result += std::to_string(stats.core_affinity[i]);
+                    }
+                    result += ")";
+                }
+                result += "\n";
             }
         }
         return result;
