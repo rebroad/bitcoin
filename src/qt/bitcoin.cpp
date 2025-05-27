@@ -58,6 +58,11 @@
 #include <QTranslator>
 #include <QWindow>
 
+// For crash handling to save traffic widget data
+#include <signal.h>
+#include <qt/trafficgraphwidget.h>
+#include <qt/rpcconsole.h>
+
 #if defined(QT_STATICPLUGIN)
 #include <QtPlugin>
 #if defined(QT_QPA_PLATFORM_XCB)
@@ -512,8 +517,31 @@ static void SetupUIArgs(ArgsManager& argsman)
     argsman.AddArg("-uiplatform", strprintf("Select platform to customize UI for (one of windows, macosx, other; default: %s)", BitcoinGUI::DEFAULT_UIPLATFORM), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::GUI);
 }
 
+static void handleCrash(int sig)
+{
+    // Save traffic widget data if it exists
+    if (QApplication::instance()) {
+        // Find the traffic graph widget directly from the application
+        TrafficGraphWidget* trafficGraph = QApplication::instance()->findChild<TrafficGraphWidget*>();
+        if (trafficGraph) {
+            // Use QMetaObject to call the private saveData method
+            QMetaObject::invokeMethod(trafficGraph, "saveData", Qt::DirectConnection);
+        }
+    }
+
+    // Call the original signal handler
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
 int GuiMain(int argc, char* argv[])
 {
+    // Set up signal handlers for crashes
+    signal(SIGSEGV, handleCrash);
+    signal(SIGABRT, handleCrash);
+    signal(SIGFPE, handleCrash);
+    signal(SIGILL, handleCrash);
+
 #ifdef WIN32
     util::WinCmdLineArgs winArgs;
     std::tie(argc, argv) = winArgs.get();
