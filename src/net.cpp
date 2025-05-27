@@ -1734,8 +1734,8 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 if ((now - m_connected >= 120) && (nMempoolPct < 10) && ((nRecvBps > 120) || (nSendBps > 1200))) {
                     if (!pnode->HasPermission(NetPermissionFlags::NoBan)) {
                         pnode->fDisconnect = 1;
-                        LOCK(pnode->m_subver_mutex);
-                        LogPrintf("%s: Pct=%d%% Send=%s Recv=%s TimeConn=%d %s disconnect incoming peer=%d\n", __func__, nMempoolPct, nSendBps, nRecvBps, now - m_connected, pnode->cleanSubVer, pnode->GetId());
+                        if (m_banman) m_banman->Ban(pnode->addr, 10 * 60); // Ban for 10 minutes
+                        LogPrintf("%s: Pct=%d%% Send=%s Recv=%s TimeConn=%d %s disconnect incoming peer=%d\n", __func__, nMempoolPct, nSendBps, nRecvBps, now - m_connected, pnode->addr.ToString(), pnode->GetId());
                     }
                 }
             } else if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
