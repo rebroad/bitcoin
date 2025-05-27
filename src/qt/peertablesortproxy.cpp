@@ -21,7 +21,7 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
     auto left_data = sourceModel()->data(left_index, PeerTableModel::StatsRole);
     auto right_data = sourceModel()->data(right_index, PeerTableModel::StatsRole);
 
-    if (!left_data.isValid() || !right_data.isValid()) return false
+    if (!left_data.isValid() || !right_data.isValid()) return false;
 
     auto left_stats_ptr = left_data.value<CNodeCombinedStats*>();
     auto right_stats_ptr = right_data.value<CNodeCombinedStats*>();
