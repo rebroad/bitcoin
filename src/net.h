@@ -729,7 +729,10 @@ public:
         m_min_ping_time = std::min(m_min_ping_time.load(), ping_time);
     }
 
-    std::atomic<std::chrono::nanoseconds> m_cpu_time;
+    /** Accumulate CPU time spent processing this peer's messages */
+    void AddCpuTime(std::chrono::nanoseconds cpu_time) {
+        m_cpu_time += cpu_time;
+    }
 
 private:
     const NodeId id;
@@ -762,6 +765,8 @@ private:
 
     mapMsgCmdSize mapSendBytesPerMsgCmd GUARDED_BY(cs_vSend);
     mapMsgCmdSize mapRecvBytesPerMsgCmd GUARDED_BY(cs_vRecv);
+
+    std::atomic<std::chrono::nanoseconds> m_cpu_time;
 };
 
 /**

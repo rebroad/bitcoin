@@ -93,6 +93,11 @@ struct timeval MillisToTimeval(std::chrono::milliseconds ms);
 bool ChronoSanityCheck();
 
 /**
+ * Get the CPU time spent by the current thread.
+ */
+std::chrono::nanoseconds ThreadCpuTime();
+
+/**
  * Measure CPU time spent by the current thread.
  * A clock is started when a CpuTimer is created. When the object is destroyed
  * the elapsed CPU time is valculated and a callback function is invoked,
@@ -116,6 +121,15 @@ private:
     const FinishedCB m_finished_cb;
 };
 
-std::chrono::nanoseconds operator+(std::chrono::nanoseconds a, std::chrono::nanoseconds b);
+inline std::atomic<std::chrono::nanoseconds>& operator+=(std::atomic<std::chrono::nanoseconds>& a, std::chrono::nanoseconds b)
+{
+    std::chrono::nanoseconds expected;
+    std::chrono::nanoseconds desired;
+    do {
+        expected = a.load();
+        desired = expected + b;
+    } while (!a.compare_exchange_weak(expected, desired));
+    return a;
+}
 
 #endif // BITCOIN_UTIL_TIME_H

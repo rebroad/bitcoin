@@ -213,13 +213,3 @@ std::chrono::nanoseconds ThreadCpuTime()
     return std::chrono::nanoseconds{0};
 #endif
 }
-
-std::chrono::nanoseconds operator+(std::chrono::nanoseconds a, std::chrono::nanoseconds b)
-{
-    std::chrono::nanoseconds expected, desired;
-    do {
-        expected = a.load();
-        desired = expected + b;
-    } while (!a.compare_exchange_weak(expected, desired));
-    return desired;
-}
