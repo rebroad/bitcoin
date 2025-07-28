@@ -7,6 +7,7 @@
 
 #include <arith_uint256.h>
 #include <chain.h>
+#include <util/time.h>
 #include <chainparams.h>
 #include <checkqueue.h>
 #include <consensus/amount.h>
@@ -143,6 +144,9 @@ RecursiveMutex cs_main;
 static constexpr int64_t MAX_TIMEWARP{MAX_FUTURE_BLOCK_TIME};
 
 CBlockIndex *pindexBestHeader = nullptr;
+
+/** CPU time spent in ConnectBlock for attribution to source peer */
+std::atomic<std::chrono::nanoseconds> g_connect_block_cpu_time{0ns};
 int g_tiptowards = 0;
 Mutex g_best_block_mutex;
 std::condition_variable g_best_block_cv;
@@ -1508,7 +1512,7 @@ bool CChainState::IsInitialBlockDownload() const
                 now > nLastIBDAlmostFinished + nIBDTimeThreshold &&
                 m_chain.Tip()->GetBlockTime() < (now - nMaxTipAge)) {
             if (!fPrev)
-				LogPrintf("%s: Setting to true: tip age=%s. IBD_time_remaining=%s\n", __func__,
+                LogPrintf("%s: Setting to true: tip age=%s. IBD_time_remaining=%s\n", __func__,
                         strAge(now - m_chain.Tip()->GetBlockTime()), strAge(nIBDTimeRemaining));
             fPrev = fNew = true;
         } else if (nIBDTimeRemaining <= nIBDTimeThreshold) nLastIBDAlmostFinished = now;
@@ -1968,6 +1972,13 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     if (!g_chainstate) g_chainstate = this;
 
     int64_t nTimeStart = GetTimeMicros();
+
+    // Track CPU time for background validation
+    CpuTimer cpu_timer{[](std::chrono::nanoseconds elapsed) {
+        // Store the CPU time for later attribution to the source peer
+        // This will be picked up by the BlockChecked callback
+        g_connect_block_cpu_time = elapsed;
+    }};
 
     // Check it again in case a previous version let a bad block in
     // NOTE: We don't currently (re-)invoke ContextualCheckBlock() or

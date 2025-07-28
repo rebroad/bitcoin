@@ -6,6 +6,7 @@
 #include <net_processing.h>
 
 #include <addrman.h>
+#include <validation.h>
 #include <banman.h>
 #include <blockencodings.h>
 #include <blockfilter.h>
@@ -1894,8 +1895,19 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
             MaybeSetPeerAsAnnouncingHeaderAndIDs(it->second.first);
         }
     }
-    if (it != mapBlockSource.end())
+
+    // Attribute CPU time from background validation to the source peer
+    if (it != mapBlockSource.end()) {
+        NodeId nodeid = it->second.first;
+        std::chrono::nanoseconds cpu_time = g_connect_block_cpu_time.exchange(0ns);
+        if (cpu_time.count() > 0) {
+            m_connman.ForNode(nodeid, [cpu_time](CNode* pnode) {
+                pnode->AddCpuTime(cpu_time);
+                return true;
+            });
+        }
         mapBlockSource.erase(it);
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2314,7 +2326,7 @@ void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string s
         }
         strNew += "new ";
     }
-	//bool fShow = false;
+    //bool fShow = false;
     bool fCheck = false, fBest = false;
     std::string strExtra;
     if (pindex) {
@@ -2329,10 +2341,10 @@ void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string s
         else if (pindex->nTx > 0)
             strDesc += "got "; // it's been downloaded
         strExtra = strprintf("%s ", strBlockInfo(pindex, &fCheck));
-		if (fBest) {
-			CNodeState *nodestate = State(node);
-			strExtra += strprintf("tif=%d ", nodestate->nTxInFlight);
-		}
+        if (fBest) {
+            CNodeState *nodestate = State(node);
+            strExtra += strprintf("tif=%d ", nodestate->nTxInFlight);
+        }
         //if (pindex->nChainWork >= (pindexBestHeader->pprev ? (pindexBestHeader->pprev->pprev ? pindexBestHeader->pprev->pprev->nChainWork : 0) : 0)) fShow = true;
     } else {
         strDesc += "invalid "; // it's probably invalid
@@ -2522,10 +2534,10 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 }
             }
         } else if (received_new_header) {
-		    if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
+            if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
                 LogPrintf("CURIOUS: COMPETING BLOCK\n");
             LogPrint(BCLog::BLOCK, "%s%s%s\n", fDownloadBlocks ? "" : "!fDownloadBlocks ", CanDirectFetch() ? "" : "!CanDirectFetch() ", pindexLast->IsValid(BLOCK_VALID_TREE) ? "" : "!IsValid(BLOCK_VALID_TREE)");
-		}
+        }
         // If we're in IBD, we want outbound peers that will serve us a useful
         // chain. Disconnect peers that are on chains with insufficient work.
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && nCount != MAX_HEADERS_RESULTS) {
@@ -2599,7 +2611,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             });
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
-		nSize, (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
+        nSize, (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
             bool should_relay = true;
             if (!fRelayDust) {
                 // Do not relay transactions with outputs of 250 satoshis or less
@@ -4717,7 +4729,12 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
             nBlocksToBeProcessed--;
             doit = true;
         }
-        if (doit) ProcessMessage(*pfrom, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
+        if (doit) {
+            CpuTimer timer{[&pfrom](std::chrono::nanoseconds elapsed) {
+                pfrom->AddCpuTime(elapsed);
+            }};
+            ProcessMessage(*pfrom, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
+        }
         if (interruptMsgProc) return false;
         {
             LOCK(peer->m_getdata_requests_mutex);

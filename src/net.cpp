@@ -2640,11 +2640,6 @@ void CConnman::ThreadMessageHandler()
                         LogPrintf("%s: Force ProcessMessages() as blks2b=%d vProcessMsgs=%d fDisconnect=%s peer=%d\n", __func__, pnode->nBlocksToBeProcessed, pnode->vProcessMsg.size(), pnode->fDisconnect, pnode->GetId());
                 }
 
-                CpuTimer timer{[&pnode](std::chrono::nanoseconds elapsed) {
-                    auto current = pnode->m_cpu_time.load();
-                    pnode->m_cpu_time.store(current + elapsed);
-                }};
-
                 // Receive messages
                 bool fMoreNodeWork = m_msgproc->ProcessMessages(pnode, flagInterruptMsgProc, fToggle);
                 fMoreWork |= (fMoreNodeWork && !pnode->fPauseSend);
