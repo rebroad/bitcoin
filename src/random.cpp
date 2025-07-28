@@ -228,7 +228,7 @@ static void Strengthen(const unsigned char (&seed)[32], int microseconds, CSHA51
 
     // Hash loop
     unsigned char buffer[64];
-    uint64_t stop = GetTimeMicros() + microseconds;
+    int64_t stop = GetTimeMicros() + microseconds;
     do {
         for (int i = 0; i < 1000; ++i) {
             inner_hasher.Finalize(buffer);
