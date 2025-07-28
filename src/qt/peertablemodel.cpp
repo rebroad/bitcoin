@@ -8,6 +8,7 @@
 #include <qt/guiutil.h>
 
 #include <interfaces/node.h>
+#include <tinyformat.h>
 
 #include <utility>
 
@@ -128,6 +129,27 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             } else
                 return {};
         }
+        case CpuTime: {
+            int64_t now = GetTimeSeconds();
+            if (rec->nodeStats.m_cpu_time_snap_old.count() > 0 && rec->nodeStats.nTimeSnapOld != now) {
+                // Calculate CPU percentage using snapshots
+                double cpu_time_diff = (rec->nodeStats.m_cpu_time_snap - rec->nodeStats.m_cpu_time_snap_old).count() / 1e9; // Convert nanoseconds to seconds
+                double time_diff = now - rec->nodeStats.nTimeSnapOld;
+                if (time_diff > 0) {
+                    double cpu_percentage = (cpu_time_diff / time_diff) * 100.0; // Convert to percentage
+                    return QString::fromStdString(strprintf("%.1f%%", cpu_percentage));
+                }
+            } else if (now != count_seconds(rec->nodeStats.m_connected)) {
+                // Fallback to total CPU percentage since connection
+                double total_cpu_time = rec->nodeStats.m_cpu_time.count() / 1e9; // Convert nanoseconds to seconds
+                double total_time = now - count_seconds(rec->nodeStats.m_connected);
+                if (total_time > 0) {
+                    double cpu_percentage = (total_cpu_time / total_time) * 100.0; // Convert to percentage
+                    return QString::fromStdString(strprintf("%.1f%%", cpu_percentage));
+                }
+            }
+            return QString::fromStdString("");
+        }
         case Subversion:
             return QString::fromStdString(rec->nodeStats.cleanSubVer);
         } // no default case, so the compiler can warn about missing cases
@@ -144,6 +166,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         case Recv:
         case TxBpsPct:
         case MPpm:
+        case CpuTime:
             return QVariant(Qt::AlignCenter);
         case Subversion:
             return QVariant(Qt::AlignLeft | Qt::AlignVCenter);

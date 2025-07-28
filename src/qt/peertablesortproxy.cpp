@@ -86,6 +86,24 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
         }
         return Left < Right;
     }
+    case PeerTableModel::CpuTime: {
+        int64_t now = GetTimeSeconds();
+        if (left_stats.m_cpu_time_snap_old.count() > 0 && right_stats.m_cpu_time_snap_old.count() > 0 &&
+            left_stats.nTimeSnapOld != now && right_stats.nTimeSnapOld != now) {
+            // Compare CPU time per second using snapshots
+            double left_cpu_diff = (left_stats.m_cpu_time_snap - left_stats.m_cpu_time_snap_old).count() / 1e9;
+            double right_cpu_diff = (right_stats.m_cpu_time_snap - right_stats.m_cpu_time_snap_old).count() / 1e9;
+            double left_time_diff = now - left_stats.nTimeSnapOld;
+            double right_time_diff = now - right_stats.nTimeSnapOld;
+            if (left_time_diff > 0 && right_time_diff > 0) {
+                double left_cpu_per_sec = left_cpu_diff / left_time_diff;
+                double right_cpu_per_sec = right_cpu_diff / right_time_diff;
+                return left_cpu_per_sec < right_cpu_per_sec;
+            }
+        }
+        // Fallback to total CPU time comparison
+        return left_stats.m_cpu_time < right_stats.m_cpu_time;
+    }
     case PeerTableModel::Subversion:
         return left_stats.cleanSubVer.compare(right_stats.cleanSubVer) < 0;
     } // no default case, so the compiler can warn about missing cases

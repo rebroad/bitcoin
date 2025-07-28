@@ -303,6 +303,10 @@ public:
     uint32_t m_mapped_as;
     ConnectionType m_conn_type;
     std::chrono::nanoseconds m_cpu_time;
+    //! CPU time snapshot for rate calculation
+    std::chrono::nanoseconds m_cpu_time_snap;
+    //! Old CPU time snapshot for rate calculation
+    std::chrono::nanoseconds m_cpu_time_snap_old;
 };
 
 
@@ -733,6 +737,11 @@ public:
     void AddCpuTime(std::chrono::nanoseconds cpu_time) {
         m_cpu_time += cpu_time;
     }
+
+    //! CPU time snapshot for rate calculation
+    std::chrono::nanoseconds m_cpu_time_snap{0};
+    //! Old CPU time snapshot for rate calculation
+    std::chrono::nanoseconds m_cpu_time_snap_old{0};
 
 private:
     const NodeId id;

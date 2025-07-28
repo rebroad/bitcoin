@@ -56,6 +56,7 @@ public:
         Recv,
         TxBpsPct,
         MPpm,
+        CpuTime,
         Subversion
     };
 
@@ -111,6 +112,9 @@ private:
         /*: Title of Peers Table column which indicates the number of TX
             that make it into the mempool per minute on average */
         tr("MPpm"),
+        /*: Title of Peers Table column which indicates the CPU percentage
+            spent processing this peer's messages */
+        tr("CPU%"),
         /*: Title of Peers Table column which contains the peer's
             User Agent string. */
         tr("User Agent")};
