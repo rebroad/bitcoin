@@ -302,6 +302,7 @@ public:
     Network m_network;
     uint32_t m_mapped_as;
     ConnectionType m_conn_type;
+    std::chrono::nanoseconds m_cpu_time;
 };
 
 
@@ -727,6 +728,8 @@ public:
         m_last_ping_time = ping_time;
         m_min_ping_time = std::min(m_min_ping_time.load(), ping_time);
     }
+
+    std::atomic<std::chrono::nanoseconds> m_cpu_time;
 
 private:
     const NodeId id;

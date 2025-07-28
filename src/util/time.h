@@ -8,7 +8,9 @@
 
 #include <compat.h>
 
+#include <atomic>
 #include <chrono>
+#include <functional>
 #include <stdint.h>
 #include <string>
 
@@ -89,5 +91,31 @@ struct timeval MillisToTimeval(std::chrono::milliseconds ms);
 
 /** Sanity check epoch match normal Unix epoch */
 bool ChronoSanityCheck();
+
+/**
+ * Measure CPU time spent by the current thread.
+ * A clock is started when a CpuTimer is created. When the object is destroyed
+ * the elapsed CPU time is valculated and a callback function is invoked,
+ * providing it the elapsed CPU time.
+ */
+class CpuTimer {
+public:
+    using FinishedCB = std::function<void(std::chrono::nanoseconds)>;
+
+    CpuTimer(const FinishedCB& finished_cb) : m_start{ThreadCpuTime()}, m_finished_cb{finished_cb} {}
+
+    ~CpuTimer()
+    {
+        if (m_finished_cb) {
+            m_finished_cb(ThreadCpuTime() - m_start);
+        }
+    }
+
+private:
+    const std::chrono::nanoseconds m_start;
+    const FinishedCB m_finished_cb;
+};
+
+std::chrono::nanoseconds operator+(std::chrono::nanoseconds a, std::chrono::nanoseconds b);
 
 #endif // BITCOIN_UTIL_TIME_H

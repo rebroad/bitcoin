@@ -19,6 +19,13 @@
 
 #include <tinyformat.h>
 
+#ifdef WIN32
+#include <windows.h>
+#include <winnt.h>
+#else
+#include <ctime>
+#endif
+
 void UninterruptibleSleep(const std::chrono::microseconds& n) { std::this_thread::sleep_for(n); }
 
 static std::atomic<int64_t> nMockTime(0); //!< For testing
@@ -186,4 +193,33 @@ struct timeval MillisToTimeval(int64_t nTimeout)
 struct timeval MillisToTimeval(std::chrono::milliseconds ms)
 {
     return MillisToTimeval(count_milliseconds(ms));
+}
+
+std::chrono::nanoseconds ThreadCpuTime()
+{
+#ifdef CLOCK_THREAD_CPUTIME_ID
+    timespec t;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t) == -1) {
+        return std::chrono::nanoseconds{0};
+    }
+    return std::chrono::seconds{t.tv_sec} + std::chrono::nanoseconds{t.tv_nsec};
+#elif defined(WIN32)
+    FILETIME creation, exit, kernel, user;
+    if (!GetThreadTimes(GetCurrentThread(), &creation, &exit, &kernel, &user)) {
+        return std::chrono::nanoseconds{0};
+    }
+    return std::chrono::seconds{kernel.dwHighDateTime} + std::chrono::nanoseconds{kernel.dwLowDateTime};
+#else
+    return std::chrono::nanoseconds{0};
+#endif
+}
+
+std::chrono::nanoseconds operator+(std::chrono::nanoseconds a, std::chrono::nanoseconds b)
+{
+    std::chrono::nanoseconds expected, desired;
+    do {
+        expected = a.load();
+        desired = expected + b;
+    } while (!a.compare_exchange_weak(expected, desired));
+    return desired;
 }
