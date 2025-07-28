@@ -624,7 +624,7 @@ static RPCHelpMan getblocktemplate()
     if (!request.params[0].isNull())
     {
         const UniValue& oparam = request.params[0].get_obj();
-        const UniValue& modeval = find_value(oparam, "mode");
+        const UniValue modeval = find_value(oparam, "mode");
         if (modeval.isStr())
             strMode = modeval.get_str();
         else if (modeval.isNull())
@@ -637,7 +637,7 @@ static RPCHelpMan getblocktemplate()
 
         if (strMode == "proposal")
         {
-            const UniValue& dataval = find_value(oparam, "data");
+            const UniValue dataval = find_value(oparam, "data");
             if (!dataval.isStr())
                 throw JSONRPCError(RPC_TYPE_ERROR, "Missing data String key for proposal");
 
@@ -664,7 +664,7 @@ static RPCHelpMan getblocktemplate()
             return BIP22ValidationResult(state);
         }
 
-        const UniValue& aClientRules = find_value(oparam, "rules");
+        const UniValue aClientRules = find_value(oparam, "rules");
         if (aClientRules.isArray()) {
             for (unsigned int i = 0; i < aClientRules.size(); ++i) {
                 const UniValue& v = aClientRules[i];
@@ -672,7 +672,7 @@ static RPCHelpMan getblocktemplate()
             }
         } else {
             // NOTE: It is important that this NOT be read if versionbits is supported
-            const UniValue& uvMaxVersion = find_value(oparam, "maxversion");
+            const UniValue uvMaxVersion = find_value(oparam, "maxversion");
             if (uvMaxVersion.isNum()) {
                 nMaxVersionPreVB = uvMaxVersion.get_int64();
             }
