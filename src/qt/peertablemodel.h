@@ -108,7 +108,7 @@ private:
         tr("Recv"),
         /*: Title of Peers Table column which indicates the percentage of
             useful TX traffic we're receiving from the peer. */
-        tr("Bps%"),
+        tr("MP%"),
         /*: Title of Peers Table column which indicates the number of TX
             that make it into the mempool per minute on average */
         tr("MPpm"),

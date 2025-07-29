@@ -336,6 +336,10 @@ public:
                         const std::chrono::microseconds time_received, const std::atomic<bool>& interruptMsgProc) override;
 
 private:
+    /** Rotate peer snapshots (old <- current, current <- live) */
+    void RotatePeerSnapshots(int64_t now);
+    /** Update current peer snapshots to live values */
+    void UpdatePeerSnapshots(int64_t now);
     void _RelayTransaction(const uint256& txid, const uint256& wtxid)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -4317,17 +4321,27 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 strExtra += " UNSOLICITED";
         }
         LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
-        if (pfrom.nRecvBytesSnapOld) {
-            int nBIF;
-            WITH_LOCK(cs_main, nBIF = State(pfrom.GetId())->nBlocksInFlight);
-            int nLBT = int(GetTime() - count_seconds(pfrom.m_last_block_time));
-            if (nBIF == 0 || nLBT < 60) {
-                pfrom.nRecvBytesSnapOld = 0;
-                pfrom.nMempoolBytes = 0;
-                pfrom.nMempoolTXs = 0;
-                LogPrintf("Setting nRecvBytesSnapOld=0 BIF=%d nLBT=%s peer=%d\n", nBIF, strAge(nLBT), pfrom.GetId());
+
+        // Take snapshot when IBD completes AND we're downloading the best block we know about
+        bool was_ibd = !m_initial_sync_finished;
+        const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(pblock->GetHash());
+        if (was_ibd && CanDirectFetch() && pindex && pindex->nHeight == m_chainman.ActiveChain().Height()) {
+            m_initial_sync_finished = true;
+            // IBD just completed AND this is the best block we know about, take a snapshot
+            int64_t now = GetTimeSeconds();
+            int64_t time_since_last_snap = now - pfrom.nTimeSnap;
+
+            if (time_since_last_snap > 60) {
+                // Last snapshot was > 1 minute ago, do full rotation
+                RotatePeerSnapshots(now);
+                LogPrintf("IBD completion snapshot rotation at height=%d\n", pindex->nHeight);
+            } else {
+                // Last snapshot was ≤ 1 minute ago, just update current snapshot
+                UpdatePeerSnapshots(now);
+                LogPrintf("IBD completion snapshot update at height=%d\n", pindex->nHeight);
             }
         }
+
         ProcessBlock(pfrom, pblock, forceProcessing);
         return;
     }
@@ -5660,4 +5674,31 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         MaybeSendFeefilter(*pto, current_time);
     } // release cs_main
     return true;
+}
+
+void PeerManagerImpl::RotatePeerSnapshots(int64_t now)
+{
+    m_connman.ForEachNode([&](CNode* pnode) {
+        pnode->nRecvBytesSnapOld = pnode->nRecvBytesSnap;
+        pnode->nRecvBytesSnap = pnode->nRecvBytes;
+        pnode->nMempoolBytesSnapOld = pnode->nMempoolBytesSnap;
+        pnode->nMempoolBytesSnap = pnode->nMempoolBytes;
+        pnode->nMempoolTXsSnapOld = pnode->nMempoolTXsSnap;
+        pnode->nMempoolTXsSnap = pnode->nMempoolTXs;
+        pnode->m_cpu_time_snap_old = pnode->m_cpu_time_snap;
+        pnode->m_cpu_time_snap = pnode->m_cpu_time.load();
+        pnode->nTimeSnapOld = pnode->nTimeSnap;
+        pnode->nTimeSnap = now;
+    });
+}
+
+void PeerManagerImpl::UpdatePeerSnapshots(int64_t now)
+{
+    m_connman.ForEachNode([&](CNode* pnode) {
+        pnode->nRecvBytesSnap = pnode->nRecvBytes;
+        pnode->nMempoolBytesSnap = pnode->nMempoolBytes;
+        pnode->nMempoolTXsSnap = pnode->nMempoolTXs;
+        pnode->m_cpu_time_snap = pnode->m_cpu_time.load();
+        pnode->nTimeSnap = now;
+    });
 }

@@ -139,7 +139,7 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
                     double cpu_percentage = (cpu_time_diff / time_diff) * 100.0; // Convert to percentage
                     return QString::fromStdString(strprintf("%.1f%%", cpu_percentage));
                 }
-            } else if (now != count_seconds(rec->nodeStats.m_connected)) {
+            } else if (now - count_seconds(rec->nodeStats.m_connected) > 0) {
                 // Fallback to total CPU percentage since connection
                 double total_cpu_time = rec->nodeStats.m_cpu_time.count() / 1e9; // Convert nanoseconds to seconds
                 double total_time = now - count_seconds(rec->nodeStats.m_connected);
