@@ -302,6 +302,7 @@ public:
     Network m_network;
     uint32_t m_mapped_as;
     ConnectionType m_conn_type;
+    //! CPU time spent processing messages to/from the peer
     std::chrono::nanoseconds m_cpu_time;
     //! CPU time snapshot for rate calculation
     std::chrono::nanoseconds m_cpu_time_snap;
