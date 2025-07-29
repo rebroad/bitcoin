@@ -1,0 +1,28 @@
+# Makefile for building the arcTo interceptor library
+
+CXX = g++
+CXXFLAGS = -fPIC -shared -std=c++11 -Wall -Wextra
+LIBS = -ldl
+
+TARGET = libqt_painter_interceptor.so
+SOURCE = qt_painter_interceptor.cpp
+
+all: $(TARGET)
+
+$(TARGET): $(SOURCE)
+	$(CXX) $(CXXFLAGS) -o $@ $< $(LIBS)
+
+clean:
+	rm -f $(TARGET)
+
+install: $(TARGET)
+	cp $(TARGET) /usr/local/lib/
+	ldconfig
+
+test: $(TARGET)
+	@echo "To test the interceptor:"
+	@echo "1. Build Bitcoin Core normally"
+	@echo "2. Run with: LD_PRELOAD=./libarcTo_interceptor.so ./src/qt/bitcoin-qt"
+	@echo "3. Or run with: LD_PRELOAD=./libarcTo_interceptor.so gdb --args ./src/qt/bitcoin-qt"
+
+.PHONY: all clean install test 
