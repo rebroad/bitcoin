@@ -280,12 +280,20 @@ public:
     uint64_t nRecvBytes;
     uint64_t nRecvBytesSnap;
     uint64_t nRecvBytesSnapOld;
+    // Mempool statistics - for transactions coming in via mempool
     uint64_t nMempoolBytes;
     uint64_t nMempoolBytesSnap;
     uint64_t nMempoolBytesSnapOld;
     unsigned int nMempoolTXs;
     unsigned int nMempoolTXsSnap;
     unsigned int nMempoolTXsSnapOld;
+    // Block statistics - for transactions coming in via blocks (full + compact)
+    uint64_t nBlockBytes;
+    uint64_t nBlockBytesSnap;
+    uint64_t nBlockBytesSnapOld;
+    unsigned int nBlockTXs;
+    unsigned int nBlockTXsSnap;
+    unsigned int nBlockTXsSnapOld;
     mapMsgCmdSize mapRecvBytesPerMsgCmd;
     NetPermissionFlags m_permissionFlags;
     std::chrono::microseconds m_last_ping_time;
@@ -462,12 +470,20 @@ public:
 
     std::atomic<std::chrono::seconds> m_last_send{0s};
     std::atomic<std::chrono::seconds> m_last_recv{0s};
+    // Mempool statistics - for transactions coming in via mempool
     uint64_t nMempoolBytes{0};
     uint64_t nMempoolBytesSnap{0};
     uint64_t nMempoolBytesSnapOld{0};
     unsigned int nMempoolTXs{0};
     unsigned int nMempoolTXsSnap{0};
     unsigned int nMempoolTXsSnapOld{0};
+    // Block statistics - for transactions coming in via blocks (full + compact)
+    uint64_t nBlockBytes{0};
+    uint64_t nBlockBytesSnap{0};
+    uint64_t nBlockBytesSnapOld{0};
+    unsigned int nBlockTXs{0};
+    unsigned int nBlockTXsSnap{0};
+    unsigned int nBlockTXsSnapOld{0};
     uint64_t nRecvBytesSnap{0};
     uint64_t nRecvBytesSnapOld{0};
     int64_t nTimeSnap{0};
