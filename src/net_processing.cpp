@@ -5710,18 +5710,18 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 
 void PeerManagerImpl::RotatePeerSnapshots(int64_t now)
 {
-    m_connman.ForEachNode([&](CNode* pnode) {
-        pnode->nRecvBytesSnapOld = pnode->nRecvBytesSnap;
-        pnode->nRecvBytesSnap = pnode->nRecvBytes;
-        pnode->nMempoolBytesSnapOld = pnode->nMempoolBytesSnap;
-        pnode->nMempoolBytesSnap = pnode->nMempoolBytes;
-        pnode->nMempoolTXsSnapOld = pnode->nMempoolTXsSnap;
-        pnode->nMempoolTXsSnap = pnode->nMempoolTXs;
-        pnode->m_cpu_time_snap_old = pnode->m_cpu_time_snap;
-        pnode->m_cpu_time_snap = pnode->m_cpu_time.load();
-        pnode->nTimeSnapOld = pnode->nTimeSnap;
-        pnode->nTimeSnap = now;
-    });
+    pnode->nRecvBytesSnapOld = pnode->nRecvBytesSnap;
+    pnode->nRecvBytesSnap = pnode->nRecvBytes;
+    pnode->nMempoolBytesSnapOld = pnode->nMempoolBytesSnap;
+    pnode->nMempoolBytesSnap = pnode->nMempoolBytes;
+    pnode->nMempoolTXsSnapOld = pnode->nMempoolTXsSnap;
+    pnode->nMempoolTXsSnap = pnode->nMempoolTXs;
+    pnode->nBlockBytesSnapOld = pnode->nBlockBytesSnap;
+    pnode->nBlockBytesSnap = pnode->nBlockBytes;
+    pnode->nBlockTXsSnapOld = pnode->nBlockTXsSnap;
+    pnode->nBlockTXsSnap = pnode->nBlockTXs;
+    pnode->nTimeSnapOld = pnode->nTimeSnap;
+    pnode->nTimeSnap = now;
 }
 
 void PeerManagerImpl::UpdatePeerSnapshots(int64_t now)
@@ -5730,7 +5730,8 @@ void PeerManagerImpl::UpdatePeerSnapshots(int64_t now)
         pnode->nRecvBytesSnap = pnode->nRecvBytes;
         pnode->nMempoolBytesSnap = pnode->nMempoolBytes;
         pnode->nMempoolTXsSnap = pnode->nMempoolTXs;
-        pnode->m_cpu_time_snap = pnode->m_cpu_time.load();
+        pnode->nBlockBytesSnap = pnode->nBlockBytes;
+        pnode->nBlockTXsSnap = pnode->nBlockTXs;
         pnode->nTimeSnap = now;
     });
 }

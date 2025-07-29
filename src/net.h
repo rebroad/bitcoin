@@ -738,6 +738,11 @@ public:
         m_cpu_time += cpu_time;
     }
 
+    /** Get the accumulated CPU time spent processing this peer's messages */
+    std::chrono::nanoseconds GetCpuTime() const {
+        return m_cpu_time.load();
+    }
+
     //! CPU time snapshot for rate calculation
     std::chrono::nanoseconds m_cpu_time_snap{0};
     //! Old CPU time snapshot for rate calculation
