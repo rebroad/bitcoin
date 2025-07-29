@@ -1902,11 +1902,11 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
     // Attribute CPU time from background validation to the source peer
     if (it != mapBlockSource.end()) {
         NodeId nodeid = it->second.first;
-        bool is_compact_block = it->second.second; // true = compact block, false = full block
+        bool is_full_block = it->second.second; // true = full block, false = compact block
 
         // Only attribute CPU time and stats for full blocks to avoid double-counting
         // Compact blocks already have their stats collected during processing
-        if (!is_compact_block) {
+        if (is_full_block) {
             // Calculate block statistics
             uint64_t block_bytes = 0;
             unsigned int block_txs = 0;
