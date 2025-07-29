@@ -1898,8 +1898,41 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
             MaybeSetPeerAsAnnouncingHeaderAndIDs(it->second.first);
         }
     }
-    if (it != mapBlockSource.end())
+
+    // Attribute CPU time from background validation to the source peer
+    if (it != mapBlockSource.end()) {
+        NodeId nodeid = it->second.first;
+        bool is_compact_block = it->second.second; // true = compact block, false = full block
+
+        // Only attribute CPU time and stats for full blocks to avoid double-counting
+        // Compact blocks already have their stats collected during processing
+        if (!is_compact_block) {
+            // Calculate block statistics
+            uint64_t block_bytes = 0;
+            unsigned int block_txs = 0;
+            for (const auto& tx : block.vtx) {
+                block_bytes += tx->GetTotalSize();
+                block_txs++;
+            }
+
+            LogPrintf("DEBUG: Attributing %d bytes and %d transactions for full block %s to peer %d\n",
+                     block_bytes, block_txs, block.GetHash().ToString(), nodeid);
+
+            // Attribute all statistics in a single ForNode call
+            m_connman.ForNode(nodeid, [block_bytes, block_txs](CNode* pnode) {
+                pnode->nMempoolBytes += block_bytes;
+                pnode->nMempoolTXs += block_txs;
+                return true;
+            });
+        } else {
+            LogPrintf("DEBUG: Skipping CPU and stats attribution for compact block %s (already counted)\n",
+                     block.GetHash().ToString());
+        }
         mapBlockSource.erase(it);
+    } else {
+        LogPrintf("DEBUG: No source peer found for block %s in mapBlockSource (likely from previous run)\n",
+                 block.GetHash().ToString());
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2871,8 +2904,10 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
             }
         });
     } else {
-        LOCK(cs_main);
-        mapBlockSource.erase(block->GetHash());
+        // Don't remove from mapBlockSource here - let BlockChecked callback handle it
+        // after CPU time attribution is complete
+        LogPrintf("DEBUG: Skipping mapBlockSource cleanup for block %s (force_processing=false)\n",
+                 block->GetHash().ToString());
     }
 }
 
@@ -4301,6 +4336,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // which peers send us compact blocks, so the race between here and
             // cs_main in ProcessNewBlock is fine.
             mapBlockSource.emplace(hash, std::make_pair(pfrom.GetId(), true));
+            LogPrintf("DEBUG: Added block %s to mapBlockSource for peer %d\n",
+                     hash.ToString(), pfrom.GetId());
 
             const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
             if (pindex)
