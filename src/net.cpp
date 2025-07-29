@@ -622,6 +622,10 @@ void CNode::CopyStats(CNodeStats& stats) {
     X(nMempoolBytesSnapOld);
     X(nMempoolTXs);
     X(nMempoolTXsSnapOld);
+    X(nBlockBytes);
+    X(nBlockBytesSnapOld);
+    X(nBlockTXs);
+    X(nBlockTXsSnapOld);
     X(nRecvBytesSnapOld);
     X(nTimeSnapOld);
     X(nBTxBpsPct);

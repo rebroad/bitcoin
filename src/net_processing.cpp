@@ -335,8 +335,8 @@ public:
                         const std::chrono::microseconds time_received, const std::atomic<bool>& interruptMsgProc) override;
 
 private:
-    /** Rotate peer snapshots (old <- current, current <- live) */
-    void RotatePeerSnapshots(int64_t now);
+    /** Rotate snapshots for a single node (old <- current, current <- live) */
+    void RotateNodeSnapshots(CNode* pnode, int64_t now);
     /** Update current peer snapshots to live values */
     void UpdatePeerSnapshots(int64_t now);
     void _RelayTransaction(const uint256& txid, const uint256& wtxid)
@@ -761,22 +761,8 @@ struct CNodeState {
     int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
     int nBlockAfterTXs{0};
-    //! BlockBytes for this node
-    int64_t nBlockBytes{0};
-    //! Last snapshot of nBlockBytes
-    int64_t nBlockBytesSnap{0};
-    //! Oldest snapshot of nBlockBytes
-    int64_t nBlockBytesSnapOld{0};
-    //! BlockTXs for this node
-    int nBlockTXs{0};
-    //! Last snapshot of nBlockTXs
-    int nBlockTXsSnap{0};
-    //! Oldest snapshot of nBlockTXs
-    int nBlockTXsSnapOld{0};
-    //! BlockBytes for this node if we process the BLOCK
-    int nNextBlockBytes{0};
-    //! BlockTXs for this node if we process the BLOCK
-    unsigned int nNextBlockTXs{0};
+    //! Per-block hash statistics to avoid double-counting compact blocks
+    std::map<uint256, std::pair<uint64_t, unsigned int>> m_block_stats;
     //! Number of blocks received while this node has been connected
     unsigned int nBlocksRecv{0};
     //! Time of last snapshot
@@ -1899,15 +1885,17 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
         }
     }
 
-    // Attribute CPU time from background validation to the source peer
+    // Attribute CPU time and block statistics from background validation to the source peer
     if (it != mapBlockSource.end()) {
         NodeId nodeid = it->second.first;
         bool is_full_block = it->second.second; // true = full block, false = compact block
 
-        // Only attribute CPU time and stats for full blocks to avoid double-counting
-        // Compact blocks already have their stats collected during processing
+        // Get current time for snapshot operations
+        int64_t now = GetTimeSeconds();
+
+        // Handle both full blocks and compact blocks
         if (is_full_block) {
-            // Calculate block statistics
+            // For full blocks, calculate statistics from the block data
             uint64_t block_bytes = 0;
             unsigned int block_txs = 0;
             for (const auto& tx : block.vtx) {
@@ -1920,13 +1908,57 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
 
             // Attribute all statistics in a single ForNode call
             m_connman.ForNode(nodeid, [block_bytes, block_txs](CNode* pnode) {
-                pnode->nMempoolBytes += block_bytes;
-                pnode->nMempoolTXs += block_txs;
+                pnode->nBlockBytes += block_bytes;
+                pnode->nBlockTXs += block_txs;
                 return true;
             });
         } else {
-            LogPrintf("DEBUG: Skipping CPU and stats attribution for compact block %s (already counted)\n",
+            // For compact blocks, multiple peers can contribute transactions to the same block
+            // We need to iterate through ALL peers that contributed to this block
+            LogPrintf("DEBUG: Transferring compact block stats for block %s from all contributing peers\n",
                      block.GetHash().ToString());
+
+            m_connman.ForEachNode([this, &block, now](CNode* pnode) {
+                CNodeState* nodestate = State(pnode->GetId());
+                if (nodestate) {
+                    // Look up stats for this specific block hash
+                    auto it = nodestate->m_block_stats.find(block.GetHash());
+                    if (it != nodestate->m_block_stats.end()) {
+                        // Transfer stats to permanent storage
+                        pnode->nBlockBytes += it->second.first;
+                        pnode->nBlockTXs += it->second.second;
+
+                        LogPrintf("DEBUG: Transferred %d bytes and %d transactions for compact block %s to peer %d\n",
+                                 it->second.first, it->second.second, block.GetHash().ToString(), pnode->GetId());
+
+                        // Increment block count for this peer
+                        nodestate->nBlocksRecv++;
+                        if (nodestate->nBlocksRecv % 3 == 0) {
+                            // Rotate snapshots for this peer
+                            RotateNodeSnapshots(pnode, now);
+                        }
+
+                        // Remove the block hash entry to avoid double-counting
+                        nodestate->m_block_stats.erase(it);
+                    }
+                }
+                return true;
+            });
+        }
+
+        // Take snapshots for full blocks (compact blocks handled above)
+        if (is_full_block) {
+            CNodeState* nodestate = State(nodeid);
+            if (nodestate) {
+                nodestate->nBlocksRecv++;
+                if (nodestate->nBlocksRecv % 3 == 0) {
+                    // Rotate snapshots only for this specific peer
+                    m_connman.ForNode(nodeid, [this, now](CNode* pnode) {
+                        RotateNodeSnapshots(pnode, now);
+                        return true;
+                    });
+                }
+            }
         }
         mapBlockSource.erase(it);
     } else {
@@ -2877,35 +2909,9 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
         node.m_last_block_time = GetTime<std::chrono::seconds>();
         LOCK(cs_main);
         MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
-        int64_t now = GetTimeSeconds();
-        m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-            CNodeState *nodestate = State(pnode->GetId());
-            nodestate->nBlocksRecv++;
-            nodestate->nBlockBytes += nodestate->nNextBlockBytes;
-            nodestate->nNextBlockBytes = 0;
-            if (nodestate->nBlockBytes) {
-                pnode->nBTxBpsPct = 100.0 * (nodestate->nBlockBytes - nodestate->nBlockBytesSnapOld) / (pnode->nRecvBytes - nodestate->nRecvBytesSnapOld);
-                LogPrintf("peer=%d: recv=%d Pct = (%d-%d) / %d = %d\n", pnode->GetId(), nodestate->nBlocksRecv, nodestate->nBlockBytes, nodestate->nBlockBytesSnapOld, pnode->nRecvBytes - nodestate->nRecvBytesSnapOld, pnode->nBTxBpsPct);
-            }
-            nodestate->nBlockTXs += nodestate->nNextBlockTXs;
-            nodestate->nNextBlockTXs = 0;
-            if (!nodestate->nBlockTimeSnap)
-                nodestate->nBlockTimeSnap = nodestate->nBlockTimeSnapOld = count_seconds(pnode->m_connected) - 1;
-            pnode->nBTXpm = 60.0 * (nodestate->nBlockTXs - nodestate->nBlockTXsSnapOld) / (now - nodestate->nBlockTimeSnapOld);
-            if (nodestate->nBlocksRecv % 3 == 0) { // Every 3rd block
-                nodestate->nRecvBytesSnapOld = nodestate->nRecvBytesSnap;
-                nodestate->nRecvBytesSnap = pnode->nRecvBytes;
-                nodestate->nBlockTimeSnapOld = nodestate->nBlockTimeSnap;
-                nodestate->nBlockTimeSnap = now;
-                nodestate->nBlockBytesSnapOld = nodestate->nBlockBytesSnap;
-                nodestate->nBlockBytesSnap = nodestate->nBlockBytes;
-                nodestate->nBlockTXsSnapOld = nodestate->nBlockTXsSnap;
-                nodestate->nBlockTXsSnap = nodestate->nBlockTXs;
-            }
-        });
     } else {
-        // Don't remove from mapBlockSource here - let BlockChecked callback handle it
-        // after CPU time attribution is complete
+        LOCK(cs_main);
+        mapBlockSource.erase(block->GetHash()); // Don't reward the peer for the block
         LogPrintf("DEBUG: Skipping mapBlockSource cleanup for block %s (force_processing=false)\n",
                  block->GetHash().ToString());
     }
@@ -4079,20 +4085,16 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 int nFromReorg = 0; int nFromRecycledPeers = 0;
                 bool fSeenBefore = (cmpctblock.header.GetHash() == last_recved_cmpctblock1.header.GetHash() ||
                     cmpctblock.header.GetHash() == last_recved_cmpctblock2.header.GetHash());
-                m_connman.ForEachNode([&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-                    State(pnode->GetId())->nNextBlockBytes = 0;
-                    State(pnode->GetId())->nNextBlockTXs = 0;
-                });
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize)) req.indexes.push_back(i);
                     else if (!fSeenBefore) {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
-                            m_connman.ForNode(nodeid, [nSize](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-                                State(pnode->GetId())->nNextBlockBytes += nSize;
-                                State(pnode->GetId())->nNextBlockTXs++;
-                                return true;
-                            });
+                            // Track stats per block hash to avoid double-counting
+                            uint256 block_hash = cmpctblock.header.GetHash();
+                            auto& [bytes, txs] = State(nodeid)->m_block_stats[block_hash];
+                            bytes += nSize;
+                            txs++;
                             nFromConPeers++;
                         } else {
                             if (nodeid == -1)
@@ -4158,7 +4160,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         if (fProcessBLOCKTXN) {
             pfrom.nMempoolBytes += nSize;
-            State(pfrom.GetId())->nBlockBytes += nSize; // REBTODO - maybe not needed once block provider logic added
+            // Track BLOCKTXN bytes per block hash for attribution in BlockChecked()
+            // Note: We don't have the block hash here, so we'll track it in the actual BLOCKTXN handler
             LogPrint(BCLog::BLOCK, "Calling ProcessMessage(BLOCKTXN) peer=%d\n", pfrom.GetId());
             return ProcessMessage(pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, time_received, interruptMsgProc);
         }
@@ -4277,7 +4280,15 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             if (fWrongPeer)
                 LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessBlock() wrong peer=%d\n", pfrom.GetId());
             if (resp.txn.size()) { // Only add these when an actual BLOCKTXN has been received
-                State(pfrom.GetId())->nBlockBytes += nSize; // REBTODO - remove once block provider metrics added
+                // Track BLOCKTXN bytes per block hash for attribution in BlockChecked()
+                uint256 block_hash = resp.blockhash;
+                CNodeState* nodestate = State(pfrom.GetId());
+                if (nodestate) {
+                    auto& [bytes, txs] = nodestate->m_block_stats[block_hash];
+                    bytes += nSize;
+                    txs += resp.txn.size();
+                }
+                // Also count as mempool bytes since these are transaction data
                 pfrom.nMempoolBytes += nSize;
                 pfrom.nMempoolTXs += resp.txn.size();
             }
@@ -4358,7 +4369,11 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
             if (time_since_last_snap > 60) {
                 // Last snapshot was > 1 minute ago, do full rotation
-                RotatePeerSnapshots(now);
+                // Rotate snapshots for all peers (5-minute timer)
+                m_connman.ForEachNode([this, now](CNode* pnode) {
+                    RotateNodeSnapshots(pnode, now);
+                    return true;
+                });
                 LogPrintf("IBD completion snapshot rotation at height=%d\n", pindex->nHeight);
             } else {
                 // Last snapshot was ≤ 1 minute ago, just update current snapshot
@@ -5696,26 +5711,28 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
     return true;
 }
 
-void PeerManagerImpl::RotatePeerSnapshots(int64_t now)
-{
-    m_connman.ForEachNode([&](CNode* pnode) {
-        pnode->nRecvBytesSnapOld = pnode->nRecvBytesSnap;
-        pnode->nRecvBytesSnap = pnode->nRecvBytes;
-        pnode->nMempoolBytesSnapOld = pnode->nMempoolBytesSnap;
-        pnode->nMempoolBytesSnap = pnode->nMempoolBytes;
-        pnode->nMempoolTXsSnapOld = pnode->nMempoolTXsSnap;
-        pnode->nMempoolTXsSnap = pnode->nMempoolTXs;
-        pnode->nTimeSnapOld = pnode->nTimeSnap;
-        pnode->nTimeSnap = now;
-    });
+void PeerManagerImpl::RotateNodeSnapshots(CNode* pnode, int64_t now) {
+    pnode->nRecvBytesSnapOld = pnode->nRecvBytesSnap;
+    pnode->nRecvBytesSnap = pnode->nRecvBytes;
+    pnode->nMempoolBytesSnapOld = pnode->nMempoolBytesSnap;
+    pnode->nMempoolBytesSnap = pnode->nMempoolBytes;
+    pnode->nMempoolTXsSnapOld = pnode->nMempoolTXsSnap;
+    pnode->nMempoolTXsSnap = pnode->nMempoolTXs;
+    pnode->nBlockBytesSnapOld = pnode->nBlockBytesSnap;
+    pnode->nBlockBytesSnap = pnode->nBlockBytes;
+    pnode->nBlockTXsSnapOld = pnode->nBlockTXsSnap;
+    pnode->nBlockTXsSnap = pnode->nBlockTXs;
+    pnode->nTimeSnapOld = pnode->nTimeSnap;
+    pnode->nTimeSnap = now;
 }
 
-void PeerManagerImpl::UpdatePeerSnapshots(int64_t now)
-{
+void PeerManagerImpl::UpdatePeerSnapshots(int64_t now) {
     m_connman.ForEachNode([&](CNode* pnode) {
         pnode->nRecvBytesSnap = pnode->nRecvBytes;
         pnode->nMempoolBytesSnap = pnode->nMempoolBytes;
         pnode->nMempoolTXsSnap = pnode->nMempoolTXs;
+        pnode->nBlockBytesSnap = pnode->nBlockBytes;
+        pnode->nBlockTXsSnap = pnode->nBlockTXs;
         pnode->nTimeSnap = now;
     });
 }
