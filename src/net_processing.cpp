@@ -339,6 +339,15 @@ private:
     void RotateNodeSnapshots(CNode* pnode, int64_t now);
     /** Update current peer snapshots to live values */
     void UpdatePeerSnapshots(int64_t now);
+
+    //! Add compact block stats for a specific node and block hash
+    void AddCompactBlockStats(NodeId nodeid, const uint256& hash, uint64_t bytes, unsigned int txs);
+
+    //! Store a compact block in the rolling buffer
+    void AddCompactBlock(const CBlockHeaderAndShortTxIDs& cmpctblock);
+
+    //! Get and clear compact block stats for a specific block hash
+    std::map<NodeId, std::pair<uint64_t, unsigned int>> GetAndClearCompactBlockStats(const uint256& hash);
     void _RelayTransaction(const uint256& txid, const uint256& wtxid)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -484,6 +493,13 @@ private:
      * punished if the block is invalid.
      */
     std::map<uint256, std::pair<NodeId, bool>> mapBlockSource GUARDED_BY(cs_main);
+
+    //! Global rolling list of recent compact blocks (size 3) - replaces last_recved_cmpctblock1/2
+    std::array<CBlockHeaderAndShortTxIDs, 3> m_recent_compact_blocks;
+    size_t m_next_compact_block_index{0};
+
+    //! Map from block hash to contributing nodes and their stats
+    std::map<uint256, std::map<NodeId, std::pair<uint64_t, unsigned int>>> m_compact_block_stats GUARDED_BY(cs_main);
 
     std::map</*height*/ int, /*time*/std::chrono::milliseconds> mapBlockTimes; // REBTODO - list or deque?
 
@@ -761,8 +777,6 @@ struct CNodeState {
     int nTxInFlight{0};
     //! How many TXs were in flight when we sent GETBLOCKTXN
     int nBlockAfterTXs{0};
-    //! Per-block hash statistics to avoid double-counting compact blocks
-    std::map<uint256, std::pair<uint64_t, unsigned int>> m_block_stats;
     //! Number of blocks received while this node has been connected
     unsigned int nBlocksRecv{0};
     //! Time of last snapshot
@@ -1756,8 +1770,6 @@ void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &blo
 static RecursiveMutex cs_most_recent_block;
 static std::shared_ptr<const CBlock> most_recent_block GUARDED_BY(cs_most_recent_block);
 static std::shared_ptr<const CBlockHeaderAndShortTxIDs> most_recent_compact_block GUARDED_BY(cs_most_recent_block);
-static CBlockHeaderAndShortTxIDs last_recved_cmpctblock1;
-static CBlockHeaderAndShortTxIDs last_recved_cmpctblock2;
 static uint256 most_recent_block_hash GUARDED_BY(cs_most_recent_block);
 static bool fWitnessesPresentInMostRecentCompactBlock GUARDED_BY(cs_most_recent_block);
 
@@ -1918,32 +1930,37 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
             LogPrintf("DEBUG: Transferring compact block stats for block %s from all contributing peers\n",
                      block.GetHash().ToString());
 
-            m_connman.ForEachNode([this, &block, now](CNode* pnode) {
-                CNodeState* nodestate = State(pnode->GetId());
-                if (nodestate) {
-                    // Look up stats for this specific block hash
-                    auto it = nodestate->m_block_stats.find(block.GetHash());
-                    if (it != nodestate->m_block_stats.end()) {
+            // Get and clear compact block stats for all contributing nodes
+            auto node_stats = GetAndClearCompactBlockStats(block.GetHash());
+            for (const auto& [nodeid, stats] : node_stats) {
+                auto [bytes, txs] = stats;
+                if (bytes > 0 || txs > 0) {
+                    // Find the CNode and CNodeState for this nodeid
+                    m_connman.ForNode(nodeid, [this, bytes, txs, now](CNode* pnode) {
                         // Transfer stats to permanent storage
-                        pnode->nBlockBytes += it->second.first;
-                        pnode->nBlockTXs += it->second.second;
-
-                        LogPrintf("DEBUG: Transferred %d bytes and %d transactions for compact block %s to peer %d\n",
-                                 it->second.first, it->second.second, block.GetHash().ToString(), pnode->GetId());
+                        pnode->nBlockBytes += bytes;
+                        pnode->nBlockTXs += txs;
 
                         // Increment block count for this peer
-                        nodestate->nBlocksRecv++;
-                        if (nodestate->nBlocksRecv % 3 == 0) {
-                            // Rotate snapshots for this peer
-                            RotateNodeSnapshots(pnode, now);
-                        }
+                        CNodeState* nodestate = State(pnode->GetId());
+                        if (nodestate) {
+                            nodestate->nBlocksRecv++;
 
-                        // Remove the block hash entry to avoid double-counting
-                        nodestate->m_block_stats.erase(it);
-                    }
+                            pnode->nBTxBpsPct = 100.0 * (pnode->nBlockBytes - pnode->nBlockBytesSnapOld) /
+                                    (pnode->nRecvBytes - pnode->nRecvBytesSnapOld);
+                            LogPrintf("peer=%d, recv=%d Pct = (%d-%d) / %d = %d\n",
+                                    pnode->GetId(), nodestate->nBlocksRecv, pnode->nBlockBytes, pnode->nBlockBytesSnapOld,
+                                    pnode->nRecvBytes - pnode->nRecvBytesSnapOld, pnode->nBTxBpsPct);
+
+                            if (nodestate->nBlocksRecv % 3 == 0) {
+                                // Rotate snapshots for this peer
+                                RotateNodeSnapshots(pnode, now);
+                            }
+                        }
+                        return true;
+                    });
                 }
-                return true;
-            });
+            }
         }
 
         // Take snapshots for full blocks (compact blocks handled above)
@@ -2554,8 +2571,14 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                         // Can't download any more from this peer
                         break;
                     }
-                    if (pindex->GetBlockHash() == last_recved_cmpctblock1.header.GetHash() ||
-                        pindex->GetBlockHash() == last_recved_cmpctblock2.header.GetHash()) {
+                    bool found_cached = false;
+                    for (size_t i = 0; i < 3; ++i) {
+                        if (pindex->GetBlockHash() == m_recent_compact_blocks[i].header.GetHash()) {
+                            found_cached = true;
+                            break;
+                        }
+                    }
+                    if (found_cached) {
                         // We'll pick this up in SendMessages() next
                         break;
                     }
@@ -4071,11 +4094,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     RemoveBlockRequest(pindex->GetBlockHash()); // Reset in-flight state in case Misbehaving does not result in a disconnect
                     Misbehaving(pfrom.GetId(), 100, "invalid compact block");
                     return;
-                } else if (status == READ_STATUS_FAILED && fDownloadBlocks) {
+                }
+                uint256 block_hash = cmpctblock.header.GetHash();
+                if (status == READ_STATUS_FAILED && fDownloadBlocks) {
                     // Duplicate txindexes, the block is now in-flight, so just request it
                     LogPrint(BCLog::BLOCK, "cmpctblock failed. send getdata block %s peer=%d\n", strBlockInfo(pindex), pfrom.GetId());
                     std::vector<CInv> vInv(1);
-                    vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom), cmpctblock.header.GetHash());
+                    vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom), block_hash);
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
                     return;
                 }
@@ -4083,18 +4108,25 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 BlockTransactionsRequest req;
                 int nFromConPeers = 0; int nFromDisPeers = 0; int nFromExtra = 0; int nFromMemDat = 0; int nFromPack = 0;
                 int nFromReorg = 0; int nFromRecycledPeers = 0;
-                bool fSeenBefore = (cmpctblock.header.GetHash() == last_recved_cmpctblock1.header.GetHash() ||
-                    cmpctblock.header.GetHash() == last_recved_cmpctblock2.header.GetHash());
+                bool fSeenBefore = false;
+                for (size_t i = 0; i < 3; ++i) {
+                    if (m_recent_compact_blocks[i].header.GetHash() == block_hash) {
+                        fSeenBefore = true;
+                        break;
+                    }
+                }
+                // Store the compact block first so AddCompactBlockStats can find it
+                if (!fSeenBefore) {
+                    AddCompactBlock(cmpctblock);
+                }
+
                 for (size_t i = 1; i < cmpctblock.BlockTxCount(); i++) {
                     NodeId nodeid; int64_t nTime; unsigned int nSize;
                     if (!partialBlock.IsTxAvailable(i, &nodeid, &nTime, &nSize)) req.indexes.push_back(i);
                     else if (!fSeenBefore) {
                         if (nodeid >= 0 && nTime >= m_last_no_connections && State(nodeid)) {
-                            // Track stats per block hash to avoid double-counting
-                            uint256 block_hash = cmpctblock.header.GetHash();
-                            auto& [bytes, txs] = State(nodeid)->m_block_stats[block_hash];
-                            bytes += nSize;
-                            txs++;
+                            // Add stats to the global compact block stats for this peer
+                            AddCompactBlockStats(nodeid, block_hash, nSize, 1);
                             nFromConPeers++;
                         } else {
                             if (nodeid == -1)
@@ -4128,10 +4160,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                     blockTxnMsg << txn;
                     fProcessBLOCKTXN = true;
                 } else {
-                    if (!fSeenBefore) {
-                        last_recved_cmpctblock2 = last_recved_cmpctblock1;
-                        last_recved_cmpctblock1 = cmpctblock;
-                    }
                     LogPrint(BCLog::BLOCK, "send getblocktxn %s indexes=%d/%d TXif=%d peer=%d\n", strBlkHeight(pindex), req.indexes.size(), cmpctblock.BlockTxCount(), nodestate->nTxInFlight, pfrom.GetId());
                     req.blockhash = pindex->GetBlockHash();
                     m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETBLOCKTXN, req));
@@ -4281,13 +4309,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 LogPrint(BCLog::BLOCK, "blocktxn Calling ProcessBlock() wrong peer=%d\n", pfrom.GetId());
             if (resp.txn.size()) { // Only add these when an actual BLOCKTXN has been received
                 // Track BLOCKTXN bytes per block hash for attribution in BlockChecked()
-                uint256 block_hash = resp.blockhash;
-                CNodeState* nodestate = State(pfrom.GetId());
-                if (nodestate) {
-                    auto& [bytes, txs] = nodestate->m_block_stats[block_hash];
-                    bytes += nSize;
-                    txs += resp.txn.size();
-                }
+                AddCompactBlockStats(pfrom.GetId(), resp.blockhash, nSize, resp.txn.size());
                 // Also count as mempool bytes since these are transaction data
                 pfrom.nMempoolBytes += nSize;
                 pfrom.nMempoolTXs += resp.txn.size();
@@ -5647,10 +5669,12 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
             FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
             for (const CBlockIndex *pindex : vToDownload) {
                 CBlockHeaderAndShortTxIDs* cached_cmpctblock{nullptr};
-                if (pindex->GetBlockHash() == last_recved_cmpctblock1.header.GetHash())
-                    cached_cmpctblock = &last_recved_cmpctblock1;
-                if (pindex->GetBlockHash() == last_recved_cmpctblock2.header.GetHash())
-                    cached_cmpctblock = &last_recved_cmpctblock2;
+                for (size_t i = 0; i < 3; ++i) {
+                    if (pindex->GetBlockHash() == m_recent_compact_blocks[i].header.GetHash()) {
+                        cached_cmpctblock = &m_recent_compact_blocks[i];
+                        break;
+                    }
+                }
                 if (CanDirectFetch() && cached_cmpctblock) {
                     LogPrint(BCLog::BLOCK, "Calling ProcessMessage(CMPCTBLOCK) %s peer=%d\n", strBlkInfo(pindex), pto->GetId());
                     CDataStream cmpctblkMsg(SER_NETWORK, PROTOCOL_VERSION);
@@ -5735,4 +5759,68 @@ void PeerManagerImpl::UpdatePeerSnapshots(int64_t now) {
         pnode->nBlockTXsSnap = pnode->nBlockTXs;
         pnode->nTimeSnap = now;
     });
+}
+
+void PeerManagerImpl::AddCompactBlockStats(NodeId nodeid, const uint256& hash, uint64_t bytes, unsigned int txs)
+{
+    // Add/accumulate stats for this node and hash
+    // Note: The compact block should already be stored in m_recent_compact_blocks
+    // by the time this method is called (AddCompactBlock() is called first)
+    auto& node_stats = m_compact_block_stats[hash];
+    auto& stats = node_stats[nodeid];
+    stats.first += bytes;   // bytes
+    stats.second += txs;    // txs
+}
+
+std::map<NodeId, std::pair<uint64_t, unsigned int>> PeerManagerImpl::GetAndClearCompactBlockStats(const uint256& hash)
+{
+    auto it = m_compact_block_stats.find(hash);
+    if (it == m_compact_block_stats.end()) {
+        return {}; // Not found
+    }
+
+    // Return the stats and remove the entry
+    auto result = std::move(it->second);
+    m_compact_block_stats.erase(it);
+
+    // Also remove from rolling list if present
+    for (size_t i = 0; i < 3; ++i) {
+        if (m_recent_compact_blocks[i].header.GetHash() == hash) {
+            // Mark this slot as empty by setting header to null
+            // This is sufficient since we check header.GetHash() for emptiness
+            m_recent_compact_blocks[i].header.SetNull();
+            break;
+        }
+    }
+
+    return result;
+}
+
+void PeerManagerImpl::AddCompactBlock(const CBlockHeaderAndShortTxIDs& cmpctblock)
+{
+    const uint256& hash = cmpctblock.header.GetHash();
+
+    // Check if this compact block already exists in our rolling list
+    bool found = false;
+    for (size_t i = 0; i < 3; ++i) {
+        if (m_recent_compact_blocks[i].header.GetHash() == hash) {
+            found = true;
+            break;
+        }
+    }
+
+    // If not found, add it to the rolling list
+    if (!found) {
+        // Check if we're about to overwrite a non-empty compact block (indicating buffer overflow)
+        if (m_recent_compact_blocks[m_next_compact_block_index].header.GetHash() != uint256{}) {
+            LogPrintf("ERROR: Compact block buffer overflow! Hash %s will overwrite %s\n",
+                     hash.ToString(), m_recent_compact_blocks[m_next_compact_block_index].header.GetHash().ToString());
+
+            // Clean up stats for the hash we're about to overwrite
+            m_compact_block_stats.erase(m_recent_compact_blocks[m_next_compact_block_index].header.GetHash());
+        }
+
+        m_recent_compact_blocks[m_next_compact_block_index] = cmpctblock;
+        m_next_compact_block_index = (m_next_compact_block_index + 1) % 3;
+    }
 }
