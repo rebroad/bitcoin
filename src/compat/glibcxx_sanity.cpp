@@ -47,7 +47,7 @@ bool sanity_test_range_fmt()
 {
     std::string test;
     try {
-        test.at(1);
+        (void)test.at(1);  // Explicitly ignore the return value to suppress nodiscard warning
     } catch (const std::out_of_range&) {
         return true;
     } catch (...) {

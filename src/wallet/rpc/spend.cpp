@@ -554,7 +554,10 @@ void FundTransaction(CWallet& wallet, CMutableTransaction& tx, CAmount& fee_out,
         for (const UniValue& input : options["input_weights"].get_array().getValues()) {
             uint256 txid = ParseHashO(input, "txid");
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-reference"
             const UniValue& vout_v = find_value(input, "vout");
+#pragma GCC diagnostic pop
             if (!vout_v.isNum()) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, missing vout key");
             }
@@ -563,7 +566,10 @@ void FundTransaction(CWallet& wallet, CMutableTransaction& tx, CAmount& fee_out,
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, vout cannot be negative");
             }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-reference"
             const UniValue& weight_v = find_value(input, "weight");
+#pragma GCC diagnostic pop
             if (!weight_v.isNum()) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, missing weight key");
             }
