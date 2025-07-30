@@ -49,7 +49,7 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
     QString font            = QApplication::font().toString();
 
     // create a bitmap according to device pixelratio
-    QSize splashSize(480*devicePixelRatio,320*devicePixelRatio);
+    QSize splashSize(520*devicePixelRatio,320*devicePixelRatio);
     pixmap = QPixmap(splashSize);
 
     // change to HiDPI if it makes sense
@@ -118,7 +118,7 @@ SplashScreen::SplashScreen(const NetworkStyle* networkStyle)
         pixPaint.setFont(QFont(font, 12*fontFactor));
         const int x = textStartX;
         const int y = paddingTop+titleCopyrightVSpace;
-        QRect copyrightRect(x, y, pixmap.width() - x - paddingRight, pixmap.height() - y);
+        QRect copyrightRect(x, y, pixmap.width() - x - 20, pixmap.height() - y);
         if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
             pixPaint.setPen(QApplication::palette().color(QPalette::WindowText));
         } else {
