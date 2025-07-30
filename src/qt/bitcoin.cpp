@@ -52,11 +52,14 @@
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QMessageBox>
+#include <QProcess>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
 #include <QTranslator>
 #include <QWindow>
+#include <QFile>
 
 // For crash handling to save traffic widget data
 #include <signal.h>
@@ -220,6 +223,87 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
 static int qt_argc = 1;
 static const char* qt_argv = "bitcoin-qt";
 
+// Helper function to detect dark mode across different platforms
+bool isSystemDarkMode() {
+#ifdef Q_OS_LINUX
+    // Check environment variables first
+    QString gtkTheme = qgetenv("GTK_THEME");
+    QString qtTheme = qgetenv("QT_STYLE_OVERRIDE");
+
+    if (gtkTheme.contains("dark", Qt::CaseInsensitive) ||
+        qtTheme.contains("dark", Qt::CaseInsensitive)) {
+        return true;
+    }
+
+    // Check XFCE specific settings
+    QString xfceTheme = qgetenv("XFCE_THEME");
+    if (xfceTheme.contains("dark", Qt::CaseInsensitive)) {
+        return true;
+    }
+
+    // Try to detect via gsettings (GNOME)
+    QProcess gsettingsProcess;
+    gsettingsProcess.start("gsettings", {"get", "org.gnome.desktop.interface", "color-scheme"});
+    if (gsettingsProcess.waitForFinished(1000)) {
+        QString output = gsettingsProcess.readAllStandardOutput().trimmed();
+        if (output.contains("dark", Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+
+    // Try to detect via kreadconfig5 (KDE)
+    QProcess kdeProcess;
+    kdeProcess.start("kreadconfig5", {"--file", "kcmdisplayrc", "--group", "General", "--key", "ColorScheme"});
+    if (kdeProcess.waitForFinished(1000)) {
+        QString output = kdeProcess.readAllStandardOutput().trimmed();
+        if (output.contains("dark", Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+
+    // Check XFCE settings file
+    QString xfceConfig = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml";
+    if (QFile::exists(xfceConfig)) {
+        QFile file(xfceConfig);
+        if (file.open(QIODevice::ReadOnly)) {
+            QString content = file.readAll();
+            if (content.contains("dark", Qt::CaseInsensitive) ||
+                content.contains("Adwaita-dark", Qt::CaseInsensitive) ||
+                content.contains("Breeze-Dark", Qt::CaseInsensitive)) {
+                return true;
+            }
+        }
+    }
+#endif
+
+#ifdef Q_OS_WIN
+    // Windows registry check for dark mode
+    QSettings settings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", QSettings::NativeFormat);
+    return settings.value("AppsUseLightTheme", 1).toInt() == 0;
+#endif
+
+#ifdef Q_OS_MAC
+    // macOS appearance check
+    QProcess process;
+    process.start("defaults", {"read", "-g", "AppleInterfaceStyle"});
+    if (process.waitForFinished(1000)) {
+        QString output = process.readAllStandardOutput().trimmed();
+        return output.contains("Dark", Qt::CaseInsensitive);
+    }
+#endif
+
+    // Fallback: try to detect from current palette (less reliable)
+    QPalette currentPalette = QApplication::palette();
+    QColor windowColor = currentPalette.color(QPalette::Window);
+
+    // Use both lightness and value for better detection
+    int lightness = windowColor.lightness();
+    int value = windowColor.value();
+
+    // If both lightness and value are low, it's likely dark mode
+    return (lightness < 128 && value < 128);
+}
+
 BitcoinApplication::BitcoinApplication():
     QApplication(qt_argc, const_cast<char **>(&qt_argv)),
     optionsModel(nullptr),
@@ -236,9 +320,8 @@ BitcoinApplication::BitcoinApplication():
     // Set up performance monitoring
     setupPerfMonitoring();
 
-
     // Set up Qt6-like dark theme if system is in dark mode
-    if (QApplication::palette().color(QPalette::Window).lightness() < 128) {
+    if (isSystemDarkMode()) {
         setStyle("Fusion");
         QPalette darkPalette;
         darkPalette.setColor(QPalette::Window, QColor(53, 53, 53));
