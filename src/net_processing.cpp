@@ -4359,6 +4359,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         bool forceProcessing = false;
         const uint256 hash(pblock->GetHash());
         std::string strExtra;
+        const CBlockIndex* pindex = nullptr;
         {
             LOCK(cs_main);
             // Always process the block if we requested it, since we may
@@ -4382,8 +4383,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         // Take snapshot when IBD completes AND we're downloading the best block we know about
         bool was_ibd = !m_initial_sync_finished;
-        const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(pblock->GetHash());
-        if (was_ibd && CanDirectFetch() && pindex && pindex->nHeight == m_chainman.ActiveChain().Height()) {
+        if (was_ibd && pindex && CanDirectFetch() && pindex->nHeight == m_chainman.ActiveChain().Height()) {
             m_initial_sync_finished = true;
             // IBD just completed AND this is the best block we know about, take a snapshot
             int64_t now = GetTimeSeconds();
