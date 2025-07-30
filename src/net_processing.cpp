@@ -4381,9 +4381,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
 
-        // Take snapshot when IBD completes AND we're downloading the best block we know about
+        // Take snapshot when IBD completes AND we're connecting the best block we know about
         bool was_ibd = !m_initial_sync_finished;
-        if (was_ibd && pindex && CanDirectFetch() && pindex->nHeight == m_chainman.ActiveChain().Height()) {
+        if (was_ibd && pindex && pindex == pindexBestHeader) {
             m_initial_sync_finished = true;
             // IBD just completed AND this is the best block we know about, take a snapshot
             int64_t now = GetTimeSeconds();
@@ -4997,7 +4997,11 @@ void PeerManagerImpl::CheckForStaleTipAndEvictPeers()
         m_stale_tip_check_time = now + STALE_CHECK_INTERVAL;
     }
 
-    if (!m_initial_sync_finished && CanDirectFetch()) {
+    if (!CanDirectFetch()) {
+        // Our tip is too old, we're falling behind - reset initial sync state
+        m_initial_sync_finished = false;
+    } else if (!m_initial_sync_finished) {
+        // We can direct fetch and haven't finished initial sync yet - start extra peers
         m_connman.StartExtraBlockRelayPeers();
         m_initial_sync_finished = true;
     }
