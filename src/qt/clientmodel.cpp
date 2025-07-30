@@ -88,6 +88,14 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
             m_gui_data.bytesRecv = m_node.getTotalBytesRecv();
             m_gui_data.bytesSent = m_node.getTotalBytesSent();
 
+            // Update peer stats cache (less frequently to avoid cs_main contention)
+            int64_t now = GetTime();
+            if (now - m_gui_data.lastPeerUpdateTime >= 5) { // Update every 5 seconds
+                m_gui_data.peerStats.clear();
+                m_node.getNodesStats(m_gui_data.peerStats);
+                m_gui_data.lastPeerUpdateTime = now;
+            }
+
             // Update performance metrics
             m_gui_data.lastUpdateTime = updateStartTime;
             m_gui_data.updateCount++;
@@ -133,6 +141,11 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     qDebug() << "ClientModel: IBD freeze-fix enabled - using async cache updates with"
              << MODEL_UPDATE_DELAY.count() << "ms normal /"
              << MODEL_UPDATE_DELAY_IBD.count() << "ms IBD intervals";
+
+    // Log initial cache stats after 10 seconds
+    QTimer::singleShot(10000, [this]() {
+        qDebug() << "ClientModel: Initial cache stats:" << getCacheStats();
+    });
 }
 
 ClientModel::~ClientModel()
@@ -455,7 +468,8 @@ QString ClientModel::getCacheStats() const
                            "  Header Height: %4\n"
                            "  Connections: %5 in, %6 out, %7 total\n"
                            "  Mempool: %8 txs, %9 bytes\n"
-                           "  Network: %10 bytes in, %11 bytes out")
+                           "  Network: %10 bytes in, %11 bytes out\n"
+                           "  Peers: %12 cached, last update: %13 seconds ago")
                            .arg(m_gui_data.updateCount)
                            .arg(age)
                            .arg(m_gui_data.numBlocks)
@@ -466,7 +480,9 @@ QString ClientModel::getCacheStats() const
                            .arg(m_gui_data.mempoolSize)
                            .arg(m_gui_data.mempoolDynamicUsage)
                            .arg(m_gui_data.bytesRecv)
-                           .arg(m_gui_data.bytesSent);
+                           .arg(m_gui_data.bytesSent)
+                           .arg(m_gui_data.peerStats.size())
+                           .arg(now - m_gui_data.lastPeerUpdateTime);
 
     return stats;
 }
@@ -492,4 +508,47 @@ void ClientModel::forceCacheRefresh()
     // Reset cache age to force immediate update
     LOCK(m_gui_data_mutex);
     m_gui_data.lastUpdateTime = 0;
+}
+
+int64_t ClientModel::getCachedBytesRecv() const
+{
+    // Use cached data to avoid cs_main contention
+    LOCK(m_gui_data_mutex);
+
+    // If cache is invalid or stale, fall back to direct call
+    if (!isCacheValid()) {
+        qDebug() << "ClientModel: Cache miss for bytesRecv, falling back to direct call";
+        return m_node.getTotalBytesRecv();
+    }
+
+    return m_gui_data.bytesRecv;
+}
+
+int64_t ClientModel::getCachedBytesSent() const
+{
+    // Use cached data to avoid cs_main contention
+    LOCK(m_gui_data_mutex);
+
+    // If cache is invalid or stale, fall back to direct call
+    if (!isCacheValid()) {
+        qDebug() << "ClientModel: Cache miss for bytesSent, falling back to direct call";
+        return m_node.getTotalBytesSent();
+    }
+
+    return m_gui_data.bytesSent;
+}
+
+bool ClientModel::getCachedPeerStats(interfaces::Node::NodesStats& stats) const
+{
+    // Use cached data to avoid cs_main contention
+    LOCK(m_gui_data_mutex);
+
+    // If cache is invalid or stale, fall back to direct call
+    if (m_gui_data.peerStats.empty() || !isCacheValid()) {
+        qDebug() << "ClientModel: Cache miss for peerStats, falling back to direct call";
+        return m_node.getNodesStats(stats);
+    }
+
+    stats = m_gui_data.peerStats;
+    return true;
 }

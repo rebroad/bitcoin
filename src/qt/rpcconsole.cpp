@@ -672,8 +672,8 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         updateNetworkState();
         connect(model, &ClientModel::networkActiveChanged, this, &RPCConsole::setNetworkActive);
 
-        interfaces::Node& node = clientModel->node();
-        updateTrafficStats(node.getTotalBytesRecv(), node.getTotalBytesSent());
+        // Use cached data to avoid cs_main contention during IBD
+        updateTrafficStats(clientModel->getCachedBytesRecv(), clientModel->getCachedBytesSent());
         connect(model, &ClientModel::bytesChanged, this, &RPCConsole::updateTrafficStats);
 
         connect(model, &ClientModel::mempoolSizeChanged, this, &RPCConsole::setMempoolSize);

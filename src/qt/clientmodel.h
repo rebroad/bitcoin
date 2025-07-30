@@ -83,6 +83,13 @@ public:
     bool isCacheValid() const;
     void forceCacheRefresh();
 
+    // Cached traffic data for debug components
+    int64_t getCachedBytesRecv() const;
+    int64_t getCachedBytesSent() const;
+
+    // Cached peer data for debug components
+    bool getCachedPeerStats(interfaces::Node::NodesStats& stats) const;
+
     // Legacy caching - now replaced by m_gui_data (kept for compatibility)
     mutable std::atomic<int> cachedBestHeaderHeight;
     mutable std::atomic<int64_t> cachedBestHeaderTime;
@@ -114,6 +121,14 @@ public:
         size_t mempoolDynamicUsage{0};
         int64_t bytesRecv{0};
         int64_t bytesSent{0};
+
+        // Traffic graph data (updated more frequently)
+        int64_t trafficBytesRecv{0};
+        int64_t trafficBytesSent{0};
+
+        // Peer data cache
+        interfaces::Node::NodesStats peerStats;
+        int64_t lastPeerUpdateTime{0};
 
         // Performance monitoring metrics
         int64_t lastUpdateTime{0};

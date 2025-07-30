@@ -348,8 +348,9 @@ void TrafficGraphWidget::updateStuff()
         if (now > (m_last_time[i] + msecs_per_sample - expected_gap / 2)) {
             if (!latest_bytes) {
                 latest_bytes = true;
-                bytes_in = m_client_model->node().getTotalBytesRecv() + m_baseline_bytes_recv;
-                bytes_out = m_client_model->node().getTotalBytesSent() + m_baseline_bytes_sent;
+                // Use cached data to avoid cs_main contention during IBD
+                bytes_in = m_client_model->getCachedBytesRecv() + m_baseline_bytes_recv;
+                bytes_out = m_client_model->getCachedBytesSent() + m_baseline_bytes_sent;
             }
             updateRates(i, now, bytes_in, bytes_out);
             if (i == m_value) {

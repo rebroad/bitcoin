@@ -4,6 +4,7 @@
 
 #include <qt/peertablemodel.h>
 
+#include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
 
@@ -190,7 +191,15 @@ QModelIndex PeerTableModel::index(int row, int column, const QModelIndex& parent
 void PeerTableModel::refresh()
 {
     interfaces::Node::NodesStats nodes_stats;
-    m_node.getNodesStats(nodes_stats);
+
+    // Try to get cached peer stats from ClientModel first
+    ClientModel* clientModel = qobject_cast<ClientModel*>(parent());
+    if (clientModel && clientModel->getCachedPeerStats(nodes_stats)) {
+        // Successfully got cached data
+    } else {
+        // Fall back to direct node call if cache is not available
+        m_node.getNodesStats(nodes_stats);
+    }
     decltype(m_peers_data) new_peers_data;
     new_peers_data.reserve(nodes_stats.size());
     for (const auto& node_stats : nodes_stats) {
