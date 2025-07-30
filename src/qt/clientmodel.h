@@ -110,7 +110,7 @@ public:
     std::vector<mempool_feehist_sample> m_mempool_feehist;
     std::atomic<int64_t> m_mempool_feehist_last_sample_timestamp{0};
 
-    // GUI-specific data layer - updated asynchronously to avoid cs_main contention
+    // GUI-specific data layer - double-buffered for air lock pattern
     struct GuiData {
         int numBlocks{-1};
         int headerHeight{-1};
@@ -141,8 +141,12 @@ public:
         int64_t lastUpdateTime{0};
         int64_t updateCount{0};
     };
-    mutable GuiData m_gui_data;
-    mutable Mutex m_gui_data_mutex;
+
+    // Double-buffered cache for air lock pattern
+    GuiData m_gui_data_front;  // Front buffer - read by GUI (no lock needed)
+    GuiData m_gui_data_back;   // Back buffer - written by background thread
+    mutable Mutex m_gui_data_back_mutex;  // Only protects back buffer during writes
+    std::atomic<bool> m_cache_ready{false};  // Indicates if front buffer has valid data
 
 private:
     interfaces::Node& m_node;
@@ -164,6 +168,7 @@ private:
 
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();
+    void initializeCache();
 
 Q_SIGNALS:
     void numConnectionsChanged(int count);

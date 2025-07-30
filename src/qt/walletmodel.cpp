@@ -62,6 +62,7 @@ WalletModel::WalletModel(std::unique_ptr<interfaces::Wallet> wallet, ClientModel
 
 WalletModel::~WalletModel()
 {
+    m_shutdown = true;
     unsubscribeFromCoreSignals();
 }
 
@@ -78,7 +79,12 @@ void WalletModel::startPollBalance()
 void WalletModel::setClientModel(ClientModel* client_model)
 {
     m_client_model = client_model;
-    if (!m_client_model) timer->stop();
+    // Don't stop the timer if we're in the process of shutting down
+    // This prevents crashes when setClientModel(nullptr) is called during shutdown
+    // while Qt's parent-child system is destroying timers (including the GUI responsiveness timer)
+    if (!m_client_model && !m_shutdown && timer && timer->isActive()) {
+        timer->stop();
+    }
 }
 
 void WalletModel::updateStatus()

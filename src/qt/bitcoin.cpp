@@ -403,9 +403,12 @@ void BitcoinApplication::createWindow(const NetworkStyle *networkStyle)
         responsivenessTimer->setInterval(33); // ~30 FPS - good balance of responsiveness and performance
         connect(responsivenessTimer, &QTimer::timeout, [this] {
             // Process events and update GUI to maintain responsiveness during heavy validation
-            QApplication::processEvents();
-            if (window) {
-                window->update(); // Force a repaint for progress bars and status updates
+            // Only process events if we're not in the process of shutting down
+            if (!m_shutdown) {
+                QApplication::processEvents();
+                if (window) {
+                    window->update(); // Force a repaint for progress bars and status updates
+                }
             }
         });
         responsivenessTimer->start();
@@ -475,6 +478,7 @@ void BitcoinApplication::requestInitialize()
 void BitcoinApplication::requestShutdown()
 {
     PERF_MONITOR("qt_request_shutdown");
+    m_shutdown = true;
     for (const auto w : QGuiApplication::topLevelWindows()) {
         w->hide();
     }

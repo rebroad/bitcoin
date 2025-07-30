@@ -49,71 +49,78 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
 
     banTableModel = new BanTableModel(m_node, this);
 
+    // Initialize cache immediately to avoid fallbacks
+    initializeCache();
+
     QTimer* timer = new QTimer;
     timer->setInterval(MODEL_UPDATE_DELAY);
     connect(timer, &QTimer::timeout, [this, timer] {
         // no locking required at this point
         // the following calls will acquire the required lock
 
-        // Update GUI data asynchronously to avoid cs_main contention
+        // Update back buffer asynchronously to avoid cs_main contention
         // Note: These calls still need cs_main, but they're in a background thread
-        // and the GUI methods will use cached data instead
+        // and the GUI methods will use front buffer (no locks needed)
         interfaces::mempool_feehistogram current_fee_histogram;
         {
-            LOCK(m_gui_data_mutex);
+            LOCK(m_gui_data_back_mutex);
 
             int64_t updateStartTime = GetTime();
 
             // Direct assignment - these methods are reliable and always return valid values
-            m_gui_data.numBlocks = m_node.getNumBlocks();
+            m_gui_data_back.numBlocks = m_node.getNumBlocks();
 
             // Fix: Use local variables for getHeaderTip to avoid passing stale cached values
             int height;
             int64_t blockTime;
             if (m_node.getHeaderTip(height, blockTime)) {
-                m_gui_data.headerHeight = height;
-                m_gui_data.headerTime = blockTime;
+                m_gui_data_back.headerHeight = height;
+                m_gui_data_back.headerTime = blockTime;
             } else {
                 // Keep previous values if getHeaderTip fails
                 // This prevents cache from being corrupted with invalid data
                 qDebug() << "ClientModel: getHeaderTip failed, keeping previous cached values";
             }
 
-            m_gui_data.bestBlockHash = m_node.getBestBlockHash();
-            m_gui_data.initialSyncFinished = m_node.isInitialSyncFinished();
-            m_gui_data.numConnectionsIn = m_node.getNodeCount(ConnectionDirection::In);
-            m_gui_data.numConnectionsOut = m_node.getNodeCount(ConnectionDirection::Out);
-            m_gui_data.numConnectionsTotal = m_node.getNodeCount(ConnectionDirection::Both);
-            m_gui_data.mempoolSize = m_node.getMempoolSize();
-            m_gui_data.mempoolDynamicUsage = m_node.getMempoolDynamicUsage();
-            m_gui_data.bytesRecv = m_node.getTotalBytesRecv();
-            m_gui_data.bytesSent = m_node.getTotalBytesSent();
+            m_gui_data_back.bestBlockHash = m_node.getBestBlockHash();
+            m_gui_data_back.initialSyncFinished = m_node.isInitialSyncFinished();
+            m_gui_data_back.numConnectionsIn = m_node.getNodeCount(ConnectionDirection::In);
+            m_gui_data_back.numConnectionsOut = m_node.getNodeCount(ConnectionDirection::Out);
+            m_gui_data_back.numConnectionsTotal = m_node.getNodeCount(ConnectionDirection::Both);
+            m_gui_data_back.mempoolSize = m_node.getMempoolSize();
+            m_gui_data_back.mempoolDynamicUsage = m_node.getMempoolDynamicUsage();
+            m_gui_data_back.bytesRecv = m_node.getTotalBytesRecv();
+            m_gui_data_back.bytesSent = m_node.getTotalBytesSent();
 
             // Update peer stats cache (less frequently to avoid cs_main contention)
             int64_t now = GetTime();
-            if (now - m_gui_data.lastPeerUpdateTime >= 5) { // Update every 5 seconds
-                m_gui_data.peerStats.clear();
-                m_node.getNodesStats(m_gui_data.peerStats);
-                m_gui_data.lastPeerUpdateTime = now;
+            if (now - m_gui_data_back.lastPeerUpdateTime >= 5) { // Update every 5 seconds
+                m_gui_data_back.peerStats.clear();
+                m_node.getNodesStats(m_gui_data_back.peerStats);
+                m_gui_data_back.lastPeerUpdateTime = now;
             }
 
             // Update mempool fee histogram cache (less frequently to avoid cs_main contention)
-            if (now - m_gui_data.lastFeeHistogramUpdateTime >= 10) { // Update every 10 seconds
-                m_gui_data.feeHistogram.clear();
-                m_gui_data.feeHistogram = m_node.getMempoolFeeHistogram();
-                m_gui_data.lastFeeHistogramUpdateTime = now;
+            if (now - m_gui_data_back.lastFeeHistogramUpdateTime >= 10) { // Update every 10 seconds
+                m_gui_data_back.feeHistogram.clear();
+                m_gui_data_back.feeHistogram = m_node.getMempoolFeeHistogram();
+                m_gui_data_back.lastFeeHistogramUpdateTime = now;
             }
 
             // Update performance metrics
-            m_gui_data.lastUpdateTime = updateStartTime;
-            m_gui_data.updateCount++;
+            m_gui_data_back.lastUpdateTime = updateStartTime;
+            m_gui_data_back.updateCount++;
 
             // Store fee histogram for use outside the mutex block
-            current_fee_histogram = m_gui_data.feeHistogram;
+            current_fee_histogram = m_gui_data_back.feeHistogram;
         }
 
+        // AIR LOCK: Swap buffers atomically (no locks needed for front buffer reads)
+        m_gui_data_front = m_gui_data_back;
+        m_cache_ready.store(true);
+
         // Check if we're in IBD and adjust timer interval for better responsiveness
-        bool inIBD = !m_gui_data.initialSyncFinished; // Use cached data
+        bool inIBD = !m_gui_data_front.initialSyncFinished; // Use front buffer (no lock needed)
         if (inIBD && timer->interval() != count_milliseconds(MODEL_UPDATE_DELAY_IBD)) {
             timer->setInterval(MODEL_UPDATE_DELAY_IBD);
             // Force immediate GUI update when entering IBD
@@ -134,8 +141,8 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
             Q_EMIT mempoolFeeHistChanged();
         }
 
-        Q_EMIT mempoolSizeChanged(m_gui_data.mempoolSize, m_gui_data.mempoolDynamicUsage);
-        Q_EMIT bytesChanged(m_gui_data.bytesRecv, m_gui_data.bytesSent);
+        Q_EMIT mempoolSizeChanged(m_gui_data_front.mempoolSize, m_gui_data_front.mempoolDynamicUsage);
+        Q_EMIT bytesChanged(m_gui_data_front.bytesRecv, m_gui_data_front.bytesSent);
     });
     connect(m_thread, &QThread::finished, timer, &QObject::deleteLater);
     connect(m_thread, &QThread::started, [timer] { timer->start(); });
@@ -153,10 +160,56 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
              << MODEL_UPDATE_DELAY.count() << "ms normal /"
              << MODEL_UPDATE_DELAY_IBD.count() << "ms IBD intervals";
 
-    // Log initial cache stats after 10 seconds
-    QTimer::singleShot(10000, [this]() {
-        qDebug() << "ClientModel: Initial cache stats:" << getCacheStats();
-    });
+    // Note: Removed cache stats logging to avoid potential GUI blocking
+}
+
+void ClientModel::initializeCache()
+{
+    // Initialize both front and back buffers with current data
+    // This ensures cache is ready immediately and no fallbacks are needed
+
+    int64_t updateStartTime = GetTime();
+
+    // Initialize back buffer
+    m_gui_data_back.numBlocks = m_node.getNumBlocks();
+
+    int height;
+    int64_t blockTime;
+    if (m_node.getHeaderTip(height, blockTime)) {
+        m_gui_data_back.headerHeight = height;
+        m_gui_data_back.headerTime = blockTime;
+    } else {
+        m_gui_data_back.headerHeight = -1;
+        m_gui_data_back.headerTime = -1;
+    }
+
+    m_gui_data_back.bestBlockHash = m_node.getBestBlockHash();
+    m_gui_data_back.initialSyncFinished = m_node.isInitialSyncFinished();
+    m_gui_data_back.numConnectionsIn = m_node.getNodeCount(ConnectionDirection::In);
+    m_gui_data_back.numConnectionsOut = m_node.getNodeCount(ConnectionDirection::Out);
+    m_gui_data_back.numConnectionsTotal = m_node.getNodeCount(ConnectionDirection::Both);
+    m_gui_data_back.mempoolSize = m_node.getMempoolSize();
+    m_gui_data_back.mempoolDynamicUsage = m_node.getMempoolDynamicUsage();
+    m_gui_data_back.bytesRecv = m_node.getTotalBytesRecv();
+    m_gui_data_back.bytesSent = m_node.getTotalBytesSent();
+
+    // Initialize peer stats
+    m_node.getNodesStats(m_gui_data_back.peerStats);
+    m_gui_data_back.lastPeerUpdateTime = updateStartTime;
+
+    // Initialize fee histogram
+    m_gui_data_back.feeHistogram = m_node.getMempoolFeeHistogram();
+    m_gui_data_back.lastFeeHistogramUpdateTime = updateStartTime;
+
+    // Initialize performance metrics
+    m_gui_data_back.lastUpdateTime = updateStartTime;
+    m_gui_data_back.updateCount = 1;
+
+    // Copy to front buffer and mark as ready
+    m_gui_data_front = m_gui_data_back;
+    m_cache_ready.store(true);
+
+    qDebug() << "ClientModel: Cache initialized with" << m_gui_data_front.numBlocks << "blocks";
 }
 
 ClientModel::~ClientModel()
@@ -169,89 +222,39 @@ ClientModel::~ClientModel()
 
 int ClientModel::getNumConnections(unsigned int flags) const
 {
-    // Use cached data to avoid cs_main contention
-    LOCK(m_gui_data_mutex);
-
-    // Check if cache is stale (older than 60 seconds) and log warning
-    int64_t now = GetTime();
-    if (m_gui_data.lastUpdateTime > 0 && (now - m_gui_data.lastUpdateTime) > 60) {
-        qDebug() << "ClientModel: Warning - cache is stale, last update was" << (now - m_gui_data.lastUpdateTime) << "seconds ago";
-    }
-
+    // Use front buffer - no lock needed (air lock pattern)
     if (flags == CONNECTIONS_IN) {
-        return m_gui_data.numConnectionsIn;
+        return m_gui_data_front.numConnectionsIn;
     } else if (flags == CONNECTIONS_OUT) {
-        return m_gui_data.numConnectionsOut;
+        return m_gui_data_front.numConnectionsOut;
     } else {
         // For CONNECTIONS_ALL or any other combination, return total (most common case)
-        return m_gui_data.numConnectionsTotal;
+        return m_gui_data_front.numConnectionsTotal;
     }
 }
 
 int ClientModel::getHeaderTipHeight() const
 {
-    // Use cached data to avoid cs_main contention
-    LOCK(m_gui_data_mutex);
-
-    // If cache is invalid, fall back to direct call
-    if (m_gui_data.headerHeight < 0) {
-        qDebug() << "ClientModel: Cache miss for headerHeight, falling back to direct call";
-        int height;
-        int64_t blockTime;
-        if (m_node.getHeaderTip(height, blockTime)) {
-            return height;
-        }
-        return -1; // Return invalid if getHeaderTip fails
-    }
-
-    return m_gui_data.headerHeight;
+    // Use front buffer - no lock needed (air lock pattern)
+    return m_gui_data_front.headerHeight;
 }
 
 int64_t ClientModel::getHeaderTipTime() const
 {
-    // Use cached data to avoid cs_main contention
-    LOCK(m_gui_data_mutex);
-
-    // If cache is invalid, fall back to direct call
-    if (m_gui_data.headerTime < 0) {
-        qDebug() << "ClientModel: Cache miss for headerTime, falling back to direct call";
-        int height;
-        int64_t blockTime;
-        if (m_node.getHeaderTip(height, blockTime)) {
-            return blockTime;
-        }
-        return -1; // Return invalid if getHeaderTip fails
-    }
-
-    return m_gui_data.headerTime;
+    // Use front buffer - no lock needed (air lock pattern)
+    return m_gui_data_front.headerTime;
 }
 
 int ClientModel::getNumBlocks() const
 {
-    // Use cached data to avoid cs_main contention
-    LOCK(m_gui_data_mutex);
-
-    // If cache is invalid, fall back to direct call (with warning)
-    if (m_gui_data.numBlocks < 0) {
-        qDebug() << "ClientModel: Cache miss for numBlocks, falling back to direct call";
-        return m_node.getNumBlocks();
-    }
-
-    return m_gui_data.numBlocks;
+    // Use front buffer - no lock needed (air lock pattern)
+    return m_gui_data_front.numBlocks;
 }
 
 uint256 ClientModel::getBestBlockHash()
 {
-    // Use cached data to avoid cs_main contention
-    LOCK(m_gui_data_mutex);
-
-    // If cache is invalid, fall back to direct call
-    if (m_gui_data.bestBlockHash.IsNull()) {
-        qDebug() << "ClientModel: Cache miss for bestBlockHash, falling back to direct call";
-        return m_node.getBestBlockHash();
-    }
-
-    return m_gui_data.bestBlockHash;
+    // Use front buffer - no lock needed (air lock pattern)
+    return m_gui_data_front.bestBlockHash;
 }
 
 void ClientModel::updateNumConnections(int numConnections)
@@ -467,10 +470,9 @@ void ClientModel::updateMempoolStats()
 
 QString ClientModel::getCacheStats() const
 {
-    LOCK(m_gui_data_mutex);
-
+    // Use front buffer - no lock needed (air lock pattern)
     int64_t now = GetTime();
-    int64_t age = now - m_gui_data.lastUpdateTime;
+    int64_t age = now - m_gui_data_front.lastUpdateTime;
 
     QString stats = QString("Cache Stats:\n"
                            "  Updates: %1\n"
@@ -482,35 +484,38 @@ QString ClientModel::getCacheStats() const
                            "  Network: %10 bytes in, %11 bytes out\n"
                            "  Peers: %12 cached, last update: %13 seconds ago\n"
                            "  Fee Histogram: %14 ranges, last update: %15 seconds ago")
-                           .arg(m_gui_data.updateCount)
+                           .arg(m_gui_data_front.updateCount)
                            .arg(age)
-                           .arg(m_gui_data.numBlocks)
-                           .arg(m_gui_data.headerHeight)
-                           .arg(m_gui_data.numConnectionsIn)
-                           .arg(m_gui_data.numConnectionsOut)
-                           .arg(m_gui_data.numConnectionsTotal)
-                           .arg(m_gui_data.mempoolSize)
-                           .arg(m_gui_data.mempoolDynamicUsage)
-                           .arg(m_gui_data.bytesRecv)
-                           .arg(m_gui_data.bytesSent)
-                           .arg(m_gui_data.peerStats.size())
-                           .arg(now - m_gui_data.lastPeerUpdateTime)
-                           .arg(m_gui_data.feeHistogram.size())
-                           .arg(now - m_gui_data.lastFeeHistogramUpdateTime);
+                           .arg(m_gui_data_front.numBlocks)
+                           .arg(m_gui_data_front.headerHeight)
+                           .arg(m_gui_data_front.numConnectionsIn)
+                           .arg(m_gui_data_front.numConnectionsOut)
+                           .arg(m_gui_data_front.numConnectionsTotal)
+                           .arg(m_gui_data_front.mempoolSize)
+                           .arg(m_gui_data_front.mempoolDynamicUsage)
+                           .arg(m_gui_data_front.bytesRecv)
+                           .arg(m_gui_data_front.bytesSent)
+                           .arg(m_gui_data_front.peerStats.size())
+                           .arg(now - m_gui_data_front.lastPeerUpdateTime)
+                           .arg(m_gui_data_front.feeHistogram.size())
+                           .arg(now - m_gui_data_front.lastFeeHistogramUpdateTime);
 
     return stats;
 }
 
 bool ClientModel::isCacheValid() const
 {
-    LOCK(m_gui_data_mutex);
+    // Use front buffer - no lock needed (air lock pattern)
+    if (!m_cache_ready.load()) {
+        return false;
+    }
 
     // Cache is valid if we've had at least one successful update
     // and the last update was within the last 30 seconds
     int64_t now = GetTime();
-    int64_t age = now - m_gui_data.lastUpdateTime;
+    int64_t age = now - m_gui_data_front.lastUpdateTime;
 
-    return m_gui_data.updateCount > 0 && age < 30;
+    return m_gui_data_front.updateCount > 0 && age < 30;
 }
 
 void ClientModel::forceCacheRefresh()
@@ -520,65 +525,32 @@ void ClientModel::forceCacheRefresh()
     qDebug() << "ClientModel: Forcing cache refresh";
 
     // Reset cache age to force immediate update
-    LOCK(m_gui_data_mutex);
-    m_gui_data.lastUpdateTime = 0;
+    LOCK(m_gui_data_back_mutex);
+    m_gui_data_back.lastUpdateTime = 0;
 }
 
 int64_t ClientModel::getCachedBytesRecv() const
 {
-    // Use cached data to avoid cs_main contention
-    LOCK(m_gui_data_mutex);
-
-    // If cache hasn't been updated yet, fall back to direct call
-    if (m_gui_data.updateCount == 0) {
-        qDebug() << "ClientModel: Cache miss for bytesRecv, falling back to direct call";
-        return m_node.getTotalBytesRecv();
-    }
-
-    return m_gui_data.bytesRecv;
+    // Use front buffer - no lock needed (air lock pattern)
+    return m_gui_data_front.bytesRecv;
 }
 
 int64_t ClientModel::getCachedBytesSent() const
 {
-    // Use cached data to avoid cs_main contention
-    LOCK(m_gui_data_mutex);
-
-    // If cache hasn't been updated yet, fall back to direct call
-    if (m_gui_data.updateCount == 0) {
-        qDebug() << "ClientModel: Cache miss for bytesSent, falling back to direct call";
-        return m_node.getTotalBytesSent();
-    }
-
-    return m_gui_data.bytesSent;
+    // Use front buffer - no lock needed (air lock pattern)
+    return m_gui_data_front.bytesSent;
 }
 
 bool ClientModel::getCachedPeerStats(interfaces::Node::NodesStats& stats) const
 {
-    // Use cached data to avoid cs_main contention
-    LOCK(m_gui_data_mutex);
-
-    // If cache is empty, fall back to direct call
-    if (m_gui_data.peerStats.empty()) {
-        qDebug() << "ClientModel: Cache miss for peerStats, falling back to direct call";
-        return m_node.getNodesStats(stats);
-    }
-
-    stats = m_gui_data.peerStats;
+    // Use front buffer - no lock needed (air lock pattern)
+    stats = m_gui_data_front.peerStats;
     return true;
 }
 
 bool ClientModel::getCachedFeeHistogram(interfaces::mempool_feehistogram& histogram) const
 {
-    // Use cached data to avoid cs_main contention
-    LOCK(m_gui_data_mutex);
-
-    // If cache is empty, fall back to direct call
-    if (m_gui_data.feeHistogram.empty()) {
-        qDebug() << "ClientModel: Cache miss for feeHistogram, falling back to direct call";
-        histogram = m_node.getMempoolFeeHistogram();
-        return true;
-    }
-
-    histogram = m_gui_data.feeHistogram;
+    // Use front buffer - no lock needed (air lock pattern)
+    histogram = m_gui_data_front.feeHistogram;
     return true;
 }

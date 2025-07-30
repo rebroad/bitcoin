@@ -13,8 +13,8 @@ using namespace std::chrono_literals;
 /* A delay between model updates */
 static constexpr auto MODEL_UPDATE_DELAY{250ms};
 
-/* A delay between model updates during IBD (more frequent for better responsiveness) */
-static constexpr auto MODEL_UPDATE_DELAY_IBD{100ms};
+/* A delay between model updates during IBD (less frequent to reduce GUI contention) */
+static constexpr auto MODEL_UPDATE_DELAY_IBD{500ms};
 
 /* A delay between shutdown pollings */
 static constexpr auto SHUTDOWN_POLLING_DELAY{200ms};
