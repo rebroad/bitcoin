@@ -78,7 +78,12 @@ public:
 
     bool getProxyInfo(std::string& ip_port) const;
 
-    // caches for the best header: hash, number of blocks and block time
+    // Performance monitoring methods (for debugging)
+    QString getCacheStats() const;
+    bool isCacheValid() const;
+    void forceCacheRefresh();
+
+    // Legacy caching - now replaced by m_gui_data (kept for compatibility)
     mutable std::atomic<int> cachedBestHeaderHeight;
     mutable std::atomic<int64_t> cachedBestHeaderTime;
     mutable std::atomic<int> m_cached_num_blocks{-1};
@@ -94,6 +99,28 @@ public:
     const static size_t m_mempool_collect_intervall{20}; // 540*20 = 3h of sample window
     std::vector<mempool_feehist_sample> m_mempool_feehist;
     std::atomic<int64_t> m_mempool_feehist_last_sample_timestamp{0};
+
+    // GUI-specific data layer - updated asynchronously to avoid cs_main contention
+    struct GuiData {
+        int numBlocks{-1};
+        int headerHeight{-1};
+        int64_t headerTime{-1};
+        uint256 bestBlockHash;
+        bool initialSyncFinished{false};
+        int numConnectionsIn{0};
+        int numConnectionsOut{0};
+        int numConnectionsTotal{0};
+        size_t mempoolSize{0};
+        size_t mempoolDynamicUsage{0};
+        int64_t bytesRecv{0};
+        int64_t bytesSent{0};
+
+        // Performance monitoring metrics
+        int64_t lastUpdateTime{0};
+        int64_t updateCount{0};
+    };
+    mutable GuiData m_gui_data;
+    mutable Mutex m_gui_data_mutex;
 
 private:
     interfaces::Node& m_node;

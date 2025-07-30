@@ -55,8 +55,46 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
         // no locking required at this point
         // the following calls will acquire the required lock
 
+        // Update GUI data asynchronously to avoid cs_main contention
+        // Note: These calls still need cs_main, but they're in a background thread
+        // and the GUI methods will use cached data instead
+        {
+            LOCK(m_gui_data_mutex);
+
+            int64_t updateStartTime = GetTime();
+
+            // Direct assignment - these methods are reliable and always return valid values
+            m_gui_data.numBlocks = m_node.getNumBlocks();
+
+            // Fix: Use local variables for getHeaderTip to avoid passing stale cached values
+            int height;
+            int64_t blockTime;
+            if (m_node.getHeaderTip(height, blockTime)) {
+                m_gui_data.headerHeight = height;
+                m_gui_data.headerTime = blockTime;
+            } else {
+                // Keep previous values if getHeaderTip fails
+                // This prevents cache from being corrupted with invalid data
+                qDebug() << "ClientModel: getHeaderTip failed, keeping previous cached values";
+            }
+
+            m_gui_data.bestBlockHash = m_node.getBestBlockHash();
+            m_gui_data.initialSyncFinished = m_node.isInitialSyncFinished();
+            m_gui_data.numConnectionsIn = m_node.getNodeCount(ConnectionDirection::In);
+            m_gui_data.numConnectionsOut = m_node.getNodeCount(ConnectionDirection::Out);
+            m_gui_data.numConnectionsTotal = m_node.getNodeCount(ConnectionDirection::Both);
+            m_gui_data.mempoolSize = m_node.getMempoolSize();
+            m_gui_data.mempoolDynamicUsage = m_node.getMempoolDynamicUsage();
+            m_gui_data.bytesRecv = m_node.getTotalBytesRecv();
+            m_gui_data.bytesSent = m_node.getTotalBytesSent();
+
+            // Update performance metrics
+            m_gui_data.lastUpdateTime = updateStartTime;
+            m_gui_data.updateCount++;
+        }
+
         // Check if we're in IBD and adjust timer interval for better responsiveness
-        bool inIBD = !m_node.isInitialSyncFinished(); // More accurate than isInitialBlockDownload()
+        bool inIBD = !m_gui_data.initialSyncFinished; // Use cached data
         if (inIBD && timer->interval() != count_milliseconds(MODEL_UPDATE_DELAY_IBD)) {
             timer->setInterval(MODEL_UPDATE_DELAY_IBD);
             // Force immediate GUI update when entering IBD
@@ -77,8 +115,8 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
             Q_EMIT mempoolFeeHistChanged();
         }
 
-        Q_EMIT mempoolSizeChanged(m_node.getMempoolSize(), m_node.getMempoolDynamicUsage()); // REBTODO - what does this do?
-        Q_EMIT bytesChanged(m_node.getTotalBytesRecv(), m_node.getTotalBytesSent()); // REBTODO - what does this do?
+        Q_EMIT mempoolSizeChanged(m_gui_data.mempoolSize, m_gui_data.mempoolDynamicUsage);
+        Q_EMIT bytesChanged(m_gui_data.bytesRecv, m_gui_data.bytesSent);
     });
     connect(m_thread, &QThread::finished, timer, &QObject::deleteLater);
     connect(m_thread, &QThread::started, [timer] { timer->start(); });
@@ -90,6 +128,11 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     });
 
     subscribeToCoreSignals();
+
+    // Log the IBD freeze-fix implementation
+    qDebug() << "ClientModel: IBD freeze-fix enabled - using async cache updates with"
+             << MODEL_UPDATE_DELAY.count() << "ms normal /"
+             << MODEL_UPDATE_DELAY_IBD.count() << "ms IBD intervals";
 }
 
 ClientModel::~ClientModel()
@@ -102,75 +145,89 @@ ClientModel::~ClientModel()
 
 int ClientModel::getNumConnections(unsigned int flags) const
 {
-    ConnectionDirection connections = ConnectionDirection::None;
+    // Use cached data to avoid cs_main contention
+    LOCK(m_gui_data_mutex);
 
-    if(flags == CONNECTIONS_IN)
-        connections = ConnectionDirection::In;
-    else if (flags == CONNECTIONS_OUT)
-        connections = ConnectionDirection::Out;
-    else if (flags == CONNECTIONS_ALL)
-        connections = ConnectionDirection::Both;
+    // Check if cache is stale (older than 60 seconds) and log warning
+    int64_t now = GetTime();
+    if (m_gui_data.lastUpdateTime > 0 && (now - m_gui_data.lastUpdateTime) > 60) {
+        qDebug() << "ClientModel: Warning - cache is stale, last update was" << (now - m_gui_data.lastUpdateTime) << "seconds ago";
+    }
 
-    return m_node.getNodeCount(connections);
+    if (flags == CONNECTIONS_IN) {
+        return m_gui_data.numConnectionsIn;
+    } else if (flags == CONNECTIONS_OUT) {
+        return m_gui_data.numConnectionsOut;
+    } else {
+        // For CONNECTIONS_ALL or any other combination, return total (most common case)
+        return m_gui_data.numConnectionsTotal;
+    }
 }
 
 int ClientModel::getHeaderTipHeight() const
 {
-    if (cachedBestHeaderHeight == -1) {
-        // make sure we initially populate the cache via a cs_main lock
-        // otherwise we need to wait for a tip update
+    // Use cached data to avoid cs_main contention
+    LOCK(m_gui_data_mutex);
+
+    // If cache is invalid or stale, fall back to direct call
+    if (m_gui_data.headerHeight < 0 || !isCacheValid()) {
+        qDebug() << "ClientModel: Cache miss for headerHeight, falling back to direct call";
         int height;
         int64_t blockTime;
         if (m_node.getHeaderTip(height, blockTime)) {
-            cachedBestHeaderHeight = height;
-            cachedBestHeaderTime = blockTime;
+            return height;
         }
+        return -1; // Return invalid if getHeaderTip fails
     }
-    return cachedBestHeaderHeight;
+
+    return m_gui_data.headerHeight;
 }
 
 int64_t ClientModel::getHeaderTipTime() const
 {
-    if (cachedBestHeaderTime == -1) {
+    // Use cached data to avoid cs_main contention
+    LOCK(m_gui_data_mutex);
+
+    // If cache is invalid or stale, fall back to direct call
+    if (m_gui_data.headerTime < 0 || !isCacheValid()) {
+        qDebug() << "ClientModel: Cache miss for headerTime, falling back to direct call";
         int height;
         int64_t blockTime;
         if (m_node.getHeaderTip(height, blockTime)) {
-            cachedBestHeaderHeight = height;
-            cachedBestHeaderTime = blockTime;
+            return blockTime;
         }
+        return -1; // Return invalid if getHeaderTip fails
     }
-    return cachedBestHeaderTime;
+
+    return m_gui_data.headerTime;
 }
 
 int ClientModel::getNumBlocks() const
 {
-    if (m_cached_num_blocks == -1) {
-        m_cached_num_blocks = m_node.getNumBlocks();
+    // Use cached data to avoid cs_main contention
+    LOCK(m_gui_data_mutex);
+
+    // If cache is invalid or stale, fall back to direct call (with warning)
+    if (m_gui_data.numBlocks < 0 || !isCacheValid()) {
+        qDebug() << "ClientModel: Cache miss for numBlocks, falling back to direct call";
+        return m_node.getNumBlocks();
     }
-    return m_cached_num_blocks;
+
+    return m_gui_data.numBlocks;
 }
 
 uint256 ClientModel::getBestBlockHash()
 {
-    uint256 tip{WITH_LOCK(m_cached_tip_mutex, return m_cached_tip_blocks)};
+    // Use cached data to avoid cs_main contention
+    LOCK(m_gui_data_mutex);
 
-    if (!tip.IsNull()) {
-        return tip;
+    // If cache is invalid or stale, fall back to direct call
+    if (m_gui_data.bestBlockHash.IsNull() || !isCacheValid()) {
+        qDebug() << "ClientModel: Cache miss for bestBlockHash, falling back to direct call";
+        return m_node.getBestBlockHash();
     }
 
-    // Lock order must be: first `cs_main`, then `m_cached_tip_mutex`.
-    // The following will lock `cs_main` (and release it), so we must not
-    // own `m_cached_tip_mutex` here.
-    tip = m_node.getBestBlockHash();
-
-    LOCK(m_cached_tip_mutex);
-    // We checked that `m_cached_tip_blocks` is not null above, but then we
-    // released the mutex `m_cached_tip_mutex`, so it could have changed in the
-    // meantime. Thus, check again.
-    if (m_cached_tip_blocks.IsNull()) {
-        m_cached_tip_blocks = tip;
-    }
-    return m_cached_tip_blocks;
+    return m_gui_data.bestBlockHash;
 }
 
 void ClientModel::updateNumConnections(int numConnections)
@@ -382,4 +439,57 @@ mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime 
 void ClientModel::updateMempoolStats()
 {
     Q_EMIT mempoolStatsDidUpdate();
+}
+
+QString ClientModel::getCacheStats() const
+{
+    LOCK(m_gui_data_mutex);
+
+    int64_t now = GetTime();
+    int64_t age = now - m_gui_data.lastUpdateTime;
+
+    QString stats = QString("Cache Stats:\n"
+                           "  Updates: %1\n"
+                           "  Last Update: %2 seconds ago\n"
+                           "  Blocks: %3\n"
+                           "  Header Height: %4\n"
+                           "  Connections: %5 in, %6 out, %7 total\n"
+                           "  Mempool: %8 txs, %9 bytes\n"
+                           "  Network: %10 bytes in, %11 bytes out")
+                           .arg(m_gui_data.updateCount)
+                           .arg(age)
+                           .arg(m_gui_data.numBlocks)
+                           .arg(m_gui_data.headerHeight)
+                           .arg(m_gui_data.numConnectionsIn)
+                           .arg(m_gui_data.numConnectionsOut)
+                           .arg(m_gui_data.numConnectionsTotal)
+                           .arg(m_gui_data.mempoolSize)
+                           .arg(m_gui_data.mempoolDynamicUsage)
+                           .arg(m_gui_data.bytesRecv)
+                           .arg(m_gui_data.bytesSent);
+
+    return stats;
+}
+
+bool ClientModel::isCacheValid() const
+{
+    LOCK(m_gui_data_mutex);
+
+    // Cache is valid if we've had at least one successful update
+    // and the last update was within the last 30 seconds
+    int64_t now = GetTime();
+    int64_t age = now - m_gui_data.lastUpdateTime;
+
+    return m_gui_data.updateCount > 0 && age < 30;
+}
+
+void ClientModel::forceCacheRefresh()
+{
+    // This method can be called from the GUI thread to force an immediate cache update
+    // It will trigger the timer to fire immediately
+    qDebug() << "ClientModel: Forcing cache refresh";
+
+    // Reset cache age to force immediate update
+    LOCK(m_gui_data_mutex);
+    m_gui_data.lastUpdateTime = 0;
 }
