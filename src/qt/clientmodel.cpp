@@ -527,8 +527,8 @@ int64_t ClientModel::getCachedBytesRecv() const
     // Use cached data to avoid cs_main contention
     LOCK(m_gui_data_mutex);
 
-    // If cache is invalid or stale, fall back to direct call
-    if (!isCacheValid()) {
+    // If cache hasn't been updated yet, fall back to direct call
+    if (m_gui_data.updateCount == 0) {
         qDebug() << "ClientModel: Cache miss for bytesRecv, falling back to direct call";
         return m_node.getTotalBytesRecv();
     }
@@ -541,8 +541,8 @@ int64_t ClientModel::getCachedBytesSent() const
     // Use cached data to avoid cs_main contention
     LOCK(m_gui_data_mutex);
 
-    // If cache is invalid or stale, fall back to direct call
-    if (!isCacheValid()) {
+    // If cache hasn't been updated yet, fall back to direct call
+    if (m_gui_data.updateCount == 0) {
         qDebug() << "ClientModel: Cache miss for bytesSent, falling back to direct call";
         return m_node.getTotalBytesSent();
     }
@@ -555,8 +555,8 @@ bool ClientModel::getCachedPeerStats(interfaces::Node::NodesStats& stats) const
     // Use cached data to avoid cs_main contention
     LOCK(m_gui_data_mutex);
 
-    // If cache is invalid or stale, fall back to direct call
-    if (m_gui_data.peerStats.empty() || !isCacheValid()) {
+    // If cache is empty, fall back to direct call
+    if (m_gui_data.peerStats.empty()) {
         qDebug() << "ClientModel: Cache miss for peerStats, falling back to direct call";
         return m_node.getNodesStats(stats);
     }
@@ -570,8 +570,8 @@ bool ClientModel::getCachedFeeHistogram(interfaces::mempool_feehistogram& histog
     // Use cached data to avoid cs_main contention
     LOCK(m_gui_data_mutex);
 
-    // If cache is invalid or stale, fall back to direct call
-    if (m_gui_data.feeHistogram.empty() || !isCacheValid()) {
+    // If cache is empty, fall back to direct call
+    if (m_gui_data.feeHistogram.empty()) {
         qDebug() << "ClientModel: Cache miss for feeHistogram, falling back to direct call";
         histogram = m_node.getMempoolFeeHistogram();
         return true;
