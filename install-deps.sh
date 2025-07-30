@@ -32,7 +32,7 @@ print_error() {
 
 # Function to check if a package is installed
 is_package_installed() {
-    dpkg -l "$1" >/dev/null 2>&1
+    dpkg -l "$1" 2>/dev/null | grep -q "^ii"
 }
 
 # Function to install packages if not already installed
@@ -161,7 +161,7 @@ install_dependencies() {
     install_packages "libsqlite3-dev"
 
     # Try to run configure first with GUI and wallet enabled
-    if run_configure "--with-gui=qt5 --enable-wallet --with-incompatible-bdb"; then
+    if run_configure "--with-gui=qt5 --enable-wallet --with-incompatible-bdb --enable-deterministic-builds"; then
         print_success "All dependencies are already installed! 🎉"
         return 0
     fi
@@ -192,7 +192,7 @@ install_dependencies() {
     # Only run configure again if we actually installed something
     if [ "$qt_installed" = true ] || [ "$fallback_installed" = true ]; then
         print_status "Running ./configure again after installing dependencies..."
-        if run_configure "--with-gui=qt5 --enable-wallet --with-incompatible-bdb"; then
+        if run_configure "--with-gui=qt5 --enable-wallet --with-incompatible-bdb --enable-deterministic-builds"; then
             print_success "Dependencies installed successfully! 🚀"
             print_status "You can now run 'make' to build Bitcoin Core"
             return 0
@@ -225,10 +225,11 @@ show_usage() {
     echo "  1. Install essential build tools"
     echo "  2. Install core dependencies (Boost, libevent)"
     echo "  3. Install SQLite development package"
-    echo "  4. Run ./configure with GUI and wallet enabled"
-    echo "  5. Install any missing packages found"
-    echo "  6. Install comprehensive fallback packages"
-    echo "  7. Verify the installation with ./configure"
+    echo "  4. Set up environment for deterministic builds"
+    echo "  5. Run ./configure with GUI and wallet enabled"
+    echo "  6. Install any missing packages found"
+    echo "  7. Install comprehensive fallback packages"
+    echo "  8. Verify the installation with ./configure"
 }
 
 # Parse command line arguments
@@ -264,6 +265,14 @@ if [ ! -f "./configure.ac" ] && [ ! -f "./configure" ]; then
     exit 1
 fi
 
+# Set up environment for deterministic builds
+print_status "Setting up environment for optimal ccache usage..."
+export SOURCE_DATE_EPOCH=0
+export TZ=UTC
+export LC_ALL=C
+export LANG=C
+export LANGUAGE=C
+
 # Check if autogen.sh needs to be run
 if [ ! -f "./configure" ]; then
     print_status "Running ./autogen.sh to generate configure script..."
@@ -274,9 +283,14 @@ fi
 if install_dependencies; then
     print_success "🎉 Bitcoin Core dependencies installed successfully!"
     print_status "Next steps:"
-    print_status "  1. Run 'make' to build Bitcoin Core"
+    print_status "  1. Run 'make -j$(nproc)' to build Bitcoin Core with parallel compilation"
     print_status "  2. Optionally run 'make check' to run tests"
     print_status "  3. Optionally run 'sudo make install' to install system-wide"
+    print_status ""
+    print_status "💡 Build optimization tips:"
+    print_status "  - Use 'make -j$(nproc)' for parallel builds (faster)"
+    print_status "  - ccache is configured for faster incremental builds"
+    print_status "  - Environment is set up for deterministic builds"
 else
     print_error "❌ Failed to install all dependencies"
     print_status "You may need to:"
