@@ -251,8 +251,11 @@ void MempoolStats::drawChart()
                     // skip ranges without txns
                     continue;
                 }
-                if (fCount) y -= (maxheight_g / max_num_graph * list_entry.tx_count);
-                else y -= (maxheight_g / max_num_graph * list_entry.total_size);
+                // Prevent division by zero when max_num_graph is 0
+                if (max_num_graph > 0) {
+                    if (fCount) y -= (maxheight_g / max_num_graph * list_entry.tx_count);
+                    else y -= (maxheight_g / max_num_graph * list_entry.total_size);
+                }
                 if (first)
                     // first sample, initiate the path with first point
                     fee_paths.emplace_back(QPointF(current_x, y));
