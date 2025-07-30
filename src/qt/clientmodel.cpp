@@ -58,6 +58,7 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
         // Update GUI data asynchronously to avoid cs_main contention
         // Note: These calls still need cs_main, but they're in a background thread
         // and the GUI methods will use cached data instead
+        interfaces::mempool_feehistogram current_fee_histogram;
         {
             LOCK(m_gui_data_mutex);
 
@@ -106,6 +107,9 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
             // Update performance metrics
             m_gui_data.lastUpdateTime = updateStartTime;
             m_gui_data.updateCount++;
+
+            // Store fee histogram for use outside the mutex block
+            current_fee_histogram = m_gui_data.feeHistogram;
         }
 
         // Check if we're in IBD and adjust timer interval for better responsiveness
@@ -121,10 +125,8 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
         int64_t now = GetTime();
         if (m_mempool_feehist_last_sample_timestamp == 0 || static_cast<uint64_t>(m_mempool_feehist_last_sample_timestamp)+static_cast<uint64_t>(m_mempool_collect_intervall) <= static_cast<uint64_t>(now)) {
             QMutexLocker locker(&m_mempool_locker);
-            // Use cached fee histogram to avoid cs_main contention
-            interfaces::mempool_feehistogram fee_histogram;
-            getCachedFeeHistogram(fee_histogram);
-            m_mempool_feehist.push_back({now, fee_histogram});
+            // Use the fee histogram we captured inside the mutex block
+            m_mempool_feehist.push_back({now, current_fee_histogram});
             if (m_mempool_feehist.size() > m_mempool_max_samples) {
                 m_mempool_feehist.erase(m_mempool_feehist.begin(), m_mempool_feehist.begin()+1);
             }
@@ -191,8 +193,8 @@ int ClientModel::getHeaderTipHeight() const
     // Use cached data to avoid cs_main contention
     LOCK(m_gui_data_mutex);
 
-    // If cache is invalid or stale, fall back to direct call
-    if (m_gui_data.headerHeight < 0 || !isCacheValid()) {
+    // If cache is invalid, fall back to direct call
+    if (m_gui_data.headerHeight < 0) {
         qDebug() << "ClientModel: Cache miss for headerHeight, falling back to direct call";
         int height;
         int64_t blockTime;
@@ -210,8 +212,8 @@ int64_t ClientModel::getHeaderTipTime() const
     // Use cached data to avoid cs_main contention
     LOCK(m_gui_data_mutex);
 
-    // If cache is invalid or stale, fall back to direct call
-    if (m_gui_data.headerTime < 0 || !isCacheValid()) {
+    // If cache is invalid, fall back to direct call
+    if (m_gui_data.headerTime < 0) {
         qDebug() << "ClientModel: Cache miss for headerTime, falling back to direct call";
         int height;
         int64_t blockTime;
@@ -229,8 +231,8 @@ int ClientModel::getNumBlocks() const
     // Use cached data to avoid cs_main contention
     LOCK(m_gui_data_mutex);
 
-    // If cache is invalid or stale, fall back to direct call (with warning)
-    if (m_gui_data.numBlocks < 0 || !isCacheValid()) {
+    // If cache is invalid, fall back to direct call (with warning)
+    if (m_gui_data.numBlocks < 0) {
         qDebug() << "ClientModel: Cache miss for numBlocks, falling back to direct call";
         return m_node.getNumBlocks();
     }
@@ -243,8 +245,8 @@ uint256 ClientModel::getBestBlockHash()
     // Use cached data to avoid cs_main contention
     LOCK(m_gui_data_mutex);
 
-    // If cache is invalid or stale, fall back to direct call
-    if (m_gui_data.bestBlockHash.IsNull() || !isCacheValid()) {
+    // If cache is invalid, fall back to direct call
+    if (m_gui_data.bestBlockHash.IsNull()) {
         qDebug() << "ClientModel: Cache miss for bestBlockHash, falling back to direct call";
         return m_node.getBestBlockHash();
     }
