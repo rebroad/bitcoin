@@ -2388,6 +2388,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 nLastOutboundCount = nOutboundCount;
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                         return;
+                if (interruptNet) return;
                 // Load addresses from anchors.dat
                 m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
