@@ -2968,14 +2968,13 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
             }
 
             if (rescan_height != block_height) {
-                // We can't rescan beyond non-pruned blocks, stop and throw an error.
+                // We can't rescan beyond non-pruned blocks, but instead of failing completely,
+                // we'll add a warning and continue with a limited rescan.
                 // This might happen if a user uses an old wallet within a pruned node
                 // or if they ran -disablewallet for a longer time, then decided to re-enable
-                // Exit early and print an error.
-                // If a block is pruned after this check, we will load the wallet,
-                // but fail the rescan with a generic error.
-                error = _("Prune: last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of pruned node)");
-                return false;
+                warnings.push_back(_("Prune: last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of pruned node)"));
+                // Adjust rescan_height to the earliest available block
+                rescan_height = block_height;
             }
         }
 
