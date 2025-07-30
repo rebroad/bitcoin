@@ -94,8 +94,6 @@ public:
     bool getCachedFeeHistogram(interfaces::mempool_feehistogram& histogram) const;
 
     // Legacy caching - now replaced by m_gui_data (kept for compatibility)
-    mutable std::atomic<int> cachedBestHeaderHeight;
-    mutable std::atomic<int64_t> cachedBestHeaderTime;
     mutable std::atomic<int> m_cached_num_blocks{-1};
 
     Mutex m_cached_tip_mutex;
@@ -169,6 +167,7 @@ private:
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();
     void initializeCache();
+    void updateCacheData(bool forceUpdate = false);
 
 Q_SIGNALS:
     void numConnectionsChanged(int count);
@@ -195,6 +194,7 @@ public Q_SLOTS:
 
     /* stats stack */
     void updateMempoolStats();
+    void updateHeaderTip(int height, int64_t blockTime);
 };
 
 #endif // BITCOIN_QT_CLIENTMODEL_H

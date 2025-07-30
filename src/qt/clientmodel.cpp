@@ -40,9 +40,6 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     banTableModel(nullptr),
     m_thread(new QThread(this))
 {
-    cachedBestHeaderHeight = -1;
-    cachedBestHeaderTime = -1;
-
     peerTableModel = new PeerTableModel(m_node, this);
     m_peer_table_sort_proxy = new PeerTableSortProxy(this);
     m_peer_table_sort_proxy->setSourceModel(peerTableModel);
@@ -65,51 +62,8 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
         {
             LOCK(m_gui_data_back_mutex);
 
-            int64_t updateStartTime = GetTime();
-
-            // Direct assignment - these methods are reliable and always return valid values
-            m_gui_data_back.numBlocks = m_node.getNumBlocks();
-
-            // Fix: Use local variables for getHeaderTip to avoid passing stale cached values
-            int height;
-            int64_t blockTime;
-            if (m_node.getHeaderTip(height, blockTime)) {
-                m_gui_data_back.headerHeight = height;
-                m_gui_data_back.headerTime = blockTime;
-            } else {
-                // Keep previous values if getHeaderTip fails
-                // This prevents cache from being corrupted with invalid data
-                qDebug() << "ClientModel: getHeaderTip failed, keeping previous cached values";
-            }
-
-            m_gui_data_back.bestBlockHash = m_node.getBestBlockHash();
-            m_gui_data_back.initialSyncFinished = m_node.isInitialSyncFinished();
-            m_gui_data_back.numConnectionsIn = m_node.getNodeCount(ConnectionDirection::In);
-            m_gui_data_back.numConnectionsOut = m_node.getNodeCount(ConnectionDirection::Out);
-            m_gui_data_back.numConnectionsTotal = m_node.getNodeCount(ConnectionDirection::Both);
-            m_gui_data_back.mempoolSize = m_node.getMempoolSize();
-            m_gui_data_back.mempoolDynamicUsage = m_node.getMempoolDynamicUsage();
-            m_gui_data_back.bytesRecv = m_node.getTotalBytesRecv();
-            m_gui_data_back.bytesSent = m_node.getTotalBytesSent();
-
-            // Update peer stats cache (less frequently to avoid cs_main contention)
-            int64_t now = GetTime();
-            if (now - m_gui_data_back.lastPeerUpdateTime >= 5) { // Update every 5 seconds
-                m_gui_data_back.peerStats.clear();
-                m_node.getNodesStats(m_gui_data_back.peerStats);
-                m_gui_data_back.lastPeerUpdateTime = now;
-            }
-
-            // Update mempool fee histogram cache (less frequently to avoid cs_main contention)
-            if (now - m_gui_data_back.lastFeeHistogramUpdateTime >= 10) { // Update every 10 seconds
-                m_gui_data_back.feeHistogram.clear();
-                m_gui_data_back.feeHistogram = m_node.getMempoolFeeHistogram();
-                m_gui_data_back.lastFeeHistogramUpdateTime = now;
-            }
-
-            // Update performance metrics
-            m_gui_data_back.lastUpdateTime = updateStartTime;
-            m_gui_data_back.updateCount++;
+            // Use shared method to update cache data
+            updateCacheData(false);
 
             // Store fee histogram for use outside the mutex block
             current_fee_histogram = m_gui_data_back.feeHistogram;
@@ -163,47 +117,73 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     // Note: Removed cache stats logging to avoid potential GUI blocking
 }
 
-void ClientModel::initializeCache()
+void ClientModel::updateCacheData(bool forceUpdate)
 {
-    // Initialize both front and back buffers with current data
-    // This ensures cache is ready immediately and no fallbacks are needed
-
-    int64_t updateStartTime = GetTime();
-
-    // Initialize back buffer
+    // Update basic blockchain data
     m_gui_data_back.numBlocks = m_node.getNumBlocks();
 
+    // Update header tip data
     int height;
     int64_t blockTime;
     if (m_node.getHeaderTip(height, blockTime)) {
         m_gui_data_back.headerHeight = height;
         m_gui_data_back.headerTime = blockTime;
     } else {
-        m_gui_data_back.headerHeight = -1;
-        m_gui_data_back.headerTime = -1;
+        // Initialize to -1 if getHeaderTip fails (proper initialization)
+        if (forceUpdate) {
+            m_gui_data_back.headerHeight = -1;
+            m_gui_data_back.headerTime = -1;
+        } else {
+            // Keep previous values if getHeaderTip fails during updates
+            qDebug() << "ClientModel: getHeaderTip failed, keeping previous cached values";
+        }
     }
 
+    // Update blockchain state
     m_gui_data_back.bestBlockHash = m_node.getBestBlockHash();
     m_gui_data_back.initialSyncFinished = m_node.isInitialSyncFinished();
+
+    // Update connection data
     m_gui_data_back.numConnectionsIn = m_node.getNodeCount(ConnectionDirection::In);
     m_gui_data_back.numConnectionsOut = m_node.getNodeCount(ConnectionDirection::Out);
     m_gui_data_back.numConnectionsTotal = m_node.getNodeCount(ConnectionDirection::Both);
+
+    // Update mempool data
     m_gui_data_back.mempoolSize = m_node.getMempoolSize();
     m_gui_data_back.mempoolDynamicUsage = m_node.getMempoolDynamicUsage();
+
+    // Update network traffic data
     m_gui_data_back.bytesRecv = m_node.getTotalBytesRecv();
     m_gui_data_back.bytesSent = m_node.getTotalBytesSent();
 
-    // Initialize peer stats
-    m_node.getNodesStats(m_gui_data_back.peerStats);
-    m_gui_data_back.lastPeerUpdateTime = updateStartTime;
+    // Update peer stats (less frequently to avoid cs_main contention)
+    int64_t now = GetTime();
+    if (forceUpdate || now - m_gui_data_back.lastPeerUpdateTime >= 5) { // Update every 5 seconds
+        m_gui_data_back.peerStats.clear();
+        m_node.getNodesStats(m_gui_data_back.peerStats);
+        m_gui_data_back.lastPeerUpdateTime = now;
+    }
 
-    // Initialize fee histogram
-    m_gui_data_back.feeHistogram = m_node.getMempoolFeeHistogram();
-    m_gui_data_back.lastFeeHistogramUpdateTime = updateStartTime;
+    // Update mempool fee histogram (less frequently to avoid cs_main contention)
+    if (forceUpdate || now - m_gui_data_back.lastFeeHistogramUpdateTime >= 10) { // Update every 10 seconds
+        m_gui_data_back.feeHistogram.clear();
+        m_gui_data_back.feeHistogram = m_node.getMempoolFeeHistogram();
+        m_gui_data_back.lastFeeHistogramUpdateTime = now;
+    }
 
-    // Initialize performance metrics
-    m_gui_data_back.lastUpdateTime = updateStartTime;
-    m_gui_data_back.updateCount = 1;
+    // Update performance metrics
+    m_gui_data_back.lastUpdateTime = now;
+    if (forceUpdate) {
+        m_gui_data_back.updateCount = 1; // Initialize
+    } else {
+        m_gui_data_back.updateCount++; // Increment
+    }
+}
+
+void ClientModel::initializeCache()
+{
+    // Initialize cache with current data - forces all updates
+    updateCacheData(true);
 
     // Copy to front buffer and mark as ready
     m_gui_data_front = m_gui_data_back;
@@ -382,9 +362,14 @@ static void BannedListChanged(ClientModel *clientmodel)
 static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_state, interfaces::BlockTip tip, double verificationProgress, bool fHeader)
 {
     if (fHeader) {
-        // cache best headers time and height to reduce future cs_main locks
-        clientmodel->cachedBestHeaderHeight = tip.block_height;
-        clientmodel->cachedBestHeaderTime = tip.block_time;
+        // Queue header tip update to GUI thread for thread safety
+        // This ensures cache updates happen in the correct thread context
+        bool invoked = QMetaObject::invokeMethod(clientmodel, "updateHeaderTip", Qt::QueuedConnection,
+            Q_ARG(int, tip.block_height),
+            Q_ARG(int64_t, tip.block_time));
+        if (!invoked) {
+            qWarning() << "ClientModel: Failed to queue header tip update";
+        }
     } else {
         clientmodel->m_cached_num_blocks = tip.block_height;
         WITH_LOCK(clientmodel->m_cached_tip_mutex, clientmodel->m_cached_tip_blocks = tip.block_hash;);
@@ -466,6 +451,22 @@ mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime 
 void ClientModel::updateMempoolStats()
 {
     Q_EMIT mempoolStatsDidUpdate();
+}
+
+void ClientModel::updateHeaderTip(int height, int64_t blockTime)
+{
+    // Update header tip in the GUI thread context
+    // This is called from the validation thread via QMetaObject::invokeMethod
+    // Since we're in the GUI thread, we can update front buffer directly
+    // and also update back buffer to keep them in sync
+    m_gui_data_front.headerHeight = height;
+    m_gui_data_front.headerTime = blockTime;
+
+    // Also update back buffer to keep them in sync (no lock needed in same thread)
+    m_gui_data_back.headerHeight = height;
+    m_gui_data_back.headerTime = blockTime;
+
+    m_cache_ready.store(true);
 }
 
 QString ClientModel::getCacheStats() const

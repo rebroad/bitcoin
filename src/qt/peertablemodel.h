@@ -20,6 +20,8 @@ namespace interfaces {
 class Node;
 }
 
+class ClientModel;
+
 QT_BEGIN_NAMESPACE
 class QTimer;
 QT_END_NAMESPACE
