@@ -90,6 +90,9 @@ public:
     // Cached peer data for debug components
     bool getCachedPeerStats(interfaces::Node::NodesStats& stats) const;
 
+    // Cached mempool fee histogram for debug components
+    bool getCachedFeeHistogram(interfaces::mempool_feehistogram& histogram) const;
+
     // Legacy caching - now replaced by m_gui_data (kept for compatibility)
     mutable std::atomic<int> cachedBestHeaderHeight;
     mutable std::atomic<int64_t> cachedBestHeaderTime;
@@ -129,6 +132,10 @@ public:
         // Peer data cache
         interfaces::Node::NodesStats peerStats;
         int64_t lastPeerUpdateTime{0};
+
+        // Mempool fee histogram cache
+        interfaces::mempool_feehistogram feeHistogram;
+        int64_t lastFeeHistogramUpdateTime{0};
 
         // Performance monitoring metrics
         int64_t lastUpdateTime{0};

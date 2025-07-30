@@ -96,6 +96,13 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
                 m_gui_data.lastPeerUpdateTime = now;
             }
 
+            // Update mempool fee histogram cache (less frequently to avoid cs_main contention)
+            if (now - m_gui_data.lastFeeHistogramUpdateTime >= 10) { // Update every 10 seconds
+                m_gui_data.feeHistogram.clear();
+                m_gui_data.feeHistogram = m_node.getMempoolFeeHistogram();
+                m_gui_data.lastFeeHistogramUpdateTime = now;
+            }
+
             // Update performance metrics
             m_gui_data.lastUpdateTime = updateStartTime;
             m_gui_data.updateCount++;
@@ -114,7 +121,9 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
         int64_t now = GetTime();
         if (m_mempool_feehist_last_sample_timestamp == 0 || static_cast<uint64_t>(m_mempool_feehist_last_sample_timestamp)+static_cast<uint64_t>(m_mempool_collect_intervall) <= static_cast<uint64_t>(now)) {
             QMutexLocker locker(&m_mempool_locker);
-            interfaces::mempool_feehistogram fee_histogram = m_node.getMempoolFeeHistogram();
+            // Use cached fee histogram to avoid cs_main contention
+            interfaces::mempool_feehistogram fee_histogram;
+            getCachedFeeHistogram(fee_histogram);
             m_mempool_feehist.push_back({now, fee_histogram});
             if (m_mempool_feehist.size() > m_mempool_max_samples) {
                 m_mempool_feehist.erase(m_mempool_feehist.begin(), m_mempool_feehist.begin()+1);
@@ -469,7 +478,8 @@ QString ClientModel::getCacheStats() const
                            "  Connections: %5 in, %6 out, %7 total\n"
                            "  Mempool: %8 txs, %9 bytes\n"
                            "  Network: %10 bytes in, %11 bytes out\n"
-                           "  Peers: %12 cached, last update: %13 seconds ago")
+                           "  Peers: %12 cached, last update: %13 seconds ago\n"
+                           "  Fee Histogram: %14 ranges, last update: %15 seconds ago")
                            .arg(m_gui_data.updateCount)
                            .arg(age)
                            .arg(m_gui_data.numBlocks)
@@ -482,7 +492,9 @@ QString ClientModel::getCacheStats() const
                            .arg(m_gui_data.bytesRecv)
                            .arg(m_gui_data.bytesSent)
                            .arg(m_gui_data.peerStats.size())
-                           .arg(now - m_gui_data.lastPeerUpdateTime);
+                           .arg(now - m_gui_data.lastPeerUpdateTime)
+                           .arg(m_gui_data.feeHistogram.size())
+                           .arg(now - m_gui_data.lastFeeHistogramUpdateTime);
 
     return stats;
 }
@@ -550,5 +562,21 @@ bool ClientModel::getCachedPeerStats(interfaces::Node::NodesStats& stats) const
     }
 
     stats = m_gui_data.peerStats;
+    return true;
+}
+
+bool ClientModel::getCachedFeeHistogram(interfaces::mempool_feehistogram& histogram) const
+{
+    // Use cached data to avoid cs_main contention
+    LOCK(m_gui_data_mutex);
+
+    // If cache is invalid or stale, fall back to direct call
+    if (m_gui_data.feeHistogram.empty() || !isCacheValid()) {
+        qDebug() << "ClientModel: Cache miss for feeHistogram, falling back to direct call";
+        histogram = m_node.getMempoolFeeHistogram();
+        return true;
+    }
+
+    histogram = m_gui_data.feeHistogram;
     return true;
 }
