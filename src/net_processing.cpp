@@ -334,6 +334,8 @@ public:
     void ProcessMessage(CNode& pfrom, const std::string& msg_type, CDataStream& vRecv,
                         const std::chrono::microseconds time_received, const std::atomic<bool>& interruptMsgProc) override;
 
+    bool IsInitialSyncFinished() const override;
+
 private:
     /** Rotate snapshots for a single node (old <- current, current <- live) */
     void RotateNodeSnapshots(CNode* pnode, int64_t now);
@@ -5826,4 +5828,9 @@ void PeerManagerImpl::AddCompactBlock(const CBlockHeaderAndShortTxIDs& cmpctbloc
         m_recent_compact_blocks[m_next_compact_block_index] = cmpctblock;
         m_next_compact_block_index = (m_next_compact_block_index + 1) % 3;
     }
+}
+
+bool PeerManagerImpl::IsInitialSyncFinished() const
+{
+    return m_initial_sync_finished;
 }

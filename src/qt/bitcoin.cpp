@@ -396,6 +396,20 @@ void BitcoinApplication::createWindow(const NetworkStyle *networkStyle)
             window->detectShutdown();
         }
     });
+
+    // Add a timer to ensure GUI responsiveness during IBD
+    if (gArgs.GetBoolArg("-guiresponsive", true)) {
+        QTimer* responsivenessTimer = new QTimer(window);
+        responsivenessTimer->setInterval(33); // ~30 FPS - good balance of responsiveness and performance
+        connect(responsivenessTimer, &QTimer::timeout, [this] {
+            // Process events and update GUI to maintain responsiveness during heavy validation
+            QApplication::processEvents();
+            if (window) {
+                window->update(); // Force a repaint for progress bars and status updates
+            }
+        });
+        responsivenessTimer->start();
+    }
 }
 
 void BitcoinApplication::createSplashScreen(const NetworkStyle *networkStyle)
@@ -598,6 +612,7 @@ static void SetupUIArgs(ArgsManager& argsman)
     argsman.AddArg("-resetguisettings", "Reset all settings changed in the GUI", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
     argsman.AddArg("-splash", strprintf("Show splash screen on startup (default: %u)", DEFAULT_SPLASHSCREEN), ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
     argsman.AddArg("-uiplatform", strprintf("Select platform to customize UI for (one of windows, macosx, other; default: %s)", BitcoinGUI::DEFAULT_UIPLATFORM), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::GUI);
+    argsman.AddArg("-guiresponsive", "Enable enhanced GUI responsiveness during IBD (default: true)", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
 }
 
 static void handleCrash(int sig)

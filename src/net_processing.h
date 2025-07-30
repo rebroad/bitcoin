@@ -87,6 +87,9 @@ public:
     /** Process a single message from a peer. Public for fuzz testing */
     virtual void ProcessMessage(CNode& pfrom, const std::string& msg_type, CDataStream& vRecv,
                                 const std::chrono::microseconds time_received, const std::atomic<bool>& interruptMsgProc) = 0;
+
+    /** Check if initial sync is finished (more accurate than IsInitialBlockDownload for GUI responsiveness) */
+    virtual bool IsInitialSyncFinished() const = 0;
 };
 
 #endif // BITCOIN_NET_PROCESSING_H

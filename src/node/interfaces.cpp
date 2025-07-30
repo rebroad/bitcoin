@@ -354,6 +354,13 @@ public:
     bool isInitialBlockDownload() override {
         return chainman().ActiveChainstate().IsInitialBlockDownload();
     }
+    bool isInitialSyncFinished() override {
+        // Access the m_initial_sync_finished variable from the peer manager
+        if (m_context->peerman) {
+            return m_context->peerman->IsInitialSyncFinished();
+        }
+        return true; // Default to true if no peer manager
+    }
     bool getReindex() override { return node::fReindex; }
     bool getImporting() override { return node::fImporting; }
     void setNetworkActive(bool active) override

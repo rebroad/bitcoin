@@ -185,6 +185,9 @@ public:
     //! Is initial block download.
     virtual bool isInitialBlockDownload() = 0;
 
+    //! Is initial sync finished (more accurate than isInitialBlockDownload for GUI responsiveness).
+    virtual bool isInitialSyncFinished() = 0;
+
     //! Get reindex.
     virtual bool getReindex() = 0;
 

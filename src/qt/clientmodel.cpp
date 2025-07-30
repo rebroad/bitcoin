@@ -51,9 +51,19 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
 
     QTimer* timer = new QTimer;
     timer->setInterval(MODEL_UPDATE_DELAY);
-    connect(timer, &QTimer::timeout, [this] {
+    connect(timer, &QTimer::timeout, [this, timer] {
         // no locking required at this point
         // the following calls will acquire the required lock
+
+        // Check if we're in IBD and adjust timer interval for better responsiveness
+        bool inIBD = !m_node.isInitialSyncFinished(); // More accurate than isInitialBlockDownload()
+        if (inIBD && timer->interval() != count_milliseconds(MODEL_UPDATE_DELAY_IBD)) {
+            timer->setInterval(MODEL_UPDATE_DELAY_IBD);
+            // Force immediate GUI update when entering IBD
+            QApplication::processEvents();
+        } else if (!inIBD && timer->interval() != count_milliseconds(MODEL_UPDATE_DELAY)) {
+            timer->setInterval(MODEL_UPDATE_DELAY);
+        }
 
         int64_t now = GetTime();
         if (m_mempool_feehist_last_sample_timestamp == 0 || static_cast<uint64_t>(m_mempool_feehist_last_sample_timestamp)+static_cast<uint64_t>(m_mempool_collect_intervall) <= static_cast<uint64_t>(now)) {
