@@ -469,9 +469,9 @@ public:
 
     std::atomic<std::chrono::seconds> m_last_send{0s};
     std::atomic<std::chrono::seconds> m_last_recv{0s};
-    std::atomic<std::chrono::nanoseconds> m_cpu_time{0};
-    std::atomic<std::chrono::nanoseconds> m_cpu_time_snap{0};
-    std::atomic<std::chrono::nanoseconds> m_cpu_time_snap_old{0};
+    std::atomic<std::chrono::nanoseconds> m_cpu_time{0ns};
+    std::atomic<std::chrono::nanoseconds> m_cpu_time_snap{0ns};
+    std::atomic<std::chrono::nanoseconds> m_cpu_time_snap_old{0ns};
 
     // Mempool statistics - for transactions coming in via mempool
     uint64_t nMempoolBytes{0};
@@ -740,16 +740,6 @@ public:
         m_min_ping_time = std::min(m_min_ping_time.load(), ping_time);
     }
 
-    /** Accumulate CPU time spent processing this peer's messages */
-    void AddCpuTime(std::chrono::nanoseconds cpu_time) {
-        m_cpu_time += cpu_time;
-    }
-
-    /** Get the accumulated CPU time spent processing this peer's messages */
-    std::chrono::nanoseconds GetCpuTime() const {
-        return m_cpu_time.load();
-    }
-
 private:
     const NodeId id;
     const uint64_t nLocalHostNonce;
@@ -781,8 +771,6 @@ private:
 
     mapMsgCmdSize mapSendBytesPerMsgCmd GUARDED_BY(cs_vSend);
     mapMsgCmdSize mapRecvBytesPerMsgCmd GUARDED_BY(cs_vRecv);
-
-    std::atomic<std::chrono::nanoseconds> m_cpu_time;
 };
 
 /**

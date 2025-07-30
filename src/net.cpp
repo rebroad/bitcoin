@@ -3312,8 +3312,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, std::shared_ptr<Sock> s
       id(idIn),
       nLocalHostNonce(nLocalHostNonceIn),
       m_conn_type(conn_type_in),
-      nLocalServices(nLocalServicesIn),
-      m_cpu_time{std::chrono::nanoseconds{0}}
+      nLocalServices(nLocalServicesIn)
 {
     if (inbound_onion) assert(conn_type_in == ConnectionType::INBOUND);
     if (conn_type_in != ConnectionType::BLOCK_RELAY) {

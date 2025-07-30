@@ -1925,7 +1925,7 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
             // Attribute all statistics in a single ForNode call
             m_connman.ForNode(nodeid, [cpu_time, block_bytes, block_txs](CNode* pnode) {
                 if (cpu_time.count() > 0) {
-                    pnode->AddCpuTime(cpu_time);
+                    pnode->m_cpu_time += cpu_time;
                 }
                 pnode->nMempoolBytes += block_bytes;
                 pnode->nMempoolTXs += block_txs;
@@ -4777,7 +4777,7 @@ bool PeerManagerImpl::ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt
         }
         if (doit) {
             CpuTimer timer{[&pfrom](std::chrono::nanoseconds elapsed) {
-                pfrom->AddCpuTime(elapsed);
+                pfrom->m_cpu_time += elapsed;
             }};
             ProcessMessage(*pfrom, msg.m_type, msg.m_recv, msg.m_time, interruptMsgProc);
         }
@@ -5720,6 +5720,8 @@ void PeerManagerImpl::RotatePeerSnapshots(int64_t now)
     pnode->nBlockBytesSnap = pnode->nBlockBytes;
     pnode->nBlockTXsSnapOld = pnode->nBlockTXsSnap;
     pnode->nBlockTXsSnap = pnode->nBlockTXs;
+    pnode->m_cpu_time_snap_old = pnode->m_cpu_time_snap;
+    pnode->m_cpu_time_snap = pnode->m_cpu_time;
     pnode->nTimeSnapOld = pnode->nTimeSnap;
     pnode->nTimeSnap = now;
 }
@@ -5732,6 +5734,7 @@ void PeerManagerImpl::UpdatePeerSnapshots(int64_t now)
         pnode->nMempoolTXsSnap = pnode->nMempoolTXs;
         pnode->nBlockBytesSnap = pnode->nBlockBytes;
         pnode->nBlockTXsSnap = pnode->nBlockTXs;
+        pnode->m_cpu_time_snap = pnode->m_cpu_time;
         pnode->nTimeSnap = now;
     });
 }
