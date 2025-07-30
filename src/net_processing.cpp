@@ -5003,7 +5003,6 @@ void PeerManagerImpl::CheckForStaleTipAndEvictPeers()
     } else if (!m_initial_sync_finished) {
         // We can direct fetch and haven't finished initial sync yet - start extra peers
         m_connman.StartExtraBlockRelayPeers();
-        m_initial_sync_finished = true;
     }
 }
 
