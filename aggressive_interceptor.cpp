@@ -2,20 +2,17 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#define _GNU_SOURCE
 #include <dlfcn.h>
 #include <iostream>
 #include <execinfo.h>
 #include <cmath>
 #include <cstring>
-
-// Forward declarations
-struct QPainterPath;
-struct QRectF;
-struct QPointF;
+#include <sys/mman.h>
+#include <unistd.h>
 
 // Function pointers to original functions
-static void (*original_arcTo_rect)(QPainterPath*, const QRectF&, double, double) = nullptr;
-static void (*original_drawEllipse_rect)(void*, const QRectF&) = nullptr;
+static void (*original_arcTo_rect)(void*, void*, double, double) = nullptr;
 
 // Flag to prevent infinite recursion
 static bool in_interceptor = false;
@@ -26,18 +23,14 @@ static void init_original_functions() {
         return; // Already initialized
     }
     
-    // Get the original function addresses
-    original_arcTo_rect = (void(*)(QPainterPath*, const QRectF&, double, double))dlsym(RTLD_NEXT, "_ZN12QPainterPath5arcToERK6QRectFdd");
-    original_drawEllipse_rect = (void(*)(void*, const QRectF&))dlsym(RTLD_NEXT, "_ZN8QPainter11drawEllipseERK6QRectF");
+    // Get the original function address
+    original_arcTo_rect = (void(*)(void*, void*, double, double))dlsym(RTLD_NEXT, "_ZN12QPainterPath5arcToERK6QRectFdd");
     
     if (!original_arcTo_rect) {
         std::cerr << "WARNING: Could not find original arcTo(rect) function" << std::endl;
     }
-    if (!original_drawEllipse_rect) {
-        std::cerr << "WARNING: Could not find original drawEllipse(rect) function" << std::endl;
-    }
     
-    std::cerr << "Qt painter interceptor initialized" << std::endl;
+    std::cerr << "Aggressive interceptor initialized" << std::endl;
 }
 
 // Helper function to print backtrace
@@ -58,7 +51,7 @@ static void print_backtrace(const char* message) {
 }
 
 // Interceptor for QRectF arcTo
-extern "C" void _ZN12QPainterPath5arcToERK6QRectFdd(QPainterPath* path, const QRectF& rect, double startAngle, double arcLength) {
+extern "C" void _ZN12QPainterPath5arcToERK6QRectFdd(void* path, void* rect, double startAngle, double arcLength) {
     if (in_interceptor) {
         if (original_arcTo_rect) {
             original_arcTo_rect(path, rect, startAngle, arcLength);
@@ -68,10 +61,9 @@ extern "C" void _ZN12QPainterPath5arcToERK6QRectFdd(QPainterPath* path, const QR
     
     init_original_functions();
     
-    // Check for NaN parameters - we can't easily check rect members without Qt headers
-    // so we'll just check the angles
+    // Check for NaN parameters
     if (std::isnan(startAngle) || std::isnan(arcLength)) {
-        print_backtrace("🚨 INTERCEPT: QPainterPath::arcTo(QRectF) called with NaN parameters!");
+        print_backtrace("🚨 AGGRESSIVE INTERCEPT: QPainterPath::arcTo(QRectF) called with NaN parameters!");
     }
     
     // Call the original function
@@ -82,32 +74,31 @@ extern "C" void _ZN12QPainterPath5arcToERK6QRectFdd(QPainterPath* path, const QR
     in_interceptor = false;
 }
 
+// Now let's try to hook into the 6-parameter version by patching the binary
+// This is more aggressive but should catch ALL arcTo calls
 
-
-// Interceptor for drawEllipse with QRectF
-extern "C" void _ZN8QPainter11drawEllipseERK6QRectF(void* painter, const QRectF& rect) {
-    if (in_interceptor) {
-        if (original_drawEllipse_rect) {
-            original_drawEllipse_rect(painter, rect);
-        }
+// Function to patch Qt's internal arcTo calls
+static void patch_qt_arcTo() {
+    // Get the Qt library handle
+    void* handle = dlopen("libQt5Gui.so.5", RTLD_LAZY);
+    if (!handle) {
+        std::cerr << "Could not open Qt library for patching" << std::endl;
         return;
     }
     
-    init_original_functions();
+    // Try to find the 6-parameter arcTo function in memory
+    // This is tricky because it's not exported, but we can try to find it
+    // by looking for the function signature in memory
     
-    // We can't easily check rect members without Qt headers, but we can still intercept
-    // to see if this is where the NaN is coming from
+    std::cerr << "Attempting to patch Qt's internal arcTo functions..." << std::endl;
     
-    // Call the original function
-    in_interceptor = true;
-    if (original_drawEllipse_rect) {
-        original_drawEllipse_rect(painter, rect);
-    }
-    in_interceptor = false;
+    // For now, let's just log that we're trying
+    dlclose(handle);
 }
 
 // Constructor to initialize when library is loaded
 __attribute__((constructor))
 static void init() {
-    std::cerr << "Qt painter interceptor library loaded" << std::endl;
+    std::cerr << "Aggressive Qt interceptor library loaded" << std::endl;
+    patch_qt_arcTo();
 } 
