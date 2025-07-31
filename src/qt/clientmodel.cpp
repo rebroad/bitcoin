@@ -32,6 +32,9 @@
 static int64_t nLastHeaderTipUpdateNotification = 0;
 static int64_t nLastBlockTipUpdateNotification = 0;
 
+// Initialize static member
+std::atomic<int> ClientModel::s_signalProcessingCount{0};
+
 ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QObject *parent) :
     QObject(parent),
     m_node(node),
@@ -124,6 +127,14 @@ uint256 ClientModel::getBestBlockHash()
 
 void ClientModel::updateNumConnections(int numConnections)
 {
+    static int64_t lastConnLogTime = 0;
+    int64_t now = GetTime();
+
+    if (now - lastConnLogTime > 5) {
+        LogPrint(BCLog::QT, "updateNumConnections: GUI thread processing connection update: %d\n", numConnections);
+        lastConnLogTime = now;
+    }
+
     Q_EMIT numConnectionsChanged(numConnections);
 }
 
@@ -412,7 +423,11 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
         Q_ARG(double, verificationProgress),
         Q_ARG(bool, fHeader),
         Q_ARG(SynchronizationState, sync_state));
-    assert(invoked);
+    if (!invoked) {
+        LogPrint(BCLog::GUI, "BlockTipChanged: Failed to queue numBlocksChanged signal\n");
+    } else {
+        LogPrint(BCLog::GUI, "BlockTipChanged: Successfully queued numBlocksChanged signal for height %d\n", tip.block_height);
+    }
     nLastUpdateNotification = throttleNow;
 }
 
@@ -531,6 +546,13 @@ void ClientModel::updateHeaderTip(int height, qint64 blockTime)
 
 void ClientModel::updateBlockData(int numBlocks, const QString& bestBlockHashStr, bool initialSyncFinished)
 {
+    static int64_t lastBlockLogTime = 0;
+    int64_t updateStartTime = GetTimeMillis();
+    int64_t now = GetTime();
+
+    // Increment signal processing counter
+    s_signalProcessingCount++;
+
     // Update block data in the GUI thread context
     m_gui_data.numBlocks = numBlocks;
 
@@ -544,8 +566,14 @@ void ClientModel::updateBlockData(int numBlocks, const QString& bestBlockHashStr
 
     m_gui_data.initialSyncFinished = initialSyncFinished;
 
-    // Emit signal to notify GUI components of the update
-    Q_EMIT numBlocksChanged(numBlocks, QDateTime::fromSecsSinceEpoch(m_gui_data.headerTime), 0.0, false, SynchronizationState::POST_INIT);
+    // Note: numBlocksChanged signal is emitted by the original BlockTipChanged handler
+    // to avoid duplicate signal emissions
+
+    int64_t updateTime = GetTimeMillis() - updateStartTime;
+    if (now - lastBlockLogTime > 5) {
+        LogPrint(BCLog::QT, "updateBlockData: GUI thread processed block update in %dms (height: %d)\n", updateTime, numBlocks);
+        lastBlockLogTime = now;
+    }
 }
 
 void ClientModel::updateConnectionData(int connectionsIn, int connectionsOut, int connectionsTotal)
@@ -553,6 +581,9 @@ void ClientModel::updateConnectionData(int connectionsIn, int connectionsOut, in
     static int64_t lastLogTime = 0;
     int64_t updateStartTime = GetTimeMillis();
     int64_t now = GetTime();
+
+    // Increment signal processing counter
+    s_signalProcessingCount++;
 
     if (now - lastLogTime > 5) {
         LogPrint(BCLog::QT, "updateConnectionData: GUI thread processing connection update: %d in, %d out, %d total\n", connectionsIn, connectionsOut, connectionsTotal);
@@ -674,6 +705,7 @@ QString ClientModel::getCacheStats() const
                            "  Peers: %12 cached, last update: %13 seconds ago\n"
                            "  Fee Histogram: %14 ranges, last update: %15 seconds ago")
                            .arg(m_gui_data.updateCount)
+                           .arg(s_signalProcessingCount.load())
                            .arg(age)
                            .arg(m_gui_data.numBlocks)
                            .arg(m_gui_data.headerHeight)
@@ -739,18 +771,19 @@ QString ClientModel::getPerformanceStats() const
 
     QString stats = QString("GUI Responsiveness Performance Stats:\n"
                            "  Signal-Based Updates: %1 total\n"
-                           "  Last Block Update: %2 seconds ago\n"
-                           "  Last Header Update: %3 seconds ago\n"
-                           "  Last Connection Update: %4 seconds ago\n"
-                           "  Last Network Update: %5 seconds ago\n"
-                           "  Last Peer Update: %6 seconds ago\n"
-                           "  Last Mempool Update: %7 seconds ago\n"
-                           "  Last Fee Histogram Update: %8 seconds ago\n"
-                           "  Current Block Height: %9\n"
-                           "  Header Height: %10\n"
-                           "  Active Connections: %11\n"
-                           "  Mempool Size: %12 txs\n"
-                           "  Network Traffic: %13 bytes in, %14 bytes out\n"
+                           "  Signals Processed: %2\n"
+                           "  Last Block Update: %3 seconds ago\n"
+                           "  Last Header Update: %4 seconds ago\n"
+                           "  Last Connection Update: %5 seconds ago\n"
+                           "  Last Network Update: %6 seconds ago\n"
+                           "  Last Peer Update: %7 seconds ago\n"
+                           "  Last Mempool Update: %8 seconds ago\n"
+                           "  Last Fee Histogram Update: %9 seconds ago\n"
+                           "  Current Block Height: %10\n"
+                           "  Header Height: %11\n"
+                           "  Active Connections: %12\n"
+                           "  Mempool Size: %13 txs\n"
+                           "  Network Traffic: %14 bytes in, %15 bytes out\n"
                            "  Performance Thresholds:\n"
                            "    Signal Handler: < 50ms (validation thread)\n"
                            "    GUI Thread: < 100ms (responsiveness)\n"

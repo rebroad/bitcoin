@@ -96,6 +96,10 @@ public:
     // Performance monitoring for debugging
     QString getPerformanceStats() const;
 
+    // Debug signal processing
+    static int getSignalProcessingCount() { return s_signalProcessingCount; }
+    static void resetSignalProcessingCount() { s_signalProcessingCount = 0; }
+
     // Legacy caching - now replaced by m_gui_data (kept for compatibility)
     // Note: These are no longer used with signal-based updates but kept for API compatibility
     mutable std::atomic<int> m_cached_num_blocks{-1};
@@ -146,6 +150,9 @@ public:
 
     // Single buffer for signal-based updates
     GuiData m_gui_data;  // Updated directly by signals in GUI thread
+
+    // Debug signal processing counter
+    static std::atomic<int> s_signalProcessingCount;
 
 private:
     interfaces::Node& m_node;
