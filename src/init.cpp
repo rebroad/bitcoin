@@ -226,7 +226,10 @@ void Shutdown(NodeContext& node)
     // Because these depend on each-other, we make sure that neither can be
     // using the other before destroying them.
     if (node.peerman) UnregisterValidationInterface(node.peerman.get());
-    if (node.connman) node.connman->Stop();
+    if (node.connman) {
+        node.connman->Interrupt(); // Set interruptNet to stop new connections
+        node.connman->Stop();
+    }
 
     StopTorControl();
 
