@@ -93,7 +93,11 @@ public:
     // Cached mempool fee histogram for debug components
     bool getCachedFeeHistogram(interfaces::mempool_feehistogram& histogram) const;
 
+    // Performance monitoring for debugging
+    QString getPerformanceStats() const;
+
     // Legacy caching - now replaced by m_gui_data (kept for compatibility)
+    // Note: These are no longer used with signal-based updates but kept for API compatibility
     mutable std::atomic<int> m_cached_num_blocks{-1};
 
     Mutex m_cached_tip_mutex;
