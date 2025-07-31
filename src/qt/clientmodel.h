@@ -187,10 +187,10 @@ public Q_SLOTS:
 
     /* stats stack */
     void updateMempoolStats();
-    void updateHeaderTip(int height, int64_t blockTime);
-    void updateBlockData(int numBlocks, const uint256& bestBlockHash, bool initialSyncFinished);
+    void updateHeaderTip(int height, qint64 blockTime);
+    void updateBlockData(int numBlocks, const QString& bestBlockHashStr, bool initialSyncFinished);
     void updateConnectionData(int connectionsIn, int connectionsOut, int connectionsTotal);
-    void updateNetworkData(int64_t bytesRecv, int64_t bytesSent);
+    void updateNetworkData(qint64 bytesRecv, qint64 bytesSent);
     void updatePeerStats(const interfaces::Node::NodesStats& stats);
     void updateFeeHistogram(const interfaces::mempool_feehistogram& histogram);
 };

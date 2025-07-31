@@ -239,8 +239,8 @@ static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConn
 
     // Update network data via signal
     invoked = QMetaObject::invokeMethod(clientmodel, "updateNetworkData", Qt::QueuedConnection,
-                              Q_ARG(int64_t, bytesRecv),
-                              Q_ARG(int64_t, bytesSent));
+                              Q_ARG(qint64, bytesRecv),
+                              Q_ARG(qint64, bytesSent));
     assert(invoked);
 
     // Update peer stats via signal
@@ -282,7 +282,7 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
         // This ensures cache updates happen in the correct thread context
         bool invoked = QMetaObject::invokeMethod(clientmodel, "updateHeaderTip", Qt::QueuedConnection,
             Q_ARG(int, tip.block_height),
-            Q_ARG(int64_t, tip.block_time));
+            Q_ARG(qint64, tip.block_time));
         if (!invoked) {
             qWarning() << "ClientModel: Failed to queue header tip update";
         }
@@ -290,7 +290,7 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
         // Update block data via signal
         bool invoked = QMetaObject::invokeMethod(clientmodel, "updateBlockData", Qt::QueuedConnection,
             Q_ARG(int, tip.block_height),
-            Q_ARG(uint256, tip.block_hash),
+            Q_ARG(QString, QString::fromStdString(tip.block_hash.ToString())),
             Q_ARG(bool, false)); // Will be updated via signal later
         if (!invoked) {
             qWarning() << "ClientModel: Failed to queue block data update";
@@ -375,7 +375,7 @@ void ClientModel::updateMempoolStats()
     Q_EMIT mempoolStatsDidUpdate();
 }
 
-void ClientModel::updateHeaderTip(int height, int64_t blockTime)
+void ClientModel::updateHeaderTip(int height, qint64 blockTime)
 {
     // Update header tip in the GUI thread context
     // This is called from the validation thread via QMetaObject::invokeMethod
@@ -383,11 +383,11 @@ void ClientModel::updateHeaderTip(int height, int64_t blockTime)
     m_gui_data.headerTime = blockTime;
 }
 
-void ClientModel::updateBlockData(int numBlocks, const uint256& bestBlockHash, bool initialSyncFinished)
+void ClientModel::updateBlockData(int numBlocks, const QString& bestBlockHashStr, bool initialSyncFinished)
 {
     // Update block data in the GUI thread context
     m_gui_data.numBlocks = numBlocks;
-    m_gui_data.bestBlockHash = bestBlockHash;
+    m_gui_data.bestBlockHash = uint256S(bestBlockHashStr.toStdString());
     m_gui_data.initialSyncFinished = initialSyncFinished;
 }
 
@@ -399,7 +399,7 @@ void ClientModel::updateConnectionData(int connectionsIn, int connectionsOut, in
     m_gui_data.numConnectionsTotal = connectionsTotal;
 }
 
-void ClientModel::updateNetworkData(int64_t bytesRecv, int64_t bytesSent)
+void ClientModel::updateNetworkData(qint64 bytesRecv, qint64 bytesSent)
 {
     // Update network data in the GUI thread context
     m_gui_data.bytesRecv = bytesRecv;
