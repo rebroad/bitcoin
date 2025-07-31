@@ -12,6 +12,32 @@
 // Forward declarations
 class ClientModelDataWorker;
 
+// Data Worker Class for handling cs_main operations in separate thread
+class ClientModelDataWorker : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit ClientModelDataWorker(interfaces::Node& node, QObject* parent = nullptr);
+
+public Q_SLOTS:
+    // Data operations that require cs_main
+    void getBlockSourceAsync();
+    void getStatusBarWarningsAsync();
+    void getMempoolStatsInRangeAsync(QDateTime from, QDateTime to);
+    void updateMempoolStatsAsync();
+
+Q_SIGNALS:
+    // Results sent back to GUI thread
+    void blockSourceResult(BlockSource result);
+    void statusBarWarningsResult(QString warnings);
+    void mempoolStatsResult(mempoolSamples_t samples);
+    void mempoolStatsUpdated();
+
+private:
+    interfaces::Node& m_node;
+};
+
 // Macro to automatically capture caller for responsiveness requests
 #define REQUEST_RESPONSIVENESS(reason) requestResponsiveness(reason)
 #define REQUEST_RESPONSIVENESS_AUTO() requestResponsiveness(__PRETTY_FUNCTION__)

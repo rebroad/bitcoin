@@ -39,9 +39,9 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     optionsModel(_optionsModel),
     peerTableModel(nullptr),
     banTableModel(nullptr),
-    m_thread(new QThread(this)),
     m_data_thread(nullptr),
-    m_data_worker(nullptr)
+    m_data_worker(nullptr),
+    m_thread(new QThread(this))
 {
     cachedBestHeaderHeight = -1;
     cachedBestHeaderTime = -1;
@@ -469,32 +469,11 @@ void ClientModel::updateMempoolStats()
     Q_EMIT mempoolStatsDidUpdate();
 }
 
-// Data Worker Class for handling cs_main operations in separate thread
-class ClientModelDataWorker : public QObject
+// ClientModelDataWorker constructor
+ClientModelDataWorker::ClientModelDataWorker(interfaces::Node& node, QObject* parent)
+    : QObject(parent), m_node(node)
 {
-    Q_OBJECT
-
-public:
-    explicit ClientModelDataWorker(interfaces::Node& node, QObject* parent = nullptr)
-        : QObject(parent), m_node(node) {}
-
-public slots:
-    // Data operations that require cs_main
-    void getBlockSourceAsync();
-    void getStatusBarWarningsAsync();
-    void getMempoolStatsInRangeAsync(QDateTime from, QDateTime to);
-    void updateMempoolStatsAsync();
-
-signals:
-    // Results sent back to GUI thread
-    void blockSourceResult(enum BlockSource result);
-    void statusBarWarningsResult(QString warnings);
-    void mempoolStatsResult(mempoolSamples_t samples);
-    void mempoolStatsUpdated();
-
-private:
-    interfaces::Node& m_node;
-};
+}
 
 void ClientModelDataWorker::getBlockSourceAsync()
 {
@@ -525,5 +504,3 @@ void ClientModelDataWorker::updateMempoolStatsAsync()
     // Implementation for mempool stats update
     Q_EMIT mempoolStatsUpdated();
 }
-
-#include "clientmodel.moc"
