@@ -52,22 +52,15 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     initializeData();
 
     subscribeToCoreSignals();
-
-    // Add a simple timer to test if GUI thread is alive
-    QTimer* testTimer = new QTimer(this);
-    testTimer->setInterval(5000); // Every 5 seconds
-    connect(testTimer, &QTimer::timeout, [this]() {
-        LogPrint(BCLog::QT, "GUI Thread Test: Timer fired - GUI thread is alive!\n");
-    });
-    testTimer->start();
 }
 
 void ClientModel::initializeData()
 {
     // Initialize data with current values (only called once at startup)
     // Most data will be updated via signals, this is just for initial state
-    m_gui_data.numBlocks = m_node.getNumBlocks();
-    m_gui_data.bestBlockHash = m_node.getBestBlockHash();
+    // These require cs_main lock - will be updated via signals instead
+    m_gui_data.numBlocks = 0; // Will be updated via BlockTipChanged signal
+    m_gui_data.bestBlockHash = uint256(); // Will be updated via BlockTipChanged signal
     m_gui_data.initialSyncFinished = m_node.isInitialSyncFinished();
     m_gui_data.numConnectionsIn = m_node.getNodeCount(ConnectionDirection::In);
     m_gui_data.numConnectionsOut = m_node.getNodeCount(ConnectionDirection::Out);
@@ -78,17 +71,12 @@ void ClientModel::initializeData()
     m_gui_data.bytesSent = m_node.getTotalBytesSent();
 
     // Initialize header data
-    int height;
-    int64_t blockTime;
-    if (m_node.getHeaderTip(height, blockTime)) {
-        m_gui_data.headerHeight = height;
-        m_gui_data.headerTime = blockTime;
-    } else {
-        m_gui_data.headerHeight = -1;
-        m_gui_data.headerTime = -1;
+    // Header tip requires cs_main lock - will be updated via signals instead
+    m_gui_data.headerHeight = -1; // Will be updated via HeaderTipChanged signal
+    m_gui_data.headerTime = -1; // Will be updated via HeaderTipChanged signal
     }
 
-    qDebug() << "ClientModel: Data initialized with" << m_gui_data.numBlocks << "blocks";
+    LogPrint(BCLog::QT, "ClientModel: Data initialized with %d blocks\n", m_gui_data.numBlocks);
 }
 
 ClientModel::~ClientModel()
@@ -403,10 +391,12 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
         }
     } else {
         // Update block data via signal
+        // Note: Don't call isInitialSyncFinished() here as it might cause deadlock
+        // We'll update this in the GUI thread instead
         bool invoked = QMetaObject::invokeMethod(clientmodel, "updateBlockData", Qt::QueuedConnection,
             Q_ARG(int, tip.block_height),
             Q_ARG(QString, QString::fromStdString(tip.block_hash.ToString())),
-            Q_ARG(bool, clientmodel->node().isInitialSyncFinished()));
+            Q_ARG(bool, false)); // Will be updated in GUI thread
         if (!invoked) {
             LogPrint(BCLog::GUI, "BlockTipChanged: Failed to queue updateBlockData signal\n");
         } else {
@@ -516,11 +506,15 @@ void ClientModel::updateMempoolStats()
     // Emit signal for mempool size changes
     Q_EMIT mempoolSizeChanged(m_gui_data.mempoolSize, m_gui_data.mempoolDynamicUsage);
 
-    // Collect fee histogram data
+    // Collect fee histogram data - SKIP during IBD to avoid blocking GUI thread
     int64_t now = GetTime();
-    if (m_mempool_feehist_last_sample_timestamp == 0 ||
+    if (!m_node.isInitialSyncFinished()) {
+        // Skip expensive fee histogram collection during IBD
+        LogPrint(BCLog::QT, "updateMempoolStats: Skipping fee histogram during IBD\n");
+    } else if (m_mempool_feehist_last_sample_timestamp == 0 ||
         static_cast<uint64_t>(m_mempool_feehist_last_sample_timestamp) + static_cast<uint64_t>(m_mempool_collect_intervall) <= static_cast<uint64_t>(now)) {
 
+        // Only collect fee histogram when not in IBD and interval has passed
         QMutexLocker locker(&m_mempool_locker);
         interfaces::mempool_feehistogram fee_histogram = m_node.getMempoolFeeHistogram();
         m_mempool_feehist.push_back({now, fee_histogram});
@@ -579,7 +573,8 @@ void ClientModel::updateBlockData(int numBlocks, const QString& bestBlockHashStr
         // Keep previous hash if conversion fails
     }
 
-    m_gui_data.initialSyncFinished = initialSyncFinished;
+    // Get the actual sync status in the GUI thread to avoid deadlock
+    m_gui_data.initialSyncFinished = m_node.isInitialSyncFinished();
 
     // Note: numBlocksChanged signal is emitted by the original BlockTipChanged handler
     // to avoid duplicate signal emissions
