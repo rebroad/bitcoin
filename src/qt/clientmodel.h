@@ -108,7 +108,7 @@ public:
     std::vector<mempool_feehist_sample> m_mempool_feehist;
     std::atomic<int64_t> m_mempool_feehist_last_sample_timestamp{0};
 
-    // GUI-specific data layer - double-buffered for air lock pattern
+    // GUI-specific data layer - single buffer for signal-based updates
     struct GuiData {
         int numBlocks{-1};
         int headerHeight{-1};
@@ -123,7 +123,7 @@ public:
         int64_t bytesRecv{0};
         int64_t bytesSent{0};
 
-        // Traffic graph data (updated more frequently)
+        // Traffic graph data
         int64_t trafficBytesRecv{0};
         int64_t trafficBytesSent{0};
 
@@ -140,11 +140,8 @@ public:
         int64_t updateCount{0};
     };
 
-    // Double-buffered cache for air lock pattern
-    GuiData m_gui_data_front;  // Front buffer - read by GUI (no lock needed)
-    GuiData m_gui_data_back;   // Back buffer - written by background thread
-    mutable Mutex m_gui_data_back_mutex;  // Only protects back buffer during writes
-    std::atomic<bool> m_cache_ready{false};  // Indicates if front buffer has valid data
+    // Single buffer for signal-based updates
+    GuiData m_gui_data;  // Updated directly by signals in GUI thread
 
 private:
     interfaces::Node& m_node;
@@ -161,13 +158,9 @@ private:
     PeerTableSortProxy* m_peer_table_sort_proxy{nullptr};
     BanTableModel *banTableModel;
 
-    //! A thread to interact with m_node asynchronously
-    QThread* const m_thread;
-
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();
-    void initializeCache();
-    void updateCacheData(bool forceUpdate = false);
+    void initializeData();
 
 Q_SIGNALS:
     void numConnectionsChanged(int count);
@@ -195,6 +188,11 @@ public Q_SLOTS:
     /* stats stack */
     void updateMempoolStats();
     void updateHeaderTip(int height, int64_t blockTime);
+    void updateBlockData(int numBlocks, const uint256& bestBlockHash, bool initialSyncFinished);
+    void updateConnectionData(int connectionsIn, int connectionsOut, int connectionsTotal);
+    void updateNetworkData(int64_t bytesRecv, int64_t bytesSent);
+    void updatePeerStats(const interfaces::Node::NodesStats& stats);
+    void updateFeeHistogram(const interfaces::mempool_feehistogram& histogram);
 };
 
 #endif // BITCOIN_QT_CLIENTMODEL_H
