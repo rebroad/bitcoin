@@ -850,7 +850,10 @@ static UniValue ConnectAndCallRPC(BaseRequestHandler* rh, const std::string& str
         try {
             response = CallRPC(rh, strMethod, args, rpcwallet);
             if (fWait) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-reference"
                 const UniValue& error = find_value(response, "error");
+#pragma GCC diagnostic pop
                 if (!error.isNull() && error["code"].get_int() == RPC_IN_WARMUP) {
                     throw CConnectionFailed("server in warmup");
                 }
@@ -879,8 +882,11 @@ static void ParseResult(const UniValue& result, std::string& strPrint)
 static void ParseError(const UniValue& error, std::string& strPrint, int& nRet)
 {
     if (error.isObject()) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-reference"
         const UniValue& err_code = find_value(error, "code");
         const UniValue& err_msg = find_value(error, "message");
+#pragma GCC diagnostic pop
         if (!err_code.isNull()) {
             strPrint = "error code: " + err_code.getValStr() + "\n";
         }
@@ -907,14 +913,20 @@ static void GetWalletBalances(UniValue& result)
     DefaultRequestHandler rh;
     const UniValue listwallets = ConnectAndCallRPC(&rh, "listwallets", /* args=*/{});
     if (!find_value(listwallets, "error").isNull()) return;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-reference"
     const UniValue& wallets = find_value(listwallets, "result");
+#pragma GCC diagnostic pop
     if (wallets.size() <= 1) return;
 
     UniValue balances(UniValue::VOBJ);
     for (const UniValue& wallet : wallets.getValues()) {
         const std::string wallet_name = wallet.get_str();
         const UniValue getbalances = ConnectAndCallRPC(&rh, "getbalances", /* args=*/{}, wallet_name);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-reference"
         const UniValue& balance = find_value(getbalances, "result")["mine"]["trusted"];
+#pragma GCC diagnostic pop
         balances.pushKV(wallet_name, balance);
     }
     result.pushKV("balances", balances);
@@ -987,7 +999,7 @@ static void ParseGetInfoResult(UniValue& result)
     result_string += strprintf("Headers: %s\n", result["headers"].getValStr());
 
     const double ibd_progress{result["verificationprogress"].get_real()};
-    std::string ibd_progress_bar;
+    std::string ibd_progress_bar; // REBTODO - we should always count the beginning of the run as 0%
     // Display the progress bar only if IBD progress is less than 99%
     if (ibd_progress < 0.99) {
       GetProgressBar(ibd_progress, ibd_progress_bar);
@@ -1159,7 +1171,10 @@ static int CommandLineRPC(int argc, char *argv[])
             rh.reset(new NetinfoRequestHandler());
         } else if (gArgs.GetBoolArg("-generate", false)) {
             const UniValue getnewaddress{GetNewAddress()};
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-reference"
             const UniValue& error{find_value(getnewaddress, "error")};
+#pragma GCC diagnostic pop
             if (error.isNull()) {
                 SetGenerateToAddressArgs(find_value(getnewaddress, "result").get_str(), args);
                 rh.reset(new GenerateToAddressRequestHandler());
@@ -1184,7 +1199,10 @@ static int CommandLineRPC(int argc, char *argv[])
 
             // Parse reply
             UniValue result = find_value(reply, "result");
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-reference"
             const UniValue& error = find_value(reply, "error");
+#pragma GCC diagnostic pop
             if (error.isNull()) {
                 if (gArgs.GetBoolArg("-getinfo", false)) {
                     if (!gArgs.IsArgSet("-rpcwallet")) {
