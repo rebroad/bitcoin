@@ -960,21 +960,15 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
 
     // scan for better chains in the block chain database, that are not yet connected in the active best chain
 
-    // We can't hold cs_main during ActivateBestChain even though we're accessing
-    // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
-    // the relevant pointers before the ABC call.
-    for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
-        BlockValidationState state;
-        if (!chainstate->ActivateBestChain(state, nullptr)) { // REBTODO - Set fActivateChain instead?
-            LogPrintf("Failed to connect best block (%s)\n", state.ToString());
-            StartShutdown();
-            return;
-        }
-    }
+    // Set flag to let validation thread handle chain activation instead of doing it directly
+    // This ensures proper thread separation and allows the validation thread to handle
+    // chain progression efficiently while loadblk focuses on block loading
+    fActivateChain = true;
 
-    if (!ShutdownRequested())
+    if (!ShutdownRequested()) {
+        LogPrintf("%s: Start LoadMempool\n", __func__);
         chainman.ActiveChainstate().LoadMempool(args);
-    LogPrintf("%s: Start LoadMempoolCache loop\n", __func__);
+    } else LogPrintf("%s: ShutdownRequested\n", __func__);
     while(!ShutdownRequested()) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         chainman.ActiveChainstate().LoadMempoolCache(args);
