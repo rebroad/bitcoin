@@ -625,7 +625,7 @@ bool BitcoinApplication::event(QEvent* e)
         if (m_node && window) {
             ClientModel* clientModel = window->getClientModel();
             if (clientModel) {
-                clientModel->requestResponsiveness();
+                clientModel->requestResponsiveness("Mouse double-click");
                 QTimer::singleShot(10, [clientModel]() {
                     LogPrint(BCLog::QT, "Releasing responsiveness after mouse double-click\n");
                     clientModel->releaseResponsiveness();
@@ -651,7 +651,7 @@ bool BitcoinApplication::event(QEvent* e)
         if (m_node && window) {
             ClientModel* clientModel = window->getClientModel();
             if (clientModel) {
-                clientModel->requestResponsiveness();
+                clientModel->requestResponsiveness("Key release");
                 QTimer::singleShot(10, [clientModel]() {
                     LogPrint(BCLog::QT, "Releasing responsiveness after key release\n");
                     clientModel->releaseResponsiveness();
@@ -664,7 +664,7 @@ bool BitcoinApplication::event(QEvent* e)
         if (m_node && window) {
             ClientModel* clientModel = window->getClientModel();
             if (clientModel) {
-                clientModel->requestResponsiveness();
+                clientModel->requestResponsiveness("Mouse wheel");
                 QTimer::singleShot(10, [clientModel]() {
                     LogPrint(BCLog::QT, "Releasing responsiveness after mouse wheel\n");
                     clientModel->releaseResponsiveness();

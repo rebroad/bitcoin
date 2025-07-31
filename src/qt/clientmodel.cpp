@@ -183,7 +183,7 @@ void ClientModel::updateAlert()
 enum BlockSource ClientModel::getBlockSource() const
 {
     // Request responsiveness for node calls
-    const_cast<ClientModel*>(this)->requestResponsiveness();
+    const_cast<ClientModel*>(this)->requestResponsiveness("getBlockSource");
 
     enum BlockSource result;
     if (m_node.getReindex()) result = BlockSource::REINDEX;
@@ -200,7 +200,7 @@ enum BlockSource ClientModel::getBlockSource() const
 QString ClientModel::getStatusBarWarnings() const
 {
     // Request responsiveness for node call
-    const_cast<ClientModel*>(this)->requestResponsiveness();
+    const_cast<ClientModel*>(this)->requestResponsiveness("getStatusBarWarnings");
 
     QString result = QString::fromStdString(m_node.getWarnings().translated);
 
@@ -389,7 +389,7 @@ void ClientModel::unsubscribeFromCoreSignals()
 bool ClientModel::getProxyInfo(std::string& ip_port) const
 {
     // Request responsiveness for node calls
-    const_cast<ClientModel*>(this)->requestResponsiveness();
+    const_cast<ClientModel*>(this)->requestResponsiveness("getMempoolStatsInRange");
 
     proxyType ipv4, ipv6;
     bool result = false;
@@ -407,7 +407,7 @@ bool ClientModel::getProxyInfo(std::string& ip_port) const
 mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime &to)
 {
     // Request responsiveness for stats calls
-    requestResponsiveness();
+    requestResponsiveness("updateMempoolStats");
 
     // get stats from the core stats model
     uint64_t timeFrom = from.toTime_t();

@@ -1549,7 +1549,7 @@ void BitcoinGUI::mousePressEvent(QMouseEvent *event)
 {
     // Request responsiveness for mouse interactions
     if (clientModel) {
-        clientModel->requestResponsiveness();
+        clientModel->requestResponsiveness("Mouse press");
     }
     QMainWindow::mousePressEvent(event);
 }
@@ -1569,7 +1569,7 @@ void BitcoinGUI::mouseMoveEvent(QMouseEvent *event)
     static int moveCount = 0;
     moveCount++;
     if (moveCount % 10 == 0 && clientModel) {  // Every 10th mouse move
-        clientModel->requestResponsiveness();
+        clientModel->requestResponsiveness("Mouse move");
         clientModel->releaseResponsiveness();
     }
     QMainWindow::mouseMoveEvent(event);
@@ -1579,7 +1579,7 @@ void BitcoinGUI::keyPressEvent(QKeyEvent *event)
 {
     // Request responsiveness for keyboard interactions
     if (clientModel) {
-        clientModel->requestResponsiveness();
+        clientModel->requestResponsiveness("Key press");
     }
     QMainWindow::keyPressEvent(event);
 }
@@ -1597,7 +1597,7 @@ void BitcoinGUI::resizeEvent(QResizeEvent *event)
 {
     // Request responsiveness for window resizing
     if (clientModel) {
-        clientModel->requestResponsiveness();
+        clientModel->requestResponsiveness("Window resize");
     }
     QMainWindow::resizeEvent(event);
     // Release responsiveness after resize
@@ -1610,7 +1610,7 @@ void BitcoinGUI::moveEvent(QMoveEvent *event)
 {
     // Request responsiveness for window moving
     if (clientModel) {
-        clientModel->requestResponsiveness();
+        clientModel->requestResponsiveness("Window move");
     }
     QMainWindow::moveEvent(event);
     // Release responsiveness after move
@@ -1625,7 +1625,7 @@ void BitcoinGUI::connectActionWithResponsiveness(QAction* action, std::function<
     connect(action, &QAction::triggered, [this, slot]() {
         // Request responsiveness before executing action
         if (clientModel) {
-            clientModel->requestResponsiveness();
+            clientModel->requestResponsiveness("Action triggered");
         }
 
         // Execute the original slot
