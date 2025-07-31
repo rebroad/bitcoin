@@ -140,6 +140,11 @@ bool CBlockIndexWorkComparator::operator()(const CBlockIndex *pa, const CBlockIn
  */
 RecursiveMutex cs_main;
 
+// GUI responsiveness synchronization
+std::atomic<bool> g_gui_needs_responsiveness{false};
+std::condition_variable g_gui_cv;
+std::mutex g_gui_mutex;
+
 static constexpr int64_t MAX_TIMEWARP{MAX_FUTURE_BLOCK_TIME};
 
 CBlockIndex *pindexBestHeader = nullptr;
@@ -1508,7 +1513,7 @@ bool CChainState::IsInitialBlockDownload() const
                 now > nLastIBDAlmostFinished + nIBDTimeThreshold &&
                 m_chain.Tip()->GetBlockTime() < (now - nMaxTipAge)) {
             if (!fPrev)
-				LogPrintf("%s: Setting to true: tip age=%s. IBD_time_remaining=%s\n", __func__,
+                LogPrintf("%s: Setting to true: tip age=%s. IBD_time_remaining=%s\n", __func__,
                         strAge(now - m_chain.Tip()->GetBlockTime()), strAge(nIBDTimeRemaining));
             fPrev = fNew = true;
         } else if (nIBDTimeRemaining <= nIBDTimeThreshold) nLastIBDAlmostFinished = now;
@@ -3048,6 +3053,18 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
         // caused an assert() failure during shutdown in such cases as the UTXO DB flushing checks
         // that the best block hash is non-null.
         if (ShutdownRequested()) break;
+
+        // Check if GUI needs responsiveness (after cs_main is released)
+        if (g_gui_needs_responsiveness.load()) {
+            LogPrint(BCLog::GUI, "ActivateBestChain: Yielding to GUI thread for responsiveness\n");
+
+            // Wait for GUI to signal it's done (with timeout to prevent deadlock)
+            std::unique_lock<std::mutex> lock(g_gui_mutex);
+            g_gui_cv.wait_for(lock, std::chrono::milliseconds(100),
+                []{ return !g_gui_needs_responsiveness.load(); });
+
+            LogPrint(BCLog::GUI, "ActivateBestChain: Resuming validation\n");
+        }
     } while (pindexNewTip != pindexMostWork);
     CheckBlockIndex();
 

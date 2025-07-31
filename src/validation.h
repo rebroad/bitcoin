@@ -38,6 +38,11 @@
 #include <utility>
 #include <vector>
 
+// GUI responsiveness synchronization
+extern std::atomic<bool> g_gui_needs_responsiveness;
+extern std::condition_variable g_gui_cv;
+extern std::mutex g_gui_mutex;
+
 class CChainState;
 class CBlockTreeDB;
 class CChainParams;

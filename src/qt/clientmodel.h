@@ -95,6 +95,15 @@ public:
     std::vector<mempool_feehist_sample> m_mempool_feehist;
     std::atomic<int64_t> m_mempool_feehist_last_sample_timestamp{0};
 
+    // GUI responsiveness functions
+    void requestResponsiveness();
+    void releaseResponsiveness();
+
+    // Performance debugging
+    QString getPerformanceStats() const;
+    static int getSignalProcessingCount();
+    static void resetSignalProcessingCount();
+
 private:
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_show_progress;

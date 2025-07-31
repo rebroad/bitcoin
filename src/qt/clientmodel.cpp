@@ -175,20 +175,38 @@ void ClientModel::updateNetworkActive(bool networkActive)
 
 void ClientModel::updateAlert()
 {
+    // getStatusBarWarnings() already handles responsiveness internally
     Q_EMIT alertsChanged(getStatusBarWarnings());
 }
 
 enum BlockSource ClientModel::getBlockSource() const
 {
-    if (m_node.getReindex()) return BlockSource::REINDEX;
-    if (m_node.getImporting()) return BlockSource::DISK;
-    if (getNumConnections() > 0) return BlockSource::NETWORK;
-    return BlockSource::NONE;
+    // Request responsiveness for node calls
+    const_cast<ClientModel*>(this)->requestResponsiveness();
+
+    enum BlockSource result;
+    if (m_node.getReindex()) result = BlockSource::REINDEX;
+    else if (m_node.getImporting()) result = BlockSource::DISK;
+    else if (getNumConnections() > 0) result = BlockSource::NETWORK;
+    else result = BlockSource::NONE;
+
+    // Release responsiveness after node calls
+    const_cast<ClientModel*>(this)->releaseResponsiveness();
+
+    return result;
 }
 
 QString ClientModel::getStatusBarWarnings() const
 {
-    return QString::fromStdString(m_node.getWarnings().translated);
+    // Request responsiveness for node call
+    const_cast<ClientModel*>(this)->requestResponsiveness();
+
+    QString result = QString::fromStdString(m_node.getWarnings().translated);
+
+    // Release responsiveness after node call
+    const_cast<ClientModel*>(this)->releaseResponsiveness();
+
+    return result;
 }
 
 OptionsModel *ClientModel::getOptionsModel()
@@ -214,6 +232,25 @@ BanTableModel *ClientModel::getBanTableModel()
 QString ClientModel::formatFullVersion() const
 {
     return QString::fromStdString(FormatFullVersion());
+}
+
+void ClientModel::requestResponsiveness()
+{
+    // Signal that GUI needs responsiveness
+    extern std::atomic<bool> g_gui_needs_responsiveness;
+    g_gui_needs_responsiveness.store(true);
+    LogPrint(BCLog::QT, "ClientModel: Requesting GUI responsiveness\n");
+}
+
+void ClientModel::releaseResponsiveness()
+{
+    // Signal that GUI is done and validation can continue
+    extern std::atomic<bool> g_gui_needs_responsiveness;
+    extern std::condition_variable g_gui_cv;
+
+    g_gui_needs_responsiveness.store(false);
+    g_gui_cv.notify_one();
+    LogPrint(BCLog::QT, "ClientModel: Released GUI responsiveness\n");
 }
 
 QString ClientModel::formatSubVersion() const
@@ -349,16 +386,27 @@ void ClientModel::unsubscribeFromCoreSignals()
 
 bool ClientModel::getProxyInfo(std::string& ip_port) const
 {
+    // Request responsiveness for node calls
+    const_cast<ClientModel*>(this)->requestResponsiveness();
+
     proxyType ipv4, ipv6;
+    bool result = false;
     if (m_node.getProxy((Network) 1, ipv4) && m_node.getProxy((Network) 2, ipv6)) {
       ip_port = ipv4.proxy.ToStringIPPort();
-      return true;
+      result = true;
     }
-    return false;
+
+    // Release responsiveness after node calls
+    const_cast<ClientModel*>(this)->releaseResponsiveness();
+
+    return result;
 }
 
 mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime &to)
 {
+    // Request responsiveness for stats calls
+    requestResponsiveness();
+
     // get stats from the core stats model
     uint64_t timeFrom = from.toTime_t();
     uint64_t timeTo = to.toTime_t();
@@ -366,6 +414,10 @@ mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime 
     mempoolSamples_t samples = CStats::DefaultStats()->mempoolGetValuesInRange(timeFrom,timeTo);
     from.setTime_t(timeFrom);
     to.setTime_t(timeTo);
+
+    // Release responsiveness after stats calls
+    releaseResponsiveness();
+
     return samples;
 }
 
