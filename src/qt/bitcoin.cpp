@@ -590,19 +590,78 @@ bool BitcoinApplication::event(QEvent* e)
     switch (e->type())
     {
     case QEvent::MouseButtonPress:
-    case QEvent::MouseButtonRelease:
-    case QEvent::MouseButtonDblClick:
-    case QEvent::KeyPress:
-    case QEvent::KeyRelease:
-    case QEvent::Wheel:
-        // Request responsiveness for user interactions
+        LogPrint(BCLog::QT, "Mouse button press event - requesting responsiveness\n");
         if (m_node && window) {
-            // Access ClientModel through the main window
             ClientModel* clientModel = window->getClientModel();
             if (clientModel) {
                 clientModel->requestResponsiveness();
-                // Release responsiveness after a short delay to allow event processing
                 QTimer::singleShot(10, [clientModel]() {
+                    LogPrint(BCLog::QT, "Releasing responsiveness after mouse press\n");
+                    clientModel->releaseResponsiveness();
+                });
+            }
+        }
+        break;
+    case QEvent::MouseButtonRelease:
+        LogPrint(BCLog::QT, "Mouse button release event - requesting responsiveness\n");
+        if (m_node && window) {
+            ClientModel* clientModel = window->getClientModel();
+            if (clientModel) {
+                clientModel->requestResponsiveness();
+                QTimer::singleShot(10, [clientModel]() {
+                    LogPrint(BCLog::QT, "Releasing responsiveness after mouse release\n");
+                    clientModel->releaseResponsiveness();
+                });
+            }
+        }
+        break;
+    case QEvent::MouseButtonDblClick:
+        LogPrint(BCLog::QT, "Mouse double-click event - requesting responsiveness\n");
+        if (m_node && window) {
+            ClientModel* clientModel = window->getClientModel();
+            if (clientModel) {
+                clientModel->requestResponsiveness();
+                QTimer::singleShot(10, [clientModel]() {
+                    LogPrint(BCLog::QT, "Releasing responsiveness after mouse double-click\n");
+                    clientModel->releaseResponsiveness();
+                });
+            }
+        }
+        break;
+    case QEvent::KeyPress:
+        LogPrint(BCLog::QT, "Key press event - requesting responsiveness\n");
+        if (m_node && window) {
+            ClientModel* clientModel = window->getClientModel();
+            if (clientModel) {
+                clientModel->requestResponsiveness();
+                QTimer::singleShot(10, [clientModel]() {
+                    LogPrint(BCLog::QT, "Releasing responsiveness after key press\n");
+                    clientModel->releaseResponsiveness();
+                });
+            }
+        }
+        break;
+    case QEvent::KeyRelease:
+        LogPrint(BCLog::QT, "Key release event - requesting responsiveness\n");
+        if (m_node && window) {
+            ClientModel* clientModel = window->getClientModel();
+            if (clientModel) {
+                clientModel->requestResponsiveness();
+                QTimer::singleShot(10, [clientModel]() {
+                    LogPrint(BCLog::QT, "Releasing responsiveness after key release\n");
+                    clientModel->releaseResponsiveness();
+                });
+            }
+        }
+        break;
+    case QEvent::Wheel:
+        LogPrint(BCLog::QT, "Mouse wheel event - requesting responsiveness\n");
+        if (m_node && window) {
+            ClientModel* clientModel = window->getClientModel();
+            if (clientModel) {
+                clientModel->requestResponsiveness();
+                QTimer::singleShot(10, [clientModel]() {
+                    LogPrint(BCLog::QT, "Releasing responsiveness after mouse wheel\n");
                     clientModel->releaseResponsiveness();
                 });
             }
@@ -614,25 +673,36 @@ bool BitcoinApplication::event(QEvent* e)
     return QApplication::event(e);
 }
 
-void BitcoinApplication::processEvents() override
+void BitcoinApplication::processEvents()
 {
+    LogPrint(BCLog::QT, "BitcoinApplication::processEvents() called - requesting responsiveness\n");
+
     // Request responsiveness before processing events
     if (m_node && window) {
         ClientModel* clientModel = window->getClientModel();
         if (clientModel) {
+            LogPrint(BCLog::QT, "Requesting responsiveness from ClientModel\n");
             clientModel->requestResponsiveness();
+        } else {
+            LogPrint(BCLog::QT, "No ClientModel available for responsiveness\n");
         }
+    } else {
+        LogPrint(BCLog::QT, "No m_node or window available for responsiveness\n");
     }
 
+    LogPrint(BCLog::QT, "Calling QApplication::processEvents()\n");
     QApplication::processEvents();
 
     // Release responsiveness after processing events
     if (m_node && window) {
         ClientModel* clientModel = window->getClientModel();
         if (clientModel) {
+            LogPrint(BCLog::QT, "Releasing responsiveness from ClientModel\n");
             clientModel->releaseResponsiveness();
         }
     }
+
+    LogPrint(BCLog::QT, "BitcoinApplication::processEvents() completed\n");
 }
 
 static void SetupUIArgs(ArgsManager& argsman)

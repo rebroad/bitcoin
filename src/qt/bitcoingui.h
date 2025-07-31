@@ -126,6 +126,7 @@ protected:
     // Helper function to wrap actions with responsiveness
     void connectActionWithResponsiveness(QAction* action, std::function<void()> slot);
 
+public:
     // Access ClientModel for responsiveness
     ClientModel* getClientModel() const { return clientModel; }
 

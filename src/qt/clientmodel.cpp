@@ -239,7 +239,7 @@ void ClientModel::requestResponsiveness()
     // Signal that GUI needs responsiveness
     extern std::atomic<bool> g_gui_needs_responsiveness;
     g_gui_needs_responsiveness.store(true);
-    LogPrint(BCLog::QT, "ClientModel: Requesting GUI responsiveness\n");
+    LogPrint(BCLog::QT, "ClientModel: Requesting GUI responsiveness - flag set to true\n");
 }
 
 void ClientModel::releaseResponsiveness()
@@ -250,7 +250,7 @@ void ClientModel::releaseResponsiveness()
 
     g_gui_needs_responsiveness.store(false);
     g_gui_cv.notify_one();
-    LogPrint(BCLog::QT, "ClientModel: Released GUI responsiveness\n");
+    LogPrint(BCLog::QT, "ClientModel: Released GUI responsiveness - flag set to false and notified\n");
 }
 
 QString ClientModel::formatSubVersion() const
