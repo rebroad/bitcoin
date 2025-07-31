@@ -35,12 +35,12 @@ static int64_t nLastBlockTipUpdateNotification = 0;
 
 ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QObject *parent) :
     QObject(parent),
+    m_data_thread(nullptr),
+    m_data_worker(nullptr),
     m_node(node),
     optionsModel(_optionsModel),
     peerTableModel(nullptr),
     banTableModel(nullptr),
-    m_data_thread(nullptr),
-    m_data_worker(nullptr),
     m_thread(new QThread(this))
 {
     cachedBestHeaderHeight = -1;
@@ -267,14 +267,14 @@ void ClientModel::setupDataThread()
     m_data_worker = new ClientModelDataWorker(m_node, this);
     m_data_worker->moveToThread(m_data_thread);
 
-    // Connect signals from worker to GUI thread
-    connect(m_data_worker, &ClientModelDataWorker::blockSourceResult,
-            this, [this](enum BlockSource result) {
+        // Connect signals from worker to GUI thread
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::blockSourceResult,
+            this, [this](BlockSource result) {
         // Handle result in GUI thread
         LogPrint(BCLog::QT, "ClientModel: Received block source result from data thread\n");
     });
 
-    connect(m_data_worker, &ClientModelDataWorker::statusBarWarningsResult,
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::statusBarWarningsResult,
             this, [this](QString warnings) {
         // Handle result in GUI thread
         LogPrint(BCLog::QT, "ClientModel: Received status bar warnings from data thread\n");
