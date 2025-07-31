@@ -57,6 +57,7 @@ namespace BCLog {
         LIBEVENT    = (1 << 17),
         COINDB      = (1 << 18),
         QT          = (1 << 19),
+        GUI         = (1 << 19), // the same
         LEVELDB     = (1 << 20),
         VALIDATION  = (1 << 21),
         I2P         = (1 << 22),

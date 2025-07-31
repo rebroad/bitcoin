@@ -218,12 +218,17 @@ static void ShowProgress(ClientModel *clientmodel, const std::string &title, int
 static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConnections)
 {
     static int64_t lastLogTime = 0;
+    static int callCount = 0;
+    int64_t startTime = GetTimeMillis();
     int64_t now = GetTime();
+
+    callCount++;
 
     // Log every 5 seconds to avoid spam
     if (now - lastLogTime > 5) {
-        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Processing connection change, newNumConnections: %d\n", newNumConnections);
+        LogPrint(BCLog::GUI, "NotifyNumConnectionsChanged: Call #%d, newNumConnections: %d\n", callCount, newNumConnections);
         lastLogTime = now;
+        callCount = 0; // Reset counter
     }
 
     // Collect connection data and update cache
@@ -236,14 +241,17 @@ static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConn
     int64_t bytesSent = clientmodel->node().getTotalBytesSent();
 
     // Collect peer stats and convert to Qt-compatible format
+    int64_t peerStartTime = GetTimeMillis();
     interfaces::Node::NodesStats peerStats;
     clientmodel->node().getNodesStats(peerStats);
+    int64_t peerCollectTime = GetTimeMillis() - peerStartTime;
 
     if (now - lastLogTime > 5) {
-        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Collected %d peers, converting to Qt format...\n", peerStats.size());
+        LogPrint(BCLog::GUI, "NotifyNumConnectionsChanged: Collected %d peers in %dms, converting to Qt format...\n", peerStats.size(), peerCollectTime);
     }
 
     // Convert to QStringList for Qt compatibility
+    int64_t convertStartTime = GetTimeMillis();
     QStringList peerData;
     for (const auto& peer : peerStats) {
         const CNodeStats& stats = std::get<0>(peer);
@@ -264,18 +272,21 @@ static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConn
 
         peerData.append(peerInfo);
     }
+    int64_t convertTime = GetTimeMillis() - convertStartTime;
 
     if (now - lastLogTime > 5) {
-        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Queuing %d peer updates to GUI thread...\n", peerData.size());
+        LogPrint(BCLog::GUI, "NotifyNumConnectionsChanged: Converted %d peers in %dms, queuing to GUI thread...\n", peerData.size(), convertTime);
     }
 
     // Update connection data via signal
+    int64_t queueStartTime = GetTimeMillis();
     bool invoked = QMetaObject::invokeMethod(clientmodel, "updateConnectionData", Qt::QueuedConnection,
                               Q_ARG(int, connectionsIn),
                               Q_ARG(int, connectionsOut),
                               Q_ARG(int, connectionsTotal));
+    int64_t queueTime = GetTimeMillis() - queueStartTime;
     if (!invoked) {
-        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Failed to queue connection data update\n");
+        LogPrint(BCLog::GUI, "NotifyNumConnectionsChanged: Failed to queue connection data update\n");
     }
 
     // Update network data via signal
@@ -283,25 +294,32 @@ static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConn
                               Q_ARG(qint64, bytesRecv),
                               Q_ARG(qint64, bytesSent));
     if (!invoked) {
-        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Failed to queue network data update\n");
+        LogPrint(BCLog::GUI, "NotifyNumConnectionsChanged: Failed to queue network data update\n");
     }
 
     // Update peer stats via signal
     invoked = QMetaObject::invokeMethod(clientmodel, "updatePeerStats", Qt::QueuedConnection,
                               Q_ARG(QStringList, peerData));
     if (!invoked) {
-        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Failed to queue peer stats update\n");
+        LogPrint(BCLog::GUI, "NotifyNumConnectionsChanged: Failed to queue peer stats update\n");
     }
 
     // Also emit the legacy signal for compatibility
     invoked = QMetaObject::invokeMethod(clientmodel, "updateNumConnections", Qt::QueuedConnection,
                               Q_ARG(int, newNumConnections));
     if (!invoked) {
-        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Failed to queue num connections update\n");
+        LogPrint(BCLog::GUI, "NotifyNumConnectionsChanged: Failed to queue num connections update\n");
     }
 
+    int64_t totalTime = GetTimeMillis() - startTime;
     if (now - lastLogTime > 5) {
-        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: All updates queued successfully\n");
+        LogPrint(BCLog::GUI, "NotifyNumConnectionsChanged: All updates queued successfully in %dms total (collect: %dms, convert: %dms, queue: %dms)\n",
+                 totalTime, peerCollectTime, convertTime, queueTime);
+    }
+
+    // Warn if processing is taking too long (could indicate GUI thread blocking)
+    if (totalTime > 100) {
+        LogPrint(BCLog::GUI, "WARNING: NotifyNumConnectionsChanged took %dms - this could cause GUI responsiveness issues!\n", totalTime);
     }
 }
 
