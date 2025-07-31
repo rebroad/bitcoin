@@ -257,8 +257,8 @@ static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConn
         const CNodeStats& stats = std::get<0>(peer);
         const CNodeStateStats& stateStats = std::get<2>(peer);
 
-        // Create a simple string representation of key peer data
-        QString peerInfo = QString("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10")
+        // Create a comprehensive string representation of peer data
+        QString peerInfo = QString("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13|%14|%15|%16|%17|%18|%19|%20")
             .arg(stats.nodeid)
             .arg(QString::fromStdString(stats.m_addr_name))
             .arg(stats.nVersion)
@@ -268,7 +268,17 @@ static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConn
             .arg(stats.nRecvBytes)
             .arg(count_seconds(stats.m_connected))
             .arg(stats.nTimeOffset)
-            .arg(stateStats.m_ping_wait.count() > 0 ? QString::number(CountSecondsDouble(stateStats.m_ping_wait)) : "0");
+            .arg(stateStats.m_ping_wait.count() > 0 ? QString::number(CountSecondsDouble(stateStats.m_ping_wait)) : "0")
+            .arg(static_cast<int>(stats.m_network))  // Network enum value
+            .arg(static_cast<int>(stats.m_conn_type)) // Connection type enum value
+            .arg(stats.nServices)
+            .arg(stats.fRelayTxes ? "1" : "0")
+            .arg(count_seconds(stats.m_last_send))
+            .arg(count_seconds(stats.m_last_recv))
+            .arg(count_seconds(stats.m_last_tx_time))
+            .arg(count_seconds(stats.m_last_block_time))
+            .arg(static_cast<uint32_t>(stats.m_permissionFlags)) // NetPermissionFlags
+            .arg(stats.m_mapped_as);
 
         peerData.append(peerInfo);
     }
@@ -502,8 +512,8 @@ void ClientModel::updatePeerStats(const QStringList& peerData)
 
     for (const QString& peerInfo : peerData) {
         QStringList parts = peerInfo.split("|");
-        if (parts.size() >= 10) {
-            // Create a minimal CNodeStats structure
+        if (parts.size() >= 20) {
+            // Create a complete CNodeStats structure
             CNodeStats nodeStats;
             nodeStats.nodeid = parts[0].toInt();
             nodeStats.m_addr_name = parts[1].toStdString();
@@ -514,6 +524,20 @@ void ClientModel::updatePeerStats(const QStringList& peerData)
             nodeStats.nRecvBytes = parts[6].toULongLong();
             nodeStats.m_connected = std::chrono::seconds(parts[7].toLongLong());
             nodeStats.nTimeOffset = parts[8].toLongLong();
+
+            // Restore actual network and connection type from serialized data
+            nodeStats.m_network = static_cast<Network>(parts[10].toInt());
+            nodeStats.m_conn_type = static_cast<ConnectionType>(parts[11].toInt());
+
+            // Restore additional fields
+            nodeStats.nServices = static_cast<ServiceFlags>(parts[12].toULongLong());
+            nodeStats.fRelayTxes = parts[13] == "1";
+            nodeStats.m_last_send = std::chrono::seconds(parts[14].toLongLong());
+            nodeStats.m_last_recv = std::chrono::seconds(parts[15].toLongLong());
+            nodeStats.m_last_tx_time = std::chrono::seconds(parts[16].toLongLong());
+            nodeStats.m_last_block_time = std::chrono::seconds(parts[17].toLongLong());
+            nodeStats.m_permissionFlags = static_cast<NetPermissionFlags>(parts[18].toUInt());
+            nodeStats.m_mapped_as = parts[19].toUInt();
 
             CNodeStateStats stateStats;
             stateStats.m_ping_wait = std::chrono::seconds(static_cast<int64_t>(parts[9].toDouble()));
