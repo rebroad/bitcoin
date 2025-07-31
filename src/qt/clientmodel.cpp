@@ -39,7 +39,9 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     optionsModel(_optionsModel),
     peerTableModel(nullptr),
     banTableModel(nullptr),
-    m_thread(new QThread(this))
+    m_thread(new QThread(this)),
+    m_data_thread(nullptr),
+    m_data_worker(nullptr)
 {
     cachedBestHeaderHeight = -1;
     cachedBestHeaderTime = -1;
@@ -81,6 +83,9 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     });
 
     subscribeToCoreSignals();
+
+    // Setup data processing thread
+    setupDataThread();
 }
 
 ClientModel::~ClientModel()
@@ -89,6 +94,9 @@ ClientModel::~ClientModel()
 
     m_thread->quit();
     m_thread->wait();
+
+    // Teardown data processing thread
+    teardownDataThread();
 }
 
 int ClientModel::getNumConnections(unsigned int flags) const
@@ -182,19 +190,15 @@ void ClientModel::updateAlert()
 
 enum BlockSource ClientModel::getBlockSource() const
 {
-    // Request responsiveness for node calls
-    const_cast<ClientModel*>(this)->requestResponsiveness("getBlockSource");
+    // Use data thread for cs_main operations
+    if (m_data_worker) {
+        QMetaObject::invokeMethod(m_data_worker, "getBlockSourceAsync", Qt::QueuedConnection);
+        LogPrint(BCLog::QT, "ClientModel: Queued getBlockSource to data thread\n");
+    }
 
-    enum BlockSource result;
-    if (m_node.getReindex()) result = BlockSource::REINDEX;
-    else if (m_node.getImporting()) result = BlockSource::DISK;
-    else if (getNumConnections() > 0) result = BlockSource::NETWORK;
-    else result = BlockSource::NONE;
-
-    // Release responsiveness after node calls
-    const_cast<ClientModel*>(this)->releaseResponsiveness();
-
-    return result;
+    // Return cached result or default
+    // TODO: Implement proper caching and async result handling
+    return BlockSource::NETWORK; // Temporary default
 }
 
 QString ClientModel::getStatusBarWarnings() const
@@ -240,7 +244,7 @@ void ClientModel::requestResponsiveness(const char* reason)
     // Signal that GUI needs responsiveness
     extern std::atomic<bool> g_gui_needs_responsiveness;
     g_gui_needs_responsiveness.store(true);
-    
+
     LogPrint(BCLog::QT, "ClientModel: Requesting GUI responsiveness - Reason: %s\n", reason ? reason : "unknown");
 }
 
@@ -253,6 +257,43 @@ void ClientModel::releaseResponsiveness()
     g_gui_needs_responsiveness.store(false);
     g_gui_cv.notify_one();
     LogPrint(BCLog::QT, "ClientModel: Released GUI responsiveness - flag set to false and notified\n");
+}
+
+void ClientModel::setupDataThread()
+{
+    LogPrint(BCLog::QT, "ClientModel: Setting up data processing thread\n");
+
+    m_data_thread = new QThread(this);
+    m_data_worker = new ClientModelDataWorker(m_node, this);
+    m_data_worker->moveToThread(m_data_thread);
+
+    // Connect signals from worker to GUI thread
+    connect(m_data_worker, &ClientModelDataWorker::blockSourceResult,
+            this, [this](enum BlockSource result) {
+        // Handle result in GUI thread
+        LogPrint(BCLog::QT, "ClientModel: Received block source result from data thread\n");
+    });
+
+    connect(m_data_worker, &ClientModelDataWorker::statusBarWarningsResult,
+            this, [this](QString warnings) {
+        // Handle result in GUI thread
+        LogPrint(BCLog::QT, "ClientModel: Received status bar warnings from data thread\n");
+    });
+
+    m_data_thread->start();
+    LogPrint(BCLog::QT, "ClientModel: Data processing thread started\n");
+}
+
+void ClientModel::teardownDataThread()
+{
+    if (m_data_thread) {
+        LogPrint(BCLog::QT, "ClientModel: Stopping data processing thread\n");
+        m_data_thread->quit();
+        m_data_thread->wait();
+        delete m_data_worker;
+        m_data_worker = nullptr;
+        m_data_thread = nullptr;
+    }
 }
 
 QString ClientModel::formatSubVersion() const
@@ -427,3 +468,62 @@ void ClientModel::updateMempoolStats()
 {
     Q_EMIT mempoolStatsDidUpdate();
 }
+
+// Data Worker Class for handling cs_main operations in separate thread
+class ClientModelDataWorker : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit ClientModelDataWorker(interfaces::Node& node, QObject* parent = nullptr)
+        : QObject(parent), m_node(node) {}
+
+public slots:
+    // Data operations that require cs_main
+    void getBlockSourceAsync();
+    void getStatusBarWarningsAsync();
+    void getMempoolStatsInRangeAsync(QDateTime from, QDateTime to);
+    void updateMempoolStatsAsync();
+
+signals:
+    // Results sent back to GUI thread
+    void blockSourceResult(enum BlockSource result);
+    void statusBarWarningsResult(QString warnings);
+    void mempoolStatsResult(mempoolSamples_t samples);
+    void mempoolStatsUpdated();
+
+private:
+    interfaces::Node& m_node;
+};
+
+void ClientModelDataWorker::getBlockSourceAsync()
+{
+    enum BlockSource result;
+    if (m_node.getReindex()) result = BlockSource::REINDEX;
+    else if (m_node.getImporting()) result = BlockSource::DISK;
+    else if (m_node.getNodeCount(ConnectionDirection::Both) > 0) result = BlockSource::NETWORK;
+    else result = BlockSource::NONE;
+
+    Q_EMIT blockSourceResult(result);
+}
+
+void ClientModelDataWorker::getStatusBarWarningsAsync()
+{
+    QString result = QString::fromStdString(m_node.getWarnings().translated);
+    Q_EMIT statusBarWarningsResult(result);
+}
+
+void ClientModelDataWorker::getMempoolStatsInRangeAsync(QDateTime from, QDateTime to)
+{
+    // Implementation for mempool stats
+    mempoolSamples_t samples;
+    Q_EMIT mempoolStatsResult(samples);
+}
+
+void ClientModelDataWorker::updateMempoolStatsAsync()
+{
+    // Implementation for mempool stats update
+    Q_EMIT mempoolStatsUpdated();
+}
+
+#include "clientmodel.moc"

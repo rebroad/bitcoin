@@ -9,6 +9,9 @@
 #include <QObject>
 #include <QDateTime>
 
+// Forward declarations
+class ClientModelDataWorker;
+
 // Macro to automatically capture caller for responsiveness requests
 #define REQUEST_RESPONSIVENESS(reason) requestResponsiveness(reason)
 #define REQUEST_RESPONSIVENESS_AUTO() requestResponsiveness(__PRETTY_FUNCTION__)
@@ -109,6 +112,14 @@ public:
     static void resetSignalProcessingCount();
 
 private:
+    // Data processing thread for cs_main operations
+    QThread* m_data_thread;
+    QObject* m_data_worker;
+
+    // Move data operations to separate thread
+    void setupDataThread();
+    void teardownDataThread();
+
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_show_progress;
     std::unique_ptr<interfaces::Handler> m_handler_notify_num_connections_changed;
