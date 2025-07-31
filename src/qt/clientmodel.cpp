@@ -74,9 +74,6 @@ void ClientModel::initializeData()
     // Header tip requires cs_main lock - will be updated via signals instead
     m_gui_data.headerHeight = -1; // Will be updated via HeaderTipChanged signal
     m_gui_data.headerTime = -1; // Will be updated via HeaderTipChanged signal
-    }
-
-    LogPrint(BCLog::QT, "ClientModel: Data initialized with %d blocks\n", m_gui_data.numBlocks);
 }
 
 ClientModel::~ClientModel()
@@ -552,9 +549,7 @@ void ClientModel::updateHeaderTip(int height, qint64 blockTime)
 
 void ClientModel::updateBlockData(int numBlocks, const QString& bestBlockHashStr, bool initialSyncFinished)
 {
-    static int64_t lastBlockLogTime = 0;
     int64_t updateStartTime = GetTimeMillis();
-    int64_t now = GetTime();
 
     // Always log this to see if block signals are being processed
     LogPrint(BCLog::QT, "updateBlockData: GUI thread processing block update: height %d\n", numBlocks);
@@ -581,7 +576,6 @@ void ClientModel::updateBlockData(int numBlocks, const QString& bestBlockHashStr
 
     int64_t updateTime = GetTimeMillis() - updateStartTime;
     LogPrint(BCLog::QT, "updateBlockData: GUI thread processed block update in %dms (height: %d)\n", updateTime, numBlocks);
-    lastBlockLogTime = now;
 }
 
 void ClientModel::updateConnectionData(int connectionsIn, int connectionsOut, int connectionsTotal)
