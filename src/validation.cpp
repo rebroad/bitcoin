@@ -3056,14 +3056,14 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
         // Check if GUI needs responsiveness (after cs_main is released)
         if (g_gui_needs_responsiveness.load()) {
-            LogPrint(BCLog::GUI, "ActivateBestChain: Yielding to GUI thread for responsiveness\n");
+            LogPrint(BCLog::QT, "ActivateBestChain: Yielding to GUI thread for responsiveness\n");
 
             // Wait for GUI to signal it's done (with timeout to prevent deadlock)
             std::unique_lock<std::mutex> lock(g_gui_mutex);
             g_gui_cv.wait_for(lock, std::chrono::milliseconds(100),
                 []{ return !g_gui_needs_responsiveness.load(); });
 
-            LogPrint(BCLog::GUI, "ActivateBestChain: Resuming validation\n");
+            LogPrint(BCLog::QT, "ActivateBestChain: Resuming validation\n");
         }
     } while (pindexNewTip != pindexMostWork);
     CheckBlockIndex();
