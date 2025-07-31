@@ -217,6 +217,15 @@ static void ShowProgress(ClientModel *clientmodel, const std::string &title, int
 
 static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConnections)
 {
+    static int64_t lastLogTime = 0;
+    int64_t now = GetTime();
+
+    // Log every 5 seconds to avoid spam
+    if (now - lastLogTime > 5) {
+        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Processing connection change, newNumConnections: %d\n", newNumConnections);
+        lastLogTime = now;
+    }
+
     // Collect connection data and update cache
     int connectionsIn = clientmodel->node().getNodeCount(ConnectionDirection::In);
     int connectionsOut = clientmodel->node().getNodeCount(ConnectionDirection::Out);
@@ -226,32 +235,74 @@ static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConn
     int64_t bytesRecv = clientmodel->node().getTotalBytesRecv();
     int64_t bytesSent = clientmodel->node().getTotalBytesSent();
 
-    // Collect peer stats
+    // Collect peer stats and convert to Qt-compatible format
     interfaces::Node::NodesStats peerStats;
     clientmodel->node().getNodesStats(peerStats);
+
+    if (now - lastLogTime > 5) {
+        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Collected %d peers, converting to Qt format...\n", peerStats.size());
+    }
+
+    // Convert to QStringList for Qt compatibility
+    QStringList peerData;
+    for (const auto& peer : peerStats) {
+        const CNodeStats& stats = std::get<0>(peer);
+        const CNodeStateStats& stateStats = std::get<2>(peer);
+
+        // Create a simple string representation of key peer data
+        QString peerInfo = QString("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10")
+            .arg(stats.nodeid)
+            .arg(QString::fromStdString(stats.m_addr_name))
+            .arg(stats.nVersion)
+            .arg(QString::fromStdString(stats.cleanSubVer))
+            .arg(stats.fInbound ? "1" : "0")
+            .arg(stats.nSendBytes)
+            .arg(stats.nRecvBytes)
+            .arg(count_seconds(stats.m_connected))
+            .arg(stats.nTimeOffset)
+            .arg(stateStats.m_ping_wait.count() > 0 ? QString::number(CountSecondsDouble(stateStats.m_ping_wait)) : "0");
+
+        peerData.append(peerInfo);
+    }
+
+    if (now - lastLogTime > 5) {
+        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Queuing %d peer updates to GUI thread...\n", peerData.size());
+    }
 
     // Update connection data via signal
     bool invoked = QMetaObject::invokeMethod(clientmodel, "updateConnectionData", Qt::QueuedConnection,
                               Q_ARG(int, connectionsIn),
                               Q_ARG(int, connectionsOut),
                               Q_ARG(int, connectionsTotal));
-    assert(invoked);
+    if (!invoked) {
+        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Failed to queue connection data update\n");
+    }
 
     // Update network data via signal
     invoked = QMetaObject::invokeMethod(clientmodel, "updateNetworkData", Qt::QueuedConnection,
                               Q_ARG(qint64, bytesRecv),
                               Q_ARG(qint64, bytesSent));
-    assert(invoked);
+    if (!invoked) {
+        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Failed to queue network data update\n");
+    }
 
     // Update peer stats via signal
     invoked = QMetaObject::invokeMethod(clientmodel, "updatePeerStats", Qt::QueuedConnection,
-                              Q_ARG(interfaces::Node::NodesStats, peerStats));
-    assert(invoked);
+                              Q_ARG(QStringList, peerData));
+    if (!invoked) {
+        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Failed to queue peer stats update\n");
+    }
 
     // Also emit the legacy signal for compatibility
     invoked = QMetaObject::invokeMethod(clientmodel, "updateNumConnections", Qt::QueuedConnection,
                               Q_ARG(int, newNumConnections));
-    assert(invoked);
+    if (!invoked) {
+        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: Failed to queue num connections update\n");
+    }
+
+    if (now - lastLogTime > 5) {
+        LogPrint(BCLog::QT, "NotifyNumConnectionsChanged: All updates queued successfully\n");
+    }
 }
 
 static void NotifyNetworkActiveChanged(ClientModel *clientmodel, bool networkActive)
@@ -393,6 +444,14 @@ void ClientModel::updateBlockData(int numBlocks, const QString& bestBlockHashStr
 
 void ClientModel::updateConnectionData(int connectionsIn, int connectionsOut, int connectionsTotal)
 {
+    static int64_t lastLogTime = 0;
+    int64_t now = GetTime();
+
+    if (now - lastLogTime > 5) {
+        LogPrint(BCLog::QT, "updateConnectionData: GUI thread processing connection update: %d in, %d out, %d total\n", connectionsIn, connectionsOut, connectionsTotal);
+        lastLogTime = now;
+    }
+
     // Update connection data in the GUI thread context
     m_gui_data.numConnectionsIn = connectionsIn;
     m_gui_data.numConnectionsOut = connectionsOut;
@@ -409,11 +468,48 @@ void ClientModel::updateNetworkData(qint64 bytesRecv, qint64 bytesSent)
     Q_EMIT bytesChanged(bytesRecv, bytesSent);
 }
 
-void ClientModel::updatePeerStats(const interfaces::Node::NodesStats& stats)
+void ClientModel::updatePeerStats(const QStringList& peerData)
 {
+    static int64_t lastLogTime = 0;
+    int64_t now = GetTime();
+
+    if (now - lastLogTime > 5) {
+        LogPrint(BCLog::QT, "updatePeerStats: GUI thread processing %d peer updates...\n", peerData.size());
+        lastLogTime = now;
+    }
+
     // Update peer stats in the GUI thread context
+    // Convert QStringList back to NodesStats format for compatibility
+    interfaces::Node::NodesStats stats;
+
+    for (const QString& peerInfo : peerData) {
+        QStringList parts = peerInfo.split("|");
+        if (parts.size() >= 10) {
+            // Create a minimal CNodeStats structure
+            CNodeStats nodeStats;
+            nodeStats.nodeid = parts[0].toInt();
+            nodeStats.m_addr_name = parts[1].toStdString();
+            nodeStats.nVersion = parts[2].toInt();
+            nodeStats.cleanSubVer = parts[3].toStdString();
+            nodeStats.fInbound = parts[4] == "1";
+            nodeStats.nSendBytes = parts[5].toULongLong();
+            nodeStats.nRecvBytes = parts[6].toULongLong();
+            nodeStats.m_connected = std::chrono::seconds(parts[7].toLongLong());
+            nodeStats.nTimeOffset = parts[8].toLongLong();
+
+            CNodeStateStats stateStats;
+            stateStats.m_ping_wait = std::chrono::seconds(static_cast<int64_t>(parts[9].toDouble()));
+
+            stats.emplace_back(nodeStats, true, stateStats);
+        }
+    }
+
     m_gui_data.peerStats = stats;
     m_gui_data.lastPeerUpdateTime = GetTime();
+
+    if (now - lastLogTime > 5) {
+        LogPrint(BCLog::QT, "updatePeerStats: GUI thread completed processing %d peers\n", stats.size());
+    }
 }
 
 void ClientModel::updateFeeHistogram(const interfaces::mempool_feehistogram& histogram)

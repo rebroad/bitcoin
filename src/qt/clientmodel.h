@@ -191,7 +191,7 @@ public Q_SLOTS:
     void updateBlockData(int numBlocks, const QString& bestBlockHashStr, bool initialSyncFinished);
     void updateConnectionData(int connectionsIn, int connectionsOut, int connectionsTotal);
     void updateNetworkData(qint64 bytesRecv, qint64 bytesSent);
-    void updatePeerStats(const interfaces::Node::NodesStats& stats);
+    void updatePeerStats(const QStringList& peerData);
     void updateFeeHistogram(const interfaces::mempool_feehistogram& histogram);
 };
 
