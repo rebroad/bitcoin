@@ -1364,7 +1364,12 @@ void BitcoinGUI::showNormalIfMinimized(bool fToggleHidden)
         return;
 
     if (!isHidden() && !isMinimized() && !GUIUtil::isObscured(this) && fToggleHidden) {
+        LogPrint(BCLog::QT, "BitcoinGUI: About to hide window - requesting responsiveness\n");
+        if (clientModel) {
+            clientModel->requestResponsiveness("Window hide");
+        }
         hide();
+        LogPrint(BCLog::QT, "BitcoinGUI: Window hide completed\n");
     } else {
         GUIUtil::bringToFront(this);
     }

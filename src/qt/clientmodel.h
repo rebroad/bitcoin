@@ -9,6 +9,10 @@
 #include <QObject>
 #include <QDateTime>
 
+// Macro to automatically capture caller for responsiveness requests
+#define REQUEST_RESPONSIVENESS(reason) requestResponsiveness(reason)
+#define REQUEST_RESPONSIVENESS_AUTO() requestResponsiveness(__PRETTY_FUNCTION__)
+
 #include <atomic>
 #include <memory>
 #include <stats/stats.h>
@@ -96,7 +100,7 @@ public:
     std::atomic<int64_t> m_mempool_feehist_last_sample_timestamp{0};
 
     // GUI responsiveness functions
-    void requestResponsiveness();
+    void requestResponsiveness(const char* reason = nullptr);
     void releaseResponsiveness();
 
     // Performance debugging

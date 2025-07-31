@@ -599,7 +599,7 @@ bool BitcoinApplication::event(QEvent* e)
         if (m_node && window) {
             ClientModel* clientModel = window->getClientModel();
             if (clientModel) {
-                clientModel->requestResponsiveness();
+                clientModel->requestResponsiveness("Mouse button press");
                 QTimer::singleShot(10, [clientModel]() {
                     LogPrint(BCLog::QT, "Releasing responsiveness after mouse press\n");
                     clientModel->releaseResponsiveness();
@@ -612,7 +612,7 @@ bool BitcoinApplication::event(QEvent* e)
         if (m_node && window) {
             ClientModel* clientModel = window->getClientModel();
             if (clientModel) {
-                clientModel->requestResponsiveness();
+                clientModel->requestResponsiveness("Mouse button release");
                 QTimer::singleShot(10, [clientModel]() {
                     LogPrint(BCLog::QT, "Releasing responsiveness after mouse release\n");
                     clientModel->releaseResponsiveness();
@@ -638,7 +638,7 @@ bool BitcoinApplication::event(QEvent* e)
         if (m_node && window) {
             ClientModel* clientModel = window->getClientModel();
             if (clientModel) {
-                clientModel->requestResponsiveness();
+                clientModel->requestResponsiveness("Key press");
                 QTimer::singleShot(10, [clientModel]() {
                     LogPrint(BCLog::QT, "Releasing responsiveness after key press\n");
                     clientModel->releaseResponsiveness();
@@ -687,7 +687,7 @@ void BitcoinApplication::processEvents()
         ClientModel* clientModel = window->getClientModel();
         if (clientModel) {
             LogPrint(BCLog::QT, "Requesting responsiveness from ClientModel\n");
-            clientModel->requestResponsiveness();
+            clientModel->requestResponsiveness("Process events");
         } else {
             LogPrint(BCLog::QT, "No ClientModel available for responsiveness\n");
         }

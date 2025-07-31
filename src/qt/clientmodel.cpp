@@ -235,23 +235,13 @@ QString ClientModel::formatFullVersion() const
     return QString::fromStdString(FormatFullVersion());
 }
 
-void ClientModel::requestResponsiveness()
+void ClientModel::requestResponsiveness(const char* reason)
 {
     // Signal that GUI needs responsiveness
     extern std::atomic<bool> g_gui_needs_responsiveness;
     g_gui_needs_responsiveness.store(true);
     
-    // Get stack trace to see what's calling this
-    void* callstack[10];
-    int frames = backtrace(callstack, 10);
-    char** symbols = backtrace_symbols(callstack, frames);
-    
-    LogPrint(BCLog::QT, "ClientModel: Requesting GUI responsiveness - flag set to true\n");
-    LogPrint(BCLog::QT, "Call stack:\n");
-    for (int i = 1; i < frames && i < 5; i++) {
-        LogPrint(BCLog::QT, "  %s\n", symbols[i]);
-    }
-    free(symbols);
+    LogPrint(BCLog::QT, "ClientModel: Requesting GUI responsiveness - Reason: %s\n", reason ? reason : "unknown");
 }
 
 void ClientModel::releaseResponsiveness()
