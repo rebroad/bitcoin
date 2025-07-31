@@ -52,6 +52,14 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     initializeData();
 
     subscribeToCoreSignals();
+
+    // Add a simple timer to test if GUI thread is alive
+    QTimer* testTimer = new QTimer(this);
+    testTimer->setInterval(5000); // Every 5 seconds
+    connect(testTimer, &QTimer::timeout, [this]() {
+        LogPrint(BCLog::QT, "GUI Thread Test: Timer fired - GUI thread is alive!\n");
+    });
+    testTimer->start();
 }
 
 void ClientModel::initializeData()
@@ -130,8 +138,10 @@ void ClientModel::updateNumConnections(int numConnections)
     static int64_t lastConnLogTime = 0;
     int64_t now = GetTime();
 
+    // Always log this to see if ANY signals are being processed
+    LogPrint(BCLog::QT, "updateNumConnections: GUI thread processing connection update: %d\n", numConnections);
+
     if (now - lastConnLogTime > 5) {
-        LogPrint(BCLog::QT, "updateNumConnections: GUI thread processing connection update: %d\n", numConnections);
         lastConnLogTime = now;
     }
 
@@ -398,7 +408,9 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
             Q_ARG(QString, QString::fromStdString(tip.block_hash.ToString())),
             Q_ARG(bool, clientmodel->node().isInitialSyncFinished()));
         if (!invoked) {
-            qWarning() << "ClientModel: Failed to queue block data update";
+            LogPrint(BCLog::GUI, "BlockTipChanged: Failed to queue updateBlockData signal\n");
+        } else {
+            LogPrint(BCLog::GUI, "BlockTipChanged: Successfully queued updateBlockData signal for height %d\n", tip.block_height);
         }
     }
 
@@ -550,6 +562,9 @@ void ClientModel::updateBlockData(int numBlocks, const QString& bestBlockHashStr
     int64_t updateStartTime = GetTimeMillis();
     int64_t now = GetTime();
 
+    // Always log this to see if block signals are being processed
+    LogPrint(BCLog::QT, "updateBlockData: GUI thread processing block update: height %d\n", numBlocks);
+
     // Increment signal processing counter
     s_signalProcessingCount++;
 
@@ -570,10 +585,8 @@ void ClientModel::updateBlockData(int numBlocks, const QString& bestBlockHashStr
     // to avoid duplicate signal emissions
 
     int64_t updateTime = GetTimeMillis() - updateStartTime;
-    if (now - lastBlockLogTime > 5) {
-        LogPrint(BCLog::QT, "updateBlockData: GUI thread processed block update in %dms (height: %d)\n", updateTime, numBlocks);
-        lastBlockLogTime = now;
-    }
+    LogPrint(BCLog::QT, "updateBlockData: GUI thread processed block update in %dms (height: %d)\n", updateTime, numBlocks);
+    lastBlockLogTime = now;
 }
 
 void ClientModel::updateConnectionData(int connectionsIn, int connectionsOut, int connectionsTotal)
