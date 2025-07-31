@@ -587,7 +587,52 @@ bool BitcoinApplication::event(QEvent* e)
         return true;
     }
 
+    switch (e->type())
+    {
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonRelease:
+    case QEvent::MouseButtonDblClick:
+    case QEvent::KeyPress:
+    case QEvent::KeyRelease:
+    case QEvent::Wheel:
+        // Request responsiveness for user interactions
+        if (m_node && window) {
+            // Access ClientModel through the main window
+            ClientModel* clientModel = window->getClientModel();
+            if (clientModel) {
+                clientModel->requestResponsiveness();
+                // Release responsiveness after a short delay to allow event processing
+                QTimer::singleShot(10, [clientModel]() {
+                    clientModel->releaseResponsiveness();
+                });
+            }
+        }
+        break;
+    default:
+        break;
+    }
     return QApplication::event(e);
+}
+
+void BitcoinApplication::processEvents() override
+{
+    // Request responsiveness before processing events
+    if (m_node && window) {
+        ClientModel* clientModel = window->getClientModel();
+        if (clientModel) {
+            clientModel->requestResponsiveness();
+        }
+    }
+
+    QApplication::processEvents();
+
+    // Release responsiveness after processing events
+    if (m_node && window) {
+        ClientModel* clientModel = window->getClientModel();
+        if (clientModel) {
+            clientModel->releaseResponsiveness();
+        }
+    }
 }
 
 static void SetupUIArgs(ArgsManager& argsman)

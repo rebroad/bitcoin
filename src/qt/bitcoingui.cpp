@@ -1538,3 +1538,97 @@ void UnitDisplayStatusBarControl::onMenuSelection(QAction* action)
         optionsModel->setDisplayUnit(action->data());
     }
 }
+
+// GUI responsiveness event handlers
+void BitcoinGUI::mousePressEvent(QMouseEvent *event)
+{
+    // Request responsiveness for mouse interactions
+    if (clientModel) {
+        clientModel->requestResponsiveness();
+    }
+    QMainWindow::mousePressEvent(event);
+}
+
+void BitcoinGUI::mouseReleaseEvent(QMouseEvent *event)
+{
+    // Release responsiveness after mouse interactions
+    if (clientModel) {
+        clientModel->releaseResponsiveness();
+    }
+    QMainWindow::mouseReleaseEvent(event);
+}
+
+void BitcoinGUI::mouseMoveEvent(QMouseEvent *event)
+{
+    // Request responsiveness for mouse movements (less frequent)
+    static int moveCount = 0;
+    moveCount++;
+    if (moveCount % 10 == 0 && clientModel) {  // Every 10th mouse move
+        clientModel->requestResponsiveness();
+        clientModel->releaseResponsiveness();
+    }
+    QMainWindow::mouseMoveEvent(event);
+}
+
+void BitcoinGUI::keyPressEvent(QKeyEvent *event)
+{
+    // Request responsiveness for keyboard interactions
+    if (clientModel) {
+        clientModel->requestResponsiveness();
+    }
+    QMainWindow::keyPressEvent(event);
+}
+
+void BitcoinGUI::keyReleaseEvent(QKeyEvent *event)
+{
+    // Release responsiveness after keyboard interactions
+    if (clientModel) {
+        clientModel->releaseResponsiveness();
+    }
+    QMainWindow::keyReleaseEvent(event);
+}
+
+void BitcoinGUI::resizeEvent(QResizeEvent *event)
+{
+    // Request responsiveness for window resizing
+    if (clientModel) {
+        clientModel->requestResponsiveness();
+    }
+    QMainWindow::resizeEvent(event);
+    // Release responsiveness after resize
+    if (clientModel) {
+        clientModel->releaseResponsiveness();
+    }
+}
+
+void BitcoinGUI::moveEvent(QMoveEvent *event)
+{
+    // Request responsiveness for window moving
+    if (clientModel) {
+        clientModel->requestResponsiveness();
+    }
+    QMainWindow::moveEvent(event);
+    // Release responsiveness after move
+    if (clientModel) {
+        clientModel->releaseResponsiveness();
+    }
+}
+
+void BitcoinGUI::connectActionWithResponsiveness(QAction* action, std::function<void()> slot)
+{
+    // Connect action with responsiveness wrapper
+    connect(action, &QAction::triggered, [this, slot]() {
+        // Request responsiveness before executing action
+        if (clientModel) {
+            clientModel->requestResponsiveness();
+        }
+
+        // Execute the original slot
+        slot();
+
+        // Release responsiveness after executing action
+        if (clientModel) {
+            clientModel->releaseResponsiveness();
+        }
+    });
+}

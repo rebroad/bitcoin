@@ -96,6 +96,7 @@ Q_SIGNALS:
 
 protected:
     bool event(QEvent* e) override;
+    void processEvents() override;
 
 private:
     std::optional<InitExecutor> m_executor;
