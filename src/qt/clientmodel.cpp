@@ -28,6 +28,7 @@
 #include <QMutexLocker>
 #include <QThread>
 #include <QTimer>
+#include <execinfo.h>
 
 static int64_t nLastHeaderTipUpdateNotification = 0;
 static int64_t nLastBlockTipUpdateNotification = 0;
@@ -239,7 +240,18 @@ void ClientModel::requestResponsiveness()
     // Signal that GUI needs responsiveness
     extern std::atomic<bool> g_gui_needs_responsiveness;
     g_gui_needs_responsiveness.store(true);
+    
+    // Get stack trace to see what's calling this
+    void* callstack[10];
+    int frames = backtrace(callstack, 10);
+    char** symbols = backtrace_symbols(callstack, frames);
+    
     LogPrint(BCLog::QT, "ClientModel: Requesting GUI responsiveness - flag set to true\n");
+    LogPrint(BCLog::QT, "Call stack:\n");
+    for (int i = 1; i < frames && i < 5; i++) {
+        LogPrint(BCLog::QT, "  %s\n", symbols[i]);
+    }
+    free(symbols);
 }
 
 void ClientModel::releaseResponsiveness()

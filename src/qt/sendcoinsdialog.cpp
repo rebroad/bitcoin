@@ -8,6 +8,7 @@
 
 #include <qt/sendcoinsdialog.h>
 #include <qt/forms/ui_sendcoinsdialog.h>
+#include <qt/bitcoin.h>
 
 #include <qt/addresstablemodel.h>
 #include <qt/bitcoinunits.h>
@@ -593,7 +594,10 @@ SendCoinsEntry *SendCoinsDialog::addEntry()
     entry->clear();
     entry->setFocus();
     ui->scrollAreaWidgetContents->resize(ui->scrollAreaWidgetContents->sizeHint());
-    qApp->processEvents();
+    // Use responsive processEvents
+    if (qApp) {
+        static_cast<BitcoinApplication*>(qApp)->processEvents();
+    }
     QScrollBar* bar = ui->scrollArea->verticalScrollBar();
     if(bar)
         bar->setSliderPosition(bar->maximum());

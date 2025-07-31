@@ -96,6 +96,8 @@ Q_SIGNALS:
 
 protected:
     bool event(QEvent* e) override;
+
+public:
     void processEvents();
 
 private:

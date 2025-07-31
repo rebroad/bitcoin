@@ -534,6 +534,11 @@ void BitcoinApplication::initializeResult(bool success, interfaces::BlockAndHead
         Q_EMIT splashFinished();
         Q_EMIT windowShown(window);
 
+        // Test our responsive processEvents wrapper
+        LogPrint(BCLog::QT, "Testing responsive processEvents wrapper...\n");
+        static_cast<BitcoinApplication*>(qApp)->processEvents();
+        LogPrint(BCLog::QT, "Test completed\n");
+
 #ifdef ENABLE_WALLET
         // Now that initialization/startup is done, process any command-line
         // bitcoin: URIs or payment requests:

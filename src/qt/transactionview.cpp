@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qt/transactionview.h>
+#include <qt/bitcoin.h>
 
 #include <qt/addresstablemodel.h>
 #include <qt/bitcoinunits.h>
@@ -444,7 +445,10 @@ void TransactionView::bumpFee([[maybe_unused]] bool checked)
         transactionView->selectionModel()->clearSelection();
         model->getTransactionTableModel()->updateTransaction(hashQStr, CT_UPDATED, true);
 
-        qApp->processEvents();
+        // Use responsive processEvents
+        if (qApp) {
+            static_cast<BitcoinApplication*>(qApp)->processEvents();
+        }
         Q_EMIT bumpedFee(newHash);
     }
 }
