@@ -217,8 +217,39 @@ static void ShowProgress(ClientModel *clientmodel, const std::string &title, int
 
 static void NotifyNumConnectionsChanged(ClientModel *clientmodel, int newNumConnections)
 {
-    // Too noisy: qDebug() << "NotifyNumConnectionsChanged: " + QString::number(newNumConnections);
-    bool invoked = QMetaObject::invokeMethod(clientmodel, "updateNumConnections", Qt::QueuedConnection,
+    // Collect connection data and update cache
+    int connectionsIn = clientmodel->node().getNodeCount(ConnectionDirection::In);
+    int connectionsOut = clientmodel->node().getNodeCount(ConnectionDirection::Out);
+    int connectionsTotal = clientmodel->node().getNodeCount(ConnectionDirection::Both);
+
+    // Collect network traffic data
+    int64_t bytesRecv = clientmodel->node().getTotalBytesRecv();
+    int64_t bytesSent = clientmodel->node().getTotalBytesSent();
+
+    // Collect peer stats
+    interfaces::Node::NodesStats peerStats;
+    clientmodel->node().getNodesStats(peerStats);
+
+    // Update connection data via signal
+    bool invoked = QMetaObject::invokeMethod(clientmodel, "updateConnectionData", Qt::QueuedConnection,
+                              Q_ARG(int, connectionsIn),
+                              Q_ARG(int, connectionsOut),
+                              Q_ARG(int, connectionsTotal));
+    assert(invoked);
+
+    // Update network data via signal
+    invoked = QMetaObject::invokeMethod(clientmodel, "updateNetworkData", Qt::QueuedConnection,
+                              Q_ARG(int64_t, bytesRecv),
+                              Q_ARG(int64_t, bytesSent));
+    assert(invoked);
+
+    // Update peer stats via signal
+    invoked = QMetaObject::invokeMethod(clientmodel, "updatePeerStats", Qt::QueuedConnection,
+                              Q_ARG(interfaces::Node::NodesStats, peerStats));
+    assert(invoked);
+
+    // Also emit the legacy signal for compatibility
+    invoked = QMetaObject::invokeMethod(clientmodel, "updateNumConnections", Qt::QueuedConnection,
                               Q_ARG(int, newNumConnections));
     assert(invoked);
 }
@@ -373,6 +404,9 @@ void ClientModel::updateNetworkData(int64_t bytesRecv, int64_t bytesSent)
     // Update network data in the GUI thread context
     m_gui_data.bytesRecv = bytesRecv;
     m_gui_data.bytesSent = bytesSent;
+
+    // Emit signal for traffic graph widget
+    Q_EMIT bytesChanged(bytesRecv, bytesSent);
 }
 
 void ClientModel::updatePeerStats(const interfaces::Node::NodesStats& stats)
