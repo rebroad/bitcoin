@@ -2400,7 +2400,7 @@ void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string s
         }
         strNew += "new ";
     }
-	//bool fShow = false;
+    //bool fShow = false;
     bool fCheck = false, fBest = false;
     std::string strExtra;
     if (pindex) {
@@ -2415,10 +2415,10 @@ void PeerManagerImpl::LogRecv(int nNew, const CBlockIndex *pindex, std::string s
         else if (pindex->nTx > 0)
             strDesc += "got "; // it's been downloaded
         strExtra = strprintf("%s ", strBlockInfo(pindex, &fCheck));
-		if (fBest) {
-			CNodeState *nodestate = State(node);
-			strExtra += strprintf("tif=%d ", nodestate->nTxInFlight);
-		}
+        if (fBest) {
+            CNodeState *nodestate = State(node);
+            strExtra += strprintf("tif=%d ", nodestate->nTxInFlight);
+        }
         //if (pindex->nChainWork >= (pindexBestHeader->pprev ? (pindexBestHeader->pprev->pprev ? pindexBestHeader->pprev->pprev->nChainWork : 0) : 0)) fShow = true;
     } else {
         strDesc += "invalid "; // it's probably invalid
@@ -2614,10 +2614,10 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 }
             }
         } else if (received_new_header) {
-		    if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
+            if (m_chainman.ActiveChain().Tip()->nChainWork == pindexLast->nChainWork && m_chainman.ActiveChain().Tip()->GetBlockHash() != pindexLast->GetBlockHash())
                 LogPrintf("CURIOUS: COMPETING BLOCK\n");
             LogPrint(BCLog::BLOCK, "%s%s%s\n", fDownloadBlocks ? "" : "!fDownloadBlocks ", CanDirectFetch() ? "" : "!CanDirectFetch() ", pindexLast->IsValid(BLOCK_VALID_TREE) ? "" : "!IsValid(BLOCK_VALID_TREE)");
-		}
+        }
         // If we're in IBD, we want outbound peers that will serve us a useful
         // chain. Disconnect peers that are on chains with insufficient work.
         if (m_chainman.ActiveChainstate().IsInitialBlockDownload() && nCount != MAX_HEADERS_RESULTS) {
@@ -2691,7 +2691,7 @@ void PeerManagerImpl::ProcessOrphanTx(std::set<uint256>& orphan_work_set)
             });
             LogPrint(BCLog::MEMPOOL, "   orphan %s (poolsz %u txn, %u kB) size=%d delta=%d peer=%d\n",
                 orphanHash.ToString(), m_mempool.size(), m_mempool.DynamicMemoryUsage() / 1000,
-		nSize, (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
+        nSize, (int64_t)m_mempool.DynamicMemoryUsage() - nMemUsageBefore, from_peer);
             bool should_relay = true;
             if (!fRelayDust) {
                 // Do not relay transactions with outputs of 250 satoshis or less
@@ -4381,26 +4381,33 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         }
         LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
 
-        // Take snapshot when IBD completes AND we're connecting the best block we know about
+        // Set initial sync finished when we reach the best header we know about
         bool was_ibd = !m_initial_sync_finished;
-        if (was_ibd && pindex && pindex == pindexBestHeader) {
+        if (pindex && pindex == pindexBestHeader) {
             m_initial_sync_finished = true;
-            // IBD just completed AND this is the best block we know about, take a snapshot
-            int64_t now = GetTimeSeconds();
-            int64_t time_since_last_snap = now - pfrom.nTimeSnap;
 
-            if (time_since_last_snap > 60) {
-                // Last snapshot was > 1 minute ago, do full rotation
-                // Rotate snapshots for all peers (5-minute timer)
-                m_connman.ForEachNode([this, now](CNode* pnode) {
-                    RotateNodeSnapshots(pnode, now);
-                    return true;
-                });
-                LogPrintf("IBD completion snapshot rotation at height=%d\n", pindex->nHeight);
-            } else {
-                // Last snapshot was ≤ 1 minute ago, just update current snapshot
-                UpdatePeerSnapshots(now);
-                LogPrintf("IBD completion snapshot update at height=%d\n", pindex->nHeight);
+            // Notify UI that initial sync has finished
+            uiInterface.NotifyInitialSyncFinished();
+
+            // Take snapshot if we were previously in IBD
+            if (was_ibd) {
+                // IBD just completed AND this is the best block we know about, take a snapshot
+                int64_t now = GetTimeSeconds();
+                int64_t time_since_last_snap = now - pfrom.nTimeSnap;
+
+                if (time_since_last_snap > 60) {
+                    // Last snapshot was > 1 minute ago, do full rotation
+                    // Rotate snapshots for all peers (5-minute timer)
+                    m_connman.ForEachNode([this, now](CNode* pnode) {
+                        RotateNodeSnapshots(pnode, now);
+                        return true;
+                    });
+                    LogPrintf("IBD completion snapshot rotation at height=%d\n", pindex->nHeight);
+                } else {
+                    // Last snapshot was ≤ 1 minute ago, just update current snapshot
+                    UpdatePeerSnapshots(now);
+                    LogPrintf("IBD completion snapshot update at height=%d\n", pindex->nHeight);
+                }
             }
         }
 

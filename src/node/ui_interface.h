@@ -109,6 +109,9 @@ public:
 
     /** Banlist did change. */
     ADD_SIGNALS_DECL_WRAPPER(BannedListChanged, void, void);
+
+    /** Initial sync finished. */
+    ADD_SIGNALS_DECL_WRAPPER(NotifyInitialSyncFinished, void, );
 };
 
 /** Show warning message **/

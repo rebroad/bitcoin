@@ -62,7 +62,13 @@ public Q_SLOTS:
     void getBlockSourceAsync();
     void getStatusBarWarningsAsync();
     void getMempoolStatsInRangeAsync(QDateTime from, QDateTime to);
-    void updateMempoolStatsAsync();
+    void updateNetworkAndMempoolStatsAsync();
+    void getNumConnectionsAsync(unsigned int flags);
+    void getNumBlocksAsync();
+    void getBestBlockHashAsync();
+    void getHeaderTipHeightAsync();
+    void getHeaderTipTimeAsync();
+    void getProxyInfoAsync();
 
 Q_SIGNALS:
     // Results sent back to GUI thread
@@ -70,6 +76,15 @@ Q_SIGNALS:
     void statusBarWarningsResult(QString warnings);
     void mempoolStatsResult(mempoolSamples_t samples);
     void mempoolStatsUpdated();
+    void numConnectionsResult(int count);
+    void numBlocksResult(int count);
+    void bestBlockHashResult(uint256 hash);
+    void headerTipHeightResult(int height);
+    void headerTipTimeResult(int64_t time);
+    void proxyInfoResult(bool hasProxy, QString ipPort);
+    void mempoolSizeChanged(size_t count, size_t mempoolSizeInBytes);
+    void bytesChanged(quint64 totalBytesIn, quint64 totalBytesOut);
+
 
 private:
     interfaces::Node& m_node;
@@ -111,13 +126,16 @@ public:
 
     bool getProxyInfo(std::string& ip_port) const;
 
-    // caches for the best header: hash, number of blocks and block time
-    mutable std::atomic<int> cachedBestHeaderHeight;
-    mutable std::atomic<int64_t> cachedBestHeaderTime;
+    // Cached data for GUI thread (updated via signals from data thread)
+    mutable std::atomic<int> m_cached_num_connections{0};
     mutable std::atomic<int> m_cached_num_blocks{-1};
-
-    Mutex m_cached_tip_mutex;
-    uint256 m_cached_tip_blocks GUARDED_BY(m_cached_tip_mutex){};
+    mutable std::atomic<int> m_cached_header_height{-1};
+    mutable std::atomic<int64_t> m_cached_header_time{-1};
+    mutable std::atomic<uint256> m_cached_best_block_hash{uint256{}};
+    mutable std::atomic<bool> m_cached_has_proxy{false};
+    mutable std::atomic<QString> m_cached_proxy_ip_port{QString{}};
+    mutable std::atomic<SynchronizationState> m_cached_sync_state{SynchronizationState::INIT_DOWNLOAD};
+    mutable std::atomic<bool> m_cached_initial_sync_finished{false};
 
     mempoolSamples_t getMempoolStatsInRange(QDateTime &from, QDateTime &to);
 
@@ -154,6 +172,7 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_banned_list_changed;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
     std::unique_ptr<interfaces::Handler> m_handler_notify_header_tip;
+    std::unique_ptr<interfaces::Handler> m_handler_notify_initial_sync_finished;
     boost::signals2::scoped_connection m_connection_mempool_stats_did_change;
     OptionsModel *optionsModel;
     PeerTableModel *peerTableModel;
@@ -188,6 +207,7 @@ public Q_SLOTS:
     void updateNetworkActive(bool networkActive);
     void updateAlert();
     void updateBanlist();
+    void updateInitialSyncFinished();
 
     /* stats stack */
     void updateMempoolStats();

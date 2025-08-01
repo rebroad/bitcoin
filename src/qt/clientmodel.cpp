@@ -55,23 +55,29 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     QTimer* timer = new QTimer;
     timer->setInterval(MODEL_UPDATE_DELAY);
     connect(timer, &QTimer::timeout, [this] {
-        // no locking required at this point
-        // the following calls will acquire the required lock
-
-        int64_t now = GetTime();
-        if (m_mempool_feehist_last_sample_timestamp == 0 || static_cast<uint64_t>(m_mempool_feehist_last_sample_timestamp)+static_cast<uint64_t>(m_mempool_collect_intervall) <= static_cast<uint64_t>(now)) {
-            QMutexLocker locker(&m_mempool_locker);
-            interfaces::mempool_feehistogram fee_histogram = m_node.getMempoolFeeHistogram();
-            m_mempool_feehist.push_back({now, fee_histogram});
-            if (m_mempool_feehist.size() > m_mempool_max_samples) {
-                m_mempool_feehist.erase(m_mempool_feehist.begin(), m_mempool_feehist.begin()+1);
-            }
-            m_mempool_feehist_last_sample_timestamp = now;
-            Q_EMIT mempoolFeeHistChanged();
+        // Queue network and mempool stats update to data thread to avoid cs_main in GUI thread
+        if (m_data_worker) {
+            QMetaObject::invokeMethod(m_data_worker, "updateNetworkAndMempoolStatsAsync", Qt::QueuedConnection);
         }
 
-        Q_EMIT mempoolSizeChanged(m_node.getMempoolSize(), m_node.getMempoolDynamicUsage()); // REBTODO - what does this do?
-        Q_EMIT bytesChanged(m_node.getTotalBytesRecv(), m_node.getTotalBytesSent()); // REBTODO - what does this do?
+        // Handle fee histogram collection (only when not in IBD)
+        // This is safe to do in GUI thread since it's not critical during IBD
+        int64_t now = GetTime();
+        if (m_mempool_feehist_last_sample_timestamp == 0 ||
+            static_cast<uint64_t>(m_mempool_feehist_last_sample_timestamp)+static_cast<uint64_t>(m_mempool_collect_intervall) <= static_cast<uint64_t>(now)) {
+
+            // Only collect fee histogram if initial sync has finished (mempool likely empty during IBD anyway)
+            if (m_cached_initial_sync_finished.load()) { // Non-blocking check for IBD completion
+                QMutexLocker locker(&m_mempool_locker);
+                interfaces::mempool_feehistogram fee_histogram = m_node.getMempoolFeeHistogram();
+                m_mempool_feehist.push_back({now, fee_histogram});
+                if (m_mempool_feehist.size() > m_mempool_max_samples) {
+                    m_mempool_feehist.erase(m_mempool_feehist.begin(), m_mempool_feehist.begin()+1);
+                }
+                m_mempool_feehist_last_sample_timestamp = now;
+                Q_EMIT mempoolFeeHistChanged();
+            }
+        }
     });
     connect(m_thread, &QThread::finished, timer, &QObject::deleteLater);
     connect(m_thread, &QThread::started, [timer] { timer->start(); });
@@ -101,75 +107,52 @@ ClientModel::~ClientModel()
 
 int ClientModel::getNumConnections(unsigned int flags) const
 {
-    ConnectionDirection connections = ConnectionDirection::None;
-
-    if(flags == CONNECTIONS_IN)
-        connections = ConnectionDirection::In;
-    else if (flags == CONNECTIONS_OUT)
-        connections = ConnectionDirection::Out;
-    else if (flags == CONNECTIONS_ALL)
-        connections = ConnectionDirection::Both;
-
-    return m_node.getNodeCount(connections);
+    // Queue async request to data thread for fresh data
+    if (m_data_worker) {
+        QMetaObject::invokeMethod(m_data_worker, "getNumConnectionsAsync", Qt::QueuedConnection, Q_ARG(unsigned int, flags));
+    }
+    // Return cached data immediately
+    return m_cached_num_connections.load();
 }
 
 int ClientModel::getHeaderTipHeight() const
 {
-    if (cachedBestHeaderHeight == -1) {
-        // make sure we initially populate the cache via a cs_main lock
-        // otherwise we need to wait for a tip update
-        int height;
-        int64_t blockTime;
-        if (m_node.getHeaderTip(height, blockTime)) {
-            cachedBestHeaderHeight = height;
-            cachedBestHeaderTime = blockTime;
-        }
+    // Queue async request to data thread for fresh data
+    if (m_data_worker) {
+        QMetaObject::invokeMethod(m_data_worker, "getHeaderTipHeightAsync", Qt::QueuedConnection);
     }
-    return cachedBestHeaderHeight;
+    // Return cached data immediately
+    return m_cached_header_height.load();
 }
 
 int64_t ClientModel::getHeaderTipTime() const
 {
-    if (cachedBestHeaderTime == -1) {
-        int height;
-        int64_t blockTime;
-        if (m_node.getHeaderTip(height, blockTime)) {
-            cachedBestHeaderHeight = height;
-            cachedBestHeaderTime = blockTime;
-        }
+    // Queue async request to data thread for fresh data
+    if (m_data_worker) {
+        QMetaObject::invokeMethod(m_data_worker, "getHeaderTipTimeAsync", Qt::QueuedConnection);
     }
-    return cachedBestHeaderTime;
+    // Return cached data immediately
+    return m_cached_header_time.load();
 }
 
 int ClientModel::getNumBlocks() const
 {
-    if (m_cached_num_blocks == -1) {
-        m_cached_num_blocks = m_node.getNumBlocks();
+    // Queue async request to data thread for fresh data
+    if (m_data_worker) {
+        QMetaObject::invokeMethod(m_data_worker, "getNumBlocksAsync", Qt::QueuedConnection);
     }
-    return m_cached_num_blocks;
+    // Return cached data immediately
+    return m_cached_num_blocks.load();
 }
 
 uint256 ClientModel::getBestBlockHash()
 {
-    uint256 tip{WITH_LOCK(m_cached_tip_mutex, return m_cached_tip_blocks)};
-
-    if (!tip.IsNull()) {
-        return tip;
+    // Queue async request to data thread for fresh data
+    if (m_data_worker) {
+        QMetaObject::invokeMethod(m_data_worker, "getBestBlockHashAsync", Qt::QueuedConnection);
     }
-
-    // Lock order must be: first `cs_main`, then `m_cached_tip_mutex`.
-    // The following will lock `cs_main` (and release it), so we must not
-    // own `m_cached_tip_mutex` here.
-    tip = m_node.getBestBlockHash();
-
-    LOCK(m_cached_tip_mutex);
-    // We checked that `m_cached_tip_blocks` is not null above, but then we
-    // released the mutex `m_cached_tip_mutex`, so it could have changed in the
-    // meantime. Thus, check again.
-    if (m_cached_tip_blocks.IsNull()) {
-        m_cached_tip_blocks = tip;
-    }
-    return m_cached_tip_blocks;
+    // Return cached data immediately
+    return m_cached_best_block_hash.load();
 }
 
 void ClientModel::updateNumConnections(int numConnections)
@@ -203,15 +186,14 @@ enum BlockSource ClientModel::getBlockSource() const
 
 QString ClientModel::getStatusBarWarnings() const
 {
-    // Request responsiveness for node call
-    const_cast<ClientModel*>(this)->requestResponsiveness("getStatusBarWarnings");
+    // Queue async request to data thread for fresh data
+    if (m_data_worker) {
+        QMetaObject::invokeMethod(m_data_worker, "getStatusBarWarningsAsync", Qt::QueuedConnection);
+    }
 
-    QString result = QString::fromStdString(m_node.getWarnings().translated);
-
-    // Release responsiveness after node call
-    const_cast<ClientModel*>(this)->releaseResponsiveness();
-
-    return result;
+    // Return cached result or default
+    // TODO: Implement proper caching and async result handling
+    return QString(); // Temporary default
 }
 
 OptionsModel *ClientModel::getOptionsModel()
@@ -280,6 +262,51 @@ void ClientModel::setupDataThread()
         LogPrint(BCLog::QT, "ClientModel: Received status bar warnings from data thread\n");
     });
 
+    // Connect additional result signals to update cached data
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::numConnectionsResult,
+            this, [this](int count) {
+        m_cached_num_connections.store(count);
+        LogPrint(BCLog::QT, "ClientModel: Updated cached num connections: %d\n", count);
+    });
+
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::numBlocksResult,
+            this, [this](int count) {
+        m_cached_num_blocks.store(count);
+        LogPrint(BCLog::QT, "ClientModel: Updated cached num blocks: %d\n", count);
+    });
+
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::bestBlockHashResult,
+            this, [this](uint256 hash) {
+        m_cached_best_block_hash.store(hash);
+        LogPrint(BCLog::QT, "ClientModel: Updated cached best block hash\n");
+    });
+
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::headerTipHeightResult,
+            this, [this](int height) {
+        m_cached_header_height.store(height);
+        LogPrint(BCLog::QT, "ClientModel: Updated cached header height: %d\n", height);
+    });
+
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::headerTipTimeResult,
+            this, [this](int64_t time) {
+        m_cached_header_time.store(time);
+        LogPrint(BCLog::QT, "ClientModel: Updated cached header time: %d\n", time);
+    });
+
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::proxyInfoResult,
+            this, [this](bool hasProxy, QString ipPort) {
+        m_cached_has_proxy.store(hasProxy);
+        m_cached_proxy_ip_port.store(ipPort);
+        LogPrint(BCLog::QT, "ClientModel: Updated cached proxy info\n");
+    });
+
+    // Connect mempool and network stats signals
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::mempoolSizeChanged,
+            this, &ClientModel::mempoolSizeChanged);
+    connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::bytesChanged,
+            this, &ClientModel::bytesChanged);
+
+
     m_data_thread->start();
     LogPrint(BCLog::QT, "ClientModel: Data processing thread started\n");
 }
@@ -326,6 +353,12 @@ void ClientModel::updateBanlist()
     banTableModel->refresh();
 }
 
+void ClientModel::updateInitialSyncFinished()
+{
+    m_cached_initial_sync_finished.store(true);
+    LogPrint(BCLog::QT, "ClientModel: Initial sync finished - fee histogram collection enabled\n");
+}
+
 // Handlers for core signals
 static void ShowProgress(ClientModel *clientmodel, const std::string &title, int nProgress)
 {
@@ -365,15 +398,25 @@ static void BannedListChanged(ClientModel *clientmodel)
     assert(invoked);
 }
 
+static void NotifyInitialSyncFinished(ClientModel *clientmodel)
+{
+    qDebug() << QString("%1: Initial sync finished").arg(__func__);
+    bool invoked = QMetaObject::invokeMethod(clientmodel, "updateInitialSyncFinished", Qt::QueuedConnection);
+    assert(invoked);
+}
+
 static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_state, interfaces::BlockTip tip, double verificationProgress, bool fHeader)
 {
+    // Cache synchronization state for non-blocking access
+    clientmodel->m_cached_sync_state.store(sync_state);
+
     if (fHeader) {
         // cache best headers time and height to reduce future cs_main locks
-        clientmodel->cachedBestHeaderHeight = tip.block_height;
-        clientmodel->cachedBestHeaderTime = tip.block_time;
+        clientmodel->m_cached_header_height.store(tip.block_height);
+        clientmodel->m_cached_header_time.store(tip.block_time);
     } else {
-        clientmodel->m_cached_num_blocks = tip.block_height;
-        WITH_LOCK(clientmodel->m_cached_tip_mutex, clientmodel->m_cached_tip_blocks = tip.block_hash;);
+        clientmodel->m_cached_num_blocks.store(tip.block_height);
+        clientmodel->m_cached_best_block_hash.store(tip.block_hash);
     }
 
     // Throttle GUI notifications about (a) blocks during initial sync, and (b) both blocks and headers during reindex.
@@ -409,6 +452,7 @@ void ClientModel::subscribeToCoreSignals()
     m_handler_banned_list_changed = m_node.handleBannedListChanged(std::bind(BannedListChanged, this));
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, false));
     m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, true));
+    m_handler_notify_initial_sync_finished = m_node.handleNotifyInitialSyncFinished(std::bind(NotifyInitialSyncFinished, this));
 
     m_connection_mempool_stats_did_change = CStats::DefaultStats()->MempoolStatsDidChange.connect(std::bind(MempoolStatsDidChange, this));
 }
@@ -423,26 +467,24 @@ void ClientModel::unsubscribeFromCoreSignals()
     m_handler_banned_list_changed->disconnect();
     m_handler_notify_block_tip->disconnect();
     m_handler_notify_header_tip->disconnect();
+    m_handler_notify_initial_sync_finished->disconnect();
 
     m_connection_mempool_stats_did_change.disconnect();
 }
 
 bool ClientModel::getProxyInfo(std::string& ip_port) const
 {
-    // Request responsiveness for node calls
-    const_cast<ClientModel*>(this)->requestResponsiveness("getMempoolStatsInRange");
-
-    proxyType ipv4, ipv6;
-    bool result = false;
-    if (m_node.getProxy((Network) 1, ipv4) && m_node.getProxy((Network) 2, ipv6)) {
-      ip_port = ipv4.proxy.ToStringIPPort();
-      result = true;
+    // Queue async request to data thread for fresh data
+    if (m_data_worker) {
+        QMetaObject::invokeMethod(m_data_worker, "getProxyInfoAsync", Qt::QueuedConnection);
     }
 
-    // Release responsiveness after node calls
-    const_cast<ClientModel*>(this)->releaseResponsiveness();
-
-    return result;
+    // Return cached data immediately
+    bool hasProxy = m_cached_has_proxy.load();
+    if (hasProxy) {
+        ip_port = m_cached_proxy_ip_port.load().toStdString();
+    }
+    return hasProxy;
 }
 
 mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime &to)
@@ -499,8 +541,83 @@ void ClientModelDataWorker::getMempoolStatsInRangeAsync(QDateTime from, QDateTim
     Q_EMIT mempoolStatsResult(samples);
 }
 
-void ClientModelDataWorker::updateMempoolStatsAsync()
+void ClientModelDataWorker::updateNetworkAndMempoolStatsAsync()
 {
-    // Implementation for mempool stats update
+    // Get mempool stats from node (requires cs_main)
+    int64_t now = GetTime();
+
+    // Get mempool size and usage
+    size_t mempoolSize = m_node.getMempoolSize();
+    size_t mempoolDynamicUsage = m_node.getMempoolDynamicUsage();
+
+    // Get network stats (used by traffic graph widget)
+    quint64 totalBytesRecv = m_node.getTotalBytesRecv();
+    quint64 totalBytesSent = m_node.getTotalBytesSent();
+
+    // Emit signals with the data
+    Q_EMIT mempoolSizeChanged(mempoolSize, mempoolDynamicUsage);
+    Q_EMIT bytesChanged(totalBytesRecv, totalBytesSent);
     Q_EMIT mempoolStatsUpdated();
+}
+
+void ClientModelDataWorker::getNumConnectionsAsync(unsigned int flags)
+{
+    ConnectionDirection connections = ConnectionDirection::None;
+    if (flags == CONNECTIONS_IN)
+        connections = ConnectionDirection::In;
+    else if (flags == CONNECTIONS_OUT)
+        connections = ConnectionDirection::Out;
+    else if (flags == CONNECTIONS_ALL)
+        connections = ConnectionDirection::Both;
+
+    int count = m_node.getNodeCount(connections);
+    Q_EMIT numConnectionsResult(count);
+}
+
+void ClientModelDataWorker::getNumBlocksAsync()
+{
+    int count = m_node.getNumBlocks();
+    Q_EMIT numBlocksResult(count);
+}
+
+void ClientModelDataWorker::getBestBlockHashAsync()
+{
+    uint256 hash = m_node.getBestBlockHash();
+    Q_EMIT bestBlockHashResult(hash);
+}
+
+void ClientModelDataWorker::getHeaderTipHeightAsync()
+{
+    int height;
+    int64_t blockTime;
+    if (m_node.getHeaderTip(height, blockTime)) {
+        Q_EMIT headerTipHeightResult(height);
+    } else {
+        Q_EMIT headerTipHeightResult(-1);
+    }
+}
+
+void ClientModelDataWorker::getHeaderTipTimeAsync()
+{
+    int height;
+    int64_t blockTime;
+    if (m_node.getHeaderTip(height, blockTime)) {
+        Q_EMIT headerTipTimeResult(blockTime);
+    } else {
+        Q_EMIT headerTipTimeResult(-1);
+    }
+}
+
+void ClientModelDataWorker::getProxyInfoAsync()
+{
+    proxyType ipv4, ipv6;
+    bool hasProxy = false;
+    QString ipPort;
+
+    if (m_node.getProxy((Network) 1, ipv4) && m_node.getProxy((Network) 2, ipv6)) {
+        ipPort = QString::fromStdString(ipv4.proxy.ToStringIPPort());
+        hasProxy = true;
+    }
+
+    Q_EMIT proxyInfoResult(hasProxy, ipPort);
 }
