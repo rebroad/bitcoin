@@ -34,6 +34,7 @@ uint256 ClientModel::g_cached_best_block_hash;
 #include <QThread>
 #include <QTimer>
 #include <execinfo.h>
+#include <qt/locktiming.h>
 
 static int64_t nLastHeaderTipUpdateNotification = 0;
 static int64_t nLastBlockTipUpdateNotification = 0;
@@ -71,14 +72,7 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
             // Only collect fee histogram if initial sync has finished (mempool likely empty during IBD anyway)
             if (m_cached_initial_sync_finished.load()) { // Non-blocking check for IBD completion
                 // Try to get fresh data directly if cs_main is free
-                QElapsedTimer lockTimer;
-                lockTimer.start();
-                std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
-                qint64 waited = lockTimer.nsecsElapsed() / 1000000;
-                if (waited > 0 || !lock.owns_lock()) {
-                    qDebug() << "[LOCK_TIMED] cs_main try_to_lock at" << __FILE__ << ":" << __LINE__ << __FUNCTION__
-                             << (lock.owns_lock() ? "ACQUIRED" : "FAILED") << "after" << waited << "ms";
-                }
+                TIME_CS_MAIN_LOCK();
 
                 if (lock.owns_lock()) {
                     // We got the lock! Get fresh data and update cache
