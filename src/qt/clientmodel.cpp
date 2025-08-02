@@ -4,6 +4,9 @@
 
 #include <qt/clientmodel.h>
 
+// Static member definition
+uint256 ClientModel::g_cached_best_block_hash;
+
 #include <qt/bantablemodel.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -184,11 +187,11 @@ uint256 ClientModel::getBestBlockHash()
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
         uint256 freshHash = m_node.getBestBlockHash();
-        m_cached_best_block_hash.store(freshHash);
+        g_cached_best_block_hash = freshHash; // Update static global (non-blocking)
         return freshHash;
     } else {
         // cs_main is busy, use cached data
-        return m_cached_best_block_hash.load();
+        return g_cached_best_block_hash; // Read from static global (non-blocking)
     }
 }
 
@@ -326,7 +329,7 @@ void ClientModel::setupDataThread()
 
     connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::bestBlockHashResult,
             this, [this](uint256 hash) {
-        m_cached_best_block_hash.store(hash);
+        g_cached_best_block_hash = hash; // Update static global (non-blocking)
         LogPrint(BCLog::QT, "ClientModel: Updated cached best block hash\n");
     });
 
@@ -345,7 +348,7 @@ void ClientModel::setupDataThread()
     connect(static_cast<ClientModelDataWorker*>(m_data_worker), &ClientModelDataWorker::proxyInfoResult,
             this, [this](bool hasProxy, QString ipPort) {
         m_cached_has_proxy.store(hasProxy);
-        m_cached_proxy_ip_port.store(ipPort);
+        m_cached_proxy_ip_port = ipPort;
         LogPrint(BCLog::QT, "ClientModel: Updated cached proxy info\n");
     });
 
@@ -465,7 +468,7 @@ static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_
         clientmodel->m_cached_header_time.store(tip.block_time);
     } else {
         clientmodel->m_cached_num_blocks.store(tip.block_height);
-        clientmodel->m_cached_best_block_hash.store(tip.block_hash);
+        clientmodel->g_cached_best_block_hash = tip.block_hash; // Update static global (non-blocking)
     }
 
     // Throttle GUI notifications about (a) blocks during initial sync, and (b) both blocks and headers during reindex.
@@ -605,10 +608,7 @@ void ClientModelDataWorker::getMempoolStatsInRangeAsync(QDateTime from, QDateTim
 
 void ClientModelDataWorker::updateNetworkAndMempoolStatsAsync()
 {
-    // Get mempool stats from node (requires cs_main)
-    int64_t now = GetTime();
-
-    // Get mempool size and usage
+    // Get mempool size and usage (requires cs_main)
     size_t mempoolSize = m_node.getMempoolSize();
     size_t mempoolDynamicUsage = m_node.getMempoolDynamicUsage();
 

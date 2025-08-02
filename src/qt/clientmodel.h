@@ -133,7 +133,9 @@ public:
     mutable std::atomic<int> m_cached_num_blocks{-1};
     mutable std::atomic<int> m_cached_header_height{-1};
     mutable std::atomic<int64_t> m_cached_header_time{-1};
-    mutable std::atomic<uint256> m_cached_best_block_hash{uint256{}};
+    // Static global for atomic uint256 access
+    static uint256 g_cached_best_block_hash;
+    mutable std::atomic<uint256*> m_cached_best_block_hash_ptr{&g_cached_best_block_hash};
     mutable std::atomic<bool> m_cached_has_proxy{false};
     mutable QString m_cached_proxy_ip_port;
     mutable std::atomic<size_t> m_cached_mempool_dynamic_usage{0};

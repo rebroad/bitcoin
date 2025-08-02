@@ -6,6 +6,7 @@
 #include <net_processing.h>
 
 #include <addrman.h>
+#include <node/ui_interface.h>
 #include <banman.h>
 #include <blockencodings.h>
 #include <blockfilter.h>
