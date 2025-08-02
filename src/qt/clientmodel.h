@@ -21,6 +21,7 @@ class ClientModelDataWorker;
 #include <stats/stats.h>
 #include <sync.h>
 #include <uint256.h>
+#include <validation.h>
 
 #include <interfaces/node.h>
 
@@ -134,11 +135,12 @@ public:
     mutable std::atomic<int64_t> m_cached_header_time{-1};
     mutable std::atomic<uint256> m_cached_best_block_hash{uint256{}};
     mutable std::atomic<bool> m_cached_has_proxy{false};
-    mutable std::atomic<QString> m_cached_proxy_ip_port{QString{}};
+    mutable QString m_cached_proxy_ip_port;
+    mutable std::atomic<size_t> m_cached_mempool_dynamic_usage{0};
     mutable std::atomic<SynchronizationState> m_cached_sync_state{SynchronizationState::INIT_DOWNLOAD};
     mutable std::atomic<bool> m_cached_initial_sync_finished{false};
     mutable std::atomic<BlockSource> m_cached_block_source{BlockSource::NONE};
-    mutable std::atomic<QString> m_cached_status_bar_warnings{QString{}};
+    mutable QString m_cached_status_bar_warnings;
 
     mempoolSamples_t getMempoolStatsInRange(QDateTime &from, QDateTime &to);
 
@@ -152,10 +154,6 @@ public:
     // GUI responsiveness functions
     void requestResponsiveness(const char* reason = nullptr);
     void releaseResponsiveness();
-    
-    // Helper method to try getting fresh data if cs_main is free
-    template<typename T>
-    T tryGetFreshData(std::function<T()> freshDataFunc, T cachedValue) const;
 
     // Performance debugging
     QString getPerformanceStats() const;
@@ -179,7 +177,7 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_banned_list_changed;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
     std::unique_ptr<interfaces::Handler> m_handler_notify_header_tip;
-    std::unique_ptr<interfaces::Handler> m_handler_notify_initial_sync_finished;
+
     boost::signals2::scoped_connection m_connection_mempool_stats_did_change;
     OptionsModel *optionsModel;
     PeerTableModel *peerTableModel;

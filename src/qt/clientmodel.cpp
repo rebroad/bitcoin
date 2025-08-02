@@ -45,9 +45,6 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     banTableModel(nullptr),
     m_thread(new QThread(this))
 {
-    cachedBestHeaderHeight = -1;
-    cachedBestHeaderTime = -1;
-
     peerTableModel = new PeerTableModel(m_node, this);
     m_peer_table_sort_proxy = new PeerTableSortProxy(this);
     m_peer_table_sort_proxy->setSourceModel(peerTableModel);
@@ -109,47 +106,90 @@ ClientModel::~ClientModel()
 
 int ClientModel::getNumConnections(unsigned int flags) const
 {
-    // Try to get fresh data if cs_main is free, otherwise use cached
-    return tryGetFreshData(
-        [this, flags]() { return m_node.getNodeCount(flags); },
-        m_cached_num_connections.load()
-    );
+    // Try to get fresh data directly if cs_main is free
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        int freshCount = static_cast<int>(m_node.getNodeCount(static_cast<ConnectionDirection>(flags)));
+        m_cached_num_connections.store(freshCount);
+        return freshCount;
+    } else {
+        // cs_main is busy, use cached data
+        return m_cached_num_connections.load();
+    }
 }
 
 int ClientModel::getHeaderTipHeight() const
 {
-    // Try to get fresh data if cs_main is free, otherwise use cached
-    return tryGetFreshData(
-        [this]() { return m_node.getHeaderTipHeight(); },
-        m_cached_header_height.load()
-    );
+    // Try to get fresh data directly if cs_main is free
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        int height;
+        int64_t block_time;
+        if (m_node.getHeaderTip(height, block_time)) {
+            m_cached_header_height.store(height);
+            m_cached_header_time.store(block_time);
+            return height;
+        }
+    }
+
+    // cs_main is busy or getHeaderTip failed, use cached data
+    return m_cached_header_height.load();
 }
 
 int64_t ClientModel::getHeaderTipTime() const
 {
-    // Try to get fresh data if cs_main is free, otherwise use cached
-    return tryGetFreshData(
-        [this]() { return m_node.getHeaderTipTime(); },
-        m_cached_header_time.load()
-    );
+    // Try to get fresh data directly if cs_main is free
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        int height;
+        int64_t block_time;
+        if (m_node.getHeaderTip(height, block_time)) {
+            m_cached_header_height.store(height);
+            m_cached_header_time.store(block_time);
+            return block_time;
+        }
+    }
+
+    // cs_main is busy or getHeaderTip failed, use cached data
+    return m_cached_header_time.load();
 }
 
 int ClientModel::getNumBlocks() const
 {
-    // Try to get fresh data if cs_main is free, otherwise use cached
-    return tryGetFreshData(
-        [this]() { return m_node.getNumBlocks(); },
-        m_cached_num_blocks.load()
-    );
+    // Try to get fresh data directly if cs_main is free
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        int freshBlocks = m_node.getNumBlocks();
+        m_cached_num_blocks.store(freshBlocks);
+        return freshBlocks;
+    } else {
+        // cs_main is busy, use cached data
+        return m_cached_num_blocks.load();
+    }
 }
 
 uint256 ClientModel::getBestBlockHash()
 {
-    // Try to get fresh data if cs_main is free, otherwise use cached
-    return tryGetFreshData(
-        [this]() { return m_node.getBestBlockHash(); },
-        m_cached_best_block_hash.load()
-    );
+    // Try to get fresh data directly if cs_main is free
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        uint256 freshHash = m_node.getBestBlockHash();
+        m_cached_best_block_hash.store(freshHash);
+        return freshHash;
+    } else {
+        // cs_main is busy, use cached data
+        return m_cached_best_block_hash.load();
+    }
 }
 
 void ClientModel::updateNumConnections(int numConnections)
@@ -170,25 +210,39 @@ void ClientModel::updateAlert()
 
 enum BlockSource ClientModel::getBlockSource() const
 {
-    // Try to get fresh data if cs_main is free, otherwise use cached
-    return tryGetFreshData(
-        [this]() {
-            if (m_node.getReindex()) return BlockSource::REINDEX;
-            else if (m_node.getImporting()) return BlockSource::DISK;
-            else if (m_node.getNodeCount(ConnectionDirection::Both) > 0) return BlockSource::NETWORK;
-            else return BlockSource::NONE;
-        },
-        m_cached_block_source.load()  // Use actual cached value
-    );
+    // Try to get fresh data directly if cs_main is free
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        BlockSource freshSource;
+        if (m_node.getReindex()) freshSource = BlockSource::REINDEX;
+        else if (m_node.getImporting()) freshSource = BlockSource::DISK;
+        else if (m_node.getNodeCount(ConnectionDirection::Both) > 0) freshSource = BlockSource::NETWORK;
+        else freshSource = BlockSource::NONE;
+
+        m_cached_block_source.store(freshSource);
+        return freshSource;
+    } else {
+        // cs_main is busy, use cached data
+        return m_cached_block_source.load();
+    }
 }
 
 QString ClientModel::getStatusBarWarnings() const
 {
-    // Try to get fresh data if cs_main is free, otherwise use cached
-    return tryGetFreshData(
-        [this]() { return QString::fromStdString(m_node.getWarnings().translated); },
-        m_cached_status_bar_warnings.load()  // Use actual cached value
-    );
+    // Try to get fresh data directly if cs_main is free
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        QString freshWarnings = QString::fromStdString(m_node.getWarnings().translated);
+        m_cached_status_bar_warnings = freshWarnings;
+        return freshWarnings;
+    } else {
+        // cs_main is busy, use cached data
+        return m_cached_status_bar_warnings;
+    }
 }
 
 OptionsModel *ClientModel::getOptionsModel()
@@ -447,7 +501,6 @@ void ClientModel::subscribeToCoreSignals()
     m_handler_banned_list_changed = m_node.handleBannedListChanged(std::bind(BannedListChanged, this));
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, false));
     m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, true));
-    m_handler_notify_initial_sync_finished = m_node.handleNotifyInitialSyncFinished(std::bind(NotifyInitialSyncFinished, this));
 
     m_connection_mempool_stats_did_change = CStats::DefaultStats()->MempoolStatsDidChange.connect(std::bind(MempoolStatsDidChange, this));
 }
@@ -462,38 +515,36 @@ void ClientModel::unsubscribeFromCoreSignals()
     m_handler_banned_list_changed->disconnect();
     m_handler_notify_block_tip->disconnect();
     m_handler_notify_header_tip->disconnect();
-    m_handler_notify_initial_sync_finished->disconnect();
 
     m_connection_mempool_stats_did_change.disconnect();
 }
 
 bool ClientModel::getProxyInfo(std::string& ip_port) const
 {
-    // Try to get fresh data if cs_main is free, otherwise use cached
-    bool hasProxy = tryGetFreshData(
-        [this]() {
-            proxyType ipv4, ipv6;
-            return m_node.getProxy((Network) 1, ipv4) && m_node.getProxy((Network) 2, ipv6);
-        },
-        m_cached_has_proxy.load()
-    );
+    // Try to get fresh data directly if cs_main is free
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
 
-    if (hasProxy) {
-        // Try to get fresh proxy info if cs_main is free
-        QString ipPort = tryGetFreshData(
-            [this]() {
-                proxyType ipv4, ipv6;
-                if (m_node.getProxy((Network) 1, ipv4) && m_node.getProxy((Network) 2, ipv6)) {
-                    return QString::fromStdString(ipv4.proxy.ToStringIPPort());
-                }
-                return QString();
-            },
-            m_cached_proxy_ip_port.load()
-        );
-        ip_port = ipPort.toStdString();
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        proxyType ipv4, ipv6;
+        bool freshHasProxy = m_node.getProxy((Network) 1, ipv4) && m_node.getProxy((Network) 2, ipv6);
+        m_cached_has_proxy.store(freshHasProxy);
+
+        if (freshHasProxy) {
+            QString freshIpPort = QString::fromStdString(ipv4.proxy.ToStringIPPort());
+            m_cached_proxy_ip_port = freshIpPort;
+            ip_port = freshIpPort.toStdString();
+        }
+
+        return freshHasProxy;
+    } else {
+        // cs_main is busy, use cached data
+        bool hasProxy = m_cached_has_proxy.load();
+        if (hasProxy) {
+            ip_port = m_cached_proxy_ip_port.toStdString();
+        }
+        return hasProxy;
     }
-
-    return hasProxy;
 }
 
 mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime &to)
@@ -633,38 +684,16 @@ void ClientModelDataWorker::getProxyInfoAsync()
 
 size_t ClientModel::getMempoolDynamicUsage() const
 {
-    // Try to get fresh data if cs_main is free, otherwise use cached
-    return tryGetFreshData(
-        [this]() { return m_node.getMempoolDynamicUsage(); },
-        m_cached_mempool_dynamic_usage.load()
-    );
-}
-
-
-
-// Template implementation for trying to get fresh data if cs_main is free
-template<typename T>
-T ClientModel::tryGetFreshData(std::function<T()> freshDataFunc, T cachedValue) const
-{
-    // Try to acquire cs_main without blocking
+    // Try to get fresh data directly if cs_main is free
     std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
 
     if (lock.owns_lock()) {
-        // We got the lock! Keep it held during the entire call
-        // This prevents other threads from modifying the data while we read it
-        try {
-            T freshData = freshDataFunc();
-            LogPrint(BCLog::QT, "ClientModel: Got fresh data (cs_main reserved)\n");
-            return freshData;
-        } catch (...) {
-            // If anything goes wrong, fall back to cached data
-            LogPrint(BCLog::QT, "ClientModel: Error getting fresh data, using cached\n");
-            return cachedValue;
-        }
-        // Lock is automatically released when lock goes out of scope
+        // We got the lock! Get fresh data and update cache
+        size_t freshUsage = m_node.getMempoolDynamicUsage();
+        m_cached_mempool_dynamic_usage.store(freshUsage);
+        return freshUsage;
     } else {
-        // cs_main is held by another thread, use cached data
-        LogPrint(BCLog::QT, "ClientModel: Using cached data (cs_main busy)\n");
-        return cachedValue;
+        // cs_main is busy, use cached data
+        return m_cached_mempool_dynamic_usage.load();
     }
 }
