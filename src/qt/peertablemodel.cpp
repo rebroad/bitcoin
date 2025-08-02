@@ -8,6 +8,8 @@
 #include <qt/guiutil.h>
 
 #include <interfaces/node.h>
+#include <sync.h>
+#include <validation.h> // For cs_main
 
 #include <utility>
 
@@ -189,43 +191,50 @@ QModelIndex PeerTableModel::index(int row, int column, const QModelIndex& parent
 
 void PeerTableModel::refresh()
 {
-    interfaces::Node::NodesStats nodes_stats;
-    m_node.getNodesStats(nodes_stats);
-    decltype(m_peers_data) new_peers_data;
-    new_peers_data.reserve(nodes_stats.size());
-    for (const auto& node_stats : nodes_stats) {
-        const CNodeCombinedStats stats{std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)};
-        new_peers_data.append(stats);
-    }
+    // Try to get fresh data directly if cs_main is free
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
 
-    // Handle peer addition or removal as suggested in Qt Docs. See:
-    // - https://doc.qt.io/qt-5/model-view-programming.html#inserting-and-removing-rows
-    // - https://doc.qt.io/qt-5/model-view-programming.html#resizable-models
-    // We take advantage of the fact that the std::vector returned
-    // by interfaces::Node::getNodesStats is sorted by nodeid.
-    for (int i = 0; i < m_peers_data.size();) {
-        if (i < new_peers_data.size() && m_peers_data.at(i).nodeStats.nodeid == new_peers_data.at(i).nodeStats.nodeid) {
-            ++i;
-            continue;
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        interfaces::Node::NodesStats nodes_stats;
+        m_node.getNodesStats(nodes_stats);
+        decltype(m_peers_data) new_peers_data;
+        new_peers_data.reserve(nodes_stats.size());
+        for (const auto& node_stats : nodes_stats) {
+            const CNodeCombinedStats stats{std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)};
+            new_peers_data.append(stats);
         }
-        // A peer has been removed from the table.
-        beginRemoveRows(QModelIndex(), i, i);
-        m_peers_data.erase(m_peers_data.begin() + i);
-        endRemoveRows();
-    }
 
-    if (m_peers_data.size() < new_peers_data.size()) {
-        // Some peers have been added to the end of the table.
-        beginInsertRows(QModelIndex(), m_peers_data.size(), new_peers_data.size() - 1);
-        m_peers_data.swap(new_peers_data);
-        endInsertRows();
-    } else {
-        m_peers_data.swap(new_peers_data);
-    }
+        // Handle peer addition or removal as suggested in Qt Docs. See:
+        // - https://doc.qt.io/qt-5/model-view-programming.html#inserting-and-removing-rows
+        // - https://doc.qt.io/qt-5/model-view-programming.html#resizable-models
+        // We take advantage of the fact that the std::vector returned
+        // by interfaces::Node::getNodesStats is sorted by nodeid.
+        for (int i = 0; i < m_peers_data.size();) {
+            if (i < new_peers_data.size() && m_peers_data.at(i).nodeStats.nodeid == new_peers_data.at(i).nodeStats.nodeid) {
+                ++i;
+                continue;
+            }
+            // A peer has been removed from the table.
+            beginRemoveRows(QModelIndex(), i, i);
+            m_peers_data.erase(m_peers_data.begin() + i);
+            endRemoveRows();
+        }
 
-    const auto top_left = index(0, 0);
-    const auto bottom_right = index(rowCount() - 1, columnCount() - 1);
-    // Only emit dataChanged if both indices are valid
-    if (top_left.isValid() && bottom_right.isValid())
-        Q_EMIT dataChanged(top_left, bottom_right);
+        if (m_peers_data.size() < new_peers_data.size()) {
+            // Some peers have been added to the end of the table.
+            beginInsertRows(QModelIndex(), m_peers_data.size(), new_peers_data.size() - 1);
+            m_peers_data.swap(new_peers_data);
+            endInsertRows();
+        } else {
+            m_peers_data.swap(new_peers_data);
+        }
+
+        const auto top_left = index(0, 0);
+        const auto bottom_right = index(rowCount() - 1, columnCount() - 1);
+        // Only emit dataChanged if both indices are valid
+        if (top_left.isValid() && bottom_right.isValid())
+            Q_EMIT dataChanged(top_left, bottom_right);
+    }
+    // If cs_main is busy, skip this update (non-blocking)
 }
