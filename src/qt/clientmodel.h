@@ -110,6 +110,7 @@ public:
     int getNumBlocks() const;
     uint256 getBestBlockHash();
     int getHeaderTipHeight() const;
+    size_t getMempoolDynamicUsage() const;
     int64_t getHeaderTipTime() const;
 
     //! Returns enum BlockSource of the current importing/syncing state
@@ -136,6 +137,8 @@ public:
     mutable std::atomic<QString> m_cached_proxy_ip_port{QString{}};
     mutable std::atomic<SynchronizationState> m_cached_sync_state{SynchronizationState::INIT_DOWNLOAD};
     mutable std::atomic<bool> m_cached_initial_sync_finished{false};
+    mutable std::atomic<BlockSource> m_cached_block_source{BlockSource::NONE};
+    mutable std::atomic<QString> m_cached_status_bar_warnings{QString{}};
 
     mempoolSamples_t getMempoolStatsInRange(QDateTime &from, QDateTime &to);
 
@@ -149,6 +152,10 @@ public:
     // GUI responsiveness functions
     void requestResponsiveness(const char* reason = nullptr);
     void releaseResponsiveness();
+    
+    // Helper method to try getting fresh data if cs_main is free
+    template<typename T>
+    T tryGetFreshData(std::function<T()> freshDataFunc, T cachedValue) const;
 
     // Performance debugging
     QString getPerformanceStats() const;

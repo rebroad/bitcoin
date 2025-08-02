@@ -8,6 +8,8 @@
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
 #include <qt/peertablemodel.h>
+#include <sync.h>
+#include <net.h>
 #include <qt/peertablesortproxy.h>
 
 #include <clientversion.h>
@@ -107,52 +109,47 @@ ClientModel::~ClientModel()
 
 int ClientModel::getNumConnections(unsigned int flags) const
 {
-    // Queue async request to data thread for fresh data
-    if (m_data_worker) {
-        QMetaObject::invokeMethod(m_data_worker, "getNumConnectionsAsync", Qt::QueuedConnection, Q_ARG(unsigned int, flags));
-    }
-    // Return cached data immediately
-    return m_cached_num_connections.load();
+    // Try to get fresh data if cs_main is free, otherwise use cached
+    return tryGetFreshData(
+        [this, flags]() { return m_node.getNodeCount(flags); },
+        m_cached_num_connections.load()
+    );
 }
 
 int ClientModel::getHeaderTipHeight() const
 {
-    // Queue async request to data thread for fresh data
-    if (m_data_worker) {
-        QMetaObject::invokeMethod(m_data_worker, "getHeaderTipHeightAsync", Qt::QueuedConnection);
-    }
-    // Return cached data immediately
-    return m_cached_header_height.load();
+    // Try to get fresh data if cs_main is free, otherwise use cached
+    return tryGetFreshData(
+        [this]() { return m_node.getHeaderTipHeight(); },
+        m_cached_header_height.load()
+    );
 }
 
 int64_t ClientModel::getHeaderTipTime() const
 {
-    // Queue async request to data thread for fresh data
-    if (m_data_worker) {
-        QMetaObject::invokeMethod(m_data_worker, "getHeaderTipTimeAsync", Qt::QueuedConnection);
-    }
-    // Return cached data immediately
-    return m_cached_header_time.load();
+    // Try to get fresh data if cs_main is free, otherwise use cached
+    return tryGetFreshData(
+        [this]() { return m_node.getHeaderTipTime(); },
+        m_cached_header_time.load()
+    );
 }
 
 int ClientModel::getNumBlocks() const
 {
-    // Queue async request to data thread for fresh data
-    if (m_data_worker) {
-        QMetaObject::invokeMethod(m_data_worker, "getNumBlocksAsync", Qt::QueuedConnection);
-    }
-    // Return cached data immediately
-    return m_cached_num_blocks.load();
+    // Try to get fresh data if cs_main is free, otherwise use cached
+    return tryGetFreshData(
+        [this]() { return m_node.getNumBlocks(); },
+        m_cached_num_blocks.load()
+    );
 }
 
 uint256 ClientModel::getBestBlockHash()
 {
-    // Queue async request to data thread for fresh data
-    if (m_data_worker) {
-        QMetaObject::invokeMethod(m_data_worker, "getBestBlockHashAsync", Qt::QueuedConnection);
-    }
-    // Return cached data immediately
-    return m_cached_best_block_hash.load();
+    // Try to get fresh data if cs_main is free, otherwise use cached
+    return tryGetFreshData(
+        [this]() { return m_node.getBestBlockHash(); },
+        m_cached_best_block_hash.load()
+    );
 }
 
 void ClientModel::updateNumConnections(int numConnections)
@@ -173,27 +170,25 @@ void ClientModel::updateAlert()
 
 enum BlockSource ClientModel::getBlockSource() const
 {
-    // Use data thread for cs_main operations
-    if (m_data_worker) {
-        QMetaObject::invokeMethod(m_data_worker, "getBlockSourceAsync", Qt::QueuedConnection);
-        LogPrint(BCLog::QT, "ClientModel: Queued getBlockSource to data thread\n");
-    }
-
-    // Return cached result or default
-    // TODO: Implement proper caching and async result handling
-    return BlockSource::NETWORK; // Temporary default
+    // Try to get fresh data if cs_main is free, otherwise use cached
+    return tryGetFreshData(
+        [this]() {
+            if (m_node.getReindex()) return BlockSource::REINDEX;
+            else if (m_node.getImporting()) return BlockSource::DISK;
+            else if (m_node.getNodeCount(ConnectionDirection::Both) > 0) return BlockSource::NETWORK;
+            else return BlockSource::NONE;
+        },
+        m_cached_block_source.load()  // Use actual cached value
+    );
 }
 
 QString ClientModel::getStatusBarWarnings() const
 {
-    // Queue async request to data thread for fresh data
-    if (m_data_worker) {
-        QMetaObject::invokeMethod(m_data_worker, "getStatusBarWarningsAsync", Qt::QueuedConnection);
-    }
-
-    // Return cached result or default
-    // TODO: Implement proper caching and async result handling
-    return QString(); // Temporary default
+    // Try to get fresh data if cs_main is free, otherwise use cached
+    return tryGetFreshData(
+        [this]() { return QString::fromStdString(m_node.getWarnings().translated); },
+        m_cached_status_bar_warnings.load()  // Use actual cached value
+    );
 }
 
 OptionsModel *ClientModel::getOptionsModel()
@@ -474,16 +469,30 @@ void ClientModel::unsubscribeFromCoreSignals()
 
 bool ClientModel::getProxyInfo(std::string& ip_port) const
 {
-    // Queue async request to data thread for fresh data
-    if (m_data_worker) {
-        QMetaObject::invokeMethod(m_data_worker, "getProxyInfoAsync", Qt::QueuedConnection);
+    // Try to get fresh data if cs_main is free, otherwise use cached
+    bool hasProxy = tryGetFreshData(
+        [this]() {
+            proxyType ipv4, ipv6;
+            return m_node.getProxy((Network) 1, ipv4) && m_node.getProxy((Network) 2, ipv6);
+        },
+        m_cached_has_proxy.load()
+    );
+
+    if (hasProxy) {
+        // Try to get fresh proxy info if cs_main is free
+        QString ipPort = tryGetFreshData(
+            [this]() {
+                proxyType ipv4, ipv6;
+                if (m_node.getProxy((Network) 1, ipv4) && m_node.getProxy((Network) 2, ipv6)) {
+                    return QString::fromStdString(ipv4.proxy.ToStringIPPort());
+                }
+                return QString();
+            },
+            m_cached_proxy_ip_port.load()
+        );
+        ip_port = ipPort.toStdString();
     }
 
-    // Return cached data immediately
-    bool hasProxy = m_cached_has_proxy.load();
-    if (hasProxy) {
-        ip_port = m_cached_proxy_ip_port.load().toStdString();
-    }
     return hasProxy;
 }
 
@@ -620,4 +629,42 @@ void ClientModelDataWorker::getProxyInfoAsync()
     }
 
     Q_EMIT proxyInfoResult(hasProxy, ipPort);
+}
+
+size_t ClientModel::getMempoolDynamicUsage() const
+{
+    // Try to get fresh data if cs_main is free, otherwise use cached
+    return tryGetFreshData(
+        [this]() { return m_node.getMempoolDynamicUsage(); },
+        m_cached_mempool_dynamic_usage.load()
+    );
+}
+
+
+
+// Template implementation for trying to get fresh data if cs_main is free
+template<typename T>
+T ClientModel::tryGetFreshData(std::function<T()> freshDataFunc, T cachedValue) const
+{
+    // Try to acquire cs_main without blocking
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+
+    if (lock.owns_lock()) {
+        // We got the lock! Keep it held during the entire call
+        // This prevents other threads from modifying the data while we read it
+        try {
+            T freshData = freshDataFunc();
+            LogPrint(BCLog::QT, "ClientModel: Got fresh data (cs_main reserved)\n");
+            return freshData;
+        } catch (...) {
+            // If anything goes wrong, fall back to cached data
+            LogPrint(BCLog::QT, "ClientModel: Error getting fresh data, using cached\n");
+            return cachedValue;
+        }
+        // Lock is automatically released when lock goes out of scope
+    } else {
+        // cs_main is held by another thread, use cached data
+        LogPrint(BCLog::QT, "ClientModel: Using cached data (cs_main busy)\n");
+        return cachedValue;
+    }
 }
