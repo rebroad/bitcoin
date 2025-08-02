@@ -118,7 +118,7 @@ ClientModel::~ClientModel()
 int ClientModel::getNumConnections(unsigned int flags) const
 {
     // Try to get fresh data directly if cs_main is free
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -134,7 +134,7 @@ int ClientModel::getNumConnections(unsigned int flags) const
 int ClientModel::getHeaderTipHeight() const
 {
     // Try to get fresh data directly if cs_main is free
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -154,7 +154,7 @@ int ClientModel::getHeaderTipHeight() const
 int64_t ClientModel::getHeaderTipTime() const
 {
     // Try to get fresh data directly if cs_main is free
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -174,7 +174,7 @@ int64_t ClientModel::getHeaderTipTime() const
 int ClientModel::getNumBlocks() const
 {
     // Try to get fresh data directly if cs_main is free
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -190,7 +190,7 @@ int ClientModel::getNumBlocks() const
 uint256 ClientModel::getBestBlockHash()
 {
     // Try to get fresh data directly if cs_main is free
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -222,7 +222,7 @@ void ClientModel::updateAlert()
 enum BlockSource ClientModel::getBlockSource() const
 {
     // Try to get fresh data directly if cs_main is free
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -243,7 +243,7 @@ enum BlockSource ClientModel::getBlockSource() const
 QString ClientModel::getStatusBarWarnings() const
 {
     // Try to get fresh data directly if cs_main is free
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -535,7 +535,7 @@ void ClientModel::unsubscribeFromCoreSignals()
 bool ClientModel::getProxyInfo(std::string& ip_port) const
 {
     // Try to get fresh data directly if cs_main is free
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -695,7 +695,7 @@ void ClientModelDataWorker::getProxyInfoAsync()
 size_t ClientModel::getMempoolDynamicUsage() const
 {
     // Try to get fresh data directly if cs_main is free
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
