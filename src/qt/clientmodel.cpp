@@ -70,14 +70,21 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
 
             // Only collect fee histogram if initial sync has finished (mempool likely empty during IBD anyway)
             if (m_cached_initial_sync_finished.load()) { // Non-blocking check for IBD completion
-                QMutexLocker locker(&m_mempool_locker);
-                interfaces::mempool_feehistogram fee_histogram = m_node.getMempoolFeeHistogram();
-                m_mempool_feehist.push_back({now, fee_histogram});
-                if (m_mempool_feehist.size() > m_mempool_max_samples) {
-                    m_mempool_feehist.erase(m_mempool_feehist.begin(), m_mempool_feehist.begin()+1);
+                // Try to get fresh data directly if cs_main is free
+                std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+
+                if (lock.owns_lock()) {
+                    // We got the lock! Get fresh data and update cache
+                    QMutexLocker locker(&m_mempool_locker);
+                    interfaces::mempool_feehistogram fee_histogram = m_node.getMempoolFeeHistogram();
+                    m_mempool_feehist.push_back({now, fee_histogram});
+                    if (m_mempool_feehist.size() > m_mempool_max_samples) {
+                        m_mempool_feehist.erase(m_mempool_feehist.begin(), m_mempool_feehist.begin()+1);
+                    }
+                    m_mempool_feehist_last_sample_timestamp = now;
+                    Q_EMIT mempoolFeeHistChanged();
                 }
-                m_mempool_feehist_last_sample_timestamp = now;
-                Q_EMIT mempoolFeeHistChanged();
+                // If cs_main is busy, skip this update (non-blocking)
             }
         }
     });
