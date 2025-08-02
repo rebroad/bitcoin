@@ -710,6 +710,34 @@ void BitcoinApplication::processEvents()
     LogPrint(BCLog::QT, "BitcoinApplication::processEvents() completed\n");
 }
 
+bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
+{
+    static QElapsedTimer eventTimer;
+    static bool firstEvent = true;
+
+    if (firstEvent) {
+        eventTimer.start();
+        firstEvent = false;
+    }
+
+    qint64 elapsed = eventTimer.nsecsElapsed() / 1000000; // Convert to milliseconds
+    eventTimer.restart();
+
+    // Log if there's a significant delay between events
+    if (elapsed > 100) {
+        qDebug() << "[EVENT_TIMED] Event loop delay:" << elapsed << "ms for event" << event->type()
+                 << "to" << receiver->metaObject()->className();
+    }
+
+    // Critical warning for very long delays
+    if (elapsed > 1000) {
+        qDebug() << "[EVENT_TIMED] CRITICAL: Event loop stalled for" << elapsed << "ms! Event:" << event->type()
+                 << "to" << receiver->metaObject()->className();
+    }
+
+    return QApplication::notify(receiver, event);
+}
+
 static void SetupUIArgs(ArgsManager& argsman)
 {
     argsman.AddArg("-choosedatadir", strprintf("Choose data directory on startup (default: %u)", DEFAULT_CHOOSE_DATADIR), ArgsManager::ALLOW_ANY, OptionsCategory::GUI);

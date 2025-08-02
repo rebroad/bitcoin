@@ -96,6 +96,7 @@ Q_SIGNALS:
 
 protected:
     bool event(QEvent* e) override;
+    bool notify(QObject *receiver, QEvent *event) override;
 
 public:
     void processEvents();
