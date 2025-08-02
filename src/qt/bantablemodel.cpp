@@ -5,6 +5,8 @@
 #include <qt/bantablemodel.h>
 
 #include <interfaces/node.h>
+#include <sync.h>
+#include <validation.h> // For cs_main
 #include <net_types.h> // For banmap_t
 
 #include <utility>
@@ -46,22 +48,29 @@ public:
     /** Pull a full list of banned nodes from CNode into our cache */
     void refreshBanlist(interfaces::Node& node)
     {
-        banmap_t banMap;
-        node.getBanned(banMap);
+        // Try to get fresh data directly if cs_main is free
+        std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
 
-        cachedBanlist.clear();
-        cachedBanlist.reserve(banMap.size());
-        for (const auto& entry : banMap)
-        {
-            CCombinedBan banEntry;
-            banEntry.subnet = entry.first;
-            banEntry.banEntry = entry.second;
-            cachedBanlist.append(banEntry);
+        if (lock.owns_lock()) {
+            // We got the lock! Get fresh data and update cache
+            banmap_t banMap;
+            node.getBanned(banMap);
+
+            cachedBanlist.clear();
+            cachedBanlist.reserve(banMap.size());
+            for (const auto& entry : banMap)
+            {
+                CCombinedBan banEntry;
+                banEntry.subnet = entry.first;
+                banEntry.banEntry = entry.second;
+                cachedBanlist.append(banEntry);
+            }
+
+            if (sortColumn >= 0)
+                // sort cachedBanlist (use stable sort to prevent rows jumping around unnecessarily)
+                std::stable_sort(cachedBanlist.begin(), cachedBanlist.end(), BannedNodeLessThan(sortColumn, sortOrder));
         }
-
-        if (sortColumn >= 0)
-            // sort cachedBanlist (use stable sort to prevent rows jumping around unnecessarily)
-            std::stable_sort(cachedBanlist.begin(), cachedBanlist.end(), BannedNodeLessThan(sortColumn, sortOrder));
+        // If cs_main is busy, skip this update (non-blocking)
     }
 
     int size() const
