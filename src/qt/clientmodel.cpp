@@ -102,6 +102,36 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
 
     // Setup data processing thread
     setupDataThread();
+
+    // Initialize cache immediately (cs_main should be available during startup)
+    // This prevents GUI from constantly trying to get fresh data during IBD
+    try {
+        // Initialize header tip cache
+        int height;
+        int64_t block_time;
+        if (m_node.getHeaderTip(height, block_time)) {
+            m_cached_header_height.store(height);
+            m_cached_header_time.store(block_time);
+        }
+
+        // Initialize other caches
+        m_cached_num_blocks.store(m_node.getNumBlocks());
+        g_cached_best_block_hash = m_node.getBestBlockHash();
+
+        // Initialize block source cache
+        BlockSource freshSource;
+        if (m_node.getReindex()) freshSource = BlockSource::REINDEX;
+        else if (m_node.getImporting()) freshSource = BlockSource::DISK;
+        else if (m_node.getNodeCount(ConnectionDirection::Both) > 0) freshSource = BlockSource::NETWORK;
+        else freshSource = BlockSource::NONE;
+        m_cached_block_source.store(freshSource);
+
+        // Initialize status bar warnings cache
+        m_cached_status_bar_warnings = QString::fromStdString(m_node.getWarnings().translated);
+    } catch (...) {
+        // If cs_main is somehow locked during startup, fall back to default values
+        // The cache will be updated when the first block tip change occurs
+    }
 }
 
 ClientModel::~ClientModel()
