@@ -23,10 +23,13 @@
 #include <key_io.h>
 #include <node/ui_interface.h>
 #include <psbt.h>
+#include <sync.h>
+#include <validation.h>
 #include <util/system.h> // for GetBoolArg
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
 #include <wallet/wallet.h> // for CRecipient
+#include <QElapsedTimer>
 
 #include <stdint.h>
 #include <functional>
@@ -115,6 +118,9 @@ void WalletModel::pollBalanceChanged()
         checkBalanceChanged(new_balances);
         if(transactionTableModel)
             transactionTableModel->updateConfirmations();
+
+        // Invalidate block hash cache when blocks change
+        m_block_hash_valid = false;
     }
 }
 
@@ -130,6 +136,9 @@ void WalletModel::updateTransaction()
 {
     // Balance and number of transactions might have changed
     fForceCheckBalanceChanged = true;
+
+    // Invalidate block hash cache when transactions change
+    m_block_hash_valid = false;
 }
 
 void WalletModel::updateAddressBook(const QString &address, const QString &label,
@@ -597,5 +606,27 @@ void WalletModel::refresh(bool pk_hash_only)
 
 uint256 WalletModel::getLastBlockProcessed() const
 {
-    return m_client_model ? m_client_model->getBestBlockHash() : uint256{};
+    // If cache is valid, return cached data immediately (no lock needed)
+    if (m_block_hash_valid) {
+        return m_cached_block_hash;
+    }
+
+    // Try to get fresh data directly if cs_main is free
+    QElapsedTimer lockTimer;
+    lockTimer.start();
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    qint64 waited = lockTimer.nsecsElapsed() / 1000000;
+    if (waited > 0 || !lock.owns_lock()) {
+        qDebug() << "[LOCK_TIMED] cs_main try_to_lock at" << __FILE__ << ":" << __LINE__ << __FUNCTION__
+                 << (lock.owns_lock() ? "ACQUIRED" : "FAILED") << "after" << waited << "ms";
+    }
+
+    if (lock.owns_lock()) {
+        // We got the lock! Get fresh data and update cache
+        m_cached_block_hash = m_client_model ? m_client_model->getBestBlockHash() : uint256{};
+        m_block_hash_valid = true;
+    }
+    // If cs_main is busy, use cached data (non-blocking)
+
+    return m_cached_block_hash;
 }

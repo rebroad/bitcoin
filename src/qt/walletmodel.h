@@ -188,6 +188,10 @@ private:
     // Block hash denoting when the last balance update was done.
     uint256 m_cached_last_update_tip{};
 
+    // Cache for last block processed to avoid constant getBestBlockHash() calls
+    mutable uint256 m_cached_block_hash{};
+    mutable bool m_block_hash_valid = false;
+
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();
     void checkBalanceChanged(const interfaces::WalletBalances& new_balances);
