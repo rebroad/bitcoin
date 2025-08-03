@@ -753,21 +753,59 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
     if (receiver && receiver->metaObject()) {
         className = receiver->metaObject()->className();
 
-        // Debug: Log all classes being intercepted (with rate limiting)
-        static int debugCounter = 0;
-        debugCounter++;
-        if (debugCounter % 100 == 0) { // Log every 100th event to avoid spam
+        // Debug: Log all classes being intercepted (rate limited)
+        static QElapsedTimer generalEventTimer;
+        static int generalEventCount = 0;
+        static qint64 maxGeneralEventInterval = 0;
+        static bool generalEventTimerInitialized = false;
+        if (!generalEventTimerInitialized) {
+            generalEventTimer.start();
+            generalEventTimerInitialized = true;
+        }
+        generalEventCount++;
+        qint64 timeSinceLastGeneralEvent = generalEventTimer.nsecsElapsed() / 1000000;
+        if (timeSinceLastGeneralEvent > maxGeneralEventInterval) {
+            maxGeneralEventInterval = timeSinceLastGeneralEvent;
+        }
+        if (timeSinceLastGeneralEvent >= 1000) {
             qDebug() << "[DEBUG] notify() intercepting event" << event->type()
-                     << "to class:" << className;
+                     << "to class:" << className
+                     << "| Total events:" << generalEventCount
+                     << "| Max interval:" << maxGeneralEventInterval << "ms"
+                     << "| Time since last log:" << timeSinceLastGeneralEvent << "ms";
+            generalEventTimer.restart();
+            generalEventCount = 0;
+            maxGeneralEventInterval = 0;
         }
 
-        // Debug: Log specific event types we're interested in
+        // Debug: Log specific event types we're interested in (rate limited)
         if (event->type() == QEvent::MouseButtonPress ||
             event->type() == QEvent::MouseButtonRelease ||
             event->type() == QEvent::KeyPress ||
             event->type() == QEvent::KeyRelease) {
-            qDebug() << "[DEBUG] User input event intercepted:" << event->type()
-                     << "to class:" << className;
+            static QElapsedTimer userInputTimer;
+            static int userInputCount = 0;
+            static qint64 maxUserInputInterval = 0;
+            static bool userInputTimerInitialized = false;
+            if (!userInputTimerInitialized) {
+                userInputTimer.start();
+                userInputTimerInitialized = true;
+            }
+            userInputCount++;
+            qint64 timeSinceLastUserInput = userInputTimer.nsecsElapsed() / 1000000;
+            if (timeSinceLastUserInput > maxUserInputInterval) {
+                maxUserInputInterval = timeSinceLastUserInput;
+            }
+            if (timeSinceLastUserInput >= 1000) {
+                qDebug() << "[DEBUG] User input event intercepted:" << event->type()
+                         << "to class:" << className
+                         << "| Total user inputs:" << userInputCount
+                         << "| Max interval:" << maxUserInputInterval << "ms"
+                         << "| Time since last log:" << timeSinceLastUserInput << "ms";
+                userInputTimer.restart();
+                userInputCount = 0;
+                maxUserInputInterval = 0;
+            }
         }
 
         isBitcoinEvent = className.contains("Bitcoin") ||
@@ -789,10 +827,31 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
                         className.contains("QMenu") || // Bitcoin menus
                         className.contains("QAction"); // Bitcoin actions
 
-        // Debug: Log when we identify a Bitcoin event
+        // Debug: Log when we identify a Bitcoin event (rate limited)
         if (isBitcoinEvent) {
-            qDebug() << "[DEBUG] Identified Bitcoin event:" << event->type()
-                     << "to class:" << className;
+            static QElapsedTimer bitcoinEventTimer;
+            static int bitcoinEventCount = 0;
+            static qint64 maxBitcoinEventInterval = 0;
+            static bool bitcoinEventTimerInitialized = false;
+            if (!bitcoinEventTimerInitialized) {
+                bitcoinEventTimer.start();
+                bitcoinEventTimerInitialized = true;
+            }
+            bitcoinEventCount++;
+            qint64 timeSinceLastBitcoinEvent = bitcoinEventTimer.nsecsElapsed() / 1000000;
+            if (timeSinceLastBitcoinEvent > maxBitcoinEventInterval) {
+                maxBitcoinEventInterval = timeSinceLastBitcoinEvent;
+            }
+            if (timeSinceLastBitcoinEvent >= 1000) {
+                qDebug() << "[DEBUG] Identified Bitcoin event:" << event->type()
+                         << "to class:" << className
+                         << "| Total events:" << bitcoinEventCount
+                         << "| Max interval:" << maxBitcoinEventInterval << "ms"
+                         << "| Time since last log:" << timeSinceLastBitcoinEvent << "ms";
+                bitcoinEventTimer.restart();
+                bitcoinEventCount = 0;
+                maxBitcoinEventInterval = 0;
+            }
         }
     } else {
         // Debug: Log NULL receiver events
