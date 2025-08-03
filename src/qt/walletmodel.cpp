@@ -17,6 +17,7 @@
 #include <qt/recentrequeststablemodel.h>
 #include <qt/sendcoinsdialog.h>
 #include <qt/transactiontablemodel.h>
+#include <qt/locktiming.h>
 
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
@@ -612,14 +613,7 @@ uint256 WalletModel::getLastBlockProcessed() const
     }
 
     // Try to get fresh data directly if cs_main is free
-    QElapsedTimer lockTimer;
-    lockTimer.start();
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
-    qint64 waited = lockTimer.nsecsElapsed() / 1000000;
-    if (waited > 0 || !lock.owns_lock()) {
-        qDebug() << "[LOCK_TIMED] cs_main try_to_lock at" << __FILE__ << ":" << __LINE__ << __FUNCTION__
-                 << (lock.owns_lock() ? "ACQUIRED" : "FAILED") << "after" << waited << "ms";
-    }
+    TIME_CS_MAIN_LOCK();
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache

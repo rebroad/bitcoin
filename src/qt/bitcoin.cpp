@@ -755,27 +755,41 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
 
         // Debug: Log all classes being intercepted (rate limited)
         static QElapsedTimer generalEventTimer;
+        static QElapsedTimer lastEventTimer;
         static int generalEventCount = 0;
         static qint64 maxGeneralEventInterval = 0;
+        static qint64 minGeneralEventInterval = 999999;
         static bool generalEventTimerInitialized = false;
+        static bool lastEventTimerInitialized = false;
         if (!generalEventTimerInitialized) {
             generalEventTimer.start();
             generalEventTimerInitialized = true;
         }
-        generalEventCount++;
-        qint64 timeSinceLastGeneralEvent = generalEventTimer.nsecsElapsed() / 1000000;
-        if (timeSinceLastGeneralEvent > maxGeneralEventInterval) {
-            maxGeneralEventInterval = timeSinceLastGeneralEvent;
+        if (!lastEventTimerInitialized) {
+            lastEventTimer.start();
+            lastEventTimerInitialized = true;
         }
-        if (timeSinceLastGeneralEvent >= 1000) {
+        generalEventCount++;
+        qint64 timeSinceLastEvent = lastEventTimer.nsecsElapsed() / 1000000;
+        if (timeSinceLastEvent > maxGeneralEventInterval) {
+            maxGeneralEventInterval = timeSinceLastEvent;
+        }
+        if (timeSinceLastEvent < minGeneralEventInterval && timeSinceLastEvent > 0) {
+            minGeneralEventInterval = timeSinceLastEvent;
+        }
+        lastEventTimer.restart();
+        qint64 timeSinceLastLog = generalEventTimer.nsecsElapsed() / 1000000;
+        if (timeSinceLastLog >= 1000) {
             qDebug() << "[DEBUG] notify() intercepting event" << event->type()
                      << "to class:" << className
                      << "| Total events:" << generalEventCount
                      << "| Max interval:" << maxGeneralEventInterval << "ms"
-                     << "| Time since last log:" << timeSinceLastGeneralEvent << "ms";
+                     << "| Min interval:" << (minGeneralEventInterval == 999999 ? 0 : minGeneralEventInterval) << "ms"
+                     << "| Time since last log:" << timeSinceLastLog << "ms";
             generalEventTimer.restart();
             generalEventCount = 0;
             maxGeneralEventInterval = 0;
+            minGeneralEventInterval = 999999;
         }
 
         // Debug: Log specific event types we're interested in (rate limited)
@@ -784,27 +798,41 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
             event->type() == QEvent::KeyPress ||
             event->type() == QEvent::KeyRelease) {
             static QElapsedTimer userInputTimer;
+            static QElapsedTimer lastUserInputTimer;
             static int userInputCount = 0;
             static qint64 maxUserInputInterval = 0;
+            static qint64 minUserInputInterval = 999999;
             static bool userInputTimerInitialized = false;
+            static bool lastUserInputTimerInitialized = false;
             if (!userInputTimerInitialized) {
                 userInputTimer.start();
                 userInputTimerInitialized = true;
             }
+            if (!lastUserInputTimerInitialized) {
+                lastUserInputTimer.start();
+                lastUserInputTimerInitialized = true;
+            }
             userInputCount++;
-            qint64 timeSinceLastUserInput = userInputTimer.nsecsElapsed() / 1000000;
+            qint64 timeSinceLastUserInput = lastUserInputTimer.nsecsElapsed() / 1000000;
             if (timeSinceLastUserInput > maxUserInputInterval) {
                 maxUserInputInterval = timeSinceLastUserInput;
             }
-            if (timeSinceLastUserInput >= 1000) {
+            if (timeSinceLastUserInput < minUserInputInterval && timeSinceLastUserInput > 0) {
+                minUserInputInterval = timeSinceLastUserInput;
+            }
+            lastUserInputTimer.restart();
+            qint64 timeSinceLastLog = userInputTimer.nsecsElapsed() / 1000000;
+            if (timeSinceLastLog >= 1000) {
                 qDebug() << "[DEBUG] User input event intercepted:" << event->type()
                          << "to class:" << className
                          << "| Total user inputs:" << userInputCount
                          << "| Max interval:" << maxUserInputInterval << "ms"
-                         << "| Time since last log:" << timeSinceLastUserInput << "ms";
+                         << "| Min interval:" << (minUserInputInterval == 999999 ? 0 : minUserInputInterval) << "ms"
+                         << "| Time since last log:" << timeSinceLastLog << "ms";
                 userInputTimer.restart();
                 userInputCount = 0;
                 maxUserInputInterval = 0;
+                minUserInputInterval = 999999;
             }
         }
 
@@ -830,27 +858,41 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
         // Debug: Log when we identify a Bitcoin event (rate limited)
         if (isBitcoinEvent) {
             static QElapsedTimer bitcoinEventTimer;
+            static QElapsedTimer lastBitcoinEventTimer;
             static int bitcoinEventCount = 0;
             static qint64 maxBitcoinEventInterval = 0;
+            static qint64 minBitcoinEventInterval = 999999;
             static bool bitcoinEventTimerInitialized = false;
+            static bool lastBitcoinEventTimerInitialized = false;
             if (!bitcoinEventTimerInitialized) {
                 bitcoinEventTimer.start();
                 bitcoinEventTimerInitialized = true;
             }
+            if (!lastBitcoinEventTimerInitialized) {
+                lastBitcoinEventTimer.start();
+                lastBitcoinEventTimerInitialized = true;
+            }
             bitcoinEventCount++;
-            qint64 timeSinceLastBitcoinEvent = bitcoinEventTimer.nsecsElapsed() / 1000000;
+            qint64 timeSinceLastBitcoinEvent = lastBitcoinEventTimer.nsecsElapsed() / 1000000;
             if (timeSinceLastBitcoinEvent > maxBitcoinEventInterval) {
                 maxBitcoinEventInterval = timeSinceLastBitcoinEvent;
             }
-            if (timeSinceLastBitcoinEvent >= 1000) {
+            if (timeSinceLastBitcoinEvent < minBitcoinEventInterval && timeSinceLastBitcoinEvent > 0) {
+                minBitcoinEventInterval = timeSinceLastBitcoinEvent;
+            }
+            lastBitcoinEventTimer.restart();
+            qint64 timeSinceLastLog = bitcoinEventTimer.nsecsElapsed() / 1000000;
+            if (timeSinceLastLog >= 1000) {
                 qDebug() << "[DEBUG] Identified Bitcoin event:" << event->type()
                          << "to class:" << className
                          << "| Total events:" << bitcoinEventCount
                          << "| Max interval:" << maxBitcoinEventInterval << "ms"
-                         << "| Time since last log:" << timeSinceLastBitcoinEvent << "ms";
+                         << "| Min interval:" << (minBitcoinEventInterval == 999999 ? 0 : minBitcoinEventInterval) << "ms"
+                         << "| Time since last log:" << timeSinceLastLog << "ms";
                 bitcoinEventTimer.restart();
                 bitcoinEventCount = 0;
                 maxBitcoinEventInterval = 0;
+                minBitcoinEventInterval = 999999;
             }
         }
     } else {
