@@ -784,8 +784,7 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
                      << "to class:" << className
                      << "| Total events:" << generalEventCount
                      << "| Max interval:" << maxGeneralEventInterval << "ms"
-                     << "| Min interval:" << (minGeneralEventInterval == 999999 ? 0 : minGeneralEventInterval) << "ms"
-                     << "| Time since last log:" << timeSinceLastLog << "ms";
+                     << "| Min interval:" << (minGeneralEventInterval == 999999 ? 0 : minGeneralEventInterval) << "ms";
             generalEventTimer.restart();
             generalEventCount = 0;
             maxGeneralEventInterval = 0;
@@ -827,8 +826,7 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
                          << "to class:" << className
                          << "| Total user inputs:" << userInputCount
                          << "| Max interval:" << maxUserInputInterval << "ms"
-                         << "| Min interval:" << (minUserInputInterval == 999999 ? 0 : minUserInputInterval) << "ms"
-                         << "| Time since last log:" << timeSinceLastLog << "ms";
+                         << "| Min interval:" << (minUserInputInterval == 999999 ? 0 : minUserInputInterval) << "ms";
                 userInputTimer.restart();
                 userInputCount = 0;
                 maxUserInputInterval = 0;
@@ -887,8 +885,7 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
                          << "to class:" << className
                          << "| Total events:" << bitcoinEventCount
                          << "| Max interval:" << maxBitcoinEventInterval << "ms"
-                         << "| Min interval:" << (minBitcoinEventInterval == 999999 ? 0 : minBitcoinEventInterval) << "ms"
-                         << "| Time since last log:" << timeSinceLastLog << "ms";
+                         << "| Min interval:" << (minBitcoinEventInterval == 999999 ? 0 : minBitcoinEventInterval) << "ms";
                 bitcoinEventTimer.restart();
                 bitcoinEventCount = 0;
                 maxBitcoinEventInterval = 0;
