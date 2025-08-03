@@ -587,6 +587,9 @@ WId BitcoinApplication::getMainWinId() const
 
 bool BitcoinApplication::event(QEvent* e)
 {
+    QElapsedTimer handlerTimer;
+    handlerTimer.start();
+
     if (e->type() == QEvent::Quit) {
         requestShutdown();
         return true;
@@ -600,6 +603,11 @@ bool BitcoinApplication::event(QEvent* e)
             ClientModel* clientModel = window->getClientModel();
             if (clientModel) {
                 clientModel->requestResponsiveness("Mouse button press");
+                // Signal validation thread to yield if needed
+                if (g_gui_needs_responsiveness.load()) {
+                    LogPrint(BCLog::QT, "Signaling validation thread to yield for mouse press\n");
+                    g_gui_cv.notify_all();
+                }
                 QTimer::singleShot(10, [clientModel]() {
                     LogPrint(BCLog::QT, "Releasing responsiveness after mouse press\n");
                     clientModel->releaseResponsiveness();
@@ -675,6 +683,12 @@ bool BitcoinApplication::event(QEvent* e)
     default:
         break;
     }
+
+    qint64 handlerTime = handlerTimer.nsecsElapsed() / 1000000;
+    if (handlerTime > 100) {
+        qDebug() << "[EVENT_HANDLER] Event handler took" << handlerTime << "ms for event" << e->type();
+    }
+
     return QApplication::event(e);
 }
 
@@ -722,6 +736,15 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
 
     qint64 elapsed = eventTimer.nsecsElapsed() / 1000000; // Convert to milliseconds
     eventTimer.restart();
+
+        // Log mouse and key events specifically
+    if (event->type() == QEvent::MouseButtonPress ||
+        event->type() == QEvent::MouseButtonRelease ||
+        event->type() == QEvent::KeyPress ||
+        event->type() == QEvent::KeyRelease) {
+        qDebug() << "[EVENT_TIMED] User input event:" << event->type()
+                 << "to" << receiver->metaObject()->className() << "after" << elapsed << "ms delay";
+    }
 
     // Log if there's a significant delay between events
     if (elapsed > 100) {
