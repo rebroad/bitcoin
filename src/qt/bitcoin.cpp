@@ -603,11 +603,7 @@ bool BitcoinApplication::event(QEvent* e)
             ClientModel* clientModel = window->getClientModel();
             if (clientModel) {
                 clientModel->requestResponsiveness("Mouse button press");
-                // Signal validation thread to yield if needed
-                if (g_gui_needs_responsiveness.load()) {
-                    LogPrint(BCLog::QT, "Signaling validation thread to yield for mouse press\n");
-                    g_gui_cv.notify_all();
-                }
+                // DISABLED: Condition variable signaling was causing issues
                 QTimer::singleShot(10, [clientModel]() {
                     LogPrint(BCLog::QT, "Releasing responsiveness after mouse press\n");
                     clientModel->releaseResponsiveness();
@@ -685,8 +681,13 @@ bool BitcoinApplication::event(QEvent* e)
     }
 
     qint64 handlerTime = handlerTimer.nsecsElapsed() / 1000000;
-    if (handlerTime > 100) {
-        qDebug() << "[EVENT_HANDLER] Event handler took" << handlerTime << "ms for event" << e->type();
+    if (handlerTime > 1000) { // Much higher threshold
+        qDebug() << "[EVENT_HANDLER] Bitcoin event handler took" << handlerTime << "ms for event" << e->type();
+    }
+
+    // Safety: Add timeout protection for event handlers
+    if (handlerTime > 30000) {
+        qDebug() << "[EVENT_HANDLER] EMERGENCY: Bitcoin event handler frozen for" << handlerTime << "ms!";
     }
 
     return QApplication::event(e);
@@ -726,8 +727,16 @@ void BitcoinApplication::processEvents()
 
 bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
 {
+    // Bitcoin-specific event timing with safety checks
     static QElapsedTimer eventTimer;
     static bool firstEvent = true;
+    static int eventCount = 0;
+
+    // Safety: Limit event processing overhead
+    eventCount++;
+    if (eventCount > 1000) { // Reset counter periodically
+        eventCount = 0;
+    }
 
     if (firstEvent) {
         eventTimer.start();
@@ -737,25 +746,80 @@ bool BitcoinApplication::notify(QObject *receiver, QEvent *event)
     qint64 elapsed = eventTimer.nsecsElapsed() / 1000000; // Convert to milliseconds
     eventTimer.restart();
 
-        // Log mouse and key events specifically
-    if (event->type() == QEvent::MouseButtonPress ||
-        event->type() == QEvent::MouseButtonRelease ||
-        event->type() == QEvent::KeyPress ||
-        event->type() == QEvent::KeyRelease) {
-        qDebug() << "[EVENT_TIMED] User input event:" << event->type()
-                 << "to" << receiver->metaObject()->className() << "after" << elapsed << "ms delay";
+    // ONLY process Bitcoin-specific events
+    bool isBitcoinEvent = false;
+    QString className = "NULL";
+
+    if (receiver && receiver->metaObject()) {
+        className = receiver->metaObject()->className();
+
+        // Debug: Log all classes being intercepted (with rate limiting)
+        static int debugCounter = 0;
+        debugCounter++;
+        if (debugCounter % 100 == 0) { // Log every 100th event to avoid spam
+            qDebug() << "[DEBUG] notify() intercepting event" << event->type()
+                     << "to class:" << className;
+        }
+
+        // Debug: Log specific event types we're interested in
+        if (event->type() == QEvent::MouseButtonPress ||
+            event->type() == QEvent::MouseButtonRelease ||
+            event->type() == QEvent::KeyPress ||
+            event->type() == QEvent::KeyRelease) {
+            qDebug() << "[DEBUG] User input event intercepted:" << event->type()
+                     << "to class:" << className;
+        }
+
+        isBitcoinEvent = className.contains("Bitcoin") ||
+                        className.contains("ClientModel") ||
+                        className.contains("PeerTable") ||
+                        className.contains("BanTable") ||
+                        className.contains("Wallet") ||
+                        className.contains("Transaction") ||
+                        className.contains("SendCoins") ||
+                        className.contains("ReceiveCoins") ||
+                        className.contains("AddressBook") ||
+                        className.contains("RPCConsole") ||
+                        className.contains("OptionsDialog") ||
+                        className.contains("AboutDialog") ||
+                        className.contains("HelpMessageDialog") ||
+                        className.contains("ModalOverlay") ||
+                        className.contains("TrafficGraph") ||
+                        className.contains("UnitDisplayStatusBarControl") ||
+                        className.contains("QMenu") || // Bitcoin menus
+                        className.contains("QAction"); // Bitcoin actions
+
+        // Debug: Log when we identify a Bitcoin event
+        if (isBitcoinEvent) {
+            qDebug() << "[DEBUG] Identified Bitcoin event:" << event->type()
+                     << "to class:" << className;
+        }
+    } else {
+        // Debug: Log NULL receiver events
+        static int nullCounter = 0;
+        nullCounter++;
+        if (nullCounter % 50 == 0) { // Log every 50th NULL event
+            qDebug() << "[DEBUG] notify() intercepting event" << event->type() << "to NULL receiver";
+        }
     }
 
-    // Log if there's a significant delay between events
-    if (elapsed > 100) {
-        qDebug() << "[EVENT_TIMED] Event loop delay:" << elapsed << "ms for event" << event->type()
-                 << "to" << receiver->metaObject()->className();
-    }
-
-    // Critical warning for very long delays
+    // Log ALL events with significant delay (no Bitcoin filtering for now)
     if (elapsed > 1000) {
+        qDebug() << "[EVENT_TIMED] Event delay:" << elapsed << "ms for event" << event->type()
+                 << "to class:" << className;
+    }
+
+    // Critical warning for very long delays (any event)
+    if (elapsed > 10000) {
         qDebug() << "[EVENT_TIMED] CRITICAL: Event loop stalled for" << elapsed << "ms! Event:" << event->type()
-                 << "to" << receiver->metaObject()->className();
+                 << "to class:" << className;
+    }
+
+    // Safety: Add timeout protection
+    if (elapsed > 30000) {
+        qDebug() << "[EVENT_TIMED] EMERGENCY: Event loop frozen for" << elapsed << "ms! Event:" << event->type()
+                 << "to class:" << className << "! Aborting processing.";
+        return false; // Don't process this event
     }
 
     return QApplication::notify(receiver, event);
