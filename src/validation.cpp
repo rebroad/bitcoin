@@ -142,10 +142,6 @@ bool CBlockIndexWorkComparator::operator()(const CBlockIndex *pa, const CBlockIn
 RecursiveMutex cs_main;
 
 // GUI responsiveness synchronization
-std::atomic<bool> g_gui_needs_responsiveness{false};
-std::condition_variable g_gui_cv;
-std::mutex g_gui_mutex;
-
 static constexpr int64_t MAX_TIMEWARP{MAX_FUTURE_BLOCK_TIME};
 
 CBlockIndex *pindexBestHeader = nullptr;
@@ -3036,16 +3032,14 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 }
             } // cs_main is released here
 
-            // Check if GUI needs responsiveness (after cs_main is released)
-            if (g_gui_needs_responsiveness.load() && IsGuiInUse()) {
-                LogPrint(BCLog::QT, "ActivateBestChain: GUI needs responsiveness, yielding immediately\n");
-                
-                // Wait for GUI to signal it's done (with timeout to prevent deadlock)
-                std::unique_lock<std::mutex> lock(g_gui_mutex);
-                g_gui_cv.wait_for(lock, std::chrono::milliseconds(100),
-                    []{ return !g_gui_needs_responsiveness.load(); });
-                
-                LogPrint(BCLog::QT, "ActivateBestChain: Resuming after GUI responsiveness\n");
+            // Check if GUI is in use and yield if needed (after cs_main is released)
+            if (IsGuiInUse()) {
+                LogPrint(BCLog::QT, "ActivateBestChain: GUI is in use, yielding for responsiveness\n");
+
+                // Simple yield - let GUI thread run
+                std::this_thread::yield();
+
+                LogPrint(BCLog::QT, "ActivateBestChain: Resuming after GUI yield\n");
             }
 
         } while (!m_chain.Tip() || (starting_tip && CBlockIndexWorkComparator()(m_chain.Tip(), starting_tip)));
@@ -3077,18 +3071,6 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
         // caused an assert() failure during shutdown in such cases as the UTXO DB flushing checks
         // that the best block hash is non-null.
         if (ShutdownRequested()) break;
-
-        // Check if GUI needs responsiveness (after cs_main is released)
-        if (g_gui_needs_responsiveness.load()) {
-            LogPrint(BCLog::QT, "ActivateBestChain: Yielding to GUI thread for responsiveness\n");
-
-            // Wait for GUI to signal it's done (with timeout to prevent deadlock)
-            std::unique_lock<std::mutex> lock(g_gui_mutex);
-            g_gui_cv.wait_for(lock, std::chrono::milliseconds(100),
-                []{ return !g_gui_needs_responsiveness.load(); });
-
-            LogPrint(BCLog::QT, "ActivateBestChain: Resuming validation\n");
-        }
     } while (pindexNewTip != pindexMostWork);
     CheckBlockIndex();
 

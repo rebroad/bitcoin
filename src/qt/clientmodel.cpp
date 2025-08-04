@@ -313,26 +313,6 @@ QString ClientModel::formatFullVersion() const
     return QString::fromStdString(FormatFullVersion());
 }
 
-void ClientModel::requestResponsiveness(const char* reason)
-{
-    // Signal that GUI needs responsiveness
-    extern std::atomic<bool> g_gui_needs_responsiveness;
-    g_gui_needs_responsiveness.store(true);
-
-    LogPrint(BCLog::QT, "ClientModel: Requesting GUI responsiveness - Reason: %s\n", reason ? reason : "unknown");
-}
-
-void ClientModel::releaseResponsiveness()
-{
-    // Signal that GUI is done and validation can continue
-    extern std::atomic<bool> g_gui_needs_responsiveness;
-    extern std::condition_variable g_gui_cv;
-
-    g_gui_needs_responsiveness.store(false);
-    g_gui_cv.notify_one();
-    LogPrint(BCLog::QT, "ClientModel: Released GUI responsiveness - flag set to false and notified\n");
-}
-
 void ClientModel::setupDataThread()
 {
     LogPrint(BCLog::QT, "ClientModel: Setting up data processing thread\n");
@@ -594,9 +574,6 @@ bool ClientModel::getProxyInfo(std::string& ip_port) const
 
 mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime &to)
 {
-    // Request responsiveness for stats calls
-    requestResponsiveness("updateMempoolStats");
-
     // get stats from the core stats model
     uint64_t timeFrom = from.toTime_t();
     uint64_t timeTo = to.toTime_t();
@@ -604,9 +581,6 @@ mempoolSamples_t ClientModel::getMempoolStatsInRange(QDateTime &from, QDateTime 
     mempoolSamples_t samples = CStats::DefaultStats()->mempoolGetValuesInRange(timeFrom,timeTo);
     from.setTime_t(timeFrom);
     to.setTime_t(timeTo);
-
-    // Release responsiveness after stats calls
-    releaseResponsiveness();
 
     return samples;
 }

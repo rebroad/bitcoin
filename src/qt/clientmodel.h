@@ -12,10 +12,6 @@
 // Forward declarations
 class ClientModelDataWorker;
 
-// Macro to automatically capture caller for responsiveness requests
-#define REQUEST_RESPONSIVENESS(reason) requestResponsiveness(reason)
-#define REQUEST_RESPONSIVENESS_AUTO() requestResponsiveness(__PRETTY_FUNCTION__)
-
 #include <atomic>
 #include <memory>
 #include <stats/stats.h>
@@ -152,10 +148,6 @@ public:
     const static size_t m_mempool_collect_intervall{20}; // 540*20 = 3h of sample window
     std::vector<mempool_feehist_sample> m_mempool_feehist;
     std::atomic<int64_t> m_mempool_feehist_last_sample_timestamp{0};
-
-    // GUI responsiveness functions
-    void requestResponsiveness(const char* reason = nullptr);
-    void releaseResponsiveness();
 
     // Performance debugging
     QString getPerformanceStats() const;

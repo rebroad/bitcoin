@@ -119,18 +119,6 @@ protected:
     void dropEvent(QDropEvent *event) override;
     bool eventFilter(QObject *object, QEvent *event) override;
 
-    // GUI responsiveness event handlers
-    void mousePressEvent(QMouseEvent *event) override;
-    void mouseReleaseEvent(QMouseEvent *event) override;
-    void mouseMoveEvent(QMouseEvent *event) override;
-    void keyPressEvent(QKeyEvent *event) override;
-    void keyReleaseEvent(QKeyEvent *event) override;
-    void resizeEvent(QResizeEvent *event) override;
-    void moveEvent(QMoveEvent *event) override;
-
-    // Helper function to wrap actions with responsiveness
-    void connectActionWithResponsiveness(QAction* action, std::function<void()> slot);
-
 public:
     // Access ClientModel for responsiveness
     ClientModel* getClientModel() const { return clientModel; }
