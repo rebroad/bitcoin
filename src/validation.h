@@ -38,9 +38,6 @@
 #include <utility>
 #include <vector>
 
-// GUI responsiveness synchronization
-
-
 class CChainState;
 class CBlockTreeDB;
 class CChainParams;
