@@ -39,8 +39,7 @@
 #include <vector>
 
 // GUI responsiveness synchronization
-// Forward declaration for GUI state
-bool IsGuiInUse();
+
 
 class CChainState;
 class CBlockTreeDB;

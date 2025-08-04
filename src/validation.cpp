@@ -5,6 +5,9 @@
 
 #include <validation.h>
 
+// Forward declaration for GUI state (implemented in bitcoingui.cpp)
+bool IsGuiInUse();
+
 #include <arith_uint256.h>
 #include <chain.h>
 #include <chainparams.h>
