@@ -5,7 +5,6 @@
 
 #include <validation.h>
 
-#include <qt/guistate.h>
 #include <arith_uint256.h>
 #include <chain.h>
 #include <chainparams.h>
