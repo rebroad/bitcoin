@@ -15,8 +15,15 @@
 #define TIME_CS_MAIN_LOCK() \
     QElapsedTimer lockTimer; \
     lockTimer.start(); \
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::chrono::milliseconds(10)); \
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock); \
     qint64 waited = lockTimer.nsecsElapsed() / 1000000; \
+    if (!lock.owns_lock()) { \
+        /* Try again with a small delay to give GUI a chance */ \
+        std::this_thread::sleep_for(std::chrono::milliseconds(1)); \
+        lockTimer.restart(); \
+        lock = std::unique_lock<RecursiveMutex>(cs_main, std::try_to_lock); \
+        waited += lockTimer.nsecsElapsed() / 1000000; \
+    } \
     { \
         static QElapsedTimer lastLogTimer; \
         static QElapsedTimer lastSuccessTimer; \
