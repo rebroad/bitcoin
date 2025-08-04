@@ -9,12 +9,13 @@
 #include <QDebug>
 #include <sync.h>
 #include <limits>
+#include <chrono>
 
 // Macro to time cs_main lock attempts with rate limiting
 #define TIME_CS_MAIN_LOCK() \
     QElapsedTimer lockTimer; \
     lockTimer.start(); \
-    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock); \
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::chrono::milliseconds(10)); \
     qint64 waited = lockTimer.nsecsElapsed() / 1000000; \
     { \
         static QElapsedTimer lastLogTimer; \
@@ -23,9 +24,9 @@
         static int successCount = 0; \
         static int failureCount = 0; \
         static qint64 maxWaitTime = 0; \
-        static qint64 minSuccessInterval = std::numeric_limits<qint64>::max(); \
+        static qint64 minSuccessInterval = -1; \
         static qint64 maxSuccessInterval = 0; \
-        static qint64 minFailureInterval = std::numeric_limits<qint64>::max(); \
+        static qint64 minFailureInterval = -1; \
         static qint64 maxFailureInterval = 0; \
         static bool timerInitialized = false; \
         static bool successTimerInitialized = false; \
@@ -46,31 +47,33 @@
         if (lock.owns_lock()) { \
             successCount++; \
             qint64 timeSinceLastSuccess = lastSuccessTimer.nsecsElapsed() / 1000000; \
-            if (timeSinceLastSuccess < minSuccessInterval) minSuccessInterval = timeSinceLastSuccess; \
+            if (minSuccessInterval == -1 || timeSinceLastSuccess < minSuccessInterval) minSuccessInterval = timeSinceLastSuccess; \
             if (timeSinceLastSuccess > maxSuccessInterval) maxSuccessInterval = timeSinceLastSuccess; \
             lastSuccessTimer.restart(); \
         } else { \
             failureCount++; \
             qint64 timeSinceLastFailure = lastFailureTimer.nsecsElapsed() / 1000000; \
-            if (timeSinceLastFailure < minFailureInterval) minFailureInterval = timeSinceLastFailure; \
+            if (minFailureInterval == -1 || timeSinceLastFailure < minFailureInterval) minFailureInterval = timeSinceLastFailure; \
             if (timeSinceLastFailure > maxFailureInterval) maxFailureInterval = timeSinceLastFailure; \
             lastFailureTimer.restart(); \
         } \
         qint64 timeSinceLastLog = lastLogTimer.nsecsElapsed() / 1000000; \
         if (timeSinceLastLog >= 1000) { \
+            QString successIntervals = (minSuccessInterval == -1) ? "none" : QString("%1-%2").arg(minSuccessInterval).arg(maxSuccessInterval); \
+            QString failureIntervals = (minFailureInterval == -1) ? "none" : QString("%1-%2").arg(minFailureInterval).arg(maxFailureInterval); \
             qDebug() << "[LOCK_TIMED] cs_main try_to_lock at" << __FILE__ << ":" << __LINE__ << __FUNCTION__ \
                      << (lock.owns_lock() ? "ACQUIRED" : "FAILED") << "after" << waited << "ms" \
                      << "| Successes:" << successCount << "| Failures:" << failureCount \
                      << "| Max wait:" << maxWaitTime << "ms" \
-                     << "| Success intervals:" << minSuccessInterval << "-" << maxSuccessInterval << "ms" \
-                     << "| Failure intervals:" << minFailureInterval << "-" << maxFailureInterval << "ms"; \
+                     << "| Success intervals:" << successIntervals << "ms" \
+                     << "| Failure intervals:" << failureIntervals << "ms"; \
             lastLogTimer.restart(); \
             successCount = 0; \
             failureCount = 0; \
             maxWaitTime = 0; \
-            minSuccessInterval = std::numeric_limits<qint64>::max(); \
+            minSuccessInterval = -1; \
             maxSuccessInterval = 0; \
-            minFailureInterval = std::numeric_limits<qint64>::max(); \
+            minFailureInterval = -1; \
             maxFailureInterval = 0; \
         } \
     }
