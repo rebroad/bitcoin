@@ -62,6 +62,7 @@
 #include <numeric>
 #include <optional>
 #include <string>
+#include <thread>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -2981,13 +2982,18 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
         // probably have a DEBUG_LOCKORDER test for this in the future.
         LimitValidationInterfaceQueue();
 
-        {
-            LOCK(cs_main);
-            // Lock transaction pool for at least as long as it takes for connectTrace to be consumed
-            LOCK(MempoolMutex());
-            CBlockIndex* starting_tip = m_chain.Tip();
-            bool blocks_connected = false;
-            do {
+        CBlockIndex* starting_tip = nullptr;
+        bool blocks_connected = false;
+        do {
+            {
+                LOCK(cs_main);
+                // Lock transaction pool for at least as long as it takes for connectTrace to be consumed
+                LOCK(MempoolMutex());
+
+                if (starting_tip == nullptr) {
+                    starting_tip = m_chain.Tip();
+                }
+
                 // We absolutely may not unlock cs_main until we've made forward progress
                 // (with the exception of shutdown due to hardware issues, low disk space, etc).
                 ConnectTrace connectTrace; // Destructed before cs_main is unlocked
@@ -3028,9 +3034,19 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                     assert(trace.pblock && trace.pindex);
                     GetMainSignals().BlockConnected(trace.pblock, trace.pindex);
                 }
-            } while (!m_chain.Tip() || (starting_tip && CBlockIndexWorkComparator()(m_chain.Tip(), starting_tip)));
-            if (!blocks_connected) return true;
+            } // cs_main is released here
 
+            // Yield to GUI thread for 10ms after each ActivateBestChainStep
+            // This allows the GUI to process events and remain responsive during IBD
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        } while (!m_chain.Tip() || (starting_tip && CBlockIndexWorkComparator()(m_chain.Tip(), starting_tip)));
+
+        if (!blocks_connected) return true;
+
+        // Re-acquire cs_main for final notifications
+        {
+            LOCK(cs_main);
             const CBlockIndex* pindexFork = m_chain.FindFork(starting_tip);
             bool fInitialDownload = IsInitialBlockDownload();
 
@@ -3043,7 +3059,7 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 // Always notify the UI if a new block tip was connected
                 uiInterface.NotifyBlockTip(GetSynchronizationState(fInitialDownload), pindexNewTip);
             }
-        }
+        } // lock cs_main
         // When we reach this point, we switched to a new tip (stored in pindexNewTip).
 
         if (nStopAtHeight && pindexNewTip && pindexNewTip->nHeight >= nStopAtHeight) StartShutdown();
