@@ -5,6 +5,7 @@
 
 #include <validation.h>
 
+#include <qt/guistate.h>
 #include <arith_uint256.h>
 #include <chain.h>
 #include <chainparams.h>
@@ -3036,9 +3037,17 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 }
             } // cs_main is released here
 
-            // Yield to GUI thread for 10ms after each ActivateBestChainStep
-            // This allows the GUI to process events and remain responsive during IBD
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            // Check if GUI needs responsiveness (after cs_main is released)
+            if (g_gui_needs_responsiveness.load() && IsGuiInUse()) {
+                LogPrint(BCLog::QT, "ActivateBestChain: GUI needs responsiveness, yielding immediately\n");
+                
+                // Wait for GUI to signal it's done (with timeout to prevent deadlock)
+                std::unique_lock<std::mutex> lock(g_gui_mutex);
+                g_gui_cv.wait_for(lock, std::chrono::milliseconds(100),
+                    []{ return !g_gui_needs_responsiveness.load(); });
+                
+                LogPrint(BCLog::QT, "ActivateBestChain: Resuming after GUI responsiveness\n");
+            }
 
         } while (!m_chain.Tip() || (starting_tip && CBlockIndexWorkComparator()(m_chain.Tip(), starting_tip)));
 

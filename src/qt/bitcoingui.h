@@ -327,6 +327,10 @@ public Q_SLOTS:
     /** Simply calls showNormalIfMinimized(true) for use in SLOT() macro */
     void toggleHidden();
 
+    // Override show/hide to track GUI state
+    void show() override;
+    void hide() override;
+
     /** called by a timer to check if ShutdownRequested() has been set **/
     void detectShutdown();
 

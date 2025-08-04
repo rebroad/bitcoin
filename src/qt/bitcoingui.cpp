@@ -6,6 +6,7 @@
 
 #include <qt/bitcoinunits.h>
 #include <qt/clientmodel.h>
+#include <qt/guistate.h>
 #include <qt/createwalletdialog.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -1378,6 +1379,18 @@ void BitcoinGUI::showNormalIfMinimized(bool fToggleHidden)
 void BitcoinGUI::toggleHidden()
 {
     showNormalIfMinimized(true);
+}
+
+void BitcoinGUI::show()
+{
+    QMainWindow::show();
+    SetGuiInUse(true);
+}
+
+void BitcoinGUI::hide()
+{
+    QMainWindow::hide();
+    SetGuiInUse(false);
 }
 
 void BitcoinGUI::detectShutdown()
