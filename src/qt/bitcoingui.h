@@ -110,6 +110,7 @@ protected:
     void changeEvent(QEvent *e) override;
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent* event) override;
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dropEvent(QDropEvent *event) override;
     bool eventFilter(QObject *object, QEvent *event) override;
@@ -326,10 +327,6 @@ public Q_SLOTS:
     void showNormalIfMinimized(bool fToggleHidden);
     /** Simply calls showNormalIfMinimized(true) for use in SLOT() macro */
     void toggleHidden();
-
-    // Override show/hide to track GUI state
-    void show() override;
-    void hide() override;
 
     /** called by a timer to check if ShutdownRequested() has been set **/
     void detectShutdown();

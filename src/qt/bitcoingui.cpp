@@ -1209,6 +1209,15 @@ void BitcoinGUI::showEvent(QShowEvent *event)
     showMempoolStatsAction->setEnabled(true);
     aboutAction->setEnabled(true);
     optionsAction->setEnabled(true);
+
+    // Track GUI state
+    SetGuiInUse(true);
+}
+
+void BitcoinGUI::hideEvent(QHideEvent* event)
+{
+    QMainWindow::hideEvent(event);
+    SetGuiInUse(false);
 }
 
 #ifdef ENABLE_WALLET
@@ -1379,18 +1388,6 @@ void BitcoinGUI::showNormalIfMinimized(bool fToggleHidden)
 void BitcoinGUI::toggleHidden()
 {
     showNormalIfMinimized(true);
-}
-
-void BitcoinGUI::show()
-{
-    QMainWindow::show();
-    SetGuiInUse(true);
-}
-
-void BitcoinGUI::hide()
-{
-    QMainWindow::hide();
-    SetGuiInUse(false);
 }
 
 void BitcoinGUI::detectShutdown()
