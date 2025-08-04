@@ -96,10 +96,6 @@ Q_SIGNALS:
 
 protected:
     bool event(QEvent* e) override;
-    bool notify(QObject *receiver, QEvent *event) override;
-
-public:
-    void processEvents();
 
 private:
     std::optional<InitExecutor> m_executor;

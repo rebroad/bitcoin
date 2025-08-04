@@ -103,10 +103,11 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     // Setup data processing thread
     setupDataThread();
 
-    // Initialize cache immediately (cs_main should be available during startup)
+    // Initialize cache with try_lock to avoid blocking during startup
     // This prevents GUI from constantly trying to get fresh data during IBD
-    try {
-        // Initialize header tip cache
+    std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock);
+    if (lock.owns_lock()) {
+        // We got the lock! Initialize all caches
         int height;
         int64_t block_time;
         if (m_node.getHeaderTip(height, block_time)) {
@@ -128,9 +129,10 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
 
         // Initialize status bar warnings cache
         m_cached_status_bar_warnings = QString::fromStdString(m_node.getWarnings().translated);
-    } catch (...) {
-        // If cs_main is somehow locked during startup, fall back to default values
+    } else {
+        // cs_main is locked, use default values
         // The cache will be updated when the first block tip change occurs
+        qDebug() << "Cache initialization skipped - cs_main is locked during startup";
     }
 }
 
