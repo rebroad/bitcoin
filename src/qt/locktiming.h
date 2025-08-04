@@ -12,13 +12,13 @@
 #include <chrono>
 
 // Macro to time cs_main lock attempts with rate limiting
-#define TIME_CS_MAIN_LOCK() \
+#define TIME_CS_MAIN_LOCK(maxWaitMs) \
     QElapsedTimer lockTimer; \
     lockTimer.start(); \
     std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock); \
     qint64 waited = lockTimer.nsecsElapsed() / 1000000; \
-    if (!lock.owns_lock()) { \
-        /* Try again with a small delay to give GUI a chance */ \
+    /* Try again with small delays until maxWaitMs or lock acquired */ \
+    while (!lock.owns_lock() && waited < maxWaitMs) { \
         std::this_thread::sleep_for(std::chrono::milliseconds(1)); \
         lockTimer.restart(); \
         lock = std::unique_lock<RecursiveMutex>(cs_main, std::try_to_lock); \

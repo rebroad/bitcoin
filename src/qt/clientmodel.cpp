@@ -72,7 +72,7 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
             // Only collect fee histogram if initial sync has finished (mempool likely empty during IBD anyway)
             if (m_cached_initial_sync_finished.load()) { // Non-blocking check for IBD completion
                 // Try to get fresh data directly if cs_main is free
-                TIME_CS_MAIN_LOCK();
+                TIME_CS_MAIN_LOCK(10);
 
                 if (lock.owns_lock()) {
                     // We got the lock! Get fresh data and update cache
@@ -150,7 +150,7 @@ ClientModel::~ClientModel()
 int ClientModel::getNumConnections(unsigned int flags) const
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -166,7 +166,7 @@ int ClientModel::getNumConnections(unsigned int flags) const
 int ClientModel::getHeaderTipHeight() const
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -186,7 +186,7 @@ int ClientModel::getHeaderTipHeight() const
 int64_t ClientModel::getHeaderTipTime() const
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -206,7 +206,7 @@ int64_t ClientModel::getHeaderTipTime() const
 int ClientModel::getNumBlocks() const
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -222,7 +222,7 @@ int ClientModel::getNumBlocks() const
 uint256 ClientModel::getBestBlockHash()
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -254,7 +254,7 @@ void ClientModel::updateAlert()
 enum BlockSource ClientModel::getBlockSource() const
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -275,7 +275,7 @@ enum BlockSource ClientModel::getBlockSource() const
 QString ClientModel::getStatusBarWarnings() const
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -547,7 +547,7 @@ void ClientModel::unsubscribeFromCoreSignals()
 bool ClientModel::getProxyInfo(std::string& ip_port) const
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
@@ -701,7 +701,7 @@ void ClientModelDataWorker::getProxyInfoAsync()
 size_t ClientModel::getMempoolDynamicUsage() const
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
 
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache

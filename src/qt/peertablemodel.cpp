@@ -195,7 +195,7 @@ QModelIndex PeerTableModel::index(int row, int column, const QModelIndex& parent
 void PeerTableModel::refresh()
 {
     // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK();
+    TIME_CS_MAIN_LOCK(10);
     
     if (lock.owns_lock()) {
         // We got the lock! Get fresh data and update cache
