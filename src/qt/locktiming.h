@@ -24,9 +24,6 @@
         lock = std::unique_lock<RecursiveMutex>(cs_main, std::try_to_lock); \
         waited += lockTimer.nsecsElapsed() / 1000000; \
     } \
-    if (lock.owns_lock()) { \
-        LogPrint(BCLog::QT, "GUI: Successfully acquired cs_main in %s:%d after %lld ms\n", __FILE__, __LINE__, waited); \
-    } \
     { \
         static QElapsedTimer lastLogTimer; \
         static QElapsedTimer lastSuccessTimer; \
