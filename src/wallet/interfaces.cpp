@@ -277,6 +277,14 @@ public:
         }
         return false;
     }
+
+    bool evictTransaction(const uint256& txid) override
+    {
+        // This method is not implemented in the wallet interface
+        // The GUI should call the RPC method directly instead
+        LogPrint(BCLog::QT, "GUI: evictTransaction called but not implemented in wallet interface\n");
+        return false;
+    }
     bool transactionCanBeBumped(const uint256& txid) override
     {
         return feebumper::TransactionCanBeBumped(*m_wallet.get(), txid);

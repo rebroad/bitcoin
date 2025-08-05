@@ -159,6 +159,9 @@ public:
     //! Check if transaction is in mempool.
     virtual bool inMempool(const uint256& txid) = 0;
 
+    //! Evict transaction from mempool.
+    virtual bool evictTransaction(const uint256& txid) = 0;
+
     //! Return whether transaction can be bumped.
     virtual bool transactionCanBeBumped(const uint256& txid) = 0;
 
