@@ -4,7 +4,9 @@
 
 #include <core_io.h>
 #include <key_io.h>
+#include <node/context.h>
 #include <policy/rbf.h>
+#include <rpc/server_util.h>
 #include <rpc/util.h>
 #include <util/vector.h>
 #include <wallet/receive.h>
@@ -841,6 +843,65 @@ RPCHelpMan abandontransaction()
     }
     if (!pwallet->AbandonTransaction(hash)) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction not eligible for abandonment");
+    }
+
+    return NullUniValue;
+},
+    };
+}
+
+RPCHelpMan evicttransaction()
+{
+    return RPCHelpMan{"evicttransaction",
+                "\nEvict transaction <txid> from the mempool\n"
+                "This will remove the transaction from the local mempool, making it eligible for abandonment.\n"
+                "Use with caution as this only affects your local node and the transaction may still be relayed by other nodes.\n"
+                "It only works on transactions which are currently in the mempool.\n",
+                {
+                    {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction id"},
+                },
+                RPCResult{RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+                    HelpExampleCli("evicttransaction", "\"1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d\"")
+            + HelpExampleRpc("evicttransaction", "\"1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return NullUniValue;
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    uint256 hash(ParseHashV(request.params[0], "txid"));
+
+    // Check if transaction exists in wallet
+    if (!pwallet->mapWallet.count(hash)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid or non-wallet transaction id");
+    }
+
+    // Check if transaction is in mempool
+    auto it = pwallet->mapWallet.find(hash);
+    if (it == pwallet->mapWallet.end()) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction not found in wallet");
+    }
+    if (!it->second.InMempool()) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction is not in mempool");
+    }
+
+    // Get the transaction from mempool and remove it
+    const CTransactionRef tx = it->second.tx;
+    if (!tx) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction not found in mempool");
+    }
+
+    // Remove from mempool
+    node::NodeContext& node = EnsureAnyNodeContext(request.context);
+    if (node.mempool) {
+        node.mempool->removeRecursive(*tx, MemPoolRemovalReason::ABANDONED);
     }
 
     return NullUniValue;

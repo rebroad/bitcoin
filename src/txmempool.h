@@ -358,6 +358,7 @@ enum class MemPoolRemovalReason {
     BLOCK,       //!< Removed for block
     CONFLICT,    //!< Removed for conflict with in-block transaction
     REPLACED,    //!< Removed for replacement
+    ABANDONED,   //!< Removed due to user abandonment
 };
 
 /**

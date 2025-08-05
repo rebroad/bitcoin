@@ -27,6 +27,7 @@
 #include <wallet/rpc/wallet.h>
 #include <wallet/spend.h>
 #include <wallet/wallet.h>
+#include <txmempool.h>
 
 #include <memory>
 #include <string>
@@ -266,6 +267,41 @@ public:
     {
         LOCK(m_wallet->cs_wallet);
         return m_wallet->AbandonTransaction(txid);
+    }
+    bool inMempool(const uint256& txid) override
+    {
+        LOCK(m_wallet->cs_wallet);
+        auto it = m_wallet->mapWallet.find(txid);
+        if (it != m_wallet->mapWallet.end()) {
+            return it->second.InMempool();
+        }
+        return false;
+    }
+    bool evictTransaction(const uint256& txid) override
+    {
+        LOCK(m_wallet->cs_wallet);
+        // Check if transaction exists in wallet
+        if (!m_wallet->mapWallet.count(txid)) {
+            return false;
+        }
+
+        // Check if transaction is in mempool
+        auto it = m_wallet->mapWallet.find(txid);
+        if (it == m_wallet->mapWallet.end()) {
+            return false;
+        }
+        if (!it->second.InMempool()) {
+            return false;
+        }
+
+        // Get the transaction and remove it from mempool
+        const CTransactionRef tx = it->second.tx;
+        if (!tx) {
+            return false;
+        }
+
+        // The RPC method has direct access to the mempool and can perform the removal
+        return false;
     }
     bool transactionCanBeBumped(const uint256& txid) override
     {

@@ -80,6 +80,7 @@ private:
     QDateTimeEdit *dateFrom;
     QDateTimeEdit *dateTo;
     QAction *abandonAction{nullptr};
+    QAction *forceAbandonAction{nullptr};
     QAction *bumpFeeAction{nullptr};
     QAction *copyAddressAction{nullptr};
     QAction *copyLabelAction{nullptr};
@@ -104,6 +105,7 @@ private Q_SLOTS:
     void openThirdPartyTxUrl(QString url);
     void updateWatchOnlyColumn(bool fHaveWatchOnly);
     void abandonTx();
+    void forceAbandonTx();
     void bumpFee(bool checked);
 
 Q_SIGNALS:

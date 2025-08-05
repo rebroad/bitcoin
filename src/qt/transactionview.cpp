@@ -179,6 +179,7 @@ TransactionView::TransactionView(const PlatformStyle *platformStyle, QWidget *pa
     GUIUtil::ExceptionSafeConnect(bumpFeeAction, &QAction::triggered, this, &TransactionView::bumpFee);
     bumpFeeAction->setObjectName("bumpFeeAction");
     abandonAction = contextMenu->addAction(tr("A&bandon transaction"), this, &TransactionView::abandonTx);
+    forceAbandonAction = contextMenu->addAction(tr("&Force abandon transaction"), this, &TransactionView::forceAbandonTx);
     contextMenu->addAction(tr("&Edit address label"), this, &TransactionView::editLabel);
 
     connect(dateWidget, qOverload<int>(&QComboBox::activated), this, &TransactionView::chooseDate);
@@ -400,6 +401,7 @@ void TransactionView::contextualMenu(const QPoint &point)
     uint256 hash;
     hash.SetHex(selection.at(0).data(TransactionTableModel::TxHashRole).toString().toStdString());
     abandonAction->setEnabled(model->wallet().transactionCanBeAbandoned(hash));
+    forceAbandonAction->setEnabled(model->wallet().inMempool(hash));
     bumpFeeAction->setEnabled(model->wallet().transactionCanBeBumped(hash));
     copyAddressAction->setEnabled(GUIUtil::hasEntryData(transactionView, 0, TransactionTableModel::AddressRole));
     copyLabelAction->setEnabled(GUIUtil::hasEntryData(transactionView, 0, TransactionTableModel::LabelRole));
@@ -425,6 +427,49 @@ void TransactionView::abandonTx()
 
     // Update the table
     model->getTransactionTableModel()->updateTransaction(hashQStr, CT_UPDATED, false);
+}
+
+void TransactionView::forceAbandonTx()
+{
+    if(!transactionView || !transactionView->selectionModel())
+        return;
+    QModelIndexList selection = transactionView->selectionModel()->selectedRows(0);
+
+    // get the hash from the TxHashRole (QVariant / QString)
+    uint256 hash;
+    QString hashQStr = selection.at(0).data(TransactionTableModel::TxHashRole).toString();
+    hash.SetHex(hashQStr.toStdString());
+
+    // Show confirmation dialog
+    QString questionString = tr("This will evict the transaction from the mempool and then abandon it.\n\n");
+    questionString.append(tr("Warning: This only affects your local node. The transaction may still be relayed by other nodes and could potentially be mined.\n\n"));
+    questionString.append(tr("Are you sure you want to force abandon this transaction?"));
+
+    QMessageBox::StandardButton retval = QMessageBox::question(this, tr("Confirm force abandon"),
+        questionString,
+        QMessageBox::Yes | QMessageBox::Cancel,
+        QMessageBox::Cancel);
+
+    if (retval != QMessageBox::Yes) {
+        return;
+    }
+
+    // First evict from mempool
+    if (!model->wallet().evictTransaction(hash)) {
+        QMessageBox::critical(nullptr, tr("Force abandon error"), tr("Failed to evict transaction from mempool"));
+        return;
+    }
+
+    // Then abandon the transaction
+    if (!model->wallet().abandonTransaction(hash)) {
+        QMessageBox::critical(nullptr, tr("Force abandon error"), tr("Failed to abandon transaction"));
+        return;
+    }
+
+    // Update the table
+    model->getTransactionTableModel()->updateTransaction(hashQStr, CT_UPDATED, false);
+    
+    QMessageBox::information(nullptr, tr("Success"), tr("Transaction has been force abandoned successfully"));
 }
 
 void TransactionView::bumpFee([[maybe_unused]] bool checked)
