@@ -867,8 +867,13 @@ RPCHelpMan evicttransaction()
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
+    LogPrint(BCLog::RPC, "evicttransaction: Called with txid %s\n", request.params[0].get_str());
+
     std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
-    if (!pwallet) return NullUniValue;
+    if (!pwallet) {
+        LogPrint(BCLog::RPC, "evicttransaction: No wallet found\n");
+        return NullUniValue;
+    }
 
     // Make sure the results are valid at least up to the most recent block
     // the user could have gotten from another RPC command prior to now
@@ -877,31 +882,42 @@ RPCHelpMan evicttransaction()
     LOCK(pwallet->cs_wallet);
 
     uint256 hash(ParseHashV(request.params[0], "txid"));
+    LogPrint(BCLog::RPC, "evicttransaction: Looking for transaction %s in wallet\n", hash.ToString());
 
     // Check if transaction exists in wallet
     if (!pwallet->mapWallet.count(hash)) {
+        LogPrint(BCLog::RPC, "evicttransaction: Transaction %s not found in wallet map\n", hash.ToString());
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid or non-wallet transaction id");
     }
 
     // Check if transaction is in mempool
     auto it = pwallet->mapWallet.find(hash);
     if (it == pwallet->mapWallet.end()) {
+        LogPrint(BCLog::RPC, "evicttransaction: Transaction %s not found in wallet (second check)\n", hash.ToString());
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction not found in wallet");
     }
+
+    LogPrint(BCLog::RPC, "evicttransaction: Transaction found in wallet, checking mempool status\n");
     if (!it->second.InMempool()) {
+        LogPrint(BCLog::RPC, "evicttransaction: Transaction %s is not in mempool\n", hash.ToString());
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction is not in mempool");
     }
 
     // Get the transaction from mempool and remove it
     const CTransactionRef tx = it->second.tx;
     if (!tx) {
+        LogPrint(BCLog::RPC, "evicttransaction: Transaction %s has no CTransactionRef\n", hash.ToString());
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction not found in mempool");
     }
 
+    LogPrint(BCLog::RPC, "evicttransaction: Attempting to remove transaction %s from mempool\n", hash.ToString());
     // Remove from mempool
     node::NodeContext& node = EnsureAnyNodeContext(request.context);
     if (node.mempool) {
         node.mempool->removeRecursive(*tx, MemPoolRemovalReason::ABANDONED);
+        LogPrint(BCLog::RPC, "evicttransaction: Successfully removed transaction %s from mempool\n", hash.ToString());
+    } else {
+        LogPrint(BCLog::RPC, "evicttransaction: No mempool available\n");
     }
 
     return NullUniValue;

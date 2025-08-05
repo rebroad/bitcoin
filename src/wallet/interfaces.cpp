@@ -277,32 +277,6 @@ public:
         }
         return false;
     }
-    bool evictTransaction(const uint256& txid) override
-    {
-        LOCK(m_wallet->cs_wallet);
-        // Check if transaction exists in wallet
-        if (!m_wallet->mapWallet.count(txid)) {
-            return false;
-        }
-
-        // Check if transaction is in mempool
-        auto it = m_wallet->mapWallet.find(txid);
-        if (it == m_wallet->mapWallet.end()) {
-            return false;
-        }
-        if (!it->second.InMempool()) {
-            return false;
-        }
-
-        // Get the transaction and remove it from mempool
-        const CTransactionRef tx = it->second.tx;
-        if (!tx) {
-            return false;
-        }
-
-        // The RPC method has direct access to the mempool and can perform the removal
-        return false;
-    }
     bool transactionCanBeBumped(const uint256& txid) override
     {
         return feebumper::TransactionCanBeBumped(*m_wallet.get(), txid);

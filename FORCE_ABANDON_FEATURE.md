@@ -30,7 +30,7 @@ bitcoin-cli evicttransaction "txid"
 2. **Select "Force abandon transaction"** (only enabled for mempool transactions)
 3. **Confirm the action** in the warning dialog
 4. **Automatic two-step process**:
-   - Step 1: Evict transaction from local mempool
+   - Step 1: Evict transaction from local mempool (via RPC call)
    - Step 2: Abandon the transaction in the wallet
 5. **Success confirmation** appears when complete
 
@@ -60,7 +60,6 @@ RPCHelpMan evicttransaction()
 ```cpp
 // New methods added to interfaces::Wallet
 virtual bool inMempool(const uint256& txid) = 0;
-virtual bool evictTransaction(const uint256& txid) = 0;
 ```
 
 ### GUI Integration
@@ -69,8 +68,16 @@ virtual bool evictTransaction(const uint256& txid) = 0;
 void TransactionView::forceAbandonTx()
 {
     // Shows confirmation dialog with warnings
-    // Calls evictTransaction() then abandonTransaction()
+    // Calls evictTransactionFromMempool() via RPC if in mempool
+    // Then calls abandonTransaction() through wallet interface
     // Updates UI and shows success message
+}
+
+bool TransactionView::evictTransactionFromMempool(const QString& txid)
+{
+    // Calls bitcoin-cli evicttransaction via QProcess
+    // Handles errors gracefully (e.g., transaction not in mempool)
+    // Returns success/failure
 }
 ```
 

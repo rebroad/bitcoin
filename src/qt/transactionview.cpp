@@ -34,6 +34,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QPoint>
+#include <QProcess>
 #include <QScrollBar>
 #include <QSettings>
 #include <QTableView>
@@ -440,6 +441,8 @@ void TransactionView::forceAbandonTx()
     QString hashQStr = selection.at(0).data(TransactionTableModel::TxHashRole).toString();
     hash.SetHex(hashQStr.toStdString());
 
+    LogPrint(BCLog::QT, "GUI: Force abandon requested for transaction %s\n", hash.ToString());
+
     // Show confirmation dialog
     QString questionString = tr("This will evict the transaction from the mempool and then abandon it.\n\n");
     questionString.append(tr("Warning: This only affects your local node. The transaction may still be relayed by other nodes and could potentially be mined.\n\n"));
@@ -451,25 +454,105 @@ void TransactionView::forceAbandonTx()
         QMessageBox::Cancel);
 
     if (retval != QMessageBox::Yes) {
+        LogPrint(BCLog::QT, "GUI: User cancelled force abandon for transaction %s\n", hash.ToString());
         return;
     }
 
-    // First evict from mempool
-    if (!model->wallet().evictTransaction(hash)) {
-        QMessageBox::critical(nullptr, tr("Force abandon error"), tr("Failed to evict transaction from mempool"));
-        return;
+    // Check if transaction is actually in mempool
+    LogPrint(BCLog::QT, "GUI: Checking if transaction %s is in mempool\n", hash.ToString());
+    if (!model->wallet().inMempool(hash)) {
+        LogPrint(BCLog::QT, "GUI: Transaction %s is not in mempool, proceeding with direct abandonment\n", hash.ToString());
+        QMessageBox::information(nullptr, tr("Info"), tr("Transaction is not in mempool. Attempting to abandon directly."));
+    } else {
+        LogPrint(BCLog::QT, "GUI: Transaction %s is in mempool, attempting eviction first\n", hash.ToString());
+        // Evict from mempool using RPC call
+        if (!evictTransactionFromMempool(hashQStr)) {
+            LogPrint(BCLog::QT, "GUI: Failed to evict transaction %s from mempool\n", hash.ToString());
+            QString errorMsg = tr("Failed to evict transaction from mempool.\n\n");
+            errorMsg += tr("This could be due to:\n");
+            errorMsg += tr("• RPC connection issues\n");
+            errorMsg += tr("• Transaction not found in wallet\n");
+            errorMsg += tr("• Insufficient permissions\n");
+            errorMsg += tr("• bitcoin-cli not in PATH\n\n");
+            errorMsg += tr("Check debug.log for detailed error information.");
+            QMessageBox::critical(nullptr, tr("Force abandon error"), errorMsg);
+            return;
+        }
+        LogPrint(BCLog::QT, "GUI: Successfully evicted transaction %s from mempool\n", hash.ToString());
     }
 
-    // Then abandon the transaction
+    // Abandon the transaction
+    LogPrint(BCLog::QT, "GUI: Attempting to abandon transaction %s\n", hash.ToString());
     if (!model->wallet().abandonTransaction(hash)) {
+        LogPrint(BCLog::QT, "GUI: Failed to abandon transaction %s\n", hash.ToString());
         QMessageBox::critical(nullptr, tr("Force abandon error"), tr("Failed to abandon transaction"));
         return;
     }
 
+    LogPrint(BCLog::QT, "GUI: Successfully abandoned transaction %s\n", hash.ToString());
     // Update the table
     model->getTransactionTableModel()->updateTransaction(hashQStr, CT_UPDATED, false);
     
     QMessageBox::information(nullptr, tr("Success"), tr("Transaction has been force abandoned successfully"));
+}
+
+bool TransactionView::evictTransactionFromMempool(const QString& txid)
+{
+    // Log the attempt to debug.log
+    LogPrint(BCLog::QT, "GUI: Attempting to evict transaction %s from mempool\n", txid.toStdString());
+    
+    // Create a QProcess to call bitcoin-cli
+    QProcess process;
+    QStringList arguments;
+    arguments << "evicttransaction" << txid;
+    
+    LogPrint(BCLog::QT, "GUI: Executing: bitcoin-cli %s\n", arguments.join(' ').toStdString());
+    
+    process.start("bitcoin-cli", arguments);
+    
+    if (!process.waitForStarted()) {
+        QString error = process.errorString();
+        LogPrint(BCLog::QT, "GUI: Failed to start bitcoin-cli process: %s\n", error.toStdString());
+        return false;
+    }
+    
+    if (!process.waitForFinished(10000)) { // 10 second timeout
+        process.kill();
+        LogPrint(BCLog::QT, "GUI: bitcoin-cli process timed out after 10 seconds\n");
+        return false;
+    }
+    
+    int exitCode = process.exitCode();
+    QString stdOutput = QString::fromUtf8(process.readAllStandardOutput());
+    QString errorOutput = QString::fromUtf8(process.readAllStandardError());
+    
+    LogPrint(BCLog::QT, "GUI: bitcoin-cli exit code: %d\n", exitCode);
+    if (!stdOutput.isEmpty()) {
+        LogPrint(BCLog::QT, "GUI: bitcoin-cli stdout: %s\n", stdOutput.toStdString());
+    }
+    if (!errorOutput.isEmpty()) {
+        LogPrint(BCLog::QT, "GUI: bitcoin-cli stderr: %s\n", errorOutput.toStdString());
+    }
+    
+    if (exitCode != 0) {
+        // RPC call failed - analyze the error
+        if (errorOutput.contains("not in mempool", Qt::CaseInsensitive)) {
+            LogPrint(BCLog::QT, "GUI: Transaction %s is not in mempool (this is expected)\n", txid.toStdString());
+            return true; // This is actually fine
+        } else if (errorOutput.contains("not found in wallet", Qt::CaseInsensitive)) {
+            LogPrint(BCLog::QT, "GUI: Transaction %s not found in wallet\n", txid.toStdString());
+            return false;
+        } else if (errorOutput.contains("connection refused", Qt::CaseInsensitive)) {
+            LogPrint(BCLog::QT, "GUI: RPC connection refused - is bitcoin-cli configured correctly?\n");
+            return false;
+        } else {
+            LogPrint(BCLog::QT, "GUI: Unknown error from bitcoin-cli: %s\n", errorOutput.toStdString());
+            return false;
+        }
+    }
+    
+    LogPrint(BCLog::QT, "GUI: Successfully evicted transaction %s from mempool\n", txid.toStdString());
+    return true;
 }
 
 void TransactionView::bumpFee([[maybe_unused]] bool checked)

@@ -106,6 +106,7 @@ private Q_SLOTS:
     void updateWatchOnlyColumn(bool fHaveWatchOnly);
     void abandonTx();
     void forceAbandonTx();
+    bool evictTransactionFromMempool(const QString& txid);
     void bumpFee(bool checked);
 
 Q_SIGNALS:
