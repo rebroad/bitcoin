@@ -3038,6 +3038,12 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
             // Check if GUI is visible and yield if needed (after cs_main is released)
             if (IsGuiVisible()) {
+                // Always yield first for immediate responsiveness
+                std::this_thread::yield();
+
+                // Then wait 10ms before checking idle time
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
                 // Keep yielding until GUI has been idle for at least 100ms
                 while (true) {
                     auto now = std::chrono::steady_clock::now();
