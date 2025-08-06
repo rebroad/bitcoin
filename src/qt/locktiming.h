@@ -13,6 +13,7 @@
 
 // Macro to time cs_main lock attempts with rate limiting
 #define TIME_CS_MAIN_LOCK(maxWaitMs) \
+    UpdateGuiLastUsed(); \
     QElapsedTimer lockTimer; \
     lockTimer.start(); \
     std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock); \
@@ -83,6 +84,7 @@
             minFailureInterval = -1; \
             maxFailureInterval = 0; \
         } \
-    }
+    } \
+    UpdateGuiLastUsed();
 
 #endif // BITCOIN_QT_LOCKTIMING_H 
