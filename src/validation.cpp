@@ -3049,8 +3049,10 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 auto initial_last_used = GuiLastUsed();
                 auto start_time = std::chrono::steady_clock::now();
                 auto last_activity_time = initial_last_used;
+                auto last_check_time = start_time;
                 bool gui_was_active = false;
                 int chunk_count = 0;
+                int longest_idle_gap_ms = 0;
 
                 while (true) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -3066,6 +3068,13 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                                 gui_was_active ? "" : " (initial)", elapsed.count(), chunk_count);
                         gui_was_active = true;
                         last_activity_time = last_used; // Update our reference point
+                        last_check_time = now; // Reset idle gap tracking
+                    } else {
+                        // Track the longest idle gap between activities
+                        auto idle_gap = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_check_time);
+                        if (idle_gap.count() > longest_idle_gap_ms) {
+                            longest_idle_gap_ms = idle_gap.count();
+                        }
                     }
 
                     // Check if we should continue or exit
@@ -3081,8 +3090,8 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                     // If GUI was active and now idle for 100ms, exit
                     if (gui_was_active && idle_time.count() >= GUI_IDLE_THRESHOLD_MS) {
                         auto last_activity_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(last_activity_time - start_time);
-                        LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, last_activity=%dms, continuing\n",
-								idle_time.count(), last_activity_elapsed.count());
+                        LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, final=%dms, max_gap=%dms, continuing\n",
+								idle_time.count(), last_activity_elapsed.count(), longest_idle_gap_ms);
                         break;
                     }
 
