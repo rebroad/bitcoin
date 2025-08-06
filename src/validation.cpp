@@ -3062,8 +3062,8 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
                     // Check if GUI activity occurred during this 1ms chunk
                     if (last_used > last_activity_time) {
-                        LogPrint(BCLog::QT, "ActivateBestChain: GUI activity detected %dms into sleep (chunk %d)\n",
-                                elapsed.count(), chunk_count);
+                        LogPrint(BCLog::QT, "ActivateBestChain: GUI activity%s detected %dms into sleep (chunk %d)\n",
+                                gui_was_active ? "" : " (initial)", elapsed.count(), chunk_count);
                         gui_was_active = true;
                         last_activity_time = last_used; // Update our reference point
                     }
@@ -3073,7 +3073,8 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
                     // If no GUI activity in first 10ms, exit immediately
                     if (!gui_was_active && chunk_count >= GUI_IDLE_CHECK_DELAY_MS) {
-                        LogPrint(BCLog::QT, "ActivateBestChain: No GUI activity during %dms sleep, continuing\n", GUI_IDLE_CHECK_DELAY_MS);
+                        LogPrint(BCLog::QT, "ActivateBestChain: No GUI activity during %dms sleep, last=%dms continuing\n",
+								GUI_IDLE_CHECK_DELAY_MS, idle_time.count());
                         break;
                     }
 
