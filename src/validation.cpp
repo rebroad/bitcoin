@@ -3087,7 +3087,7 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                     }
 
                     if (gui_was_active && idle_time.count() >= GUI_IDLE_THRESHOLD_MS) {
-                        LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, final=%dms, max_gap=%dms, continuing\n",
+                        LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, max_gap=%dms, continuing\n",
 								idle_time.count(), longest_idle_gap_ms);
                         break;
                     }
