@@ -3064,17 +3064,19 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
                     // Check if GUI activity occurred during this 1ms chunk
                     if (last_used > last_activity_time) {
+                        // Calculate gap since last activity (if this isn't the first activity)
+                        if (gui_was_active) {
+                            auto gap_since_last = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_check_time);
+                            if (gap_since_last.count() > longest_idle_gap_ms) {
+                                longest_idle_gap_ms = gap_since_last.count();
+                            }
+                        }
+
                         LogPrint(BCLog::QT, "ActivateBestChain: GUI activity%s detected %dms into sleep (chunk %d)\n",
                                 gui_was_active ? "" : " (initial)", elapsed.count(), chunk_count);
                         gui_was_active = true;
                         last_activity_time = last_used; // Update our reference point
                         last_check_time = now; // Reset idle gap tracking
-                    } else {
-                        // Track the longest idle gap between activities
-                        auto idle_gap = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_check_time);
-                        if (idle_gap.count() > longest_idle_gap_ms) {
-                            longest_idle_gap_ms = idle_gap.count();
-                        }
                     }
 
                     // Check if we should continue or exit
