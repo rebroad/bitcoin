@@ -9,11 +9,16 @@
 #include <logging.h>
 
 #include <atomic>
+#include <QElapsedTimer>
 #include <qt/createwalletdialog.h>
 
 // Global GUI state tracking
 static std::atomic<bool> g_gui_visible{false};
 static std::atomic<std::chrono::steady_clock::time_point> g_gui_last_used{std::chrono::steady_clock::now()};
+
+// Global heartbeat timer (for locktiming.h macro)
+QElapsedTimer g_gui_heartbeat_timer;
+bool g_gui_heartbeat_initialized = false;
 
 bool IsGuiVisible()
 {

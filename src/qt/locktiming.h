@@ -7,6 +7,7 @@
 
 #include <QElapsedTimer>
 #include <QDebug>
+#include <QDateTime>
 #include <sync.h>
 #include <limits>
 #include <chrono>
@@ -14,9 +15,25 @@
 // Forward declaration for GUI state management
 void UpdateGuiLastUsed();
 
+// Global heartbeat timer (shared across all macro instances)
+extern QElapsedTimer g_gui_heartbeat_timer;
+extern bool g_gui_heartbeat_initialized;
+
 // Macro to time cs_main lock attempts with rate limiting
 #define TIME_CS_MAIN_LOCK(maxWaitMs) \
     UpdateGuiLastUsed(); \
+    { \
+        if (!g_gui_heartbeat_initialized) { \
+            g_gui_heartbeat_timer.start(); \
+            g_gui_heartbeat_initialized = true; \
+        } \
+        qint64 timeSinceHeartbeat = g_gui_heartbeat_timer.nsecsElapsed() / 1000000; \
+        if (timeSinceHeartbeat >= 1000) { /* Every second */ \
+            qDebug() << "[GUI_HEARTBEAT] GUI thread alive at" << QDateTime::currentDateTime().toString("hh:mm:ss.zzz") \
+                     << "from" << __FILE__ << ":" << __LINE__ << __FUNCTION__; \
+            g_gui_heartbeat_timer.restart(); \
+        } \
+    } \
     QElapsedTimer lockTimer; \
     lockTimer.start(); \
     std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock); \
