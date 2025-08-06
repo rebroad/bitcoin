@@ -12,17 +12,17 @@
 #include <qt/createwalletdialog.h>
 
 // Global GUI state tracking
-static std::atomic<bool> g_gui_in_use{false};
+static std::atomic<bool> g_gui_visible{false};
 
-bool IsGuiInUse()
+bool IsGuiVisible()
 {
-    return g_gui_in_use.load();
+    return g_gui_visible.load();
 }
 
-void SetGuiInUse(bool in_use)
+void SetGuiVisible(bool visible)
 {
-    g_gui_in_use.store(in_use);
-    LogPrint(BCLog::QT, "GUI state changed: %s\n", in_use ? "in use" : "not in use");
+    g_gui_visible.store(visible);
+    LogPrint(BCLog::QT, "GUI state changed: %s\n", visible ? "visible" : "not visible");
 }
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -1252,13 +1252,13 @@ void BitcoinGUI::showEvent(QShowEvent *event)
     optionsAction->setEnabled(true);
 
     // Track GUI state
-    SetGuiInUse(true);
+    SetGuiVisible(true);
 }
 
 void BitcoinGUI::hideEvent(QHideEvent* event)
 {
     QMainWindow::hideEvent(event);
-    SetGuiInUse(false);
+    SetGuiVisible(false);
 }
 
 #ifdef ENABLE_WALLET

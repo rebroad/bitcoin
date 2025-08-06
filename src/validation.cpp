@@ -6,7 +6,7 @@
 #include <validation.h>
 
 // Forward declaration for GUI state (implemented in bitcoingui.cpp)
-bool IsGuiInUse();
+bool IsGuiVisible();
 
 #include <arith_uint256.h>
 #include <chain.h>
@@ -3035,9 +3035,9 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 }
             } // cs_main is released here
 
-            // Check if GUI is in use and yield if needed (after cs_main is released)
-            if (IsGuiInUse()) {
-                LogPrint(BCLog::QT, "ActivateBestChain: GUI is in use, yielding for responsiveness\n");
+            // Check if GUI is visible and yield if needed (after cs_main is released)
+            if (IsGuiVisible()) {
+                LogPrint(BCLog::QT, "ActivateBestChain: GUI is visible, yielding for responsiveness\n");
 
                 // Simple yield - let GUI thread run
                 std::this_thread::yield();

@@ -68,8 +68,8 @@ class ClickableProgressBar;
   wallet models to give the user an up-to-date view of the current core state.
 */
 // GUI state management functions
-bool IsGuiInUse();
-void SetGuiInUse(bool in_use);
+bool IsGuiVisible();
+void SetGuiVisible(bool visible);
 
 class BitcoinGUI : public QMainWindow
 {
