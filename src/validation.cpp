@@ -9,6 +9,10 @@
 bool IsGuiVisible();
 std::chrono::steady_clock::time_point GuiLastUsed();
 
+// GUI responsiveness constants
+static constexpr int GUI_IDLE_CHECK_DELAY_MS = 10;
+static constexpr int GUI_IDLE_THRESHOLD_MS = 100;
+
 #include <arith_uint256.h>
 #include <chain.h>
 #include <chainparams.h>
@@ -3041,12 +3045,29 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 // Always yield first for immediate responsiveness
                 std::this_thread::yield();
 
-                // Then wait 10ms before checking idle time
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
                 // Keep yielding until GUI has been idle for at least 100ms
                 auto initial_last_used = GuiLastUsed();
+                bool is_first_sleep = true;
+
                 while (true) {
+                    // Sleep for 10ms in 1ms chunks to detect GUI activity during sleep
+                    auto sleep_start = std::chrono::steady_clock::now();
+                    for (int i = 0; i < GUI_IDLE_CHECK_DELAY_MS; i++) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        
+                        // Check if GUI activity occurred during this 1ms chunk
+                        auto current_last_used = GuiLastUsed();
+                        if (current_last_used > initial_last_used) {
+                            auto sleep_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - sleep_start);
+                            LogPrint(BCLog::QT, "ActivateBestChain: GUI activity detected%s %dms into sleep (chunk %d/%d)\n",
+                                    is_first_sleep ? " (initial)" : "", sleep_elapsed.count(), i + 1, GUI_IDLE_CHECK_DELAY_MS);
+                            initial_last_used = current_last_used; // Update our reference point
+                            is_first_sleep = false;
+                        }
+                    }
+                    std::this_thread::yield();
+
+                    // Now check idle time after the sleep
                     auto now = std::chrono::steady_clock::now();
                     auto last_used = GuiLastUsed();
                     auto idle_time = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_used);
@@ -3059,14 +3080,10 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                         initial_last_used = last_used; // Update our reference point
                     }
 
-                    if (idle_time.count() >= 100) {
+                    if (idle_time.count() >= GUI_IDLE_THRESHOLD_MS) {
                         LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, continuing\n", idle_time.count());
                         break;
                     }
-
-                    // Sleep for 1ms to reduce CPU usage, then yield
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                    std::this_thread::yield();
                 }
             }
 
