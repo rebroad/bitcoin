@@ -3050,45 +3050,43 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 auto last_check_time = std::chrono::steady_clock::now();
                 auto last_activity_time = initial_last_used;
                 bool gui_was_active = false;
-                int chunk_count = 0;
                 int longest_idle_gap_ms = 0;
 
                 while (true) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                    chunk_count++;
 
                     auto now = std::chrono::steady_clock::now();
                     auto last_used = GuiLastUsed();
+                    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_check_time).count();
 
                     // Check if GUI activity occurred during this 1ms chunk
                     if (last_used > last_activity_time) {
                         // Calculate gap since last activity (if this isn't the first activity)
-                        auto gap_since_last = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_check_time);
                         if (gui_was_active) {
-                            if (gap_since_last.count() > longest_idle_gap_ms) {
-                                longest_idle_gap_ms = gap_since_last.count();
+                            if (elapsed_ms > longest_idle_gap_ms) {
+                                longest_idle_gap_ms = elapsed_ms;
                             }
                         }
 
-                        LogPrint(BCLog::QT, "ActivateBestChain: GUI activity%s detected %dms idle (chunk %d)\n",
-                                gui_was_active ? "" : " (initial)", gap_since_last.count(), chunk_count);
+                        LogPrint(BCLog::QT, "ActivateBestChain: GUI activity%s detected %dms idle\n",
+                                gui_was_active ? "" : " (initial)", elapsed_ms);
                         gui_was_active = true;
                         last_activity_time = last_used; // Update our reference point
                         last_check_time = now; // Reset idle gap tracking
                     }
 
                     // Check if we should continue or exit
-                    auto idle_time = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_used);
+                    auto idle_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_used).count();
 
-                    if (!gui_was_active && chunk_count >= GUI_IDLE_CHECK_DELAY_MS) {
+                    if (!gui_was_active && elapsed_ms >= GUI_IDLE_CHECK_DELAY_MS) {
                         LogPrint(BCLog::QT, "ActivateBestChain: No GUI activity during %dms sleep, last=%dms continuing\n",
-								GUI_IDLE_CHECK_DELAY_MS, idle_time.count());
+								GUI_IDLE_CHECK_DELAY_MS, idle_time_ms);
                         break;
                     }
 
-                    if (gui_was_active && idle_time.count() >= GUI_IDLE_THRESHOLD_MS) {
+                    if (gui_was_active && idle_time_ms >= GUI_IDLE_THRESHOLD_MS) {
                         LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, max_gap=%dms, continuing\n",
-								idle_time.count(), longest_idle_gap_ms);
+								idle_time_ms, longest_idle_gap_ms);
                         break;
                     }
 
