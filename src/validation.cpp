@@ -3053,7 +3053,8 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
                     // Debug if GUI activity increased during the loop
                     if (last_used > initial_last_used) {
-                        LogPrint(BCLog::QT, "ActivateBestChain: GUI activity detected during wait (idle reset to %dms)\n", idle_time.count());
+                        LogPrint(BCLog::QT, "ActivateBestChain: GUI activity detected during wait (idle reset %dms to %dms)\n",
+								now - initial_last_used, idle_time.count());
                         initial_last_used = last_used; // Update our reference point
                     }
 
