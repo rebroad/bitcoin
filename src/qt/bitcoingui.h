@@ -20,6 +20,7 @@
 #include <QMenu>
 #include <QPoint>
 #include <QSystemTrayIcon>
+#include <QTimer>
 
 #ifdef Q_OS_MAC
 #include <qt/macos_appnap.h>
@@ -194,6 +195,9 @@ private:
     int prevBlocks = 0;
     int spinnerFrame = 0;
 
+    /** Timer for spinner animation at 30 FPS */
+    QTimer* spinnerTimer = nullptr;
+
     const PlatformStyle *platformStyle;
     const NetworkStyle* const m_network_style;
 
@@ -279,6 +283,9 @@ private:
     /** Set the proxy-enabled icon as shown in the UI. */
     void updateProxyIcon();
     void updateWindowTitle();
+
+    /** Advance spinner frame for 30 FPS animation */
+    void advanceSpinnerFrame();
 
 public Q_SLOTS:
 #ifdef ENABLE_WALLET

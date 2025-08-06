@@ -231,6 +231,11 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
 #endif
 
     GUIUtil::handleCloseWindowShortcut(this);
+
+    // Initialize spinner timer for 30 FPS animation
+    spinnerTimer = new QTimer(this);
+    spinnerTimer->setInterval(33); // ~30 FPS (1000ms / 30 = 33.33ms)
+    connect(spinnerTimer, &QTimer::timeout, this, &BitcoinGUI::advanceSpinnerFrame);
 }
 
 BitcoinGUI::~BitcoinGUI() {
@@ -1049,6 +1054,12 @@ void BitcoinGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVer
     if (secs < MAX_BLOCK_TIME_GAP) {
         tooltip = tr("Up to date") + QString(".<br>") + tooltip;
         labelBlocksIcon->setThemedPixmap(QStringLiteral(":/icons/synced"), STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE);
+        labelBlocksIcon->setProperty("showingSpinner", false);
+
+        // Stop spinner timer when synced
+        if (spinnerTimer->isActive()) {
+            spinnerTimer->stop();
+        }
 
 #ifdef ENABLE_WALLET
         if(walletFrame)
@@ -1072,13 +1083,27 @@ void BitcoinGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVer
         progressBar->setVisible(true);
 
         tooltip = tr("Catching up…") + QString("<br>") + tooltip;
-        if(count != prevBlocks)
-        {
+
+        // Show spinner and start timer if initial sync is not finished
+        bool shouldShowSpinner = !clientModel->isInitialSyncFinished();
+        labelBlocksIcon->setProperty("showingSpinner", shouldShowSpinner);
+
+        if (shouldShowSpinner) {
+            // Set initial spinner frame and start timer
             labelBlocksIcon->setThemedPixmap(
                 QString(":/animation/spinner-%1").arg(spinnerFrame, 3, 10, QChar('0')),
                 STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE);
-            spinnerFrame = (spinnerFrame + 1) % SPINNER_FRAMES;
+
+            if (!spinnerTimer->isActive()) {
+                spinnerTimer->start();
+            }
+        } else {
+            // Stop timer when initial sync is finished
+            if (spinnerTimer->isActive()) {
+                spinnerTimer->stop();
+            }
         }
+
         prevBlocks = count;
 
 #ifdef ENABLE_WALLET
@@ -1382,6 +1407,17 @@ void BitcoinGUI::updateWindowTitle()
         window_title += " - " + m_network_style->getTitleAddText();
     }
     setWindowTitle(window_title);
+}
+
+void BitcoinGUI::advanceSpinnerFrame()
+{
+    // Only advance spinner if we're showing the spinner icon (not the synced icon)
+    if (labelBlocksIcon->property("showingSpinner").toBool()) {
+        spinnerFrame = (spinnerFrame + 1) % SPINNER_FRAMES;
+        labelBlocksIcon->setThemedPixmap(
+            QString(":/animation/spinner-%1").arg(spinnerFrame, 3, 10, QChar('0')),
+            STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE);
+    }
 }
 
 void BitcoinGUI::showNormalIfMinimized(bool fToggleHidden)

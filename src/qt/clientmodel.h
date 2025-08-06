@@ -124,6 +124,9 @@ public:
 
     bool getProxyInfo(std::string& ip_port) const;
 
+    //! Return whether initial sync has finished
+    bool isInitialSyncFinished() const { return m_cached_initial_sync_finished.load(); }
+
     // Cached data for GUI thread (updated via signals from data thread)
     mutable std::atomic<int> m_cached_num_connections{0};
     mutable std::atomic<int> m_cached_num_blocks{-1};
