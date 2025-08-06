@@ -30,7 +30,7 @@ extern bool g_gui_heartbeat_initialized;
         qint64 timeSinceHeartbeat = g_gui_heartbeat_timer.nsecsElapsed() / 1000000; \
         if (timeSinceHeartbeat >= 1000) { /* Every second */ \
             qDebug() << "[GUI_HEARTBEAT] GUI thread alive at" << QDateTime::currentDateTime().toString("hh:mm:ss.zzz") \
-                     << "from" << __FILE__ << ":" << __LINE__ << __FUNCTION__; \
+                     << "from" << __FILE__ << ":" << __LINE__ << __FUNCTION__ << "(delay:" << timeSinceHeartbeat << "ms)"; \
             g_gui_heartbeat_timer.restart(); \
         } \
     } \
