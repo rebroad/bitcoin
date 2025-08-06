@@ -3080,8 +3080,9 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
                     // If GUI was active and now idle for 100ms, exit
                     if (gui_was_active && idle_time.count() >= GUI_IDLE_THRESHOLD_MS) {
-                        LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, final=%dms, continuing\n",
-								idle_time.count(), (last_activity_time - start_time).count());
+                        auto last_activity_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(last_activity_time - start_time);
+                        LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, last_activity=%dms, continuing\n",
+								idle_time.count(), last_activity_elapsed.count());
                         break;
                     }
 
