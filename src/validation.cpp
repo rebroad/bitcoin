@@ -10,7 +10,7 @@ bool IsGuiVisible();
 std::chrono::steady_clock::time_point GuiLastUsed();
 
 // GUI responsiveness constants
-static constexpr int GUI_IDLE_CHECK_DELAY_MS = 10;
+static constexpr int GUI_IDLE_CHECK_DELAY_MS = 5;
 static constexpr int GUI_IDLE_THRESHOLD_MS = 100;
 
 #include <arith_uint256.h>
@@ -3080,7 +3080,8 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
                     // If GUI was active and now idle for 100ms, exit
                     if (gui_was_active && idle_time.count() >= GUI_IDLE_THRESHOLD_MS) {
-                        LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, continuing\n", idle_time.count());
+                        LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, final=%dms, continuing\n",
+								idle_time.count(), (last_activity_time - start_time).count());
                         break;
                     }
 
