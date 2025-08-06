@@ -19,6 +19,7 @@
 #include <qt/walletmodel.h>
 
 #include <node/ui_interface.h>
+#include <rpc/server.h>
 
 #include <chrono>
 #include <optional>
@@ -179,7 +180,6 @@ TransactionView::TransactionView(const PlatformStyle *platformStyle, QWidget *pa
     GUIUtil::ExceptionSafeConnect(bumpFeeAction, &QAction::triggered, this, &TransactionView::bumpFee);
     bumpFeeAction->setObjectName("bumpFeeAction");
     abandonAction = contextMenu->addAction(tr("A&bandon transaction"), this, &TransactionView::abandonTx);
-    forceAbandonAction = contextMenu->addAction(tr("&Force abandon transaction"), this, &TransactionView::forceAbandonTx);
     contextMenu->addAction(tr("&Edit address label"), this, &TransactionView::editLabel);
 
     connect(dateWidget, qOverload<int>(&QComboBox::activated), this, &TransactionView::chooseDate);
@@ -401,7 +401,6 @@ void TransactionView::contextualMenu(const QPoint &point)
     uint256 hash;
     hash.SetHex(selection.at(0).data(TransactionTableModel::TxHashRole).toString().toStdString());
     abandonAction->setEnabled(model->wallet().transactionCanBeAbandoned(hash));
-    forceAbandonAction->setEnabled(model->wallet().inMempool(hash));
     bumpFeeAction->setEnabled(model->wallet().transactionCanBeBumped(hash));
     copyAddressAction->setEnabled(GUIUtil::hasEntryData(transactionView, 0, TransactionTableModel::AddressRole));
     copyLabelAction->setEnabled(GUIUtil::hasEntryData(transactionView, 0, TransactionTableModel::LabelRole));
@@ -422,66 +421,54 @@ void TransactionView::abandonTx()
     QString hashQStr = selection.at(0).data(TransactionTableModel::TxHashRole).toString();
     hash.SetHex(hashQStr.toStdString());
 
-    // Abandon the wallet transaction over the walletModel
-    model->wallet().abandonTransaction(hash);
-
-    // Update the table
-    model->getTransactionTableModel()->updateTransaction(hashQStr, CT_UPDATED, false);
-}
-
-void TransactionView::forceAbandonTx()
-{
-    if(!transactionView || !transactionView->selectionModel())
-        return;
-    QModelIndexList selection = transactionView->selectionModel()->selectedRows(0);
-
-    // get the hash from the TxHashRole (QVariant / QString)
-    uint256 hash;
-    QString hashQStr = selection.at(0).data(TransactionTableModel::TxHashRole).toString();
-    hash.SetHex(hashQStr.toStdString());
-
-    LogPrint(BCLog::QT, "GUI: Force abandon requested for transaction %s\n", hash.ToString());
-
-    // Show confirmation dialog
-    QString questionString = tr("This will evict the transaction from the mempool and then abandon it.\n\n");
-    questionString.append(tr("Warning: This only affects your local node. The transaction may still be relayed by other nodes and could potentially be mined.\n\n"));
-    questionString.append(tr("Are you sure you want to force abandon this transaction?"));
-
-    QMessageBox::StandardButton retval = QMessageBox::question(this, tr("Confirm force abandon"),
-        questionString,
-        QMessageBox::Yes | QMessageBox::Cancel,
-        QMessageBox::Cancel);
-
-    if (retval != QMessageBox::Yes) {
-        LogPrint(BCLog::QT, "GUI: User cancelled force abandon for transaction %s\n", hash.ToString());
-        return;
-    }
-
-    // Check if transaction is actually in mempool
-    LogPrint(BCLog::QT, "GUI: Checking if transaction %s is in mempool\n", hash.ToString());
-    if (!model->wallet().inMempool(hash)) {
-        LogPrint(BCLog::QT, "GUI: Transaction %s is not in mempool, proceeding with direct abandonment\n", hash.ToString());
-        QMessageBox::information(nullptr, tr("Info"), tr("Transaction is not in mempool. Attempting to abandon directly."));
-    } else {
-        LogPrint(BCLog::QT, "GUI: Transaction %s is in mempool, proceeding with abandonment\n", hash.ToString());
-        // Note: We're skipping the eviction step for now
-        // The abandonment will work regardless of mempool status
-        LogPrint(BCLog::QT, "GUI: Skipping eviction - proceeding with direct abandonment\n");
-    }
-
-    // Abandon the transaction
     LogPrint(BCLog::QT, "GUI: Attempting to abandon transaction %s\n", hash.ToString());
-    if (!model->wallet().abandonTransaction(hash)) {
-        LogPrint(BCLog::QT, "GUI: Failed to abandon transaction %s\n", hash.ToString());
-        QMessageBox::critical(nullptr, tr("Force abandon error"), tr("Failed to abandon transaction"));
+
+    // First try regular abandonment
+    if (model->wallet().abandonTransaction(hash)) {
+        LogPrint(BCLog::QT, "GUI: Successfully abandoned transaction %s\n", hash.ToString());
+        // Update the table
+        model->getTransactionTableModel()->updateTransaction(hashQStr, CT_UPDATED, false);
         return;
     }
 
-    LogPrint(BCLog::QT, "GUI: Successfully abandoned transaction %s\n", hash.ToString());
-    // Update the table
-    model->getTransactionTableModel()->updateTransaction(hashQStr, CT_UPDATED, false);
-    
-    QMessageBox::information(nullptr, tr("Success"), tr("Transaction has been force abandoned successfully"));
+    // If regular abandonment failed, check if it's because the transaction is in mempool
+    if (model->wallet().inMempool(hash)) {
+        LogPrint(BCLog::QT, "GUI: Transaction %s is in mempool, attempting eviction first\n", hash.ToString());
+        
+        // Show confirmation dialog for mempool eviction
+        QString questionString = tr("This transaction is currently in the mempool.\n\n");
+        questionString.append(tr("To abandon it, we need to evict it from the mempool first.\n\n"));
+        questionString.append(tr("Warning: This only affects your local node. The transaction may still be relayed by other nodes.\n\n"));
+        questionString.append(tr("Do you want to evict and abandon this transaction?"));
+        
+        QMessageBox::StandardButton retval = QMessageBox::question(this, tr("Confirm evict and abandon"),
+            questionString,
+            QMessageBox::Yes | QMessageBox::Cancel,
+            QMessageBox::Cancel);
+            
+        if (retval != QMessageBox::Yes) {
+            return;
+        }
+
+        // Try to evict from mempool using RPC call
+        if (!evictTransactionFromMempool(hashQStr)) {
+            QMessageBox::critical(nullptr, tr("Abandon transaction error"), tr("Failed to evict transaction from mempool"));
+            return;
+        }
+
+        // Now try abandonment again
+        if (model->wallet().abandonTransaction(hash)) {
+            LogPrint(BCLog::QT, "GUI: Successfully evicted and abandoned transaction %s\n", hash.ToString());
+            // Update the table
+            model->getTransactionTableModel()->updateTransaction(hashQStr, CT_UPDATED, false);
+            QMessageBox::information(nullptr, tr("Success"), tr("Transaction has been evicted from mempool and abandoned successfully"));
+            return;
+        }
+    }
+
+    // If we get here, abandonment failed for some other reason
+    LogPrint(BCLog::QT, "GUI: Failed to abandon transaction %s\n", hash.ToString());
+    QMessageBox::critical(nullptr, tr("Abandon transaction error"), tr("Failed to abandon transaction"));
 }
 
 bool TransactionView::evictTransactionFromMempool(const QString& txid)
@@ -489,11 +476,24 @@ bool TransactionView::evictTransactionFromMempool(const QString& txid)
     // Log the attempt to debug.log
     LogPrint(BCLog::QT, "GUI: Attempting to evict transaction %s from mempool\n", txid.toStdString());
     
-    // For now, we'll skip the eviction step and just proceed with abandonment
-    // The transaction will be abandoned directly if it's not in mempool
-    // This is actually fine because the abandonment will work regardless
-    LogPrint(BCLog::QT, "GUI: Skipping eviction step - proceeding with direct abandonment\n");
-    return true;
+    // Call the evicttransaction RPC method directly
+    JSONRPCRequest request;
+    request.strMethod = "evicttransaction";
+    request.params = UniValue(UniValue::VARR);
+    request.params.push_back(txid.toStdString());
+    
+    UniValue result;
+    try {
+        result = ::tableRPC.execute(request);
+        LogPrint(BCLog::QT, "GUI: Successfully evicted transaction %s from mempool\n", txid.toStdString());
+        return true;
+    } catch (const UniValue& e) {
+        LogPrint(BCLog::QT, "GUI: Failed to evict transaction %s from mempool: %s\n", txid.toStdString(), e.write());
+        return false;
+    } catch (const std::exception& e) {
+        LogPrint(BCLog::QT, "GUI: Exception while evicting transaction %s from mempool: %s\n", txid.toStdString(), e.what());
+        return false;
+    }
 }
 
 void TransactionView::bumpFee([[maybe_unused]] bool checked)

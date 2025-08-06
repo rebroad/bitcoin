@@ -105,7 +105,6 @@ private Q_SLOTS:
     void openThirdPartyTxUrl(QString url);
     void updateWatchOnlyColumn(bool fHaveWatchOnly);
     void abandonTx();
-    void forceAbandonTx();
     bool evictTransactionFromMempool(const QString& txid);
     void bumpFee(bool checked);
 

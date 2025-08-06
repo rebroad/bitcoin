@@ -1129,7 +1129,7 @@ bool CWallet::TransactionCanBeAbandoned(const uint256& hashTx) const
 {
     LOCK(cs_wallet);
     const CWalletTx* wtx = GetWalletTx(hashTx);
-    return wtx && !wtx->isAbandoned() && GetTxDepthInMainChain(*wtx) == 0 && !wtx->InMempool();
+    return wtx && !wtx->isAbandoned() && GetTxDepthInMainChain(*wtx) == 0; // && !wtx->InMempool();
 }
 
 void CWallet::MarkInputsDirty(const CTransactionRef& tx)
@@ -1151,11 +1151,17 @@ bool CWallet::AbandonTransaction(const uint256& hashTx)
     std::set<uint256> todo;
     std::set<uint256> done;
 
-    // Can't mark abandoned if confirmed or in mempool
+    // Can't mark abandoned if confirmed
     auto it = mapWallet.find(hashTx);
     assert(it != mapWallet.end());
     const CWalletTx& origtx = it->second;
-    if (GetTxDepthInMainChain(origtx) != 0 || origtx.InMempool()) {
+    if (GetTxDepthInMainChain(origtx) != 0) {
+        return false;
+    }
+    
+    // Can't abandon if transaction is in mempool (needs eviction first)
+    if (origtx.InMempool()) {
+        LogPrint(BCLog::RPC, "AbandonTransaction: Transaction %s is in mempool, eviction required first\n", hashTx.ToString());
         return false;
     }
 
