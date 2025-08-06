@@ -851,6 +851,8 @@ static RPCHelpMan getmempooldescendants()
     };
 }
 
+static RPCHelpMan evicttransaction();
+
 static RPCHelpMan getmempoolentry()
 {
     return RPCHelpMan{"getmempoolentry",
@@ -3065,6 +3067,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         &getmempoolancestors,                },
     { "blockchain",         &getmempooldescendants,              },
     { "blockchain",         &getmempoolentry,                    },
+    { "blockchain",         &evicttransaction,                   },
     { "blockchain",         &getmempoolinfo,                     },
     { "blockchain",         &getrawmempool,                      },
     { "blockchain",         &gettxout,                           },
@@ -3094,4 +3097,47 @@ static const CRPCCommand commands[] =
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);
     }
+}
+
+static RPCHelpMan evicttransaction()
+{
+    return RPCHelpMan{"evicttransaction",
+                "\nEvict transaction <txid> from the mempool\n"
+                "This will remove the transaction from the local mempool, making it eligible for abandonment.\n"
+                "Use with caution as this only affects your local node and the transaction may still be relayed by other nodes.\n"
+                "It only works on transactions which are currently in the mempool.\n",
+                {
+                    {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction id"},
+                },
+                RPCResult{RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+                    HelpExampleCli("evicttransaction", "\"1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d\"")
+            + HelpExampleRpc("evicttransaction", "\"1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    LogPrint(BCLog::RPC, "evicttransaction: Called with txid %s\n", request.params[0].get_str());
+
+    uint256 hash = ParseHashV(request.params[0], "txid");
+    LogPrint(BCLog::RPC, "evicttransaction: Looking for transaction %s in mempool\n", hash.ToString());
+
+    CTxMemPool& mempool = EnsureAnyMemPool(request.context);
+    LOCK(mempool.cs);
+
+    CTxMemPool::txiter it = mempool.mapTx.find(hash);
+    if (it == mempool.mapTx.end()) {
+        LogPrint(BCLog::RPC, "evicttransaction: Transaction %s not found in mempool\n", hash.ToString());
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction not found in mempool");
+    }
+
+    LogPrint(BCLog::RPC, "evicttransaction: Found transaction %s in mempool, removing it\n", hash.ToString());
+
+    // Get the transaction and remove it from mempool
+    const CTransaction& tx = it->GetTx();
+    mempool.removeRecursive(tx, MemPoolRemovalReason::ABANDONED);
+
+    LogPrint(BCLog::RPC, "evicttransaction: Successfully removed transaction %s from mempool\n", hash.ToString());
+    return NullUniValue;
+},
+    };
 }

@@ -434,18 +434,18 @@ void TransactionView::abandonTx()
     // If regular abandonment failed, check if it's because the transaction is in mempool
     if (model->wallet().inMempool(hash)) {
         LogPrint(BCLog::QT, "GUI: Transaction %s is in mempool, attempting eviction first\n", hash.ToString());
-        
+
         // Show confirmation dialog for mempool eviction
         QString questionString = tr("This transaction is currently in the mempool.\n\n");
         questionString.append(tr("To abandon it, we need to evict it from the mempool first.\n\n"));
         questionString.append(tr("Warning: This only affects your local node. The transaction may still be relayed by other nodes.\n\n"));
         questionString.append(tr("Do you want to evict and abandon this transaction?"));
-        
+
         QMessageBox::StandardButton retval = QMessageBox::question(this, tr("Confirm evict and abandon"),
             questionString,
             QMessageBox::Yes | QMessageBox::Cancel,
             QMessageBox::Cancel);
-            
+
         if (retval != QMessageBox::Yes) {
             return;
         }
@@ -473,17 +473,21 @@ void TransactionView::abandonTx()
 
 bool TransactionView::evictTransactionFromMempool(const QString& txid)
 {
-    // Log the attempt to debug.log
     LogPrint(BCLog::QT, "GUI: Attempting to evict transaction %s from mempool\n", txid.toStdString());
-    
-    // Call the evicttransaction RPC method directly
-    JSONRPCRequest request;
-    request.strMethod = "evicttransaction";
-    request.params = UniValue(UniValue::VARR);
-    request.params.push_back(txid.toStdString());
-    
+
+    // Since evicttransaction is now a non-wallet RPC method, we can call it directly
+    // without needing a wallet context
+    UniValue params(UniValue::VARR);
+    params.push_back(txid.toStdString());
+
     UniValue result;
     try {
+        // Create a JSONRPCRequest and call the RPC method directly
+        JSONRPCRequest request;
+        request.strMethod = "evicttransaction";
+        request.params = params;
+        request.mode = JSONRPCRequest::EXECUTE;
+
         result = ::tableRPC.execute(request);
         LogPrint(BCLog::QT, "GUI: Successfully evicted transaction %s from mempool\n", txid.toStdString());
         return true;
