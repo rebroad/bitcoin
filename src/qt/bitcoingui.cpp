@@ -13,6 +13,7 @@
 
 // Global GUI state tracking
 static std::atomic<bool> g_gui_visible{false};
+static std::atomic<std::chrono::steady_clock::time_point> g_gui_last_used{std::chrono::steady_clock::now()};
 
 bool IsGuiVisible()
 {
@@ -23,6 +24,16 @@ void SetGuiVisible(bool visible)
 {
     g_gui_visible.store(visible);
     LogPrint(BCLog::QT, "GUI state changed: %s\n", visible ? "visible" : "not visible");
+}
+
+std::chrono::steady_clock::time_point GuiLastUsed()
+{
+    return g_gui_last_used.load();
+}
+
+void UpdateGuiLastUsed()
+{
+    g_gui_last_used.store(std::chrono::steady_clock::now());
 }
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -1245,6 +1256,8 @@ void BitcoinGUI::closeEvent(QCloseEvent *event)
 
 void BitcoinGUI::showEvent(QShowEvent *event)
 {
+    QMainWindow::showEvent(event);
+
     // enable the debug window when the main window shows up
     openRPCConsoleAction->setEnabled(true);
     showMempoolStatsAction->setEnabled(true);
@@ -1253,12 +1266,14 @@ void BitcoinGUI::showEvent(QShowEvent *event)
 
     // Track GUI state
     SetGuiVisible(true);
+    UpdateGuiLastUsed();
 }
 
 void BitcoinGUI::hideEvent(QHideEvent* event)
 {
     QMainWindow::hideEvent(event);
     SetGuiVisible(false);
+    UpdateGuiLastUsed();
 }
 
 #ifdef ENABLE_WALLET
@@ -1301,6 +1316,29 @@ void BitcoinGUI::dropEvent(QDropEvent *event)
 
 bool BitcoinGUI::eventFilter(QObject *object, QEvent *event)
 {
+    // Track user activity for GUI responsiveness
+    switch (event->type()) {
+        case QEvent::KeyPress:
+        case QEvent::KeyRelease:
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonRelease:
+        case QEvent::MouseMove:
+        case QEvent::Wheel:
+        case QEvent::ContextMenu:
+        case QEvent::Show:
+        case QEvent::Hide:
+        case QEvent::FocusIn:
+        case QEvent::FocusOut:
+        case QEvent::Enter:
+        case QEvent::Leave:
+        case QEvent::DragEnter:
+        case QEvent::Drop:
+            UpdateGuiLastUsed();
+            break;
+        default:
+            break;
+    }
+
     // Catch status tip events
     if (event->type() == QEvent::StatusTip)
     {

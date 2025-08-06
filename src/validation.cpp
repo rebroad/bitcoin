@@ -7,6 +7,7 @@
 
 // Forward declaration for GUI state (implemented in bitcoingui.cpp)
 bool IsGuiVisible();
+std::chrono::steady_clock::time_point GuiLastUsed();
 
 #include <arith_uint256.h>
 #include <chain.h>
@@ -3037,12 +3038,22 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
             // Check if GUI is visible and yield if needed (after cs_main is released)
             if (IsGuiVisible()) {
-                LogPrint(BCLog::QT, "ActivateBestChain: GUI is visible, yielding for responsiveness\n");
+                // Keep yielding until GUI has been idle for at least 100ms
+                while (true) {
+                    auto now = std::chrono::steady_clock::now();
+                    auto last_used = GuiLastUsed();
+                    auto idle_time = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_used);
 
-                // Simple yield - let GUI thread run
-                std::this_thread::yield();
+                    if (idle_time.count() >= 100) {
+                        LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, continuing\n", idle_time.count());
+                        break;
+                    }
 
-                LogPrint(BCLog::QT, "ActivateBestChain: Resuming after GUI yield\n");
+                    LogPrint(BCLog::QT, "ActivateBestChain: GUI active (idle for %dms), yielding for responsiveness\n", idle_time.count());
+
+                    // Simple yield - let GUI thread run
+                    std::this_thread::yield();
+                }
             }
 
         } while (!m_chain.Tip() || (starting_tip && CBlockIndexWorkComparator()(m_chain.Tip(), starting_tip)));

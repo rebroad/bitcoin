@@ -70,6 +70,8 @@ class ClickableProgressBar;
 // GUI state management functions
 bool IsGuiVisible();
 void SetGuiVisible(bool visible);
+std::chrono::steady_clock::time_point GuiLastUsed();
+void UpdateGuiLastUsed();
 
 class BitcoinGUI : public QMainWindow
 {
