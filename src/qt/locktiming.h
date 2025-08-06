@@ -11,6 +11,9 @@
 #include <limits>
 #include <chrono>
 
+// Forward declaration for GUI state management
+void UpdateGuiLastUsed();
+
 // Macro to time cs_main lock attempts with rate limiting
 #define TIME_CS_MAIN_LOCK(maxWaitMs) \
     UpdateGuiLastUsed(); \
