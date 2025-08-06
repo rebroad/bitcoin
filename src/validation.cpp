@@ -3045,19 +3045,25 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
                 // Keep yielding until GUI has been idle for at least 100ms
+                auto initial_last_used = GuiLastUsed();
                 while (true) {
                     auto now = std::chrono::steady_clock::now();
                     auto last_used = GuiLastUsed();
                     auto idle_time = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_used);
+
+                    // Debug if GUI activity increased during the loop
+                    if (last_used > initial_last_used) {
+                        LogPrint(BCLog::QT, "ActivateBestChain: GUI activity detected during wait (idle reset to %dms)\n", idle_time.count());
+                        initial_last_used = last_used; // Update our reference point
+                    }
 
                     if (idle_time.count() >= 100) {
                         LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, continuing\n", idle_time.count());
                         break;
                     }
 
-                    LogPrint(BCLog::QT, "ActivateBestChain: GUI active (idle for %dms), yielding for responsiveness\n", idle_time.count());
-
-                    // Simple yield - let GUI thread run
+                    // Sleep for 1ms to reduce CPU usage, then yield
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     std::this_thread::yield();
                 }
             }
