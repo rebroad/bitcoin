@@ -1530,6 +1530,7 @@ bool CChainState::IsInitialBlockDownload() const
         LogPrintf("%s: Setting to %s\n", __func__, fNew ? "true" : "false");
         fPrev = fNew;
     }
+
     return fNew;
 }
 

@@ -1836,6 +1836,13 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
     SetBestHeight(pindexNew->nHeight);
     SetServiceFlagsIBDCache(!fInitialDownload);
 
+    // Set initial sync finished when we're at the best known header
+    if (!fInitialDownload && !m_initial_sync_finished && pindexNew == pindexBestHeader) {
+        m_initial_sync_finished = true;
+        uiInterface.NotifyInitialSyncFinished();
+        LogPrintf("Initial sync finished at height %d (best known block)\n", pindexNew->nHeight);
+    }
+
     // Don't relay inventory during initial block download.
     if (fInitialDownload) return;
 
@@ -4383,32 +4390,23 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
 
         // Set initial sync finished when we reach the best header we know about
-        bool was_ibd = !m_initial_sync_finished;
-        if (pindex && pindex == pindexBestHeader) {
-            m_initial_sync_finished = true;
+        if (!m_initial_sync_finished && pindex && pindex == pindexBestHeader) {
+            // IBD just completed AND this is the best block we know about, take a snapshot
+            int64_t now = GetTimeSeconds();
+            int64_t time_since_last_snap = now - pfrom.nTimeSnap;
 
-            // Notify UI that initial sync has finished
-            uiInterface.NotifyInitialSyncFinished();
-
-            // Take snapshot if we were previously in IBD
-            if (was_ibd) {
-                // IBD just completed AND this is the best block we know about, take a snapshot
-                int64_t now = GetTimeSeconds();
-                int64_t time_since_last_snap = now - pfrom.nTimeSnap;
-
-                if (time_since_last_snap > 60) {
-                    // Last snapshot was > 1 minute ago, do full rotation
-                    // Rotate snapshots for all peers (5-minute timer)
-                    m_connman.ForEachNode([this, now](CNode* pnode) {
-                        RotateNodeSnapshots(pnode, now);
-                        return true;
-                    });
-                    LogPrintf("IBD completion snapshot rotation at height=%d\n", pindex->nHeight);
-                } else {
-                    // Last snapshot was ≤ 1 minute ago, just update current snapshot
-                    UpdatePeerSnapshots(now);
-                    LogPrintf("IBD completion snapshot update at height=%d\n", pindex->nHeight);
-                }
+            if (time_since_last_snap > 60) {
+                // Last snapshot was > 1 minute ago, do full rotation
+                // Rotate snapshots for all peers (5-minute timer)
+                m_connman.ForEachNode([this, now](CNode* pnode) {
+                    RotateNodeSnapshots(pnode, now);
+                    return true;
+                });
+                LogPrintf("IBD completion snapshot rotation at height=%d\n", pindex->nHeight);
+            } else {
+                // Last snapshot was ≤ 1 minute ago, just update current snapshot
+                UpdatePeerSnapshots(now);
+                LogPrintf("IBD completion snapshot update at height=%d\n", pindex->nHeight);
             }
         }
 
