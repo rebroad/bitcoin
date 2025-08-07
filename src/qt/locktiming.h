@@ -108,12 +108,14 @@ extern bool g_gui_heartbeat_initialized;
             minFailureInterval = -1; \
             maxFailureInterval = 0; \
         } else { \
-            /* Log every attempt for debugging */ \
-            QString threadName = QThread::currentThread()->objectName().isEmpty() ? "unnamed" : QThread::currentThread()->objectName(); \
-            qDebug() << "[LOCK_TIMED] cs_main try_to_lock at" << __FILE__ << ":" << __LINE__ << __FUNCTION__ \
-                     << "[" << threadName << "]" \
-                     << (lock.owns_lock() ? "ACQUIRED" : "FAILED") << "after" << waited << "ms" \
-                     << "| Heartbeat delay:" << heartbeatDelay << "ms"; \
+            /* Log every attempt for debugging, but skip 0ms acquisitions to reduce noise */ \
+            if (waited > 0 || !lock.owns_lock()) { \
+                QString threadName = QThread::currentThread()->objectName().isEmpty() ? "unnamed" : QThread::currentThread()->objectName(); \
+                qDebug() << "[LOCK_TIMED] cs_main try_to_lock at" << __FILE__ << ":" << __LINE__ << __FUNCTION__ \
+                         << "[" << threadName << "]" \
+                         << (lock.owns_lock() ? "ACQUIRED" : "FAILED") << "after" << waited << "ms" \
+                         << "| Heartbeat delay:" << heartbeatDelay << "ms"; \
+            } \
         } \
     } \
     UpdateGuiLastUsed();
