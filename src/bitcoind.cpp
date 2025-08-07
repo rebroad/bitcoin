@@ -11,6 +11,7 @@
 #include <clientversion.h>
 #include <compat.h>
 #include <init.h>
+#include <init/common.h>
 #include <interfaces/chain.h>
 #include <interfaces/init.h>
 #include <node/context.h>
@@ -122,6 +123,9 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
         return InitError(Untranslated(strprintf("Error parsing command line arguments: %s\n", error)));
     }
 
+    // Set logging time precision early so that all subsequent LogPrintf calls use the correct precision
+    init::SetLoggingTimePrecision(args);
+
     // Process help and version before taking care about datadir
     if (HelpRequested(args) || args.IsArgSet("-version")) {
         std::string strUsage = PACKAGE_NAME " version " + FormatFullVersion() + "\n";
@@ -161,6 +165,9 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
         } catch (const std::exception& e) {
             return InitError(Untranslated(strprintf("%s\n", e.what())));
         }
+
+        // Parse logging options early so that all subsequent LogPrintf calls use the correct precision
+        init::SetLoggingOptions(args);
 
         // Error out when loose non-argument tokens are encountered on command line
         for (int i = 1; i < argc; i++) {

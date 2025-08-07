@@ -19,6 +19,7 @@ void UnsetGlobals();
  */
 bool SanityChecks();
 void AddLoggingArgs(ArgsManager& args);
+void SetLoggingTimePrecision(const ArgsManager& args);
 void SetLoggingOptions(const ArgsManager& args);
 void SetLoggingCategories(const ArgsManager& args);
 bool StartLogging(const ArgsManager& args);

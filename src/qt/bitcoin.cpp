@@ -11,6 +11,7 @@
 
 #include <chainparams.h>
 #include <init.h>
+#include <init/common.h>
 #include <interfaces/handler.h>
 #include <interfaces/init.h>
 #include <interfaces/node.h>
@@ -728,6 +729,9 @@ int GuiMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    // Set logging time precision after config files are read but before any log messages
+    init::SetLoggingTimePrecision(gArgs);
+
     /// 7. Determine network (and switch to network specific options)
     // - Do not call Params() before this step
     // - Do this after parsing the configuration file, as the network can be switched there
@@ -742,6 +746,7 @@ int GuiMain(int argc, char* argv[])
         QMessageBox::critical(nullptr, PACKAGE_NAME, QObject::tr("Error: %1").arg(e.what()));
         return EXIT_FAILURE;
     }
+
 #ifdef ENABLE_WALLET
     // Parse URIs on command line -- this can affect Params()
     PaymentServer::ipcParseCommandLine(argc, argv);
@@ -786,6 +791,10 @@ int GuiMain(int argc, char* argv[])
     qInstallMessageHandler(DebugMessageHandler);
     // Allow parameter interaction before we create the options model
     app.parameterSetup();
+
+    // Parse logging options after Qt-specific defaults are applied
+    init::SetLoggingOptions(gArgs);
+
     GUIUtil::LogQtInfo();
     // Load GUI settings from QSettings
     app.createOptionsModel(gArgs.GetBoolArg("-resetguisettings", false));

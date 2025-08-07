@@ -24,6 +24,7 @@ static const bool DEFAULT_LOGIPS        = false;
 static const bool DEFAULT_LOGTIMESTAMPS = true;
 static const bool DEFAULT_LOGTHREADNAMES = false;
 static const bool DEFAULT_LOGSOURCELOCATIONS = false;
+static const int DEFAULT_LOGTIMEPRECISION = 3; // Default to milliseconds (3 decimal places)
 extern const char * const DEFAULT_DEBUGLOGFILE;
 
 extern bool fLogIPs;
@@ -91,6 +92,14 @@ namespace BCLog {
 
         std::string LogTimestampStr(const std::string& str);
 
+        // For auto precision mode: track previous timestamp to detect duplicates
+        int64_t m_previous_timestamp GUARDED_BY(m_cs) = 0;
+        int m_auto_precision = DEFAULT_LOGTIMEPRECISION;
+
+    public:
+        // Setter for auto precision (used during initialization)
+        void SetAutoPrecision(int precision) { m_auto_precision = precision; }
+
         /** Slots that connect to the print signal */
         std::list<std::function<void(const std::string&)>> m_print_callbacks GUARDED_BY(m_cs) {};
 
@@ -100,6 +109,7 @@ namespace BCLog {
 
         bool m_log_timestamps = DEFAULT_LOGTIMESTAMPS;
         bool m_log_time_micros = DEFAULT_LOGTIMEMICROS;
+        int m_log_time_precision = DEFAULT_LOGTIMEPRECISION;
         bool m_log_threadnames = DEFAULT_LOGTHREADNAMES;
         bool m_log_sourcelocations = DEFAULT_LOGSOURCELOCATIONS;
 

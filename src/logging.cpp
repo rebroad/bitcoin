@@ -214,9 +214,55 @@ std::string BCLog::Logger::LogTimestampStr(const std::string& str)
     if (m_started_new_line) {
         int64_t nTimeMicros = GetTimeMicros();
         strStamped = FormatISO8601DateTime(nTimeMicros/1000000);
-        if (m_log_time_micros) {
+        if (m_log_time_precision > 0 || m_log_time_precision == -1) {
             strStamped.pop_back();
-            strStamped += strprintf(".%03d", (nTimeMicros/1000)%1000);
+            int precision_to_use = m_log_time_precision;
+
+            // Auto mode: check if we need to increase precision
+            if (m_log_time_precision == -1) {
+                precision_to_use = m_auto_precision;
+
+                // Round current timestamp to current precision
+                int64_t timestamp_rounded = nTimeMicros;
+                if (precision_to_use == 0) timestamp_rounded = (nTimeMicros/1000000)*1000000; // Round to seconds
+                else if (precision_to_use == 1) timestamp_rounded = (nTimeMicros/100000)*100000;
+                else if (precision_to_use == 2) timestamp_rounded = (nTimeMicros/10000)*10000;
+                else if (precision_to_use == 3) timestamp_rounded = (nTimeMicros/1000)*1000;
+                else if (precision_to_use == 4) timestamp_rounded = (nTimeMicros/100)*100;
+                else if (precision_to_use == 5) timestamp_rounded = (nTimeMicros/10)*10;
+
+                // Check if this timestamp is the same as the previous one
+                if (m_previous_timestamp != 0 && timestamp_rounded == m_previous_timestamp && precision_to_use < 6) {
+                    precision_to_use++;
+                    m_auto_precision = precision_to_use;
+                    // Recalculate the rounded timestamp with the new precision
+                    if (precision_to_use == 1) timestamp_rounded = (nTimeMicros/100000)*100000;
+                    else if (precision_to_use == 2) timestamp_rounded = (nTimeMicros/10000)*10000;
+                    else if (precision_to_use == 3) timestamp_rounded = (nTimeMicros/1000)*1000;
+                    else if (precision_to_use == 4) timestamp_rounded = (nTimeMicros/100)*100;
+                    else if (precision_to_use == 5) timestamp_rounded = (nTimeMicros/10)*10;
+                }
+
+                // Store current timestamp for next comparison
+                m_previous_timestamp = timestamp_rounded;
+            }
+
+            // Apply the precision
+            if (precision_to_use == 0) {
+                // No decimal places - just seconds
+            } else if (precision_to_use == 1) {
+                strStamped += strprintf(".%01d", (nTimeMicros/100000)%10);
+            } else if (precision_to_use == 2) {
+                strStamped += strprintf(".%02d", (nTimeMicros/10000)%100);
+            } else if (precision_to_use == 3) {
+                strStamped += strprintf(".%03d", (nTimeMicros/1000)%1000);
+            } else if (precision_to_use == 4) {
+                strStamped += strprintf(".%04d", (nTimeMicros/100)%10000);
+            } else if (precision_to_use == 5) {
+                strStamped += strprintf(".%05d", (nTimeMicros/10)%100000);
+            } else if (precision_to_use == 6) {
+                strStamped += strprintf(".%06d", nTimeMicros%1000000);
+            }
         }
         std::chrono::seconds mocktime = GetMockTime();
         if (mocktime > 0s) {

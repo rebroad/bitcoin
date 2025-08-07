@@ -22,17 +22,15 @@ extern bool g_gui_heartbeat_initialized;
 // Macro to time cs_main lock attempts with rate limiting
 #define TIME_CS_MAIN_LOCK(maxWaitMs) \
     UpdateGuiLastUsed(); \
-    { \
-        if (!g_gui_heartbeat_initialized) { \
-            g_gui_heartbeat_timer.start(); \
-            g_gui_heartbeat_initialized = true; \
-        } \
-        qint64 timeSinceHeartbeat = g_gui_heartbeat_timer.nsecsElapsed() / 1000000; \
-        if (timeSinceHeartbeat >= 1000) { /* Every second */ \
-            qDebug() << "[GUI_HEARTBEAT] GUI thread alive at" << QDateTime::currentDateTime().toString("hh:mm:ss.zzz") \
-                     << "from" << __FILE__ << ":" << __LINE__ << __FUNCTION__ << "(delay:" << timeSinceHeartbeat << "ms)"; \
-            g_gui_heartbeat_timer.restart(); \
-        } \
+    if (!g_gui_heartbeat_initialized) { \
+        g_gui_heartbeat_timer.start(); \
+        g_gui_heartbeat_initialized = true; \
+    } \
+    qint64 heartbeatDelay = g_gui_heartbeat_timer.nsecsElapsed() / 1000000; \
+    if (heartbeatDelay >= 1000) { /* Every second */ \
+        qDebug() << "[GUI_HEARTBEAT] GUI thread alive at" << QDateTime::currentDateTime().toString("hh:mm:ss.zzz") \
+                 << "from" << __FILE__ << ":" << __LINE__ << __FUNCTION__ << "(delay:" << heartbeatDelay << "ms)"; \
+        g_gui_heartbeat_timer.restart(); \
     } \
     QElapsedTimer lockTimer; \
     lockTimer.start(); \
@@ -86,7 +84,6 @@ extern bool g_gui_heartbeat_initialized;
             lastFailureTimer.restart(); \
         } \
         qint64 timeSinceLastLog = lastLogTimer.nsecsElapsed() / 1000000; \
-        qint64 heartbeatDelay = g_gui_heartbeat_timer.nsecsElapsed() / 1000000; \
         if (timeSinceLastLog >= 1000) { \
             QString successIntervals = (minSuccessInterval == -1) ? "none" : QString("%1-%2").arg(minSuccessInterval).arg(maxSuccessInterval); \
             QString failureIntervals = (minFailureInterval == -1) ? "none" : QString("%1-%2").arg(minFailureInterval).arg(maxFailureInterval); \

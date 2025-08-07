@@ -717,7 +717,7 @@ void InitParameterInteraction(ArgsManager& args)
  */
 void InitLogging(const ArgsManager& args)
 {
-    init::SetLoggingOptions(args);
+    // SetLoggingOptions is now called earlier in the initialization sequence
     init::LogPackageVersion();
 }
 
