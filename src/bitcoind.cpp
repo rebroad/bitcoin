@@ -166,9 +166,6 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
             return InitError(Untranslated(strprintf("%s\n", e.what())));
         }
 
-        // Parse logging options early so that all subsequent LogPrintf calls use the correct precision
-        init::SetLoggingOptions(args);
-
         // Error out when loose non-argument tokens are encountered on command line
         for (int i = 1; i < argc; i++) {
             if (!IsSwitchChar(argv[i][0])) {
