@@ -86,6 +86,7 @@ extern bool g_gui_heartbeat_initialized;
             lastFailureTimer.restart(); \
         } \
         qint64 timeSinceLastLog = lastLogTimer.nsecsElapsed() / 1000000; \
+        qint64 heartbeatDelay = g_gui_heartbeat_timer.nsecsElapsed() / 1000000; \
         if (timeSinceLastLog >= 1000) { \
             QString successIntervals = (minSuccessInterval == -1) ? "none" : QString("%1-%2").arg(minSuccessInterval).arg(maxSuccessInterval); \
             QString failureIntervals = (minFailureInterval == -1) ? "none" : QString("%1-%2").arg(minFailureInterval).arg(maxFailureInterval); \
@@ -94,7 +95,8 @@ extern bool g_gui_heartbeat_initialized;
                      << "| Successes:" << successCount << "| Failures:" << failureCount \
                      << "| Max wait:" << maxWaitTime << "ms" \
                      << "| Success intervals:" << successIntervals << "ms" \
-                     << "| Failure intervals:" << failureIntervals << "ms"; \
+                     << "| Failure intervals:" << failureIntervals << "ms" \
+                     << "| Heartbeat delay:" << heartbeatDelay << "ms"; \
             lastLogTimer.restart(); \
             successCount = 0; \
             failureCount = 0; \
@@ -106,7 +108,8 @@ extern bool g_gui_heartbeat_initialized;
         } else { \
             /* Log every attempt for debugging */ \
             qDebug() << "[LOCK_TIMED] cs_main try_to_lock at" << __FILE__ << ":" << __LINE__ << __FUNCTION__ \
-                     << (lock.owns_lock() ? "ACQUIRED" : "FAILED") << "after" << waited << "ms"; \
+                     << (lock.owns_lock() ? "ACQUIRED" : "FAILED") << "after" << waited << "ms" \
+                     << "| Heartbeat delay:" << heartbeatDelay << "ms"; \
         } \
     } \
     UpdateGuiLastUsed();
