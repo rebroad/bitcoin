@@ -667,6 +667,9 @@ int GuiMain(int argc, char* argv[])
     BitcoinApplication app;
     GUIUtil::LoadFont(QStringLiteral(":/fonts/monospace"));
 
+    // Set the main GUI thread name for debugging
+    QThread::currentThread()->setObjectName("GUI");
+
     /// 2. Parse command-line options. We do this after qt in order to show an error if there are problems parsing these
     // Command-line options take precedence:
     SetupServerArgs(gArgs);

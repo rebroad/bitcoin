@@ -49,6 +49,8 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     banTableModel(nullptr),
     m_thread(new QThread(this))
 {
+    m_thread->setObjectName("qt-clientmodl");
+
     peerTableModel = new PeerTableModel(m_node, this);
     m_peer_table_sort_proxy = new PeerTableSortProxy(this);
     m_peer_table_sort_proxy->setSourceModel(peerTableModel);
@@ -318,6 +320,7 @@ void ClientModel::setupDataThread()
     LogPrint(BCLog::QT, "ClientModel: Setting up data processing thread\n");
 
     m_data_thread = new QThread(this);
+    m_data_thread->setObjectName("qt-data");
     m_data_worker = new ClientModelDataWorker(m_node, this);
     m_data_worker->moveToThread(m_data_thread);
 
