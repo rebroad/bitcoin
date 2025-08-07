@@ -27,14 +27,14 @@ CAmount GetMinimumFee(const CWallet& wallet, unsigned int nTxBytes, const CCoinC
 
 CFeeRate GetRequiredFeeRate(const CWallet& wallet)
 {
-    printf("[DEBUG] GetRequiredFeeRate: wallet.m_min_fee = %ld, relayMinFee = %ld\n", (long)wallet.m_min_fee.GetFeePerK(), (long)wallet.chain().relayMinFee().GetFeePerK());
+    //printf("[DEBUG] GetRequiredFeeRate: wallet.m_min_fee = %ld, relayMinFee = %ld\n", (long)wallet.m_min_fee.GetFeePerK(), (long)wallet.chain().relayMinFee().GetFeePerK());
     // For wallet-originated transactions, only use wallet.m_min_fee
     if (wallet.m_min_fee == CFeeRate(0)) {
-        printf("[DEBUG] GetRequiredFeeRate: Using zero fee for wallet-originated transaction\n");
+        //printf("[DEBUG] GetRequiredFeeRate: Using zero fee for wallet-originated transaction\n");
         return CFeeRate(0);
     }
     CFeeRate r = std::max(wallet.m_min_fee, wallet.chain().relayMinFee());
-    printf("[DEBUG] GetRequiredFeeRate: returning %ld\n", (long)r.GetFeePerK());
+    //printf("[DEBUG] GetRequiredFeeRate: returning %ld\n", (long)r.GetFeePerK());
     return r;
 }
 
