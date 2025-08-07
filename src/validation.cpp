@@ -6,8 +6,10 @@
 #include <validation.h>
 
 // Forward declaration for GUI state (implemented in bitcoingui.cpp)
+#ifdef ENABLE_QT
 bool IsGuiVisible();
 std::chrono::steady_clock::time_point GuiLastUsed();
+#endif
 
 // GUI responsiveness constants
 static constexpr int GUI_IDLE_CHECK_DELAY_MS = 6;
@@ -3041,6 +3043,7 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
             } // cs_main is released here
 
             // Check if GUI is visible and yield if needed (after cs_main is released)
+#ifdef ENABLE_QT
             if (IsGuiVisible()) {
                 // Always yield first for immediate responsiveness
                 std::this_thread::yield();
@@ -3093,6 +3096,7 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
                     std::this_thread::yield();
                 }
             }
+#endif
 
         } while (!m_chain.Tip() || (starting_tip && CBlockIndexWorkComparator()(m_chain.Tip(), starting_tip)));
 
