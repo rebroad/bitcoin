@@ -273,12 +273,16 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
     AC_MSG_RESULT([$bitcoin_enable_qt])
   fi
 
+  dnl Add Qt-specific warning suppression for Qt5 deprecation warnings
+  AX_CHECK_COMPILE_FLAG([-Wno-deprecated-enum-enum-conversion], [QT_CXXFLAGS="-Wno-deprecated-enum-enum-conversion"], [], [$CXXFLAG_WERROR])
+
   AC_SUBST(QT_PIE_FLAGS)
   AC_SUBST(QT_INCLUDES)
   AC_SUBST(QT_LIBS)
   AC_SUBST(QT_LDFLAGS)
   AC_SUBST(QT_DBUS_INCLUDES)
   AC_SUBST(QT_TEST_INCLUDES)
+  AC_SUBST(QT_CXXFLAGS)
   AC_SUBST(QT_SELECT, qt5)
   AC_SUBST(MOC_DEFS)
 ])
