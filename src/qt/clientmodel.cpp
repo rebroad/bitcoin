@@ -88,8 +88,8 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
                     Q_EMIT mempoolFeeHistChanged();
                 }
                 // If cs_main is busy, skip this update (non-blocking)
-            }
-        }
+            } else LogPrint(BCLog::QT, "ClientModel: still in IBD, skipping fee histogram collection\n");
+        } else LogPrint(BCLog::QT, "ClientModel: too early to collect fee histogram\n");
     });
     connect(m_thread, &QThread::finished, timer, &QObject::deleteLater);
     connect(m_thread, &QThread::started, [timer] { timer->start(); });
