@@ -3328,10 +3328,14 @@ void CWallet::SetupDescriptorScriptPubKeyMans()
 
         if (!signer_res.isObject()) throw std::runtime_error(std::string(__func__) + ": Unexpected result");
         for (bool internal : {false, true}) {
-            #pragma GCC diagnostic push
-            #pragma GCC diagnostic ignored "-Wdangling-reference"
+#if __GNUC__ >= 12
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-reference"
+#endif
             const UniValue& descriptor_vals = find_value(signer_res, internal ? "internal" : "receive");
-            #pragma GCC diagnostic pop
+#if __GNUC__ >= 12
+#pragma GCC diagnostic pop
+#endif
             if (!descriptor_vals.isArray()) throw std::runtime_error(std::string(__func__) + ": Unexpected result");
             for (const UniValue& desc_val : descriptor_vals.get_array().getValues()) {
                 std::string desc_str = desc_val.getValStr();

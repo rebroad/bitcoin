@@ -913,20 +913,28 @@ static void GetWalletBalances(UniValue& result)
     DefaultRequestHandler rh;
     const UniValue listwallets = ConnectAndCallRPC(&rh, "listwallets", /* args=*/{});
     if (!find_value(listwallets, "error").isNull()) return;
+#if __GNUC__ >= 12
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdangling-reference"
+#endif
     const UniValue& wallets = find_value(listwallets, "result");
+#if __GNUC__ >= 12
 #pragma GCC diagnostic pop
+#endif
     if (wallets.size() <= 1) return;
 
     UniValue balances(UniValue::VOBJ);
     for (const UniValue& wallet : wallets.getValues()) {
         const std::string wallet_name = wallet.get_str();
         const UniValue getbalances = ConnectAndCallRPC(&rh, "getbalances", /* args=*/{}, wallet_name);
+#if __GNUC__ >= 12
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdangling-reference"
+#endif
         const UniValue& balance = find_value(getbalances, "result")["mine"]["trusted"];
+#if __GNUC__ >= 12
 #pragma GCC diagnostic pop
+#endif
         balances.pushKV(wallet_name, balance);
     }
     result.pushKV("balances", balances);
@@ -1171,10 +1179,14 @@ static int CommandLineRPC(int argc, char *argv[])
             rh.reset(new NetinfoRequestHandler());
         } else if (gArgs.GetBoolArg("-generate", false)) {
             const UniValue getnewaddress{GetNewAddress()};
+#if __GNUC__ >= 12
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdangling-reference"
+#endif
             const UniValue& error{find_value(getnewaddress, "error")};
+#if __GNUC__ >= 12
 #pragma GCC diagnostic pop
+#endif
             if (error.isNull()) {
                 SetGenerateToAddressArgs(find_value(getnewaddress, "result").get_str(), args);
                 rh.reset(new GenerateToAddressRequestHandler());
@@ -1199,10 +1211,14 @@ static int CommandLineRPC(int argc, char *argv[])
 
             // Parse reply
             UniValue result = find_value(reply, "result");
+#if __GNUC__ >= 12
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdangling-reference"
+#endif
             const UniValue& error = find_value(reply, "error");
+#if __GNUC__ >= 12
 #pragma GCC diagnostic pop
+#endif
             if (error.isNull()) {
                 if (gArgs.GetBoolArg("-getinfo", false)) {
                     if (!gArgs.IsArgSet("-rpcwallet")) {
