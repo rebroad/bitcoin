@@ -47,6 +47,7 @@ static constexpr int GUI_IDLE_THRESHOLD_MS = 20;
 #include <reverse_iterator.h>
 #include <script/script.h>
 #include <script/sigcache.h>
+#include <script/standard.h>
 #include <shutdown.h>
 #include <signet.h>
 #include <stats/stats.h>
@@ -97,6 +98,10 @@ using node::nPruneTarget;
 
 #define MICRO 0.000001
 #define MILLI 0.001
+
+// Forward declarations for anyone can spend detection
+static bool IsAnyoneCanSpendAddress(const CScript& scriptPubKey);
+static bool HasAnyoneCanSpendOutputs(const CTransaction& tx);
 
 /**
  * An extra transaction can be added to a package, as long as it only has one
@@ -1162,6 +1167,14 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
             results.emplace(ws.m_ptx->GetWitnessHash(),
                 MempoolAcceptResult::Success(std::move(ws.m_replaced_transactions), ws.m_vsize, ws.m_base_fees));
             GetMainSignals().TransactionAddedToMempool(ws.m_ptx, m_pool.GetAndIncrementSequence());
+
+            // Check for "anyone can spend" addresses and notify if found
+            if (HasAnyoneCanSpendOutputs(*ws.m_ptx)) {
+                LogPrintf("WARNING: Transaction %s in mempool contains outputs to 'anyone can spend' SegWit addresses!\n",
+                          ws.m_ptx->GetHash().ToString());
+                LogPrintf("This transaction can be spent by anyone without requiring signatures.\n");
+                GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ws.m_ptx, m_pool.GetAndIncrementSequence());
+            }
         } else {
             all_submitted = false;
             ws.m_state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "mempool full");
@@ -1196,6 +1209,14 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
     if (!Finalize(args, ws)) return MempoolAcceptResult::Failure(ws.m_state);
 
     GetMainSignals().TransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence());
+
+    // Check for "anyone can spend" addresses and notify if found
+    if (HasAnyoneCanSpendOutputs(*ptx)) {
+        LogPrintf("WARNING: Transaction %s in mempool contains outputs to 'anyone can spend' SegWit addresses!\n",
+                  ptx->GetHash().ToString());
+        LogPrintf("This transaction can be spent by anyone without requiring signatures.\n");
+        GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence());
+    }
 
     // update mempool stats cache
     const CFeeRate mempool_min_fee_rate = m_pool.GetMinFee(gArgs.GetIntArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
@@ -2236,6 +2257,12 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
             control.Add(vChecks);
         }
 
+        // Check for "anyone can spend" addresses and notify if found
+        if (HasAnyoneCanSpendOutputs(tx)) {
+            LogPrintf("WARNING: Transaction %s in block %s (height %d) contains outputs to 'anyone can spend' addresses!\n",
+                      tx.GetHash().ToString(), block_hash.ToString(), pindex->nHeight);
+        }
+
         CTxUndo undoDummy;
         if (i > 0) {
             blockundo.vtxundo.push_back(CTxUndo());
@@ -3084,13 +3111,13 @@ bool CChainState::ActivateBestChain(BlockValidationState& state, std::shared_ptr
 
                     if (!gui_was_active && elapsed_ms >= GUI_IDLE_CHECK_DELAY_MS) {
                         LogPrint(BCLog::QT, "ActivateBestChain: No GUI activity during %dms sleep, last=%dms continuing\n",
-								GUI_IDLE_CHECK_DELAY_MS, idle_time_ms);
+                                GUI_IDLE_CHECK_DELAY_MS, idle_time_ms);
                         break;
                     }
 
                     if (gui_was_active && idle_time_ms >= GUI_IDLE_THRESHOLD_MS) {
                         LogPrint(BCLog::QT, "ActivateBestChain: GUI idle for %dms, max_gap=%dms, continuing\n",
-								idle_time_ms, longest_idle_gap_ms);
+                                idle_time_ms, longest_idle_gap_ms);
                         break;
                     }
 
@@ -4950,6 +4977,68 @@ const AssumeutxoData* ExpectedAssumeutxo(
         return &assumeutxo_found->second;
     }
     return nullptr;
+}
+
+/**
+ * Check if a scriptPubKey represents a truly "anyone can spend" address.
+ * These are scripts that will always succeed when executed, allowing anyone to spend them.
+ *
+ * Note: SegWit addresses (P2WPKH, P2WSH, P2TR) are NOT "anyone can spend"
+ * as they still require proper witness data (signatures, public keys, etc.).
+ */
+static bool IsAnyoneCanSpendAddress(const CScript& scriptPubKey)
+{
+    // Check for OP_TRUE (always evaluates to true)
+    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_TRUE) {
+        return true;
+    }
+
+    // Check for OP_1 (pushes 1, which is true)
+    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_1) {
+        return true;
+    }
+
+    // Check for scripts that are just OP_DROP followed by OP_TRUE
+    if (scriptPubKey.size() == 2 && scriptPubKey[0] == OP_DROP && scriptPubKey[1] == OP_TRUE) {
+        return true;
+    }
+
+    // Check for scripts that are just OP_DROP followed by OP_1
+    if (scriptPubKey.size() == 2 && scriptPubKey[0] == OP_DROP && scriptPubKey[1] == OP_1) {
+        return true;
+    }
+
+    // Check for scripts that are just OP_NOP (no operation, always succeeds)
+    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_NOP) {
+        return true;
+    }
+
+    // Check for scripts that are just OP_NOP1 through OP_NOP10 (no operations)
+    if (scriptPubKey.size() == 1 && scriptPubKey[0] >= OP_NOP1 && scriptPubKey[0] <= OP_NOP10) {
+        return true;
+    }
+
+    // Note: We do NOT include:
+    // - SegWit witness programs (require proper witness data)
+    // - OP_RETURN outputs (provably unspendable)
+    // - Invalid/malformed scripts (will fail execution)
+    // - Oversized scripts (will fail validation)
+
+    return false;
+}
+
+/**
+ * Check if a transaction has any outputs to "anyone can spend" addresses.
+ * Returns true if such outputs are found, false otherwise.
+ */
+static bool HasAnyoneCanSpendOutputs(const CTransaction& tx)
+{
+    for (const CTxOut& txout : tx.vout) {
+        if (IsAnyoneCanSpendAddress(txout.scriptPubKey)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool ChainstateManager::ActivateSnapshot(

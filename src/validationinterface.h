@@ -100,6 +100,13 @@ protected:
     virtual void TransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) {}
 
     /**
+     * Notifies listeners of a transaction with "anyone can spend" outputs being added to mempool.
+     *
+     * Called on a background thread.
+     */
+    virtual void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) {}
+
+    /**
      * Notifies listeners of a transaction leaving mempool.
      *
      * This notification fires for transactions that are removed from the
@@ -199,6 +206,7 @@ public:
 
     void UpdatedBlockTip(const CBlockIndex *, const CBlockIndex *, bool fInitialDownload);
     void TransactionAddedToMempool(const CTransactionRef&, uint64_t mempool_sequence);
+    void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef&, uint64_t mempool_sequence);
     void TransactionRemovedFromMempool(const CTransactionRef&, MemPoolRemovalReason, uint64_t mempool_sequence);
     void BlockConnected(const std::shared_ptr<const CBlock> &, const CBlockIndex *pindex);
     void BlockDisconnected(const std::shared_ptr<const CBlock> &, const CBlockIndex* pindex);

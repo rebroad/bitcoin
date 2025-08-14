@@ -35,6 +35,7 @@
 #include <rpc/server_util.h>
 #include <rpc/util.h>
 #include <script/descriptor.h>
+#include <script/standard.h>
 #include <streams.h>
 #include <sync.h>
 #include <txdb.h>
@@ -43,6 +44,7 @@
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/translation.h>
+#include <util/moneystr.h>
 #include <validation.h>
 #include <validation_thread.h>
 #include <validationinterface.h>
@@ -66,6 +68,54 @@ using node::NodeContext;
 using node::ReadBlockFromDisk;
 using node::SnapshotMetadata;
 using node::UndoReadFromDisk;
+
+/**
+ * Check if a scriptPubKey represents a truly "anyone can spend" address.
+ * These are scripts that will always succeed when executed, allowing anyone to spend them.
+ *
+ * Note: SegWit addresses (P2WPKH, P2WSH, P2TR) are NOT "anyone can spend"
+ * as they still require proper witness data (signatures, public keys, etc.).
+ */
+static bool IsAnyoneCanSpendAddress(const CScript& scriptPubKey)
+{
+    // Check for OP_TRUE (always evaluates to true)
+    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_TRUE) {
+        return true;
+    }
+
+    // Check for OP_1 (pushes 1, which is true)
+    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_1) {
+        return true;
+    }
+
+    // Check for scripts that are just OP_DROP followed by OP_TRUE
+    if (scriptPubKey.size() == 2 && scriptPubKey[0] == OP_DROP && scriptPubKey[1] == OP_TRUE) {
+        return true;
+    }
+
+    // Check for scripts that are just OP_DROP followed by OP_1
+    if (scriptPubKey.size() == 2 && scriptPubKey[0] == OP_DROP && scriptPubKey[1] == OP_1) {
+        return true;
+    }
+
+    // Check for scripts that are just OP_NOP (no operation, always succeeds)
+    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_NOP) {
+        return true;
+    }
+
+    // Check for scripts that are just OP_NOP1 through OP_NOP10 (no operations)
+    if (scriptPubKey.size() == 1 && scriptPubKey[0] >= OP_NOP1 && scriptPubKey[0] <= OP_NOP10) {
+        return true;
+    }
+
+    // Note: We do NOT include:
+    // - SegWit witness programs (require proper witness data)
+    // - OP_RETURN outputs (provably unspendable)
+    // - Invalid/malformed scripts (will fail execution)
+    // - Oversized scripts (will fail validation)
+
+    return false;
+}
 
 struct CUpdatedBlock
 {
@@ -2035,6 +2085,147 @@ static RPCHelpMan getdustutxos()
     };
 }
 
+static RPCHelpMan getanyonecanspendutxos()
+{
+    return RPCHelpMan{"getanyonecanspendutxos",
+                "\nReturns statistics and details about \"anyone can spend\" UTXOs in the chainstate.\n"
+                "These are UTXOs that can be spent by anyone without requiring signatures.\n",
+                {
+                    {"verbose", RPCArg::Type::BOOL, RPCArg::Default{false}, "If true, returns detailed information about each UTXO found"},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "count", "The number of anyone can spend UTXOs"},
+                        {RPCResult::Type::NUM, "total_size", "The total size in bytes of anyone can spend UTXOs"},
+                        {RPCResult::Type::STR_AMOUNT, "total_amount", "The total amount of anyone can spend UTXOs in " + CURRENCY_UNIT},
+                        {RPCResult::Type::ARR, "utxos", "Detailed information about each UTXO (only if verbose=true)",
+                        {
+                            {RPCResult::Type::OBJ, "", "",
+                            {
+                                {RPCResult::Type::STR_HEX, "txid", "The transaction id"},
+                                {RPCResult::Type::NUM, "vout", "The vout value"},
+                                {RPCResult::Type::STR_AMOUNT, "amount", "The amount in " + CURRENCY_UNIT},
+                                {RPCResult::Type::STR_HEX, "scriptPubKey", "The script public key"},
+                                {RPCResult::Type::STR, "type", "The type of anyone can spend address"},
+                                {RPCResult::Type::NUM, "height", "Height of the unspent transaction output"},
+                            }},
+                        }},
+                    }},
+                RPCExamples{
+                    HelpExampleCli("getanyonecanspendutxos", "")
+            + HelpExampleCli("getanyonecanspendutxos", "true")
+            + HelpExampleRpc("getanyonecanspendutxos", "")
+            + HelpExampleRpc("getanyonecanspendutxos", "true")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    NodeContext& node = EnsureAnyNodeContext(request.context);
+    ChainstateManager& chainman = EnsureChainman(node);
+    LOCK(cs_main);
+
+    CChainState& active_chainstate = chainman.ActiveChainstate();
+    CCoinsViewDB* coins_view = &active_chainstate.CoinsDB();
+
+    bool verbose = false;
+    if (!request.params[0].isNull()) {
+        verbose = request.params[0].get_bool();
+    }
+
+    uint64_t anyone_can_spend_count = 0;
+    uint64_t anyone_can_spend_size = 0;
+    CAmount anyone_can_spend_amount = 0;
+    uint64_t current_count = 0;
+
+    int64_t last_log_time = GetTimeMillis();
+
+    std::unique_ptr<CCoinsViewCursor> pcursor(coins_view->Cursor());
+    COutPoint key;
+    Coin coin;
+
+    UniValue utxos(UniValue::VARR);
+
+    LogPrint(BCLog::RPC, "getanyonecanspendutxos: Starting UTXO scan\n");
+
+    while (pcursor->Valid()) {
+        // Check for RPC interruption
+        if (node.rpc_interruption_point) {
+            node.rpc_interruption_point();
+        }
+
+        current_count++;
+
+        // Log progress every 5 seconds
+        int64_t current_time = GetTimeMillis();
+        if (current_time - last_log_time > 5000) {
+            LogPrint(BCLog::RPC, "getanyonecanspendutxos: Scanned %u UTXOs\n", current_count);
+            last_log_time = current_time;
+        }
+
+        if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
+            if (!coin.IsSpent() && !coin.out.scriptPubKey.IsUnspendable()) {
+                if (IsAnyoneCanSpendAddress(coin.out.scriptPubKey)) {
+                    anyone_can_spend_count++;
+                    anyone_can_spend_size += ::GetSerializeSize(coin, PROTOCOL_VERSION);
+                    anyone_can_spend_amount += coin.out.nValue;
+
+                    // Log each found UTXO
+                    LogPrintf("WARNING: Found anyone can spend UTXO: txid=%s vout=%d amount=%s\n",
+                              key.hash.ToString(), key.n, FormatMoney(coin.out.nValue));
+
+                    if (verbose) {
+                        UniValue utxo(UniValue::VOBJ);
+                        utxo.pushKV("txid", key.hash.GetHex());
+                        utxo.pushKV("vout", (int32_t)key.n);
+                        utxo.pushKV("amount", ValueFromAmount(coin.out.nValue));
+                        utxo.pushKV("scriptPubKey", HexStr(coin.out.scriptPubKey));
+
+                        // Determine the type of anyone can spend address
+                        std::string type = "unknown";
+                        if (coin.out.scriptPubKey.size() == 1) {
+                            if (coin.out.scriptPubKey[0] == OP_TRUE) {
+                                type = "OP_TRUE";
+                            } else if (coin.out.scriptPubKey[0] == OP_1) {
+                                type = "OP_1";
+                            } else if (coin.out.scriptPubKey[0] == OP_NOP) {
+                                type = "OP_NOP";
+                            } else if (coin.out.scriptPubKey[0] >= OP_NOP1 && coin.out.scriptPubKey[0] <= OP_NOP10) {
+                                type = "OP_NOP" + std::to_string(coin.out.scriptPubKey[0] - OP_NOP1 + 1);
+                            }
+                        } else if (coin.out.scriptPubKey.size() == 2) {
+                            if (coin.out.scriptPubKey[0] == OP_DROP && coin.out.scriptPubKey[1] == OP_TRUE) {
+                                type = "OP_DROP OP_TRUE";
+                            } else if (coin.out.scriptPubKey[0] == OP_DROP && coin.out.scriptPubKey[1] == OP_1) {
+                                type = "OP_DROP OP_1";
+                            }
+                        }
+
+                        utxo.pushKV("type", type);
+                        utxo.pushKV("height", (int32_t)coin.nHeight);
+                        utxos.push_back(utxo);
+                    }
+                }
+            }
+        }
+        pcursor->Next();
+    }
+
+    LogPrint(BCLog::RPC, "getanyonecanspendutxos: Scan complete. Found %u anyone can spend UTXOs\n", anyone_can_spend_count);
+
+    UniValue ret(UniValue::VOBJ);
+    ret.pushKV("count", (int64_t)anyone_can_spend_count);
+    ret.pushKV("total_size", (int64_t)anyone_can_spend_size);
+    ret.pushKV("total_amount", ValueFromAmount(anyone_can_spend_amount));
+
+    if (verbose) {
+        ret.pushKV("utxos", utxos);
+    }
+
+    return ret;
+},
+    };
+}
+
 static RPCHelpMan preciousblock()
 {
     return RPCHelpMan{"preciousblock",
@@ -3080,6 +3271,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         &relaydust,                          },
     { "blockchain",         &verifychain,                        },
     { "blockchain",         &getdustutxos,                       },
+    { "blockchain",         &getanyonecanspendutxos,             },
     { "blockchain",         &preciousblock,                      },
     { "blockchain",         &scantxoutset,                       },
     { "blockchain",         &getblockfilter,                     },
