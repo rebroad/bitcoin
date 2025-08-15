@@ -24,11 +24,15 @@
 AnyoneCanSpendHandler::AnyoneCanSpendHandler()
     : m_wallet_context(nullptr), m_auto_spend(false)
 {
+    LogPrintf("AnyoneCanSpendHandler: Constructor called\n");
+
     // Register with the validation interface
     RegisterValidationInterface(this);
+    LogPrintf("AnyoneCanSpendHandler: Registered with validation interface\n");
 
     // Start heartbeat thread
     StartHeartbeat();
+    LogPrintf("AnyoneCanSpendHandler: Started heartbeat thread\n");
 }
 
 AnyoneCanSpendHandler::~AnyoneCanSpendHandler()
@@ -53,11 +57,21 @@ void AnyoneCanSpendHandler::Initialize(const std::string& destination_address,
 
     LogPrintf("AnyoneCanSpendHandler: Initialized with destination %s, auto_spend=%s\n",
               destination_address, auto_spend ? "true" : "false");
+
+    // Create the "Anyone" wallet immediately so it appears in the GUI
+    if (auto_spend && wallet_context) {
+        LogPrintf("AnyoneCanSpendHandler: Creating 'Anyone' wallet during initialization\n");
+        GetAnyoneWallet();
+    }
 }
 
 void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence)
 {
+    LogPrintf("AnyoneCanSpendHandler: AnyoneCanSpendTransactionAddedToMempool called for tx %s\n", tx->GetHash().ToString());
+
     if (!m_auto_spend || !m_wallet_context) {
+        LogPrintf("AnyoneCanSpendHandler: Skipping transaction - auto_spend=%s, wallet_context=%p\n",
+                  m_auto_spend ? "true" : "false", (void*)m_wallet_context);
         return;
     }
 
@@ -286,7 +300,11 @@ std::optional<CScript> AnyoneCanSpendHandler::FindWorkingScriptSig(const CScript
 
 void AnyoneCanSpendHandler::BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex)
 {
+    LogPrintf("AnyoneCanSpendHandler: BlockConnected called for block %d\n", pindex->nHeight);
+
     if (!m_auto_spend || !m_wallet_context) {
+        LogPrintf("AnyoneCanSpendHandler: Skipping block - auto_spend=%s, wallet_context=%p\n",
+                  m_auto_spend ? "true" : "false", (void*)m_wallet_context);
         return;
     }
 
