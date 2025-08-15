@@ -972,15 +972,7 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, st
     // Short-circuit most stuff in case it is from the same node
     std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash); // REB - how do we deal with finding more than one?
     if (itInFlight != mapBlocksInFlight.end() && itInFlight->second.first == nodeid) {
-        if (pit) {
-            *pit = &itInFlight->second.second; // REB - what is this? QueuedBlock?
-            LogPrintf("%s: inflight. pit set. peer=%d\n", __func__, nodeid);
-        } else
-            LogPrintf("%s: inflight. pit not set. peer=%d\n", __func__, nodeid);
-        if (itInFlight->second.second->partialBlock) // Have we gone as far as requesting a BLOCKTXN?
-            LogPrintf("%s: inflight. We also seem to have a partialBlock\n", __func__);
-        else
-            LogPrintf("%s: inflight. We don't have a partialBlock\n", __func__);
+        if (pit) *pit = &itInFlight->second.second; // REB - what is this? QueuedBlock?
 
         return false;
     }
@@ -998,19 +990,7 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, st
         m_peers_downloading_from++;
     }
     itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it))).first;
-    if (pit) {
-        if (!m_chainman.ActiveChainstate().IsInitialBlockDownload())
-            LogPrintf("%s: NotInFlight. pit set. peer=%d\n", __func__, nodeid);
-        *pit = &itInFlight->second.second;
-    } else
-        if (!m_chainman.ActiveChainstate().IsInitialBlockDownload())
-            LogPrintf("%s: NotInFlight. pit not set. peer=%d\n", __func__, nodeid);
-    if (!m_chainman.ActiveChainstate().IsInitialBlockDownload()) {
-        if (itInFlight->second.second->partialBlock) // Have we gone as far as requesting a BLOCKTXN?
-            LogPrintf("%s: NotInFlight. We also seem to have a partialBlock\n", __func__);
-        else
-            LogPrintf("%s: NotInFlight. We don't have a partialBlock\n", __func__);
-    }
+    if (pit) *pit = &itInFlight->second.second;
 
     return true;
 }
