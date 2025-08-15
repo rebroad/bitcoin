@@ -2303,16 +2303,20 @@ static RPCHelpMan getanyonecanspendutxos()
                 LogPrintf("WARNING: Wallet loader not available, cannot create spending transaction\n");
             } else {
                 try {
-                    // Create or get the AnyoneCanSpendHandler
-                    static std::unique_ptr<AnyoneCanSpendHandler> handler;
-                    if (!handler) {
-                        handler = std::make_unique<AnyoneCanSpendHandler>();
-                        handler->Initialize(destination, node_context.wallet_loader->context(), true); // Enable auto-spend
-                        LogPrintf("INFO: Created AnyoneCanSpendHandler with auto-spend enabled\n");
+                    // Create a local handler instance for this RPC call
+                    static std::unique_ptr<AnyoneCanSpendHandler> local_handler;
+
+                    // Create the handler if it doesn't exist
+                    if (!local_handler) {
+                        local_handler = std::make_unique<AnyoneCanSpendHandler>();
+                        local_handler->Initialize(destination, node_context.wallet_loader->context(), true); // Enable auto-spend
+                        LogPrintf("INFO: Created local AnyoneCanSpendHandler with auto-spend enabled\n");
+                    } else {
+                        LogPrintf("INFO: Using existing local AnyoneCanSpendHandler\n");
                     }
 
                     // Get the "Anyone" wallet
-                    auto wallet = handler->GetAnyoneWallet();
+                    auto wallet = local_handler->GetAnyoneWallet();
                     if (!wallet) {
                         LogPrintf("WARNING: Could not get 'Anyone' wallet\n");
                     } else {

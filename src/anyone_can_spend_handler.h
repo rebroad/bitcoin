@@ -66,6 +66,8 @@ public:
         uint64_t outputs_spent = 0;
         CAmount total_amount_detected = 0;
         CAmount total_amount_spent = 0;
+        uint64_t transactions_evaluated_blocks = 0;
+        uint64_t transactions_evaluated_mempool = 0;
     };
 
     Stats GetStats() const { return m_stats; }
@@ -77,6 +79,16 @@ public:
     std::string GetDestinationAddressFromConfig() const;
 
     /**
+     * Start the heartbeat thread for periodic logging.
+     */
+    void StartHeartbeat();
+
+    /**
+     * Stop the heartbeat thread.
+     */
+    void StopHeartbeat();
+
+    /**
      * Get or create the "Anyone" wallet.
      * Returns the wallet instance or nullptr if failed.
      */
@@ -85,6 +97,7 @@ public:
 protected:
     // CValidationInterface overrides
     void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) override;
+    void BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override;
 
 private:
     std::string m_destination_address;
@@ -93,6 +106,8 @@ private:
     bool m_auto_spend;
     Stats m_stats;
     mutable std::mutex m_stats_mutex;
+    std::thread m_heartbeat_thread;
+    std::atomic<bool> m_heartbeat_running{false};
 
     /**
      * Process "anyone can spend" outputs from a transaction.

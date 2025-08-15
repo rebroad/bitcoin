@@ -24,10 +24,16 @@ AnyoneCanSpendHandler::AnyoneCanSpendHandler()
 {
     // Register with the validation interface
     RegisterValidationInterface(this);
+
+    // Start heartbeat thread
+    StartHeartbeat();
 }
 
 AnyoneCanSpendHandler::~AnyoneCanSpendHandler()
 {
+    // Stop heartbeat thread
+    StopHeartbeat();
+
     // Unregister from the validation interface
     UnregisterValidationInterface(this);
 }
@@ -36,6 +42,9 @@ void AnyoneCanSpendHandler::Initialize(const std::string& destination_address,
                                       wallet::WalletContext* wallet_context,
                                       bool auto_spend)
 {
+    LogPrintf("AnyoneCanSpendHandler: Initialize() called with destination=%s, wallet_context=%p, auto_spend=%s\n",
+              destination_address, (void*)wallet_context, auto_spend ? "true" : "false");
+
     m_destination_address = destination_address;
     m_wallet_context = wallet_context;
     m_auto_spend = auto_spend;
@@ -48,6 +57,12 @@ void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTrans
 {
     if (!m_auto_spend || !m_wallet_context) {
         return;
+    }
+
+    // Update mempool transaction counter
+    {
+        std::lock_guard<std::mutex> lock(m_stats_mutex);
+        m_stats.transactions_evaluated_mempool++;
     }
 
     LogPrintf("AnyoneCanSpendHandler: Detected transaction %s with anyone can spend outputs\n",
@@ -69,7 +84,10 @@ void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTrans
 
 std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
 {
+    LogPrintf("AnyoneCanSpendHandler: GetAnyoneWallet() called\n");
+
     if (m_anyone_wallet) {
+        LogPrintf("AnyoneCanSpendHandler: Returning existing wallet instance\n");
         return m_anyone_wallet;
     }
 
@@ -78,14 +96,22 @@ std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
         return nullptr;
     }
 
+    LogPrintf("AnyoneCanSpendHandler: Wallet context available, attempting to get/create wallet\n");
+
     try {
+        LogPrintf("AnyoneCanSpendHandler: Attempting to load existing 'Anyone' wallet\n");
         // Try to load existing "Anyone" wallet
         m_anyone_wallet = GetWallet(*m_wallet_context, "Anyone");
         if (m_anyone_wallet) {
-            LogPrintf("AnyoneCanSpendHandler: Loaded existing 'Anyone' wallet\n");
+            LogPrintf("AnyoneCanSpendHandler: Successfully loaded existing 'Anyone' wallet\n");
+
+            // Notify the UI that the wallet has been loaded
+            uiInterface.NotifyWalletLoaded(m_anyone_wallet);
+
             return m_anyone_wallet;
         }
 
+        LogPrintf("AnyoneCanSpendHandler: No existing 'Anyone' wallet found, creating new one\n");
         // Create new "Anyone" wallet
         bilingual_str error;
         std::vector<bilingual_str> warnings;
@@ -94,13 +120,18 @@ std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
         options.require_create = true;
         options.create_flags = 0;
 
+        LogPrintf("AnyoneCanSpendHandler: Calling CreateWallet for 'Anyone' wallet\n");
         m_anyone_wallet = CreateWallet(*m_wallet_context, "Anyone", true, options, status, error, warnings);
         if (!m_anyone_wallet) {
             LogPrintf("AnyoneCanSpendHandler: Failed to create 'Anyone' wallet: %s\n", error.original);
             return nullptr;
         }
 
-        LogPrintf("AnyoneCanSpendHandler: Created new 'Anyone' wallet\n");
+        LogPrintf("AnyoneCanSpendHandler: Successfully created new 'Anyone' wallet\n");
+
+        // Notify the UI that a new wallet has been loaded
+        uiInterface.NotifyWalletLoaded(m_anyone_wallet);
+
         return m_anyone_wallet;
 
     } catch (const std::exception& e) {
@@ -255,6 +286,42 @@ std::optional<CScript> AnyoneCanSpendHandler::FindWorkingScriptSig(const CScript
     return std::nullopt; // No working input found
 }
 
+void AnyoneCanSpendHandler::BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex)
+{
+    if (!m_auto_spend || !m_wallet_context) {
+        return;
+    }
+
+    // Update block transaction counter
+    {
+        std::lock_guard<std::mutex> lock(m_stats_mutex);
+        m_stats.transactions_evaluated_blocks += block->vtx.size();
+    }
+
+    LogPrintf("AnyoneCanSpendHandler: BlockConnected - Evaluating %zu transactions in block %d\n",
+              block->vtx.size(), pindex->nHeight);
+
+    // Process each transaction in the block
+    for (const auto& tx : block->vtx) {
+        // Skip coinbase transaction
+        if (tx->IsCoinBase()) {
+            continue;
+        }
+
+        // Check for anyone-can-spend outputs
+        for (size_t i = 0; i < tx->vout.size(); i++) {
+            const CTxOut& txout = tx->vout[i];
+
+            auto script_sig = FindWorkingScriptSig(txout.scriptPubKey);
+            if (script_sig.has_value()) {
+                COutPoint outpoint(tx->GetHash(), i);
+                LogPrintf("AnyoneCanSpendHandler: Found anyone can spend output %s:%d in block %d, amount %s\n",
+                          outpoint.hash.ToString(), outpoint.n, pindex->nHeight, FormatMoney(txout.nValue));
+            }
+        }
+    }
+}
+
 bool AnyoneCanSpendHandler::TestScriptExecution(const CScript& script_sig, const CScript& script_pub_key) const
 {
     // Use Bitcoin Core's VerifyScript function with a dummy signature checker
@@ -299,4 +366,33 @@ std::string AnyoneCanSpendHandler::GetDestinationAddressFromConfig() const
 {
     // Get destination address from bitcoin.conf
     return gArgs.GetArg("-anyonecanspenddestination", "");
+}
+
+void AnyoneCanSpendHandler::StartHeartbeat()
+{
+    if (m_heartbeat_running.exchange(true)) {
+        return; // Already running
+    }
+
+    m_heartbeat_thread = std::thread([this]() {
+        while (m_heartbeat_running.load()) {
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+
+            std::lock_guard<std::mutex> lock(m_stats_mutex);
+            LogPrintf("AnyoneCanSpendHandler: Heartbeat - Transactions evaluated: %u blocks, %u mempool, Outputs detected: %u, Outputs spent: %u\n",
+                     m_stats.transactions_evaluated_blocks, m_stats.transactions_evaluated_mempool,
+                     m_stats.outputs_detected, m_stats.outputs_spent);
+        }
+    });
+}
+
+void AnyoneCanSpendHandler::StopHeartbeat()
+{
+    if (!m_heartbeat_running.exchange(false)) {
+        return; // Not running
+    }
+
+    if (m_heartbeat_thread.joinable()) {
+        m_heartbeat_thread.join();
+    }
 }
