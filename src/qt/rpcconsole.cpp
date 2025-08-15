@@ -684,6 +684,13 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         // Also update on mempool changes (which can indicate reorgs or new blocks)
         connect(model, &ClientModel::mempoolSizeChanged, this, &RPCConsole::updateBlocksDisplay);
 
+        // Update on header tip changes (for new headers)
+        connect(model, &ClientModel::numBlocksChanged, this, [this](int count, const QDateTime& blockDate, double nVerificationProgress, bool header, SynchronizationState sync_state) {
+            if (header) {
+                updateBlocksDisplay();
+            }
+        });
+
         updateNetworkState();
         connect(model, &ClientModel::networkActiveChanged, this, &RPCConsole::setNetworkActive);
 
@@ -1441,6 +1448,8 @@ void RPCConsole::updateBlocksDisplay()
     // Update the block visualization widget
     if (m_blockVisualizationWidget) {
         m_blockVisualizationWidget->updateBlockData();
+        // Force a repaint to ensure the display updates
+        m_blockVisualizationWidget->update();
     }
 
     // Update the legend
@@ -1455,11 +1464,7 @@ void RPCConsole::updateLegend()
     legendText += "<b>Block Status:</b> ";
     legendText += "<span style='color: #808080;'>■</span> Unknown ";
     legendText += "<span style='color: #00FF00;'>■</span> Have Block ";
-    legendText += "<span style='color: #FFFF00;'>■</span> Header Only ";
-    legendText += "<span style='color: #FFA500;'>■</span> Pruned ";
-    legendText += "<span style='color: #C8C8C8;'>■</span> No Header ";
-    legendText += "<span style='color: #0000FF;'>■</span> Have UTXOs ";
-    legendText += "<span style='color: #FF00FF;'>■</span> Wallet UTXOs";
+    legendText += "<span style='color: #FFFF00;'>■</span> Header Only";
     legendText += "</body></html>";
 
     ui->legendLabel->setText(legendText);

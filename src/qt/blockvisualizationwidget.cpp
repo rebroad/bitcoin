@@ -34,10 +34,11 @@ BlockVisualizationWidget::BlockVisualizationWidget(interfaces::Node& node, inter
     setMinimumSize(400, 200);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    // Set background color
+    // Set background color to match system theme
     setAutoFillBackground(true);
     QPalette pal = palette();
-    pal.setColor(QPalette::Window, Qt::white);
+    // Use the system background color instead of white
+    pal.setColor(QPalette::Window, pal.color(QPalette::Base));
     setPalette(pal);
 
     // Ensure the widget can expand to fill the scroll area
