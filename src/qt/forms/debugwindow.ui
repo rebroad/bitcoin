@@ -1735,16 +1735,6 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_blocks">
        <item>
-        <widget class="QWidget" name="blockVisualizationWidgetPlaceholder">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-           <horstretch>1</horstretch>
-           <verstretch>1</verstretch>
-          </sizepolicy>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="QScrollArea" name="blockVisualizationScrollArea">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">

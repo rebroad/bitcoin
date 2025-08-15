@@ -1425,9 +1425,6 @@ void RPCConsole::setupBlockVisualizationWidget()
 
     // Set the widget as the scroll area's widget
     ui->blockVisualizationScrollArea->setWidget(m_blockVisualizationWidget);
-
-    // Ensure the scroll area expands to fill available space
-    ui->blockVisualizationScrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 
 void RPCConsole::updateBlocksDisplay()
