@@ -2018,6 +2018,8 @@ static RPCHelpMan getdustutxos()
                         {RPCResult::Type::NUM, "count", "The number of dust UTXOs"},
                         {RPCResult::Type::NUM, "total_size", "The total size in bytes of dust UTXOs"},
                         {RPCResult::Type::STR_AMOUNT, "total_amount", "The total amount of dust UTXOs in " + CURRENCY_UNIT},
+                        {RPCResult::Type::NUM, "total_utxo_size", "The total size in bytes of all UTXOs"},
+                        {RPCResult::Type::NUM, "dust_size_percent", "The percentage of total UTXO size that is dust"},
                     }},
                 RPCExamples{
                     HelpExampleCli("getdustutxos", "")
@@ -2035,6 +2037,7 @@ static RPCHelpMan getdustutxos()
     uint64_t dust_count = 0;
     uint64_t dust_size = 0;
     CAmount dust_amount = 0;
+    uint64_t total_size = 0;
     uint64_t current_count = 0;
 
     // Get total number of UTXOs from the database
@@ -2085,9 +2088,13 @@ static RPCHelpMan getdustutxos()
 
         if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
             if (!coin.IsSpent() && !coin.out.scriptPubKey.IsUnspendable()) {
+                // Calculate size for all UTXOs
+                uint64_t coin_size = ::GetSerializeSize(coin, PROTOCOL_VERSION);
+                total_size += coin_size;
+
                 if (IsDust(coin.out, dust_relay_fee)) {
                     dust_count++;
-                    dust_size += ::GetSerializeSize(coin, PROTOCOL_VERSION);
+                    dust_size += coin_size;
                     dust_amount += coin.out.nValue;
                 }
             }
@@ -2095,12 +2102,16 @@ static RPCHelpMan getdustutxos()
         pcursor->Next();
     }
 
-    LogPrint(BCLog::RPC, "getdustutxos: Scan complete. Found %u dust UTXOs\n", dust_count);
+    double dust_size_percent = total_size > 0 ? (dust_size * 100.0) / total_size : 0.0;
+    LogPrint(BCLog::RPC, "getdustutxos: Scan complete. Found %u dust UTXOs (%.1f%% of total UTXO size)\n",
+            dust_count, dust_size_percent);
 
     UniValue ret(UniValue::VOBJ);
     ret.pushKV("count", (int64_t)dust_count);
     ret.pushKV("total_size", (int64_t)dust_size);
     ret.pushKV("total_amount", ValueFromAmount(dust_amount));
+    ret.pushKV("total_utxo_size", (int64_t)total_size);
+    ret.pushKV("dust_size_percent", dust_size_percent);
 
     return ret;
 },
