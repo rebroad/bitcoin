@@ -2037,7 +2037,12 @@ static RPCHelpMan getdustutxos()
     CAmount dust_amount = 0;
     uint64_t current_count = 0;
 
-    int64_t last_log_time = GetTimeMillis();
+    // Get total number of UTXOs from the database
+    size_t total_utxos = coins_view->EstimateSize();
+    LogPrint(BCLog::RPC, "getdustutxos: Starting UTXO scan of %zu total UTXOs\n", total_utxos);
+
+    int64_t start_time = GetTimeMillis();
+    int64_t last_progress_time = start_time;
 
     std::unique_ptr<CCoinsViewCursor> pcursor(coins_view->Cursor());
     COutPoint key;
@@ -2056,9 +2061,26 @@ static RPCHelpMan getdustutxos()
 
         // Log progress every 5 seconds
         int64_t current_time = GetTimeMillis();
-        if (current_time - last_log_time > 5000) {
-            LogPrint(BCLog::RPC, "getdustutxos: Scanned %u UTXOs\n", current_count);
-            last_log_time = current_time;
+        if (current_time - last_progress_time > 5000) { // 5 seconds
+            int64_t elapsed_ms = current_time - start_time;
+            double elapsed_seconds = elapsed_ms / 1000.0;
+            double utxos_per_second = current_count / elapsed_seconds;
+
+            double progress_percent = (current_count * 100.0) / total_utxos;
+            double estimated_remaining_seconds = (total_utxos - current_count) / utxos_per_second;
+
+            // Format time remaining
+            std::string time_remaining;
+            if (estimated_remaining_seconds > 0 && estimated_remaining_seconds < 3600) {
+                time_remaining = strprintf(" (~%.0f seconds remaining)", estimated_remaining_seconds);
+            } else if (estimated_remaining_seconds >= 3600) {
+                time_remaining = strprintf(" (~%.1f hours remaining)", estimated_remaining_seconds / 3600.0);
+            }
+
+            LogPrint(BCLog::RPC, "getdustutxos: Progress %.1f%% - Scanned %u/%zu UTXOs%s\n",
+                    progress_percent, current_count, total_utxos, time_remaining);
+
+            last_progress_time = current_time;
         }
 
         if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
