@@ -10,6 +10,7 @@
 #endif
 
 #include <interfaces/node.h>
+#include <interfaces/chain.h>
 #include <qt/initexecutor.h>
 
 #include <assert.h>
@@ -72,6 +73,7 @@ public:
     void setupPlatformStyle();
 
     interfaces::Node& node() const { assert(m_node); return *m_node; }
+    interfaces::Chain& chain() const { assert(m_chain); return *m_chain; }
 
     void setupPerfMonitoring();
 
@@ -112,6 +114,7 @@ private:
     std::unique_ptr<QWidget> shutdownWindow;
     SplashScreen* m_splash = nullptr;
     std::unique_ptr<interfaces::Node> m_node;
+    std::unique_ptr<interfaces::Chain> m_chain;
 
     void startThread();
 };

@@ -14,9 +14,12 @@
 #include <vector>
 #include <optional>
 #include <uint256.h>
+#include <map>
+#include <set>
 
 namespace interfaces {
     class Node;
+    class Chain;
 }
 
 class BlockVisualizationWidget : public QWidget
@@ -25,6 +28,7 @@ class BlockVisualizationWidget : public QWidget
 
 public:
     enum BlockStatus {
+        UNKNOWN,        // Status not yet determined
         NO_HEADER,      // Don't have the header
         HEADER_ONLY,    // Have header but no block data
         HAVE_BLOCK,     // Have the full block
@@ -33,10 +37,12 @@ public:
         WALLET_UTXOS    // Have unspent UTXOs from this block that we own
     };
 
-    explicit BlockVisualizationWidget(interfaces::Node& node, QWidget *parent = nullptr);
+    explicit BlockVisualizationWidget(interfaces::Node& node, interfaces::Chain& chain, QWidget *parent = nullptr);
     ~BlockVisualizationWidget();
 
     void updateBlockData();
+    void refreshBlockStatus(int height);
+    bool isDataLoaded() const { return m_dataLoaded; }
     void showEvent(QShowEvent *event) override;
 
 protected:
@@ -46,30 +52,30 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    struct BlockInfo {
-        int height;
-        BlockStatus status;
-        uint256 hash;
-        int64_t time;
-        int nTx;
-    };
-
     interfaces::Node& m_node;
-    std::vector<BlockInfo> m_blocks;
+    interfaces::Chain& m_chain;
 
     int m_blockWidth = 4;  // Width of each block in pixels
     int m_blockHeight = 20; // Height of each block in pixels
     int m_blocksPerRow = 100; // Number of blocks per row
 
     QTimer* m_resizeTimer = nullptr;
+    QTimer* m_updateTimer = nullptr;
+    bool m_initialized = false;
+    bool m_dataLoaded = false;
+
+    // Block status caching
+    std::map<int, BlockStatus> m_statusCache;
+    std::set<int> m_pendingBlocks;
+    int m_totalBlocks = 0;
 
     QColor getColorForStatus(BlockStatus status) const;
     QString getTooltipForBlock(int height) const;
     int getBlockIndexFromPosition(const QPoint& pos) const;
     void calculateLayout();
-    void updateBlockStatuses();
+    void updateBlockStatusesAsync();
+    void updateBlockStatus(int height);
     void drawLegend(QPainter& painter);
-    void drawStatistics(QPainter& painter);
 };
 
 #endif // BITCOIN_QT_BLOCKVISUALIZATIONWIDGET_H

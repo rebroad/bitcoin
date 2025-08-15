@@ -7,6 +7,7 @@
 #endif
 
 #include <qt/blockvisualizationwidget.h>
+#include <interfaces/chain.h>
 #include <interfaces/node.h>
 #include <chain.h>
 #include <validation.h>
@@ -18,12 +19,14 @@
 #include <QToolTip>
 #include <QDateTime>
 #include <QScrollBar>
+#include <QScrollArea>
 #include <QDebug>
 #include <map>
 
-BlockVisualizationWidget::BlockVisualizationWidget(interfaces::Node& node, QWidget *parent)
+BlockVisualizationWidget::BlockVisualizationWidget(interfaces::Node& node, interfaces::Chain& chain, QWidget *parent)
     : QWidget(parent)
     , m_node(node)
+    , m_chain(chain)
 {
     setMouseTracking(true);
     setMinimumSize(400, 200);
@@ -47,6 +50,14 @@ BlockVisualizationWidget::BlockVisualizationWidget(interfaces::Node& node, QWidg
         update();
     });
 
+    // Initialize update timer for asynchronous block status updates
+    m_updateTimer = new QTimer(this);
+    m_updateTimer->setSingleShot(true);
+    m_updateTimer->setInterval(100); // 100ms delay
+    connect(m_updateTimer, &QTimer::timeout, [this]() {
+        updateBlockStatusesAsync();
+    });
+
     // Don't update block data here - wait until the widget is shown
 }
 
@@ -56,8 +67,6 @@ BlockVisualizationWidget::~BlockVisualizationWidget()
 
 void BlockVisualizationWidget::updateBlockData()
 {
-    m_blocks.clear();
-
     // Get current chain height - check if chainman is available first
     int numBlocks = 0;
     try {
@@ -69,27 +78,37 @@ void BlockVisualizationWidget::updateBlockData()
 
     if (numBlocks <= 0) return;
 
-    // Initialize blocks from 0 to current height
-    for (int height = 0; height <= numBlocks; ++height) {
-        BlockInfo block;
-        block.height = height;
-        block.status = NO_HEADER; // Default status
-        block.hash.SetNull();
-        block.time = 0;
-        block.nTx = 0;
-        m_blocks.push_back(block);
-    }
+    m_totalBlocks = numBlocks;
 
-    updateBlockStatuses();
+    // Don't initialize cache or pending blocks here - do it lazily as needed
     calculateLayout();
     update();
+
+    m_dataLoaded = true;
+    m_initialized = true;
+}
+
+void BlockVisualizationWidget::refreshBlockStatus(int height)
+{
+    if (height < 0 || height > m_totalBlocks) {
+        return;
+    }
+
+    // Remove from cache to force re-check
+    m_statusCache.erase(height);
+
+    // Add to pending blocks for immediate update
+    m_pendingBlocks.insert(height);
+
+    // Trigger immediate update
+    if (!m_updateTimer->isActive()) {
+        m_updateTimer->start();
+    }
 }
 
 void BlockVisualizationWidget::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
-    // Update block data when the widget is first shown
-    updateBlockData();
 
     // Ensure we get the proper size from the parent scroll area
     if (parentWidget()) {
@@ -99,53 +118,114 @@ void BlockVisualizationWidget::showEvent(QShowEvent *event)
     }
 }
 
-void BlockVisualizationWidget::updateBlockStatuses()
+void BlockVisualizationWidget::updateBlockStatusesAsync()
 {
-    // This is a simplified implementation
-    // In a full implementation, we would need to access the chainman to get detailed block information
-    // For now, we'll use the available node interface methods
-
-    int numBlocks = m_node.getNumBlocks();
-    uint256 bestHash = m_node.getBestBlockHash();
-
-    // Mark the tip block as having the block
-    if (!bestHash.IsNull() && numBlocks >= 0 && numBlocks < (int)m_blocks.size()) {
-        m_blocks[numBlocks].status = HAVE_BLOCK;
-        m_blocks[numBlocks].hash = bestHash;
+    if (m_pendingBlocks.empty()) {
+        return; // Nothing to do
     }
 
-    // For now, we'll make some assumptions about block availability
-    // In a real implementation, we'd query the chainman for each block's status
+    // Process blocks in chunks to avoid blocking the GUI
+    const int CHUNK_SIZE = 50; // Process 50 blocks at a time
+    int processed = 0;
 
-    // Mark recent blocks as having data (simplified)
-    for (int i = std::max(0, numBlocks - 100); i <= numBlocks; ++i) {
-        if (i < (int)m_blocks.size()) {
-            if (m_blocks[i].status == NO_HEADER) {
-                m_blocks[i].status = HAVE_BLOCK;
+    // Get visible block range to prioritize them
+    QScrollArea* scrollArea = qobject_cast<QScrollArea*>(parentWidget());
+    int visibleStart = 0, visibleEnd = m_totalBlocks;
+    if (scrollArea) {
+        QScrollBar* vbar = scrollArea->verticalScrollBar();
+        if (vbar) {
+            int scrollPos = vbar->value();
+            int visibleHeight = scrollArea->viewport()->height();
+
+            // Calculate visible block range
+            int blockHeight = m_blockHeight;
+            int blocksPerRow = m_blocksPerRow;
+            if (blocksPerRow > 0) {
+                int rowHeight = blockHeight;
+                int startRow = scrollPos / rowHeight;
+                int endRow = (scrollPos + visibleHeight) / rowHeight;
+
+                visibleStart = startRow * blocksPerRow;
+                visibleEnd = std::min((endRow + 1) * blocksPerRow, m_totalBlocks);
             }
         }
     }
 
-    // Mark older blocks as potentially pruned or having headers only
-    for (int i = 0; i < std::max(0, numBlocks - 100); ++i) {
-        if (i < (int)m_blocks.size()) {
-            if (m_blocks[i].status == NO_HEADER) {
-                // This is a simplified heuristic - in reality we'd check the actual block status
-                if (i % 10 == 0) { // Every 10th block has header
-                    m_blocks[i].status = HEADER_ONLY;
-                } else if (i % 50 == 0) { // Every 50th block is pruned
-                    m_blocks[i].status = PRUNED;
-                } else {
-                    m_blocks[i].status = HAVE_BLOCK;
-                }
-            }
+    // First, process visible blocks
+    std::set<int> visiblePending;
+    for (int height : m_pendingBlocks) {
+        if (height >= visibleStart && height <= visibleEnd) {
+            visiblePending.insert(height);
         }
+    }
+
+    // Process visible blocks first
+    for (int height : visiblePending) {
+        if (processed >= CHUNK_SIZE) break;
+
+        updateBlockStatus(height);
+        m_pendingBlocks.erase(height);
+        processed++;
+    }
+
+    // Then process remaining blocks
+    if (processed < CHUNK_SIZE) {
+        for (auto it = m_pendingBlocks.begin(); it != m_pendingBlocks.end();) {
+            if (processed >= CHUNK_SIZE) break;
+
+            updateBlockStatus(*it);
+            it = m_pendingBlocks.erase(it);
+            processed++;
+        }
+    }
+
+    // Update the display
+    update();
+
+    // Schedule next chunk if there are more blocks to process
+    if (!m_pendingBlocks.empty()) {
+        m_updateTimer->start();
+    }
+}
+
+void BlockVisualizationWidget::updateBlockStatus(int height)
+{
+    if (height < 0 || height > m_totalBlocks) {
+        return;
+    }
+
+    // Try to get the block hash for this height
+    uint256 blockHash;
+    try {
+        blockHash = m_chain.getBlockHash(height);
+    } catch (...) {
+        m_statusCache[height] = NO_HEADER;
+        return;
+    }
+
+    if (blockHash.IsNull()) {
+        m_statusCache[height] = NO_HEADER;
+        return;
+    }
+
+    // We have at least the header
+    m_statusCache[height] = HEADER_ONLY;
+
+    // Check if we have the full block data on disk
+    try {
+        if (m_chain.haveBlockOnDisk(height)) {
+            m_statusCache[height] = HAVE_BLOCK;
+        } else {
+            m_statusCache[height] = PRUNED;
+        }
+    } catch (...) {
+        m_statusCache[height] = HAVE_BLOCK;
     }
 }
 
 void BlockVisualizationWidget::calculateLayout()
 {
-    if (m_blocks.empty()) return;
+    if (m_totalBlocks <= 0) return;
 
     // Get the available width from the parent scroll area
     int availableWidth = width();
@@ -155,7 +235,7 @@ void BlockVisualizationWidget::calculateLayout()
     }
 
     // Calculate optimal block size to fit blocks in width
-    int totalBlocks = m_blocks.size();
+    int totalBlocks = m_totalBlocks + 1; // +1 because we include block 0
 
     // Use a reasonable block size that fits well in the width
     int minBlockSize = 3;
@@ -170,7 +250,7 @@ void BlockVisualizationWidget::calculateLayout()
 
     // Calculate total height needed for all blocks
     int numRows = (totalBlocks + m_blocksPerRow - 1) / m_blocksPerRow; // Ceiling division
-    int totalHeight = numRows * m_blockHeight + 120; // Add space for legend
+    int totalHeight = numRows * m_blockHeight; // No need for legend space
 
     // Set the widget's size for scrolling
     setMinimumSize(availableWidth, totalHeight);
@@ -183,33 +263,43 @@ void BlockVisualizationWidget::calculateLayout()
 QColor BlockVisualizationWidget::getColorForStatus(BlockStatus status) const
 {
     switch (status) {
-    case NO_HEADER:
-        return QColor(200, 200, 200); // Light gray
-    case HEADER_ONLY:
-        return QColor(255, 255, 0);   // Yellow
-    case HAVE_BLOCK:
-        return QColor(0, 255, 0);     // Green
-    case PRUNED:
-        return QColor(255, 165, 0);   // Orange
-    case HAVE_UTXOS:
-        return QColor(0, 0, 255);     // Blue
-    case WALLET_UTXOS:
-        return QColor(255, 0, 255);   // Magenta
-    default:
-        return QColor(128, 128, 128); // Gray
+        case UNKNOWN:
+            return QColor(128, 128, 128); // Gray
+        case NO_HEADER:
+            return QColor(200, 200, 200); // Light gray
+        case HEADER_ONLY:
+            return QColor(255, 255, 0);   // Yellow
+        case HAVE_BLOCK:
+            return QColor(0, 255, 0);     // Green
+        case PRUNED:
+            return QColor(255, 165, 0);   // Orange
+        case HAVE_UTXOS:
+            return QColor(0, 0, 255);     // Blue
+        case WALLET_UTXOS:
+            return QColor(255, 0, 255);   // Magenta
+        default:
+            return QColor(128, 128, 128); // Gray
     }
 }
 
 QString BlockVisualizationWidget::getTooltipForBlock(int height) const
 {
-    if (height < 0 || height >= (int)m_blocks.size()) {
+    if (height < 0 || height > m_totalBlocks) {
         return tr("Invalid block");
     }
 
-    const BlockInfo& block = m_blocks[height];
-    QString statusText;
+    // Get status from cache
+    BlockStatus status = UNKNOWN;
+    auto it = m_statusCache.find(height);
+    if (it != m_statusCache.end()) {
+        status = it->second;
+    }
 
-    switch (block.status) {
+    QString statusText;
+    switch (status) {
+    case UNKNOWN:
+        statusText = tr("Unknown");
+        break;
     case NO_HEADER:
         statusText = tr("No header");
         break;
@@ -232,31 +322,19 @@ QString BlockVisualizationWidget::getTooltipForBlock(int height) const
 
     QString tooltip = tr("Block %1\nStatus: %2").arg(height).arg(statusText);
 
-    if (!block.hash.IsNull()) {
-        tooltip += tr("\nHash: %1").arg(QString::fromStdString(block.hash.ToString()));
-    }
-
-    if (block.time > 0) {
-        tooltip += tr("\nTime: %1").arg(QDateTime::fromSecsSinceEpoch(block.time).toString());
-    }
-
-    if (block.nTx > 0) {
-        tooltip += tr("\nTransactions: %1").arg(block.nTx);
-    }
-
     return tooltip;
 }
 
 int BlockVisualizationWidget::getBlockIndexFromPosition(const QPoint& pos) const
 {
-    if (m_blocks.empty() || m_blocksPerRow <= 0) return -1;
+    if (m_totalBlocks <= 0 || m_blocksPerRow <= 0) return -1;
 
     int row = pos.y() / m_blockHeight;
     int col = pos.x() / m_blockWidth;
 
     int blockIndex = row * m_blocksPerRow + col;
 
-    if (blockIndex >= 0 && blockIndex < (int)m_blocks.size()) {
+    if (blockIndex >= 0 && blockIndex <= m_totalBlocks) {
         return blockIndex;
     }
 
@@ -268,26 +346,45 @@ void BlockVisualizationWidget::paintEvent(QPaintEvent *event)
     Q_UNUSED(event);
 
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::Antialiasing, false); // Disable antialiasing for better performance
 
-    if (m_blocks.empty()) {
+    if (m_totalBlocks <= 0) {
         painter.drawText(rect(), Qt::AlignCenter, tr("No block data available"));
         return;
     }
 
-    // Draw blocks
-    for (size_t i = 0; i < m_blocks.size(); ++i) {
-        int row = i / m_blocksPerRow;
-        int col = i % m_blocksPerRow;
+    // Pre-calculate colors for better performance
+    QColor colors[7];
+    colors[0] = getColorForStatus(UNKNOWN);
+    colors[1] = getColorForStatus(NO_HEADER);
+    colors[2] = getColorForStatus(HEADER_ONLY);
+    colors[3] = getColorForStatus(HAVE_BLOCK);
+    colors[4] = getColorForStatus(PRUNED);
+    colors[5] = getColorForStatus(HAVE_UTXOS);
+    colors[6] = getColorForStatus(WALLET_UTXOS);
+
+    // Draw blocks more efficiently
+    for (int height = 0; height <= m_totalBlocks; ++height) {
+        int row = height / m_blocksPerRow;
+        int col = height % m_blocksPerRow;
 
         int x = col * m_blockWidth;
         int y = row * m_blockHeight;
 
         QRect blockRect(x, y, m_blockWidth, m_blockHeight);
 
+        // Get status from cache, default to UNKNOWN if not found
+        BlockStatus status = UNKNOWN;
+        auto it = m_statusCache.find(height);
+        if (it != m_statusCache.end()) {
+            status = it->second;
+        } else {
+            // Add to pending blocks for lazy loading
+            m_pendingBlocks.insert(height);
+        }
+
         // Draw block with appropriate color
-        QColor color = getColorForStatus(m_blocks[i].status);
-        painter.fillRect(blockRect, color);
+        painter.fillRect(blockRect, colors[static_cast<int>(status)]);
 
         // Draw border only if blocks are large enough
         if (m_blockWidth > 3 && m_blockHeight > 3) {
@@ -296,11 +393,10 @@ void BlockVisualizationWidget::paintEvent(QPaintEvent *event)
         }
     }
 
-    // Draw legend
-    drawLegend(painter);
-
-    // Draw statistics
-    drawStatistics(painter);
+    // Start async processing if we have pending blocks and timer isn't active
+    if (!m_pendingBlocks.empty() && !m_updateTimer->isActive()) {
+        m_updateTimer->start();
+    }
 }
 
 void BlockVisualizationWidget::drawLegend(QPainter& painter)
@@ -351,64 +447,11 @@ void BlockVisualizationWidget::drawLegend(QPainter& painter)
     }
 }
 
-void BlockVisualizationWidget::drawStatistics(QPainter& painter)
-{
-    if (m_blocks.empty()) return;
-
-    // Count blocks by status
-    std::map<BlockStatus, int> statusCounts;
-    for (const auto& block : m_blocks) {
-        statusCounts[block.status]++;
-    }
-
-    // Draw statistics in top-right corner
-    int statsX = width() - 200;
-    int statsY = 10;
-    int statsWidth = 190;
-    int statsHeight = 80;
-
-    // Draw background
-    painter.fillRect(statsX, statsY, statsWidth, statsHeight, QColor(255, 255, 255, 200));
-    painter.setPen(QPen(Qt::black, 1));
-    painter.drawRect(statsX, statsY, statsWidth, statsHeight);
-
-    // Draw title
-    painter.setFont(QFont("Arial", 8, QFont::Bold));
-    painter.drawText(statsX + 5, statsY + 15, tr("Block Statistics"));
-
-    // Draw statistics
-    painter.setFont(QFont("Arial", 7));
-    int itemY = statsY + 25;
-    int itemHeight = 12;
-
-    painter.drawText(statsX + 5, itemY, tr("Total Blocks: %1").arg(m_blocks.size()));
-    itemY += itemHeight;
-
-    if (statusCounts[HAVE_BLOCK] > 0) {
-        painter.drawText(statsX + 5, itemY, tr("Have Block: %1").arg(statusCounts[HAVE_BLOCK]));
-        itemY += itemHeight;
-    }
-
-    if (statusCounts[HEADER_ONLY] > 0) {
-        painter.drawText(statsX + 5, itemY, tr("Header Only: %1").arg(statusCounts[HEADER_ONLY]));
-        itemY += itemHeight;
-    }
-
-    if (statusCounts[PRUNED] > 0) {
-        painter.drawText(statsX + 5, itemY, tr("Pruned: %1").arg(statusCounts[PRUNED]));
-        itemY += itemHeight;
-    }
-
-    if (statusCounts[NO_HEADER] > 0) {
-        painter.drawText(statsX + 5, itemY, tr("No Header: %1").arg(statusCounts[NO_HEADER]));
-    }
-}
-
 void BlockVisualizationWidget::mouseMoveEvent(QMouseEvent *event)
 {
     int blockIndex = getBlockIndexFromPosition(event->pos());
 
-    if (blockIndex >= 0 && blockIndex < (int)m_blocks.size()) {
+    if (blockIndex >= 0 && blockIndex <= m_totalBlocks) {
         QString tooltip = getTooltipForBlock(blockIndex);
         QToolTip::showText(event->globalPos(), tooltip, this);
     } else {
@@ -422,7 +465,7 @@ void BlockVisualizationWidget::mousePressEvent(QMouseEvent *event)
 {
     int blockIndex = getBlockIndexFromPosition(event->pos());
 
-    if (blockIndex >= 0 && blockIndex < (int)m_blocks.size()) {
+    if (blockIndex >= 0 && blockIndex <= m_totalBlocks) {
         // Emit signal or handle click
         qDebug() << "Clicked on block" << blockIndex;
     }

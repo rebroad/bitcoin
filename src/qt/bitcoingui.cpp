@@ -109,8 +109,8 @@ const std::string BitcoinGUI::DEFAULT_UIPLATFORM =
 #endif
         ;
 
-BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformStyle,
-    const NetworkStyle *networkStyle, QWidget *parent) : QMainWindow(parent), m_node(node),
+BitcoinGUI::BitcoinGUI(interfaces::Node& node, interfaces::Chain& chain, const PlatformStyle *_platformStyle,
+    const NetworkStyle *networkStyle, QWidget *parent) : QMainWindow(parent), m_node(node), m_chain(chain),
     trayIconMenu{new QMenu()}, platformStyle(_platformStyle), m_network_style(networkStyle)
 {
     QSettings settings;
@@ -128,7 +128,7 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     setWindowIcon(m_network_style->getTrayAndWindowIcon());
     updateWindowTitle();
 
-    rpcConsole = new RPCConsole(node, _platformStyle, nullptr);
+    rpcConsole = new RPCConsole(node, m_chain, _platformStyle, nullptr);
     helpMessageDialog = new HelpMessageDialog(this, false);
 #ifdef ENABLE_WALLET
     if(enableWallet) {

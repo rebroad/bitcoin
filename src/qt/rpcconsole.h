@@ -24,6 +24,7 @@ class WalletModel;
 
 namespace interfaces {
     class Node;
+    class Chain;
 }
 
 namespace Ui {
@@ -42,7 +43,7 @@ class RPCConsole: public QWidget
     Q_OBJECT
 
 public:
-    explicit RPCConsole(interfaces::Node& node, const PlatformStyle *platformStyle, QWidget *parent);
+    explicit RPCConsole(interfaces::Node& node, interfaces::Chain& chain, const PlatformStyle *platformStyle, QWidget *parent);
     ~RPCConsole();
 
     static bool RPCParseCommandLine(interfaces::Node* node, std::string &strResult, const std::string &strCommand, bool fExecute, std::string * const pstrFilteredOut = nullptr, const WalletModel* wallet_model = nullptr);
@@ -109,6 +110,8 @@ private Q_SLOTS:
     void updateBlocksDisplay();
     /** create and setup the block visualization widget */
     void setupBlockVisualizationWidget();
+    /** update the legend display */
+    void updateLegend();
 
 public Q_SLOTS:
     void clear(bool keep_prompt = false);
@@ -161,6 +164,7 @@ private:
     };
 
     interfaces::Node& m_node;
+    interfaces::Chain& m_chain;
     Ui::RPCConsole* const ui;
     ClientModel *clientModel = nullptr;
     QStringList history;

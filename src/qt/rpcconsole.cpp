@@ -474,9 +474,10 @@ void RPCExecutor::request(const QString &command, const WalletModel* wallet_mode
     }
 }
 
-RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformStyle, QWidget *parent) :
+RPCConsole::RPCConsole(interfaces::Node& node, interfaces::Chain& chain, const PlatformStyle *_platformStyle, QWidget *parent) :
     QWidget(parent),
     m_node(node),
+    m_chain(chain),
     ui(new Ui::RPCConsole),
     platformStyle(_platformStyle)
 {
@@ -564,7 +565,7 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     connect(ui->fontBiggerButton, &QAbstractButton::clicked, this, &RPCConsole::fontBigger);
     connect(ui->fontSmallerButton, &QAbstractButton::clicked, this, &RPCConsole::fontSmaller);
 
-    // Setup block visualization widget
+    // Setup block visualization widget (but don't load data yet)
     setupBlockVisualizationWidget();
 
     // disable the wallet selector by default
@@ -1138,8 +1139,10 @@ void RPCConsole::on_tabWidget_currentChanged(int index)
     if (ui->tabWidget->widget(index) == ui->tab_console) {
         ui->lineEdit->setFocus();
     } else if (ui->tabWidget->widget(index) == ui->tab_blocks) {
-        // The block visualization widget will update itself when shown
-        // No need to call updateBlocksDisplay() here
+        // Load block data only when the blocks tab is actually selected
+        if (m_blockVisualizationWidget && !m_blockVisualizationWidget->isDataLoaded()) {
+            m_blockVisualizationWidget->updateBlockData();
+        }
     }
 }
 
@@ -1421,10 +1424,13 @@ void RPCConsole::updateAlerts(const QString& warnings)
 void RPCConsole::setupBlockVisualizationWidget()
 {
     // Create the block visualization widget
-    m_blockVisualizationWidget = new BlockVisualizationWidget(m_node, this);
+    m_blockVisualizationWidget = new BlockVisualizationWidget(m_node, m_chain, this);
 
     // Set the widget as the scroll area's widget
     ui->blockVisualizationScrollArea->setWidget(m_blockVisualizationWidget);
+
+    // Update the legend
+    updateLegend();
 }
 
 void RPCConsole::updateBlocksDisplay()
@@ -1436,5 +1442,26 @@ void RPCConsole::updateBlocksDisplay()
     if (m_blockVisualizationWidget) {
         m_blockVisualizationWidget->updateBlockData();
     }
+
+    // Update the legend
+    updateLegend();
+}
+
+void RPCConsole::updateLegend()
+{
+    if (!ui->legendLabel) return;
+
+    QString legendText = "<html><body style='background-color: rgba(255,255,255,0.9); padding: 5px;'>";
+    legendText += "<b>Block Status:</b> ";
+    legendText += "<span style='color: #808080;'>■</span> Unknown ";
+    legendText += "<span style='color: #00FF00;'>■</span> Have Block ";
+    legendText += "<span style='color: #FFFF00;'>■</span> Header Only ";
+    legendText += "<span style='color: #FFA500;'>■</span> Pruned ";
+    legendText += "<span style='color: #C8C8C8;'>■</span> No Header ";
+    legendText += "<span style='color: #0000FF;'>■</span> Have UTXOs ";
+    legendText += "<span style='color: #FF00FF;'>■</span> Wallet UTXOs";
+    legendText += "</body></html>";
+
+    ui->legendLabel->setText(legendText);
 }
 

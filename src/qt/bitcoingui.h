@@ -47,6 +47,7 @@ enum class SynchronizationState;
 namespace interfaces {
 class Handler;
 class Node;
+class Chain;
 struct BlockAndHeaderTipInfo;
 }
 
@@ -80,7 +81,7 @@ class BitcoinGUI : public QMainWindow
 public:
     static const std::string DEFAULT_UIPLATFORM;
 
-    explicit BitcoinGUI(interfaces::Node& node, const PlatformStyle *platformStyle, const NetworkStyle *networkStyle, QWidget *parent = nullptr);
+    explicit BitcoinGUI(interfaces::Node& node, interfaces::Chain& chain, const PlatformStyle *platformStyle, const NetworkStyle *networkStyle, QWidget *parent = nullptr);
     ~BitcoinGUI();
 
     /** Set the client model.
@@ -128,6 +129,7 @@ public:
 
 private:
     interfaces::Node& m_node;
+    interfaces::Chain& m_chain;
     WalletController* m_wallet_controller{nullptr};
     std::unique_ptr<interfaces::Handler> m_handler_message_box;
     std::unique_ptr<interfaces::Handler> m_handler_question;
