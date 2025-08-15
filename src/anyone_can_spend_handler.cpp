@@ -16,8 +16,10 @@
 #include <validationinterface.h>
 #include <primitives/transaction.h>
 #include <wallet/wallet.h>
+#include <wallet/load.h>
 #include <node/context.h>
 #include <script/interpreter.h>
+#include <node/ui_interface.h>
 
 AnyoneCanSpendHandler::AnyoneCanSpendHandler()
     : m_wallet_context(nullptr), m_auto_spend(false)
@@ -104,10 +106,6 @@ std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
         m_anyone_wallet = GetWallet(*m_wallet_context, "Anyone");
         if (m_anyone_wallet) {
             LogPrintf("AnyoneCanSpendHandler: Successfully loaded existing 'Anyone' wallet\n");
-
-            // Notify the UI that the wallet has been loaded
-            uiInterface.NotifyWalletLoaded(m_anyone_wallet);
-
             return m_anyone_wallet;
         }
 
@@ -129,8 +127,8 @@ std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
 
         LogPrintf("AnyoneCanSpendHandler: Successfully created new 'Anyone' wallet\n");
 
-        // Notify the UI that a new wallet has been loaded
-        uiInterface.NotifyWalletLoaded(m_anyone_wallet);
+        // Add the wallet to the wallet context so it appears in the GUI
+        AddWallet(*m_wallet_context, m_anyone_wallet);
 
         return m_anyone_wallet;
 
