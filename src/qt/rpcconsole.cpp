@@ -9,9 +9,12 @@
 #include <qt/rpcconsole.h>
 #include <qt/forms/ui_debugwindow.h>
 
+#include <chain.h>
 #include <chainparams.h>
 #include <interfaces/node.h>
 #include <netbase.h>
+#include <node/blockstorage.h>
+#include <optional>
 #include <qt/bantablemodel.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
@@ -50,9 +53,11 @@
 #include <QString>
 #include <QStringList>
 #include <QStyledItemDelegate>
+#include <QTextStream>
 #include <QTime>
 #include <QTimer>
 #include <QVariant>
+#include <algorithm>
 #include <chrono>
 
 const int CONSOLE_HISTORY = 50;
@@ -559,6 +564,9 @@ RPCConsole::RPCConsole(interfaces::Node& node, const PlatformStyle *_platformSty
     connect(ui->fontBiggerButton, &QAbstractButton::clicked, this, &RPCConsole::fontBigger);
     connect(ui->fontSmallerButton, &QAbstractButton::clicked, this, &RPCConsole::fontSmaller);
 
+    // Setup block visualization widget
+    setupBlockVisualizationWidget();
+
     // disable the wallet selector by default
     ui->WalletSelector->setVisible(false);
     ui->WalletSelectorLabel->setVisible(false);
@@ -668,6 +676,12 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
 
         setNumBlocks(bestblock_height, QDateTime::fromSecsSinceEpoch(bestblock_date), verification_progress, false);
         connect(model, &ClientModel::numBlocksChanged, this, &RPCConsole::setNumBlocks);
+
+        // Connect to blockchain updates for automatic block visualization updates
+        connect(model, &ClientModel::numBlocksChanged, this, &RPCConsole::updateBlocksDisplay);
+
+        // Also update on mempool changes (which can indicate reorgs or new blocks)
+        connect(model, &ClientModel::mempoolSizeChanged, this, &RPCConsole::updateBlocksDisplay);
 
         updateNetworkState();
         connect(model, &ClientModel::networkActiveChanged, this, &RPCConsole::setNetworkActive);
@@ -1123,6 +1137,9 @@ void RPCConsole::on_tabWidget_currentChanged(int index)
 {
     if (ui->tabWidget->widget(index) == ui->tab_console) {
         ui->lineEdit->setFocus();
+    } else if (ui->tabWidget->widget(index) == ui->tab_blocks) {
+        // The block visualization widget will update itself when shown
+        // No need to call updateBlocksDisplay() here
     }
 }
 
@@ -1389,6 +1406,7 @@ QKeySequence RPCConsole::tabShortcut(TabTypes tab_type) const
     case TabTypes::MEMPOOL: return QKeySequence(tr("Ctrl+M"));
     case TabTypes::GRAPH: return QKeySequence(tr("Ctrl+N"));
     case TabTypes::PEERS: return QKeySequence(tr("Ctrl+P"));
+    case TabTypes::BLOCKS: return QKeySequence(tr("Ctrl+B"));
     } // no default case, so the compiler can warn about missing cases
 
     assert(false);
@@ -1399,3 +1417,27 @@ void RPCConsole::updateAlerts(const QString& warnings)
     this->ui->label_alerts->setVisible(!warnings.isEmpty());
     this->ui->label_alerts->setText(warnings);
 }
+
+void RPCConsole::setupBlockVisualizationWidget()
+{
+    // Create the block visualization widget
+    m_blockVisualizationWidget = new BlockVisualizationWidget(m_node, this);
+
+    // Set the widget as the scroll area's widget
+    ui->blockVisualizationScrollArea->setWidget(m_blockVisualizationWidget);
+
+    // Ensure the scroll area expands to fill available space
+    ui->blockVisualizationScrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+}
+
+void RPCConsole::updateBlocksDisplay()
+{
+    if (!clientModel)
+        return;
+
+    // Update the block visualization widget
+    if (m_blockVisualizationWidget) {
+        m_blockVisualizationWidget->updateBlockData();
+    }
+}
+

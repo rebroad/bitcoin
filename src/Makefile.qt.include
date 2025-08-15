@@ -44,6 +44,7 @@ QT_MOC_CPP = \
   qt/moc_bantablemodel.cpp \
   qt/moc_bitcoin.cpp \
   qt/moc_bitcoinaddressvalidator.cpp \
+  qt/moc_blockvisualizationwidget.cpp \
   qt/moc_bitcoinamountfield.cpp \
   qt/moc_bitcoingui.cpp \
   qt/moc_bitcoinunits.cpp \
@@ -116,6 +117,7 @@ BITCOIN_QT_H = \
   qt/bantablemodel.h \
   qt/bitcoin.h \
   qt/bitcoinaddressvalidator.h \
+  qt/blockvisualizationwidget.h \
   qt/bitcoinamountfield.h \
   qt/bitcoingui.h \
   qt/bitcoinunits.h \
@@ -229,6 +231,7 @@ BITCOIN_QT_BASE_CPP = \
   qt/bantablemodel.cpp \
   qt/bitcoin.cpp \
   qt/bitcoinaddressvalidator.cpp \
+  qt/blockvisualizationwidget.cpp \
   qt/bitcoinamountfield.cpp \
   qt/bitcoingui.cpp \
   qt/bitcoinunits.cpp \

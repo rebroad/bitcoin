@@ -8,6 +8,7 @@
 #include <qt/guiutil.h>
 #include <qt/peertablemodel.h>
 #include <qt/mempoolstats.h>
+#include <qt/blockvisualizationwidget.h>
 
 #include <net.h>
 
@@ -66,10 +67,11 @@ public:
         CONSOLE,
         MEMPOOL,
         GRAPH,
-        PEERS
+        PEERS,
+        BLOCKS
     };
 
-    std::vector<TabTypes> tabs() const { return {TabTypes::INFO, TabTypes::CONSOLE, TabTypes::MEMPOOL, TabTypes::GRAPH, TabTypes::PEERS}; }
+    std::vector<TabTypes> tabs() const { return {TabTypes::INFO, TabTypes::CONSOLE, TabTypes::MEMPOOL, TabTypes::GRAPH, TabTypes::PEERS, TabTypes::BLOCKS}; }
 
     QString tabTitle(TabTypes tab_type) const;
     QKeySequence tabShortcut(TabTypes tab_type) const;
@@ -103,6 +105,10 @@ private Q_SLOTS:
     void clearSelectedNode();
     /** show detailed information on ui about selected node */
     void updateDetailWidget();
+    /** update blocks information display */
+    void updateBlocksDisplay();
+    /** create and setup the block visualization widget */
+    void setupBlockVisualizationWidget();
 
 public Q_SLOTS:
     void clear(bool keep_prompt = false);
@@ -183,6 +189,8 @@ private:
     {
         return time_at_event.count() ? GUIUtil::formatDurationStr(time_now - time_at_event) : tr("Never");
     }
+
+    BlockVisualizationWidget* m_blockVisualizationWidget = nullptr;
 
 private Q_SLOTS:
     void updateAlerts(const QString& warnings);

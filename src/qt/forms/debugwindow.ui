@@ -1729,6 +1729,45 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="tab_blocks">
+      <attribute name="title">
+       <string>&amp;Blocks</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_blocks">
+       <item>
+        <widget class="QWidget" name="blockVisualizationWidgetPlaceholder">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>1</horstretch>
+           <verstretch>1</verstretch>
+          </sizepolicy>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QScrollArea" name="blockVisualizationScrollArea">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>1</horstretch>
+           <verstretch>1</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <property name="horizontalScrollBarPolicy">
+          <enum>Qt::ScrollBarAsNeeded</enum>
+         </property>
+         <property name="verticalScrollBarPolicy">
+          <enum>Qt::ScrollBarAsNeeded</enum>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::NoFrame</enum>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
   </layout>
@@ -1747,6 +1786,12 @@
    <class>MempoolStats</class>
    <extends>QWidget</extends>
    <header>qt/mempoolstats.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>BlockVisualizationWidget</class>
+   <extends>QWidget</extends>
+   <header>qt/blockvisualizationwidget.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
