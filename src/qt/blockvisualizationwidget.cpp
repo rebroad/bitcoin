@@ -13,6 +13,8 @@
 #include <validation.h>
 #include <node/blockstorage.h>
 #include <util/time.h>
+#include <primitives/block.h>
+#include <serialize.h>
 #include <QApplication>
 #include <QPainter>
 #include <QMouseEvent>
@@ -334,11 +336,17 @@ QString BlockVisualizationWidget::getTooltipForBlock(int height) const
         return tr("Invalid block");
     }
 
-    // Get status from cache
+    // Get status from global cache
     BlockStatus status = UNKNOWN;
-    auto it = m_statusCache.find(height);
-    if (it != m_statusCache.end()) {
-        status = it->second;
+    BlockStatusCache& globalCache = BlockStatusCache::getInstance();
+    if (globalCache.isPopulated()) {
+        status = static_cast<BlockStatus>(globalCache.getStatus(height));
+    } else {
+        // Fallback to local cache if global cache not populated
+        auto it = m_statusCache.find(height);
+        if (it != m_statusCache.end()) {
+            status = it->second;
+        }
     }
 
     QString statusText;
@@ -367,6 +375,35 @@ QString BlockVisualizationWidget::getTooltipForBlock(int height) const
     }
 
     QString tooltip = tr("Block %1\nStatus: %2").arg(height).arg(statusText);
+
+    // Try to get additional block information
+    try {
+        uint256 blockHash = m_chain.getBlockHash(height);
+        if (!blockHash.IsNull()) {
+            // Get block information using FoundBlock
+            int64_t blockTime = 0;
+            CBlock blockData;
+            interfaces::FoundBlock foundBlock;
+            foundBlock.time(blockTime).data(blockData);
+
+            if (m_chain.findBlock(blockHash, foundBlock) && foundBlock.found) {
+                // Add timestamp
+                if (blockTime > 0) {
+                    QDateTime blockDateTime = QDateTime::fromSecsSinceEpoch(blockTime);
+                    QString timeStr = blockDateTime.toString("yyyy-MM-dd hh:mm:ss");
+                    tooltip += tr("\nTime: %1").arg(timeStr);
+                }
+
+                // Add block size if we have the data
+                if (!blockData.IsNull()) {
+                    size_t blockSize = ::GetSerializeSize(blockData, PROTOCOL_VERSION);
+                    tooltip += tr("\nSize: %1 bytes").arg(blockSize);
+                }
+            }
+        }
+    } catch (...) {
+        // Additional info not available
+    }
 
     return tooltip;
 }
