@@ -861,12 +861,6 @@
       </layout>
      </widget>
      <widget class="QWidget" name="tab_mempool">
-      <property name="minimumSize">
-       <size>
-        <width>747</width>
-        <height>0</height>
-       </size>
-      </property>
       <attribute name="title">
        <string>Mempool</string>
       </attribute>
