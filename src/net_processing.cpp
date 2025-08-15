@@ -1923,9 +1923,6 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
                 block_txs++;
             }
 
-            LogPrintf("DEBUG: Attributing %d bytes and %d transactions for full block %s to peer %d\n",
-                     block_bytes, block_txs, block.GetHash().ToString(), nodeid);
-
             // Attribute all statistics in a single ForNode call
             m_connman.ForNode(nodeid, [block_bytes, block_txs](CNode* pnode) {
                 pnode->nBlockBytes += block_bytes;
@@ -1933,11 +1930,6 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
                 return true;
             });
         } else {
-            // For compact blocks, multiple peers can contribute transactions to the same block
-            // We need to iterate through ALL peers that contributed to this block
-            LogPrintf("DEBUG: Transferring compact block stats for block %s from all contributing peers\n",
-                     block.GetHash().ToString());
-
             // Get and clear compact block stats for all contributing nodes
             auto node_stats = GetAndClearCompactBlockStats(block.GetHash());
             for (const auto& [nodeid, stats] : node_stats) {
@@ -1986,9 +1978,6 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
             }
         }
         mapBlockSource.erase(it);
-    } else {
-        LogPrintf("DEBUG: No source peer found for block %s in mapBlockSource (likely from previous run)\n",
-                 block.GetHash().ToString());
     }
 }
 
@@ -2943,8 +2932,6 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
     } else {
         LOCK(cs_main);
         mapBlockSource.erase(block->GetHash()); // Don't reward the peer for the block
-        LogPrintf("DEBUG: Skipping mapBlockSource cleanup for block %s (force_processing=false)\n",
-                 block->GetHash().ToString());
     }
 }
 
@@ -4378,8 +4365,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // which peers send us compact blocks, so the race between here and
             // cs_main in ProcessNewBlock is fine.
             mapBlockSource.emplace(hash, std::make_pair(pfrom.GetId(), true));
-            LogPrintf("DEBUG: Added block %s to mapBlockSource for peer %d\n",
-                     hash.ToString(), pfrom.GetId());
 
             const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
             if (pindex)
