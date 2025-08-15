@@ -67,25 +67,67 @@ BlockVisualizationWidget::~BlockVisualizationWidget()
 
 void BlockVisualizationWidget::updateBlockData()
 {
-    // Get current chain height - check if chainman is available first
-    int numBlocks = 0;
-    try {
-        numBlocks = m_node.getNumBlocks();
-    } catch (...) {
-        // Chainman not available yet, just return
-        return;
+    // Check if global cache is populated
+    BlockStatusCache& globalCache = BlockStatusCache::getInstance();
+
+    if (globalCache.isPopulated()) {
+        // Use the global cache that was populated during startup
+        m_totalBlocks = globalCache.getTotalBlocks();
+        m_dataLoaded = true;
+        m_initialized = true;
+    } else {
+        // Fallback to the old method if global cache isn't populated
+        int numBlocks = 0;
+        try {
+            numBlocks = m_node.getNumBlocks();
+        } catch (...) {
+            // Chainman not available yet, just return
+            return;
+        }
+
+        if (numBlocks <= 0) return;
+
+        m_totalBlocks = numBlocks;
+        populateBlockStatusCache();
+        m_dataLoaded = true;
+        m_initialized = true;
     }
 
-    if (numBlocks <= 0) return;
-
-    m_totalBlocks = numBlocks;
-
-    // Don't initialize cache or pending blocks here - do it lazily as needed
     calculateLayout();
     update();
+}
 
-    m_dataLoaded = true;
-    m_initialized = true;
+void BlockVisualizationWidget::populateBlockStatusCache()
+{
+    // This method bulk-populates the cache by accessing the block index directly
+    // This is much faster than checking each block individually via the Chain interface
+
+    // Process all blocks at once without chunking to avoid interruption
+    for (int height = 0; height <= m_totalBlocks; ++height) {
+        // Use the same logic as haveBlockOnDisk but cache the result
+        try {
+            uint256 blockHash = m_chain.getBlockHash(height);
+            if (blockHash.IsNull()) {
+                m_statusCache[height] = NO_HEADER;
+                continue;
+            }
+
+            // We have at least the header
+            m_statusCache[height] = HEADER_ONLY;
+
+            // Check if we have the full block data on disk
+            if (m_chain.haveBlockOnDisk(height)) {
+                m_statusCache[height] = HAVE_BLOCK;
+            } else {
+                m_statusCache[height] = PRUNED;
+            }
+        } catch (...) {
+            m_statusCache[height] = NO_HEADER;
+        }
+    }
+
+    // Update the display once at the end
+    update();
 }
 
 void BlockVisualizationWidget::refreshBlockStatus(int height)
@@ -373,14 +415,16 @@ void BlockVisualizationWidget::paintEvent(QPaintEvent *event)
 
         QRect blockRect(x, y, m_blockWidth, m_blockHeight);
 
-        // Get status from cache, default to UNKNOWN if not found
+        // Get status from global cache, fallback to local cache
         BlockStatus status = UNKNOWN;
-        auto it = m_statusCache.find(height);
-        if (it != m_statusCache.end()) {
-            status = it->second;
+        BlockStatusCache& globalCache = BlockStatusCache::getInstance();
+        if (globalCache.isPopulated()) {
+            status = static_cast<BlockStatus>(globalCache.getStatus(height));
         } else {
-            // Add to pending blocks for lazy loading
-            m_pendingBlocks.insert(height);
+            auto it = m_statusCache.find(height);
+            if (it != m_statusCache.end()) {
+                status = it->second;
+            }
         }
 
         // Draw block with appropriate color
@@ -391,11 +435,6 @@ void BlockVisualizationWidget::paintEvent(QPaintEvent *event)
             painter.setPen(QPen(Qt::black, 1));
             painter.drawRect(blockRect);
         }
-    }
-
-    // Start async processing if we have pending blocks and timer isn't active
-    if (!m_pendingBlocks.empty() && !m_updateTimer->isActive()) {
-        m_updateTimer->start();
     }
 }
 

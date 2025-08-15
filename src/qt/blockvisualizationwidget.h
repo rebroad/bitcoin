@@ -6,16 +6,22 @@
 #define BITCOIN_QT_BLOCKVISUALIZATIONWIDGET_H
 
 #include <QWidget>
+#include <QTimer>
 #include <QPainter>
 #include <QMouseEvent>
+#include <QShowEvent>
+#include <QResizeEvent>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QToolTip>
-#include <QColor>
-#include <QTimer>
+#include <QDateTime>
+#include <QCoreApplication>
 #include <vector>
 #include <optional>
 #include <uint256.h>
 #include <map>
 #include <set>
+#include <blockstatus_cache.h>
 
 namespace interfaces {
     class Node;
@@ -32,7 +38,7 @@ public:
         NO_HEADER,      // Don't have the header
         HEADER_ONLY,    // Have header but no block data
         HAVE_BLOCK,     // Have the full block
-        PRUNED,         // Had the block but it was pruned
+        PRUNED,         // Had block but it's been pruned
         HAVE_UTXOS,     // Have unspent UTXOs from this block
         WALLET_UTXOS    // Have unspent UTXOs from this block that we own
     };
@@ -75,6 +81,7 @@ private:
     void calculateLayout();
     void updateBlockStatusesAsync();
     void updateBlockStatus(int height);
+    void populateBlockStatusCache();
     void drawLegend(QPainter& painter);
 };
 

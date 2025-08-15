@@ -118,6 +118,7 @@ BITCOIN_CORE_H = \
   base58.h \
   bech32.h \
   blockencodings.h \
+  blockstatus_cache.h \
   blockfilter.h \
   chain.h \
   chainparams.h \
@@ -351,6 +352,7 @@ libbitcoin_node_a_SOURCES = \
   mapport.cpp \
   net.cpp \
   net_processing.cpp \
+  blockstatus_cache.cpp \
   node/blockstorage.cpp \
   node/caches.cpp \
   node/chainstate.cpp \

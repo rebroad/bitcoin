@@ -22,6 +22,7 @@
 #include <util/system.h>
 #include <validation.h>
 #include <validation_thread.h>
+#include <blockstatus_cache.h>
 
 // If true (below), hain activation starts in loadblk then gets passed to validation thread. This allows blocks to be
 // downloaded (as fImporting becomes false), and also makes the GUI more responsive.
@@ -447,6 +448,9 @@ bool BlockManager::LoadBlockIndexDB(ChainstateManager& chainman)
     bool fReindexing = false;
     m_block_tree_db->ReadReindexing(fReindexing);
     if (fReindexing) fReindex = true;
+
+    // Populate the global block status cache for the GUI
+    PopulateBlockStatusCacheFromBlockIndex(chainman);
 
     return true;
 }
