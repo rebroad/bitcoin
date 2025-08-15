@@ -476,7 +476,7 @@ Alihkan fail data ke dalam tab semasa</translation>
     </message>
     <message>
         <source>Debug window</source>
-        <translation>Node window</translation>
+        <translation>Debug window</translation>
     </message>
     <message>
         <source>Open debugging and diagnostic console</source>
@@ -1752,7 +1752,7 @@ Alihkan fail data ke dalam tab semasa</translation>
     </message>
     <message>
         <source>Debug window</source>
-        <translation>Node window</translation>
+        <translation>Debug window</translation>
     </message>
     <message>
         <source>Open the %1 debug log file from the current data directory. This can take a few seconds for large log files.</source>

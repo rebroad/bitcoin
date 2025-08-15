@@ -575,7 +575,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
         <context-group purpose="location"><context context-type="linenumber">321</context></context-group>
       </trans-unit>
       <trans-unit id="_msg131">
-        <source xml:space="preserve">Node window</source>
+        <source xml:space="preserve">Debug window</source>
         <context-group purpose="location"><context context-type="linenumber">323</context></context-group>
       </trans-unit>
       <trans-unit id="_msg132">
@@ -672,7 +672,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
       <trans-unit id="_msg153">
         <source xml:space="preserve">Show Peers tab</source>
         <context-group purpose="location"><context context-type="linenumber">969</context></context-group>
-        <note annotates="source" from="developer">A context menu item. The &quot;Peers tab&quot; is an element of the &quot;Node window&quot;.</note>
+        <note annotates="source" from="developer">A context menu item. The &quot;Peers tab&quot; is an element of the &quot;Debug window&quot;.</note>
       </trans-unit>
       <trans-unit id="_msg154">
         <source xml:space="preserve">Disable network activity</source>
@@ -2478,7 +2478,7 @@ If you are receiving this error you should request the merchant provide a BIP21 
         <context-group purpose="location"><context context-type="linenumber">1139</context></context-group>
       </trans-unit>
       <trans-unit id="_msg538">
-        <source xml:space="preserve">Node window</source>
+        <source xml:space="preserve">Debug window</source>
         <context-group purpose="location"><context context-type="linenumber">14</context></context-group>
       </trans-unit>
       <trans-unit id="_msg539">

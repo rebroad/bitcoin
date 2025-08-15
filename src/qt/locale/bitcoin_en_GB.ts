@@ -501,7 +501,7 @@ Signing is only possible with addresses of the type 'legacy'.</translation>
     </message>
     <message>
         <source>Debug window</source>
-        <translation>Node window</translation>
+        <translation>Debug window</translation>
     </message>
     <message>
         <source>Open debugging and diagnostic console</source>
@@ -1971,7 +1971,7 @@ Signing is only possible with addresses of the type 'legacy'.</translation>
     </message>
     <message>
         <source>Debug window</source>
-        <translation>Node window</translation>
+        <translation>Debug window</translation>
     </message>
     <message>
         <source>Current block height</source>

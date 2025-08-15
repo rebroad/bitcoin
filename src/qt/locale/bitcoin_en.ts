@@ -762,7 +762,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     <message>
         <location line="+17"/>
         <source>Show Peers tab</source>
-        <extracomment>A context menu item. The &quot;Peers tab&quot; is an element of the &quot;Node window&quot;.</extracomment>
+        <extracomment>A context menu item. The &quot;Peers tab&quot; is an element of the &quot;Debug window&quot;.</extracomment>
         <translation type="unfinished"></translation>
     </message>
     <message>

@@ -504,7 +504,7 @@ Solicitar pagos (genera códigos QR y bitcoin: URI)
     </message>
     <message>
         <source>Debug window</source>
-        <translation>Node window</translation>
+        <translation>Debug window</translation>
     </message>
     <message>
         <source>Open debugging and diagnostic console</source>
@@ -1974,7 +1974,7 @@ Solicitar pagos (genera códigos QR y bitcoin: URI)
     </message>
     <message>
         <source>Debug window</source>
-        <translation>Node window</translation>
+        <translation>Debug window</translation>
     </message>
     <message>
         <source>Current block height</source>

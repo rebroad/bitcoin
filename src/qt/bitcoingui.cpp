@@ -970,7 +970,7 @@ void BitcoinGUI::setNetworkActive(bool network_active)
     updateNetworkState();
     m_network_context_menu->clear();
     m_network_context_menu->addAction(
-        //: A context menu item. The "Peers tab" is an element of the "Node window".
+        //: A context menu item. The "Peers tab" is an element of the "Debug window".
         tr("Show Peers tab"),
         [this] {
             rpcConsole->setTabFocus(RPCConsole::TabTypes::PEERS);
