@@ -98,6 +98,7 @@ protected:
     // CValidationInterface overrides
     void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) override;
     void BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override;
+    void TransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) override;
 
 private:
     std::string m_destination_address;

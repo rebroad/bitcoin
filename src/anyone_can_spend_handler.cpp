@@ -65,6 +65,15 @@ void AnyoneCanSpendHandler::Initialize(const std::string& destination_address,
     }
 }
 
+void AnyoneCanSpendHandler::TransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence)
+{
+    // Track all mempool transactions for evaluation statistics
+    {
+        std::lock_guard<std::mutex> lock(m_stats_mutex);
+        m_stats.transactions_evaluated_mempool++;
+    }
+}
+
 void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence)
 {
     LogPrintf("AnyoneCanSpendHandler: AnyoneCanSpendTransactionAddedToMempool called for tx %s\n", tx->GetHash().ToString());
@@ -75,10 +84,10 @@ void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTrans
         return;
     }
 
-    // Update mempool transaction counter
+    // Update anyone-can-spend detection counter
     {
         std::lock_guard<std::mutex> lock(m_stats_mutex);
-        m_stats.transactions_evaluated_mempool++;
+        m_stats.outputs_detected++;
     }
 
     LogPrintf("AnyoneCanSpendHandler: Detected transaction %s with anyone can spend outputs\n",
@@ -395,7 +404,7 @@ void AnyoneCanSpendHandler::StartHeartbeat()
             std::this_thread::sleep_for(std::chrono::seconds(5));
 
             std::lock_guard<std::mutex> lock(m_stats_mutex);
-            LogPrintf("AnyoneCanSpendHandler: Heartbeat - Transactions evaluated: %u blocks, %u mempool, Outputs detected: %u, Outputs spent: %u\n",
+            LogPrintf("AnyoneCanSpendHandler: Heartbeat - Transactions evaluated: %u blocks, %u mempool, Anyone-can-spend outputs detected: %u, Outputs spent: %u\n",
                      m_stats.transactions_evaluated_blocks, m_stats.transactions_evaluated_mempool,
                      m_stats.outputs_detected, m_stats.outputs_spent);
         }
