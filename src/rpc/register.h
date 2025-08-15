@@ -23,6 +23,8 @@ void RegisterRawTransactionRPCCommands(CRPCTable &tableRPC);
 void RegisterSignerRPCCommands(CRPCTable &tableRPC);
 /** Register stats RPC commands */
 void RegisterStatsRPCCommands(CRPCTable &tableRPC);
+/** Register anyone can spend handler RPC commands */
+void RegisterAnyoneCanSpendHandlerRPCCommands(CRPCTable &tableRPC);
 
 static inline void RegisterAllCoreRPCCommands(CRPCTable &t)
 {
@@ -35,6 +37,7 @@ static inline void RegisterAllCoreRPCCommands(CRPCTable &t)
     RegisterSignerRPCCommands(t);
 #endif // ENABLE_EXTERNAL_SIGNER
     RegisterStatsRPCCommands(t);
+    RegisterAnyoneCanSpendHandlerRPCCommands(t);
 }
 
 #endif // BITCOIN_RPC_REGISTER_H

@@ -50,6 +50,13 @@
 #include <validationinterface.h>
 #include <versionbits.h>
 #include <warnings.h>
+#include <anyone_can_spend_handler.h>
+#include <wallet/load.h>
+#include <wallet/wallet.h>
+#include <wallet/spend.h>
+#include <wallet/coincontrol.h>
+#include <key_io.h>
+#include <interfaces/wallet.h>
 
 #include <stdint.h>
 
@@ -2132,6 +2139,8 @@ static RPCHelpMan getanyonecanspendutxos()
                         {RPCResult::Type::NUM, "count", "The number of anyone can spend UTXOs"},
                         {RPCResult::Type::NUM, "total_size", "The total size in bytes of anyone can spend UTXOs"},
                         {RPCResult::Type::STR_AMOUNT, "total_amount", "The total amount of anyone can spend UTXOs in " + CURRENCY_UNIT},
+                        {RPCResult::Type::NUM, "total_utxo_size", "The total size in bytes of all UTXOs"},
+                        {RPCResult::Type::NUM, "anyone_can_spend_size_percent", "The percentage of total UTXO size that is anyone can spend"},
                         {RPCResult::Type::ARR, "utxos", "Detailed information about each UTXO (only if verbose=true)",
                         {
                             {RPCResult::Type::OBJ, "", "",
@@ -2168,9 +2177,15 @@ static RPCHelpMan getanyonecanspendutxos()
     uint64_t anyone_can_spend_count = 0;
     uint64_t anyone_can_spend_size = 0;
     CAmount anyone_can_spend_amount = 0;
+    uint64_t total_size = 0;
     uint64_t current_count = 0;
 
-    int64_t last_log_time = GetTimeMillis();
+    // Get total number of UTXOs from the database
+    size_t total_utxos = coins_view->EstimateSize();
+    LogPrint(BCLog::RPC, "getanyonecanspendutxos: Starting UTXO scan of %zu total UTXOs\n", total_utxos);
+
+    int64_t start_time = GetTimeMillis();
+    int64_t last_progress_time = start_time;
 
     std::unique_ptr<CCoinsViewCursor> pcursor(coins_view->Cursor());
     COutPoint key;
@@ -2179,6 +2194,7 @@ static RPCHelpMan getanyonecanspendutxos()
     UniValue utxos(UniValue::VARR);
 
     LogPrint(BCLog::RPC, "getanyonecanspendutxos: Starting UTXO scan\n");
+    std::vector<COutPoint> found_utxos; // Store found UTXOs for wallet management
 
     while (pcursor->Valid()) {
         // Check for RPC interruption
@@ -2190,17 +2206,39 @@ static RPCHelpMan getanyonecanspendutxos()
 
         // Log progress every 5 seconds
         int64_t current_time = GetTimeMillis();
-        if (current_time - last_log_time > 5000) {
-            LogPrint(BCLog::RPC, "getanyonecanspendutxos: Scanned %u UTXOs\n", current_count);
-            last_log_time = current_time;
+        if (current_time - last_progress_time > 5000) { // 5 seconds
+            int64_t elapsed_ms = current_time - start_time;
+            double elapsed_seconds = elapsed_ms / 1000.0;
+            double utxos_per_second = current_count / elapsed_seconds;
+
+            double progress_percent = (current_count * 100.0) / total_utxos;
+            double estimated_remaining_seconds = (total_utxos - current_count) / utxos_per_second;
+
+            // Format time remaining
+            std::string time_remaining;
+            if (estimated_remaining_seconds > 0 && estimated_remaining_seconds < 3600) {
+                time_remaining = strprintf(" (~%.0f seconds remaining)", estimated_remaining_seconds);
+            } else if (estimated_remaining_seconds >= 3600) {
+                time_remaining = strprintf(" (~%.1f hours remaining)", estimated_remaining_seconds / 3600.0);
+            }
+
+            LogPrint(BCLog::RPC, "getanyonecanspendutxos: Progress %.1f%% - Scanned %u/%zu UTXOs%s\n",
+                    progress_percent, current_count, total_utxos, time_remaining);
+
+            last_progress_time = current_time;
         }
 
         if (pcursor->GetKey(key) && pcursor->GetValue(coin)) {
             if (!coin.IsSpent() && !coin.out.scriptPubKey.IsUnspendable()) {
+                // Calculate size for all UTXOs
+                uint64_t coin_size = ::GetSerializeSize(coin, PROTOCOL_VERSION);
+                total_size += coin_size;
+
                 if (IsAnyoneCanSpendAddress(coin.out.scriptPubKey)) {
                     anyone_can_spend_count++;
-                    anyone_can_spend_size += ::GetSerializeSize(coin, PROTOCOL_VERSION);
+                    anyone_can_spend_size += coin_size;
                     anyone_can_spend_amount += coin.out.nValue;
+                    found_utxos.push_back(key); // Store for wallet management
 
                     // Log each found UTXO
                     LogPrintf("WARNING: Found anyone can spend UTXO: txid=%s vout=%d amount=%s\n",
@@ -2243,12 +2281,120 @@ static RPCHelpMan getanyonecanspendutxos()
         pcursor->Next();
     }
 
-    LogPrint(BCLog::RPC, "getanyonecanspendutxos: Scan complete. Found %u anyone can spend UTXOs\n", anyone_can_spend_count);
+    int64_t total_time_ms = GetTimeMillis() - start_time;
+    double total_time_seconds = total_time_ms / 1000.0;
+    double anyone_can_spend_size_percent = total_size > 0 ? (anyone_can_spend_size * 100.0) / total_size : 0.0;
+    LogPrint(BCLog::RPC, "getanyonecanspendutxos: Scan complete in %.1f seconds. Scanned %u UTXOs, found %u anyone can spend UTXOs (%.1f%% of total size)\n",
+            total_time_seconds, current_count, anyone_can_spend_count, anyone_can_spend_size_percent);
+
+    // Handle wallet management if anyone can spend UTXOs were found
+    if (anyone_can_spend_count > 0) {
+        LogPrintf("WARNING: Found %u anyone can spend UTXOs with total value %s\n",
+                  anyone_can_spend_count, FormatMoney(anyone_can_spend_amount));
+
+        // Check if anyonecanspenddestination is configured
+        std::string destination = gArgs.GetArg("-anyonecanspenddestination", "");
+        if (!destination.empty()) {
+            LogPrintf("INFO: anyonecanspenddestination is configured as: %s\n", destination);
+
+            // Get the wallet context
+            const node::NodeContext& node_context = EnsureAnyNodeContext(request.context);
+            if (!node_context.wallet_loader) {
+                LogPrintf("WARNING: Wallet loader not available, cannot create spending transaction\n");
+            } else {
+                try {
+                    // Create or get the AnyoneCanSpendHandler
+                    static std::unique_ptr<AnyoneCanSpendHandler> handler;
+                    if (!handler) {
+                        handler = std::make_unique<AnyoneCanSpendHandler>();
+                        handler->Initialize(destination, node_context.wallet_loader->context(), true); // Enable auto-spend
+                        LogPrintf("INFO: Created AnyoneCanSpendHandler with auto-spend enabled\n");
+                    }
+
+                    // Get the "Anyone" wallet
+                    auto wallet = handler->GetAnyoneWallet();
+                    if (!wallet) {
+                        LogPrintf("WARNING: Could not get 'Anyone' wallet\n");
+                    } else {
+                        LogPrintf("INFO: Successfully loaded 'Anyone' wallet\n");
+
+                        // Add found UTXOs to the wallet (so they can be spent)
+                        for (const auto& outpoint : found_utxos) {
+                            // Get the coin data
+                            Coin coin;
+                            if (coins_view->GetCoin(outpoint, coin)) {
+                                // Create a transaction that contains this output
+                                CMutableTransaction mtx;
+                                mtx.vin.resize(1);
+                                mtx.vin[0].prevout = outpoint;
+                                mtx.vout.resize(1);
+                                mtx.vout[0].nValue = coin.out.nValue;
+                                mtx.vout[0].scriptPubKey = coin.out.scriptPubKey;
+
+                                // Add to wallet
+                                wallet->AddToWallet(MakeTransactionRef(CTransaction(mtx)), wallet::TxStateInactive{});
+                                LogPrintf("INFO: Added UTXO %s:%d to 'Anyone' wallet\n",
+                                         outpoint.hash.ToString(), outpoint.n);
+                            }
+                        }
+
+                        // Create and broadcast spending transaction
+                        if (!found_utxos.empty()) {
+                            // Create coin control to specify the exact outputs to spend
+                            wallet::CCoinControl coin_control;
+                            for (const auto& outpoint : found_utxos) {
+                                coin_control.Select(outpoint);
+                            }
+
+                            // Set a high fee rate to ensure inclusion in next block
+                            // Use a conservative fee rate (higher than default) for anyone-can-spend transactions
+                            coin_control.m_confirm_target = 1; // Target next block
+
+                            // Create destination
+                            CTxDestination dest = DecodeDestination(destination);
+                            if (!std::holds_alternative<CNoDestination>(dest)) {
+                                // Create recipient
+                                std::vector<wallet::CRecipient> recipients;
+                                wallet::CRecipient recipient{GetScriptForDestination(dest), anyone_can_spend_amount, false};
+                                recipients.push_back(recipient);
+
+                                // Create the transaction
+                                CTransactionRef tx_new;
+                                CAmount fee;
+                                int change_pos = -1;
+                                bilingual_str error;
+                                FeeCalculation fee_calc_out;
+
+                                if (CreateTransaction(*wallet, recipients, tx_new, fee, change_pos, error, coin_control, fee_calc_out, true)) {
+                                    // Commit the transaction to the wallet
+                                    wallet->CommitTransaction(tx_new, {}, {});
+                                    LogPrintf("INFO: Created and committed spending transaction %s for %zu UTXOs (total: %s, fee: %s, fee_rate: %.1f sat/vB)\n",
+                                             tx_new->GetHash().ToString(), found_utxos.size(),
+                                             FormatMoney(anyone_can_spend_amount), FormatMoney(fee),
+                                             (double)fee / GetVirtualTransactionSize(*tx_new) * 1000.0);
+                                } else {
+                                    LogPrintf("WARNING: Failed to create spending transaction: %s\n", error.original);
+                                }
+                            } else {
+                                LogPrintf("WARNING: Invalid destination address: %s\n", destination);
+                            }
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    LogPrintf("ERROR: Exception during wallet management: %s\n", e.what());
+                }
+            }
+        } else {
+            LogPrintf("INFO: anyonecanspenddestination not configured. Set -anyonecanspenddestination=<address> to automatically spend found UTXOs\n");
+        }
+    }
 
     UniValue ret(UniValue::VOBJ);
     ret.pushKV("count", (int64_t)anyone_can_spend_count);
     ret.pushKV("total_size", (int64_t)anyone_can_spend_size);
     ret.pushKV("total_amount", ValueFromAmount(anyone_can_spend_amount));
+    ret.pushKV("total_utxo_size", (int64_t)total_size);
+    ret.pushKV("anyone_can_spend_size_percent", anyone_can_spend_size_percent);
 
     if (verbose) {
         ret.pushKV("utxos", utxos);
@@ -2258,6 +2404,8 @@ static RPCHelpMan getanyonecanspendutxos()
 },
     };
 }
+
+// anyonecanspendhandler RPC function is implemented in src/rpc/anyone_can_spend_handler.cpp
 
 static RPCHelpMan preciousblock()
 {

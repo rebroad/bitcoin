@@ -72,6 +72,9 @@
 #include <validation.h>
 #include <validationinterface.h>
 #include <walletinitinterface.h>
+#include <anyone_can_spend_handler.h>
+#include <wallet/load.h>
+#include <interfaces/wallet.h>
 
 #include <condition_variable>
 #include <cstdint>
@@ -1200,6 +1203,8 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     RegisterZMQRPCCommands(tableRPC);
 #endif
 
+    // Note: AnyoneCanSpendHandler auto-initialization will be handled after wallet loading
+
     /* Start the RPC server already.  It will be started in "warmup" mode
      * and not really process calls already (but it will signify connections
      * that the server is there and will be ready later).  Warmup mode will
@@ -1567,6 +1572,24 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     for (const auto& client : node.chain_clients) {
         if (!client->load()) {
             return false;
+        }
+    }
+
+    // Auto-initialize AnyoneCanSpendHandler if configured
+    std::string anyone_can_spend_destination = args.GetArg("-anyonecanspenddestination", "");
+    bool anyone_can_spend_auto_enable = args.GetBoolArg("-anyonecanspendautoenable", false);
+    if (!anyone_can_spend_destination.empty() && anyone_can_spend_auto_enable && node.wallet_loader) {
+        try {
+            // Create global AnyoneCanSpendHandler instance
+            static std::unique_ptr<AnyoneCanSpendHandler> g_anyone_can_spend_handler;
+            if (!g_anyone_can_spend_handler) {
+                g_anyone_can_spend_handler = std::make_unique<AnyoneCanSpendHandler>();
+                auto* wallet_context = node.wallet_loader->context();
+                g_anyone_can_spend_handler->Initialize(anyone_can_spend_destination, wallet_context, true); // Enable auto-spend
+                LogPrintf("AnyoneCanSpendHandler: Auto-initialized with destination %s and auto-spend enabled\n", anyone_can_spend_destination);
+            }
+        } catch (const std::exception& e) {
+            LogPrintf("AnyoneCanSpendHandler: Failed to auto-initialize: %s\n", e.what());
         }
     }
 
