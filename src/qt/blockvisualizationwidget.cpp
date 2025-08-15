@@ -70,9 +70,12 @@ void BlockVisualizationWidget::updateBlockData()
     // Check if global cache is populated
     BlockStatusCache& globalCache = BlockStatusCache::getInstance();
 
+    qDebug() << "updateBlockData: global cache populated =" << globalCache.isPopulated();
+
     if (globalCache.isPopulated()) {
         // Use the global cache that was populated during startup
         m_totalBlocks = globalCache.getTotalBlocks();
+        qDebug() << "updateBlockData: using global cache, total blocks =" << m_totalBlocks;
         m_dataLoaded = true;
         m_initialized = true;
     } else {
@@ -88,6 +91,7 @@ void BlockVisualizationWidget::updateBlockData()
         if (numBlocks <= 0) return;
 
         m_totalBlocks = numBlocks;
+        qDebug() << "updateBlockData: using fallback method, total blocks =" << m_totalBlocks;
         populateBlockStatusCache();
         m_dataLoaded = true;
         m_initialized = true;
@@ -389,6 +393,8 @@ void BlockVisualizationWidget::paintEvent(QPaintEvent *event)
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, false); // Disable antialiasing for better performance
+
+    qDebug() << "paintEvent: m_totalBlocks =" << m_totalBlocks;
 
     if (m_totalBlocks <= 0) {
         painter.drawText(rect(), Qt::AlignCenter, tr("No block data available"));

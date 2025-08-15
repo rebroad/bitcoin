@@ -11,42 +11,27 @@ BlockStatusCache& BlockStatusCache::getInstance()
     return instance;
 }
 
-void BlockStatusCache::populateFromBlockIndex(ChainstateManager& chainman)
+void BlockStatusCache::addBlock(int height, CBlockIndex* pindex)
 {
-    // This method populates the cache from the block index during startup
-    // It's called from the block loading process
-
-    LOCK(cs_main);
-
-    // Clear any existing data
-    m_statusCache.clear();
-
-    // Get the active chain
-    const CChain& active = chainman.ActiveChain();
-
-    // Get the total number of blocks
-    int totalBlocks = active.Height();
-    m_totalBlocks.store(totalBlocks);
-
-    // Populate the cache for all blocks
-    for (int height = 0; height <= totalBlocks; ++height) {
-        CBlockIndex* pindex = active[height];
-        if (!pindex) {
-            m_statusCache[height] = NO_HEADER;
-            continue;
-        }
-
-        // Check if we have block data
-        if (pindex->nStatus & BLOCK_HAVE_DATA) {
-            m_statusCache[height] = HAVE_BLOCK;
-        } else {
-            // We have the header but no block data
-            m_statusCache[height] = HEADER_ONLY;
-        }
+    // Add a single block to the cache
+    if (!pindex) {
+        m_statusCache[height] = NO_HEADER;
+        return;
     }
 
-    // Mark as populated
-    m_populated.store(true);
+    // Check if we have block data
+    if (pindex->nStatus & BLOCK_HAVE_DATA) {
+        m_statusCache[height] = HAVE_BLOCK;
+    } else {
+        // We have the header but no block data
+        m_statusCache[height] = HEADER_ONLY;
+    }
+
+    // Update the total blocks count if this is higher
+    int currentMax = m_totalBlocks.load();
+    if (height > currentMax) {
+        m_totalBlocks.store(height);
+    }
 }
 
 BlockStatusCache::BlockStatus BlockStatusCache::getStatus(int height) const
@@ -55,6 +40,7 @@ BlockStatusCache::BlockStatus BlockStatusCache::getStatus(int height) const
     if (it != m_statusCache.end()) {
         return it->second;
     }
+    printf("BlockStatusCache::getStatus: no status found for height %d\n", height);
     return UNKNOWN;
 }
 
@@ -65,9 +51,3 @@ void BlockStatusCache::clear()
     m_totalBlocks.store(0);
 }
 
-void PopulateBlockStatusCacheFromBlockIndex(ChainstateManager& chainman)
-{
-    // This function is called from the block loading process
-    BlockStatusCache& cache = BlockStatusCache::getInstance();
-    cache.populateFromBlockIndex(chainman);
-}

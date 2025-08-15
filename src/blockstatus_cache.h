@@ -21,10 +21,12 @@ public:
 
     static BlockStatusCache& getInstance();
 
-    void populateFromBlockIndex(class ChainstateManager& chainman);
+    void addBlock(int height, class CBlockIndex* pindex);
+    void setPopulated() { m_populated.store(true); }
     BlockStatus getStatus(int height) const;
     bool isPopulated() const { return m_populated.load(); }
     int getTotalBlocks() const { return m_totalBlocks.load(); }
+    size_t getCacheSize() const { return m_statusCache.size(); }
     void clear();
 
 private:
@@ -33,8 +35,5 @@ private:
     std::atomic<bool> m_populated{false};
     std::atomic<int> m_totalBlocks{0};
 };
-
-// Function to be called from block loading process
-void PopulateBlockStatusCacheFromBlockIndex(class ChainstateManager& chainman);
 
 #endif // BITCOIN_BLOCKSTATUS_CACHE_H

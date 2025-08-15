@@ -357,7 +357,14 @@ bool BlockManager::LoadBlockIndex(
         }
         if (pindex->IsValid(BLOCK_VALID_TREE) && (pindexBestHeader == nullptr || CBlockIndexWorkComparator()(pindexBestHeader, pindex)))
             pindexBestHeader = pindex;
+
+        // Add this block to the global status cache for the GUI
+        BlockStatusCache::getInstance().addBlock(pindex->nHeight, pindex);
     }
+
+    // Mark the cache as populated
+    BlockStatusCache::getInstance().setPopulated();
+    printf("BlockStatusCache: populated with %zu entries during LoadBlockIndex\n", BlockStatusCache::getInstance().getCacheSize());
 
     return true;
 }
@@ -448,9 +455,6 @@ bool BlockManager::LoadBlockIndexDB(ChainstateManager& chainman)
     bool fReindexing = false;
     m_block_tree_db->ReadReindexing(fReindexing);
     if (fReindexing) fReindex = true;
-
-    // Populate the global block status cache for the GUI
-    PopulateBlockStatusCacheFromBlockIndex(chainman);
 
     return true;
 }
