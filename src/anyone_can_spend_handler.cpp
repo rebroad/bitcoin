@@ -133,19 +133,27 @@ std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
         }
 
         LogPrintf("AnyoneCanSpendHandler: No existing 'Anyone' wallet found, creating new one\n");
-        // Create new "Anyone" wallet
+        // Try to load existing wallet first, then create if it doesn't exist
         bilingual_str error;
         std::vector<bilingual_str> warnings;
         wallet::DatabaseOptions options;
         wallet::DatabaseStatus status;
-        options.require_create = true;
-        options.create_flags = 0;
+        options.require_existing = true; // Try to load existing first
+        options.verify = false; // Don't verify for now
 
-        LogPrintf("AnyoneCanSpendHandler: Calling CreateWallet for 'Anyone' wallet\n");
-        m_anyone_wallet = CreateWallet(*m_wallet_context, "Anyone", true, options, status, error, warnings);
+        LogPrintf("AnyoneCanSpendHandler: Attempting to load existing 'Anyone' wallet database\n");
+        m_anyone_wallet = LoadWallet(*m_wallet_context, "Anyone", true, options, status, error, warnings);
         if (!m_anyone_wallet) {
-            LogPrintf("AnyoneCanSpendHandler: Failed to create 'Anyone' wallet: %s\n", error.original);
-            return nullptr;
+            LogPrintf("AnyoneCanSpendHandler: Failed to load existing wallet, trying to create new one: %s\n", error.original);
+
+            // Try to create new wallet
+            options.require_existing = false;
+            options.require_create = true;
+            m_anyone_wallet = CreateWallet(*m_wallet_context, "Anyone", true, options, status, error, warnings);
+            if (!m_anyone_wallet) {
+                LogPrintf("AnyoneCanSpendHandler: Failed to create 'Anyone' wallet: %s\n", error.original);
+                return nullptr;
+            }
         }
 
         LogPrintf("AnyoneCanSpendHandler: Successfully created new 'Anyone' wallet\n");
