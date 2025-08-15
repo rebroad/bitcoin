@@ -17,6 +17,7 @@
 #include <primitives/transaction.h>
 #include <wallet/wallet.h>
 #include <node/context.h>
+#include <script/interpreter.h>
 
 AnyoneCanSpendHandler::AnyoneCanSpendHandler()
     : m_wallet_context(nullptr), m_auto_spend(false)
@@ -123,7 +124,8 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
     for (size_t i = 0; i < tx->vout.size(); i++) {
         const CTxOut& txout = tx->vout[i];
 
-        if (IsAnyoneCanSpendScript(txout.scriptPubKey)) {
+        auto script_sig = FindWorkingScriptSig(txout.scriptPubKey);
+        if (script_sig.has_value()) {
             COutPoint outpoint(tx->GetHash(), i);
 
             LogPrintf("AnyoneCanSpendHandler: Found anyone can spend output %s:%d, amount %s\n",
@@ -228,78 +230,69 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
     }
 }
 
-bool AnyoneCanSpendHandler::IsAnyoneCanSpendScript(const CScript& script) const
+std::optional<CScript> AnyoneCanSpendHandler::FindWorkingScriptSig(const CScript& script) const
 {
-    // Check for OP_TRUE (always evaluates to true)
-    if (script.size() == 1 && script[0] == OP_TRUE) {
-        return true;
+    // Test with different script signatures to see if the script can be spent
+    std::vector<CScript> test_script_sigs = {
+        CScript(),                    // Empty script signature
+        CScript() << OP_1,           // Push 1
+        CScript() << OP_0,           // Push 0
+        CScript() << OP_1 << OP_2,   // Push multiple values
+        CScript() << OP_0 << OP_0,   // Push multiple zeros
+        CScript() << OP_1 << OP_DROP, // Push 1, then drop it
+        CScript() << OP_1 << OP_1,   // Push two 1s
+        CScript() << OP_0 << OP_1,   // Push 0, then 1
+    };
+
+    // Use Bitcoin Core's actual script execution engine
+    // Return the first working script signature
+    for (const auto& script_sig : test_script_sigs) {
+        if (TestScriptExecution(script_sig, script)) {
+            return script_sig; // Return the working input
+        }
     }
 
-    // Check for OP_1 (pushes 1, which is true)
-    if (script.size() == 1 && script[0] == OP_1) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_DROP followed by OP_TRUE
-    if (script.size() == 2 && script[0] == OP_DROP && script[1] == OP_TRUE) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_DROP followed by OP_1
-    if (script.size() == 2 && script[0] == OP_DROP && script[1] == OP_1) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_NOP (no operation, always succeeds)
-    if (script.size() == 1 && script[0] == OP_NOP) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_NOP1 through OP_NOP10 (no operations)
-    if (script.size() == 1 && script[0] >= OP_NOP1 && script[0] <= OP_NOP10) {
-        return true;
-    }
-
-    return false;
+    return std::nullopt; // No working input found
 }
 
-CScript AnyoneCanSpendHandler::CreateAnyoneCanSpendScriptSig(const CScript& script_pub_key) const
+bool AnyoneCanSpendHandler::TestScriptExecution(const CScript& script_sig, const CScript& script_pub_key) const
 {
-    // For "anyone can spend" outputs, the script signature can be empty or contain any data
-    // since the script will always succeed regardless of the input
+    // Use Bitcoin Core's VerifyScript function with a dummy signature checker
+    ScriptError serror;
 
-    if (script_pub_key.size() == 1 && script_pub_key[0] == OP_TRUE) {
-        // For OP_TRUE, we can provide any script signature
-        return CScript() << OP_1;
-    }
+    // Create a dummy signature checker that always returns true for signature checks
+    // This allows us to test script logic without needing real signatures
+    class DummySignatureChecker : public BaseSignatureChecker {
+    public:
+        bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig,
+                                const std::vector<unsigned char>& vchPubKey,
+                                const CScript& scriptCode,
+                                SigVersion sigversion) const override {
+            return true; // Always return true for signature checks
+        }
 
-    if (script_pub_key.size() == 1 && script_pub_key[0] == OP_1) {
-        // For OP_1, we can provide any script signature
-        return CScript() << OP_1;
-    }
+        bool CheckSchnorrSignature(Span<const unsigned char> sig,
+                                  Span<const unsigned char> pubkey,
+                                  SigVersion sigversion,
+                                  ScriptExecutionData& execdata,
+                                  ScriptError* serror) const override {
+            return true; // Always return true for signature checks
+        }
 
-    if (script_pub_key.size() == 2 && script_pub_key[0] == OP_DROP && script_pub_key[1] == OP_TRUE) {
-        // For OP_DROP OP_TRUE, we need to provide something to drop, then it will succeed
-        return CScript() << OP_1;
-    }
+        bool CheckLockTime(const CScriptNum& nLockTime) const override {
+            return true; // Always return true for lock time checks
+        }
 
-    if (script_pub_key.size() == 2 && script_pub_key[0] == OP_DROP && script_pub_key[1] == OP_1) {
-        // For OP_DROP OP_1, we need to provide something to drop, then it will push 1
-        return CScript() << OP_1;
-    }
+        bool CheckSequence(const CScriptNum& nSequence) const override {
+            return true; // Always return true for sequence checks
+        }
+    };
 
-    if (script_pub_key.size() == 1 && script_pub_key[0] == OP_NOP) {
-        // For OP_NOP, we can provide any script signature
-        return CScript() << OP_1;
-    }
+    DummySignatureChecker checker;
 
-    if (script_pub_key.size() == 1 && script_pub_key[0] >= OP_NOP1 && script_pub_key[0] <= OP_NOP10) {
-        // For OP_NOP1-OP_NOP10, we can provide any script signature
-        return CScript() << OP_1;
-    }
-
-    // Default: empty script signature
-    return CScript();
+    // Use Bitcoin Core's VerifyScript function
+    return VerifyScript(script_sig, script_pub_key, nullptr,
+                       STANDARD_SCRIPT_VERIFY_FLAGS, checker, &serror);
 }
 
 std::string AnyoneCanSpendHandler::GetDestinationAddressFromConfig() const

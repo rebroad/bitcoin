@@ -47,14 +47,42 @@ The Anyone Can Spend Handler is a comprehensive system that:
 - **Oversized scripts**: These will fail validation
 - **SegWit addresses**: These require proper cryptographic proof
 
+### Script Execution Testing
+
+The handler uses Bitcoin Core's `VerifyScript` function with a `DummySignatureChecker` to test script execution:
+
+- **DummySignatureChecker**: Always returns `true` for signature checks, allowing us to test script logic without needing real signatures
+- **Test Inputs**: Tests multiple script signature patterns (empty, OP_1, OP_0, multiple values, etc.)
+- **Efficient Detection**: Returns the first working script signature found, optimizing for minimal input size
+- **Comprehensive Coverage**: Can detect complex "anyone can spend" patterns that simple pattern matching would miss
+
+**Example Test Patterns:**
+```cpp
+CScript()                    // Empty script signature
+CScript() << OP_1           // Push 1
+CScript() << OP_0           // Push 0
+CScript() << OP_1 << OP_2   // Push multiple values
+CScript() << OP_0 << OP_0   // Push multiple zeros
+CScript() << OP_1 << OP_DROP // Push 1, then drop it
+CScript() << OP_1 << OP_1   // Push two 1s
+CScript() << OP_0 << OP_1   // Push 0, then 1
+```
+
 ## Detection System
 
 ### Detection Logic
 
-The detection is implemented in `src/validation.cpp` and `src/rpc/blockchain.cpp` with two main functions:
+The detection is implemented in multiple layers:
 
-1. `IsAnyoneCanSpendAddress(const CScript& scriptPubKey)`: Checks if a script represents a truly "anyone can spend" address
-2. `HasAnyoneCanSpendOutputs(const CTransaction& tx)`: Checks if a transaction has any outputs to such addresses
+1. **Core Detection** (`src/validation.cpp` and `src/rpc/blockchain.cpp`):
+   - `IsAnyoneCanSpendAddress(const CScript& scriptPubKey)`: Pattern-based detection for common "anyone can spend" scripts
+   - `HasAnyoneCanSpendOutputs(const CTransaction& tx)`: Checks if a transaction has any outputs to such addresses
+
+2. **Advanced Detection** (`src/anyone_can_spend_handler.cpp`):
+   - `FindWorkingScriptSig(const CScript& script)`: Comprehensive detection using Bitcoin Core's script execution engine
+   - Returns both detection result AND the working script signature for spending
+   - Uses `VerifyScript` with a `DummySignatureChecker` to test script execution
+   - Tests multiple input patterns to find working script signatures
 
 ### Notification System
 
@@ -90,6 +118,8 @@ The detection is integrated into the mempool transaction processing pipeline:
 - **Safe Architecture**: Runs in separate thread, no interference with core validation
 - **Persistent Storage**: Uses Bitcoin Core's wallet system for transaction history
 - **Automatic Re-broadcast**: Leverages wallet's built-in re-broadcast functionality
+- **Optimized Script Signatures**: Uses minimal script signatures (empty for simple scripts, OP_1 for scripts requiring input)
+- **Efficient Detection**: Single function call provides both detection and working script signature
 
 ## Installation
 
@@ -309,6 +339,11 @@ If you encounter compilation errors:
 - `GetAutoSpend()` - Get current auto-spend setting
 - `GetDestinationAddress()` - Get destination address
 - `GetStats()` - Get statistics
+
+#### Detection Methods
+
+- `FindWorkingScriptSig(const CScript& script)` - **Returns `std::optional<CScript>`**: Detects if a script is "anyone can spend" and returns the working script signature using Bitcoin Core's script execution engine
+- `TestScriptExecution(const CScript& script_sig, const CScript& script_pub_key)` - **Returns `bool`**: Tests if a specific script signature works with a script using `VerifyScript`
 
 #### Events
 

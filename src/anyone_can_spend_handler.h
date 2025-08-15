@@ -14,6 +14,8 @@
 #include <util/system.h>
 #include <memory>
 #include <string>
+#include <stack>
+#include <vector>
 
 /**
  * Handler for "anyone can spend" outputs.
@@ -113,14 +115,21 @@ private:
         const std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>>& outputs);
 
     /**
-     * Check if a script is a valid "anyone can spend" script.
+     * Find a working script signature for a given script.
+     *
+     * @param script The script to find a working input for
+     * @return The working script signature if found, std::nullopt otherwise
      */
-    bool IsAnyoneCanSpendScript(const CScript& script) const;
+    std::optional<CScript> FindWorkingScriptSig(const CScript& script) const;
 
     /**
-     * Create the appropriate script signature for an "anyone can spend" output.
+     * Test script execution with a specific script signature.
+     *
+     * @param script_sig The script signature to test
+     * @param script_pub_key The scriptPubKey to test against
+     * @return true if execution succeeds, false otherwise
      */
-    CScript CreateAnyoneCanSpendScriptSig(const CScript& script_pub_key) const;
+    bool TestScriptExecution(const CScript& script_sig, const CScript& script_pub_key) const;
 };
 
 #endif // BITCOIN_ANYONE_CAN_SPEND_HANDLER_H
