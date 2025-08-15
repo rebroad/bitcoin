@@ -1816,13 +1816,6 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
     SetBestHeight(pindexNew->nHeight);
     SetServiceFlagsIBDCache(!fInitialDownload);
 
-    // Set initial sync finished when we're at the best known header
-    if (!fInitialDownload && !m_initial_sync_finished && pindexNew == pindexBestHeader) {
-        m_initial_sync_finished = true;
-        uiInterface.NotifyInitialSyncFinished();
-        LogPrintf("Initial sync finished at height %d (best known block)\n", pindexNew->nHeight);
-    }
-
     // Don't relay inventory during initial block download.
     if (fInitialDownload) return;
 
@@ -2499,6 +2492,16 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
 
         assert(pindexLast);
         UpdateBlockAvailability(pfrom.GetId(), pindexLast->GetBlockHash());
+
+        // Check if we should mark initial sync as finished
+        // This happens when we're not in IBD, we're at the best known header, and our active chain matches
+        if (!m_initial_sync_finished && pindexLast == pindexBestHeader &&
+                !m_chainman.ActiveChainstate().IsInitialBlockDownload() &&
+                m_chainman.ActiveChain().Height() == pindexLast->nHeight) {
+            m_initial_sync_finished = true;
+            uiInterface.NotifyInitialSyncFinished();
+            LogPrintf("Initial sync finished at height %d (best known block) - triggered by headers\n", pindexLast->nHeight);
+        }
 
         // From here, pindexBestKnownBlock should be guaranteed to be non-null,
         // because it is set in UpdateBlockAvailability. Some nullptr checks

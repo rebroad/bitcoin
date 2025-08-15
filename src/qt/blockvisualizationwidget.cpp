@@ -72,12 +72,9 @@ void BlockVisualizationWidget::updateBlockData()
     // Check if global cache is populated
     BlockStatusCache& globalCache = BlockStatusCache::getInstance();
 
-    qDebug() << "updateBlockData: global cache populated =" << globalCache.isPopulated();
-
     if (globalCache.isPopulated()) {
         // Use the global cache that was populated during startup
         m_totalBlocks = globalCache.getTotalBlocks();
-        qDebug() << "updateBlockData: using global cache, total blocks =" << m_totalBlocks;
         m_dataLoaded = true;
         m_initialized = true;
     } else {
