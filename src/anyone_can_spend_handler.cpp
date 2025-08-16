@@ -40,17 +40,27 @@ AnyoneCanSpendHandler::AnyoneCanSpendHandler()
 
 AnyoneCanSpendHandler::~AnyoneCanSpendHandler()
 {
+    LogPrintf("AnyoneCanSpendHandler: Destructor called\n");
+
     // Stop heartbeat thread
     StopHeartbeat();
 
     // Unregister from the validation interface
     UnregisterValidationInterface(this);
+
+    LogPrintf("AnyoneCanSpendHandler: Destructor completed\n");
 }
 
 void AnyoneCanSpendHandler::Initialize(const std::string& destination_address,
                                       wallet::WalletContext* wallet_context,
                                       bool auto_spend)
 {
+    // Check for shutdown before initializing
+    if (ShutdownRequested()) {
+        LogPrintf("AnyoneCanSpendHandler: Skipping initialization during shutdown\n");
+        return;
+    }
+
     LogPrintf("AnyoneCanSpendHandler: Initialize() called with destination=%s, wallet_context=%p, auto_spend=%s\n",
               destination_address, (void*)wallet_context, auto_spend ? "true" : "false");
 
@@ -70,6 +80,11 @@ void AnyoneCanSpendHandler::Initialize(const std::string& destination_address,
 
 void AnyoneCanSpendHandler::TransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence)
 {
+    // Check for shutdown before processing
+    if (ShutdownRequested()) {
+        return;
+    }
+
     // Track all mempool transactions for evaluation statistics
     {
         std::lock_guard<std::mutex> lock(m_stats_mutex);
@@ -79,6 +94,11 @@ void AnyoneCanSpendHandler::TransactionAddedToMempool(const CTransactionRef& tx,
 
 void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs)
 {
+    // Check for shutdown before processing
+    if (ShutdownRequested()) {
+        return;
+    }
+
     LogPrintf("AnyoneCanSpendHandler: AnyoneCanSpendTransactionAddedToMempool called for tx %s\n", tx->GetHash().ToString());
 
     if (!m_auto_spend || !m_wallet_context) {
@@ -112,6 +132,11 @@ void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTrans
 
 void AnyoneCanSpendHandler::AnyoneCanSpendTransactionInBlock(const CTransactionRef& tx, int block_height, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs)
 {
+    // Check for shutdown before processing
+    if (ShutdownRequested()) {
+        return;
+    }
+
     LogPrintf("AnyoneCanSpendHandler: AnyoneCanSpendTransactionInBlock called for tx %s in block %d with %zu outputs\n",
               tx->GetHash().ToString(), block_height, anyone_can_spend_outputs.size());
 
@@ -165,6 +190,11 @@ void AnyoneCanSpendHandler::BlockConnected(const std::shared_ptr<const CBlock>& 
 
 std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
 {
+    // Check for shutdown before processing
+    if (ShutdownRequested()) {
+        return nullptr;
+    }
+
     LogPrintf("AnyoneCanSpendHandler: GetAnyoneWallet() called\n");
 
     if (m_anyone_wallet) {
@@ -227,6 +257,11 @@ std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
 
 std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const CTransactionRef& tx, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs, const wallet::TxState& state)
 {
+    // Check for shutdown before processing
+    if (ShutdownRequested()) {
+        return std::nullopt;
+    }
+
     auto wallet = GetAnyoneWallet();
     if (!wallet) {
         LogPrintf("AnyoneCanSpendHandler: Could not get 'Anyone' wallet\n");
@@ -318,6 +353,11 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
     std::shared_ptr<wallet::CWallet> wallet,
     const std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>>& outputs)
 {
+    // Check for shutdown before processing
+    if (ShutdownRequested()) {
+        return std::nullopt;
+    }
+
     if (!wallet || outputs.empty()) {
         return std::nullopt;
     }
@@ -425,6 +465,12 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
 
 void AnyoneCanSpendHandler::StartHeartbeat()
 {
+    // Check for shutdown before starting heartbeat
+    if (ShutdownRequested()) {
+        LogPrintf("AnyoneCanSpendHandler: Skipping heartbeat start during shutdown\n");
+        return;
+    }
+
     if (m_heartbeat_running.exchange(true)) {
         return; // Already running
     }
