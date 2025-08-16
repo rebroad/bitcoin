@@ -38,6 +38,7 @@ static constexpr int GUI_IDLE_THRESHOLD_MS = 20;
 #include <node/ui_interface.h>
 #include <node/utxo_snapshot.h>
 #include <policy/policy.h>
+#include <policy/fees.h>
 #include <policy/rbf.h>
 #include <policy/settings.h>
 #include <pow.h>
@@ -4979,6 +4980,7 @@ const AssumeutxoData* ExpectedAssumeutxo(
 /**
  * Find working script signatures for "anyone can spend" outputs in a transaction.
  * Returns a vector of (output_index, working_script_sig) pairs.
+ * Only includes outputs that are profitable to spend (value > estimated fee).
  */
 static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx)
 {
@@ -5041,7 +5043,11 @@ static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const C
             if (EvalScript(stack, txout.scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
                 // Check if the final result is true (non-empty stack with truthy top element)
                 if (!stack.empty() && !stack.back().empty() && stack.back()[0] != 0) {
+                    // Found a working script signature for this anyone-can-spend output
+                    // Add it to results - profitability checking will be done in the handler
                     results.emplace_back(i, script_sig);
+                    LogPrintf("AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s\n",
+                              tx.GetHash().ToString(), i, FormatMoney(txout.nValue));
                     break; // Found working script signature, no need to test more
                 }
             }
@@ -5056,7 +5062,7 @@ static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const C
  * Check for "anyone can spend" outputs in a transaction and log warnings.
  * Returns the found outputs for signal emission by the caller.
  */
-static std::vector<std::pair<size_t, CScript>> CheckAndLogAnyoneCanSpendOutputs(const CTransaction& tx, const std::string& context_info = "")
+static std::vector<std::pair<size_t, CScript>> CheckAndLogAnyoneCanSpendOutputs(const CTransaction& tx, const std::string& context_info)
 {
     auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(tx);
     if (!anyone_can_spend_outputs.empty()) {

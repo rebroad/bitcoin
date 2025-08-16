@@ -54,6 +54,11 @@ public:
     bool GetAutoSpend() const { return m_auto_spend; }
 
     /**
+     * Check if the handler is enabled (has valid destination address).
+     */
+    bool IsEnabled() const { return m_handler_enabled; }
+
+    /**
      * Get the destination address.
      */
     std::string GetDestinationAddress() const { return m_destination_address; }
@@ -103,7 +108,18 @@ protected:
 
 private:
     std::string m_destination_address;
+    CTxDestination m_cached_destination; // Cached decoded destination address
+    CScript m_cached_output_script; // Cached output script for the destination
+    bool m_handler_enabled; // Whether the handler is enabled (valid destination required)
     wallet::WalletContext* m_wallet_context;
+    
+    // Pre-calculated transaction sizes for different script signature types
+    struct CachedTxSizes {
+        unsigned int empty_script_size;    // For CScript() (0 bytes)
+        unsigned int op1_script_size;      // For CScript() << OP_1 (1 byte)
+        unsigned int op0_script_size;      // For CScript() << OP_0 (1 byte)
+    };
+    CachedTxSizes m_cached_tx_sizes;
     std::shared_ptr<wallet::CWallet> m_anyone_wallet;
     bool m_auto_spend;
     Stats m_stats;
