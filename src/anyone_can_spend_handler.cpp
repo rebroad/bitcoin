@@ -304,9 +304,12 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
             coin_control.Select(output.first);
         }
 
-        // Create recipient
+        // Set coin control to target next block inclusion
+        coin_control.m_confirm_target = 1; // Target next block
+
+        // Create recipient with full amount - let CreateTransaction handle fee calculation
         std::vector<wallet::CRecipient> recipients;
-        wallet::CRecipient recipient{GetScriptForDestination(dest), total_amount, false};
+        wallet::CRecipient recipient{GetScriptForDestination(dest), total_amount, true}; // fSubtractFeeFromAmount = true
         recipients.push_back(recipient);
 
         // Create the transaction using wallet's CreateTransaction method
