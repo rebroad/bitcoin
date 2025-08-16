@@ -409,12 +409,17 @@ void AnyoneCanSpendHandler::StartHeartbeat()
 
     m_heartbeat_thread = std::thread([this]() {
         while (m_heartbeat_running.load()) {
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            // Sleep in shorter intervals to be more responsive to shutdown
+            for (int i = 0; i < 5 && m_heartbeat_running.load(); i++) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
 
-            std::lock_guard<std::mutex> lock(m_stats_mutex);
-            LogPrintf("AnyoneCanSpendHandler: Heartbeat - Transactions evaluated: %u blocks, %u mempool, Anyone-can-spend outputs detected: %u, Outputs spent: %u\n",
-                     m_stats.transactions_evaluated_blocks, m_stats.transactions_evaluated_mempool,
-                     m_stats.outputs_detected, m_stats.outputs_spent);
+            if (m_heartbeat_running.load()) {
+                std::lock_guard<std::mutex> lock(m_stats_mutex);
+                LogPrintf("AnyoneCanSpendHandler: Heartbeat - Transactions evaluated: %u blocks, %u mempool, Anyone-can-spend outputs detected: %u, Outputs spent: %u\n",
+                         m_stats.transactions_evaluated_blocks, m_stats.transactions_evaluated_mempool,
+                         m_stats.outputs_detected, m_stats.outputs_spent);
+            }
         }
     });
 }
