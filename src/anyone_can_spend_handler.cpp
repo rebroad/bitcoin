@@ -11,6 +11,7 @@
 #include <wallet/spend.h>
 #include <wallet/coincontrol.h>
 #include <wallet/load.h>
+#include <wallet/fees.h>
 #include <logging.h>
 #include <txmempool.h>
 #include <net_processing.h>
@@ -325,9 +326,28 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
         // Since these are ISMINE_ANYONE, we can't use the wallet's CreateTransaction method
         // Instead, we'll manually construct the transaction
 
+        // First, create a draft transaction to calculate its size
+        CMutableTransaction mtx_draft;
+
+        // Add inputs (anyone-can-spend outputs)
+        for (const auto& output : outputs) {
+            CTxIn txin(output.first);
+            // For anyone-can-spend outputs, we can use an empty scriptSig
+            txin.scriptSig = CScript();
+            mtx_draft.vin.push_back(txin);
+        }
+
+        // Add a placeholder output (we'll update the amount after fee calculation)
+        mtx_draft.vout.push_back(CTxOut(total_amount, GetScriptForDestination(dest)));
+
+        // Calculate the transaction weight for accurate fee estimation
+        CTransaction tx_draft(mtx_draft);
+        int64_t tx_weight = GetTransactionWeight(tx_draft);
+        unsigned int nTxBytes = (tx_weight + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR; // Convert weight to vsize
+
         // Get fee estimation using the coin control
         FeeCalculation fee_calc;
-        CAmount estimated_fee = wallet->GetMinimumFee(coin_control, fee_calc);
+        CAmount estimated_fee = GetMinimumFee(*wallet, nTxBytes, coin_control, &fee_calc);
         if (estimated_fee == 0) {
             // Fallback to a reasonable fee if estimation fails
             estimated_fee = 1000; // 1000 sats as a reasonable fallback fee
@@ -339,7 +359,7 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
             return std::nullopt;
         }
 
-        // Create the transaction manually
+        // Now create the final transaction with the correct amount
         CMutableTransaction mtx;
 
         // Add inputs (anyone-can-spend outputs)
@@ -350,7 +370,7 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
             mtx.vin.push_back(txin);
         }
 
-        // Add output
+        // Add output with the correct amount
         mtx.vout.push_back(CTxOut(amount_to_send, GetScriptForDestination(dest)));
 
         // Create the transaction
