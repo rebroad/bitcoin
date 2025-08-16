@@ -5028,12 +5028,24 @@ static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const C
 
             DummySignatureChecker checker;
 
-            // Use Bitcoin Core's VerifyScript function
-            if (VerifyScript(script_sig, txout.scriptPubKey, nullptr,
-                           STANDARD_SCRIPT_VERIFY_FLAGS, checker, &serror)) {
-                results.emplace_back(i, script_sig);
-                break; // Found working script signature, no need to test more
+            // Use EvalScript directly to avoid debug log noise from VerifyScript
+            // We're intentionally testing scripts, so failures are expected
+            std::vector<std::vector<unsigned char>> stack;
+
+            // Execute the script signature first
+            if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
+                continue; // Script signature failed, try next one
             }
+
+            // Then execute the scriptPubKey
+            if (EvalScript(stack, txout.scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
+                // Check if the final result is true (non-empty stack with truthy top element)
+                if (!stack.empty() && !stack.back().empty() && stack.back()[0] != 0) {
+                    results.emplace_back(i, script_sig);
+                    break; // Found working script signature, no need to test more
+                }
+            }
+            // Script failed - this is expected when testing, so continue silently
         }
     }
 
