@@ -151,114 +151,51 @@ void AnyoneCanSpendHandler::TransactionAddedToMempool(const CTransactionRef& tx,
         std::lock_guard<std::mutex> lock(m_stats_mutex);
         m_stats.transactions_evaluated_mempool++;
     }
-}
 
-void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs)
-{
-    // Check for shutdown before processing
-    if (ShutdownRequested()) {
-        return;
-    }
+    // Check for anyone-can-spend outputs in this transaction
+    auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(*tx);
+    if (!anyone_can_spend_outputs.empty()) {
+        LogPrintf("AnyoneCanSpendHandler: Found %zu anyone-can-spend outputs in mempool transaction %s\n",
+                  anyone_can_spend_outputs.size(), tx->GetHash().ToString());
 
-    // Skip processing if handler is disabled
-    if (!m_handler_enabled) {
-        LogPrintf("AnyoneCanSpendHandler: Skipping anyone-can-spend transaction (handler disabled due to invalid destination)\n");
-        return;
-    }
-
-    LogPrintf("AnyoneCanSpendHandler: AnyoneCanSpendTransactionAddedToMempool called for tx %s\n", tx->GetHash().ToString());
-
-    if (!m_auto_spend || !m_wallet_context) {
-        LogPrintf("AnyoneCanSpendHandler: Skipping transaction - auto_spend=%s, wallet_context=%p\n",
-                  m_auto_spend ? "true" : "false", (void*)m_wallet_context);
-        return;
-    }
-
-    // Update anyone-can-spend detection counter
-    {
-        std::lock_guard<std::mutex> lock(m_stats_mutex);
-        m_stats.outputs_detected++;
-    }
-
-    LogPrintf("AnyoneCanSpendHandler: Detected transaction %s with %zu anyone can spend outputs\n",
-              tx->GetHash().ToString(), anyone_can_spend_outputs.size());
-
-    // Process the outputs (add to wallet and optionally spend)
-    auto tx_hash_opt = ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs, wallet::TxStateInMempool{});
-
-    if (tx_hash_opt.has_value()) {
-        LogPrintf("AnyoneCanSpendHandler: Created spending transaction %s for tx %s\n",
-                  tx_hash_opt.value().ToString(), tx->GetHash().ToString());
-
-        // Update statistics
-        std::lock_guard<std::mutex> lock(m_stats_mutex);
-        m_stats.outputs_spent++;
-        m_stats.total_amount_spent += tx->GetValueOut();
+        // Process the anyone-can-spend outputs
+        ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs, wallet::TxStateInMempool{});
     }
 }
 
-void AnyoneCanSpendHandler::AnyoneCanSpendTransactionInBlock(const CTransactionRef& tx, int block_height, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs)
-{
-    // Check for shutdown before processing
-    if (ShutdownRequested()) {
-        return;
-    }
 
-    // Skip processing if handler is disabled
-    if (!m_handler_enabled) {
-        LogPrintf("AnyoneCanSpendHandler: Skipping anyone-can-spend transaction in block (handler disabled due to invalid destination)\n");
-        return;
-    }
-
-    LogPrintf("AnyoneCanSpendHandler: AnyoneCanSpendTransactionInBlock called for tx %s in block %d with %zu outputs\n",
-              tx->GetHash().ToString(), block_height, anyone_can_spend_outputs.size());
-
-    if (!m_auto_spend || !m_wallet_context) {
-        LogPrintf("AnyoneCanSpendHandler: Skipping transaction - auto_spend=%s, wallet_context=%p\n",
-                  m_auto_spend ? "true" : "false", (void*)m_wallet_context);
-        return;
-    }
-
-    // Update block transaction counter
-    {
-        std::lock_guard<std::mutex> lock(m_stats_mutex);
-        m_stats.transactions_evaluated_blocks++;
-    }
-
-    // Process each anyone-can-spend output
-    for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
-        const CTxOut& txout = tx->vout[output_index];
-        COutPoint outpoint(tx->GetHash(), output_index);
-
-        LogPrintf("AnyoneCanSpendHandler: Found anyone can spend output %s:%d in block %d, amount %s\n",
-                  outpoint.hash.ToString(), outpoint.n, block_height, FormatMoney(txout.nValue));
-
-        // Update detection statistics
-        {
-            std::lock_guard<std::mutex> lock(m_stats_mutex);
-            m_stats.outputs_detected++;
-            m_stats.total_amount_detected += txout.nValue;
-        }
-    }
-
-    // Process the outputs (add to wallet and optionally spend)
-    auto tx_hash_opt = ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs, wallet::TxStateInMempool{});
-
-    if (tx_hash_opt.has_value()) {
-        LogPrintf("AnyoneCanSpendHandler: Created spending transaction %s for tx %s\n",
-                  tx_hash_opt.value().ToString(), tx->GetHash().ToString());
-
-        // Update statistics
-        std::lock_guard<std::mutex> lock(m_stats_mutex);
-        m_stats.outputs_spent++;
-        m_stats.total_amount_spent += tx->GetValueOut();
-    }
-}
 
 void AnyoneCanSpendHandler::BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex)
 {
-    // Note: AnyoneCanSpend detection is now handled by AnyoneCanSpendTransactionInBlock signal
-    // which is emitted from the validation layer, eliminating duplicate processing
+    // Check for shutdown before processing
+    if (ShutdownRequested()) {
+        return;
+    }
+
+    // Skip processing if handler is disabled
+    if (!m_handler_enabled) {
+        return;
+    }
+
+    LogPrintf("AnyoneCanSpendHandler: BlockConnected called for block %d\n", pindex->nHeight);
+
+    // Check for anyone-can-spend outputs in each transaction in the block
+    for (const auto& tx : block->vtx) {
+        auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(*tx);
+        if (!anyone_can_spend_outputs.empty()) {
+            LogPrintf("AnyoneCanSpendHandler: Found %zu anyone-can-spend outputs in block transaction %s\n",
+                      anyone_can_spend_outputs.size(), tx->GetHash().ToString());
+
+            // Update block transaction counter
+            {
+                std::lock_guard<std::mutex> lock(m_stats_mutex);
+                m_stats.transactions_evaluated_blocks++;
+            }
+
+            // Process the anyone-can-spend outputs
+            ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs, wallet::TxStateInMempool{});
+        }
+    }
 }
 
 std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
@@ -268,10 +205,7 @@ std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
         return nullptr;
     }
 
-    LogPrintf("AnyoneCanSpendHandler: GetAnyoneWallet() called\n");
-
     if (m_anyone_wallet) {
-        LogPrintf("AnyoneCanSpendHandler: Returning existing wallet instance\n");
         return m_anyone_wallet;
     }
 
@@ -657,4 +591,80 @@ void AnyoneCanSpendHandler::UpdateNextBlockFeeRateWithTimestamp(const CFeeRate& 
 {
     UpdateNextBlockFeeRate(fee_rate);
     m_last_fee_rate_update = std::chrono::steady_clock::now();
+}
+
+std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpendOutputs(const CTransaction& tx)
+{
+    std::vector<std::pair<size_t, CScript>> results;
+
+    for (size_t i = 0; i < tx.vout.size(); i++) {
+        const CTxOut& txout = tx.vout[i];
+
+        // Test every output with script execution to determine if it's anyone-can-spend
+        // Use a minimal but effective test set covering the most common anyone-can-spend patterns
+        std::vector<CScript> test_script_sigs = {
+            CScript(),           // Empty script signature (most common anyone-can-spend case)
+            CScript() << OP_1,   // Push true value
+            CScript() << OP_0,   // Push false value
+        };
+
+        // Use Bitcoin Core's actual script execution engine
+        for (const auto& script_sig : test_script_sigs) {
+            ScriptError serror;
+
+            // Create a dummy signature checker that always returns true for signature checks
+            class DummySignatureChecker : public BaseSignatureChecker {
+            public:
+                bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig,
+                                        const std::vector<unsigned char>& vchPubKey,
+                                        const CScript& scriptCode,
+                                        SigVersion sigversion) const override {
+                    return true; // Always return true for signature checks
+                }
+
+                bool CheckSchnorrSignature(Span<const unsigned char> sig,
+                                          Span<const unsigned char> pubkey,
+                                          SigVersion sigversion,
+                                          ScriptExecutionData& execdata,
+                                          ScriptError* serror) const override {
+                    return true; // Always return true for signature checks
+                }
+
+                bool CheckLockTime(const CScriptNum& nLockTime) const override {
+                    return true; // Always return true for lock time checks
+                }
+
+                bool CheckSequence(const CScriptNum& nSequence) const override {
+                    return true; // Always return true for sequence checks
+                }
+            };
+
+            DummySignatureChecker checker;
+
+            // Use EvalScript directly to avoid debug log noise from VerifyScript
+            // We're intentionally testing scripts, so failures are expected
+            std::vector<std::vector<unsigned char>> stack;
+
+            // Execute the script signature first
+            if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
+                continue; // Script signature failed, try next one - REBTODO is this right?!
+            }
+
+            // Then execute the scriptPubKey
+            if (EvalScript(stack, txout.scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
+                // Check if the final result is true (non-empty stack with truthy top element)
+                if (!stack.empty() && !stack.back().empty() && stack.back()[0] != 0) {
+                    // Found a working script signature for this anyone-can-spend output
+                    // Add it to results - profitability checking will be done in the handler
+                    results.emplace_back(i, script_sig);
+                    LogPrintf("AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s\n",
+                              tx.GetHash().ToString(), i, FormatMoney(txout.nValue));
+                    break; // Found working script signature, no need to test more
+                }
+            }
+            // Script failed - this is expected when testing, so continue silently
+        }
+    }
+
+    return results;
 }

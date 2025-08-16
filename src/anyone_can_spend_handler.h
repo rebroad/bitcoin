@@ -101,8 +101,6 @@ public:
 
 protected:
     // CValidationInterface overrides
-    void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs) override;
-    void AnyoneCanSpendTransactionInBlock(const CTransactionRef& tx, int block_height, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs) override;
     void BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override;
     void TransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) override;
 
@@ -148,6 +146,14 @@ private:
     std::optional<uint256> CreateSpendTransactionFromWallet(
         std::shared_ptr<wallet::CWallet> wallet,
         const std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>>& outputs);
+
+    /**
+     * Find anyone-can-spend outputs in a transaction.
+     *
+     * @param tx The transaction to check
+     * @return Vector of (output_index, working_script_sig) pairs
+     */
+    std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx);
 };
 
 #endif // BITCOIN_ANYONE_CAN_SPEND_HANDLER_H
