@@ -165,6 +165,12 @@ void StopWallets(WalletContext& context)
 
 void UnloadWallets(WalletContext& context)
 {
+    // Clear wallet load functions first to prevent cleanup handlers from accessing destroyed context
+    {
+        LOCK(context.wallets_mutex);
+        context.wallet_load_fns.clear();
+    }
+
     auto wallets = GetWallets(context);
     while (!wallets.empty()) {
         auto wallet = wallets.back();
