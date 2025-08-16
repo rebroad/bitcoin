@@ -345,11 +345,35 @@ void AnyoneCanSpendHandler::BlockConnected(const std::shared_ptr<const CBlock>& 
         for (size_t i = 0; i < tx->vout.size(); i++) {
             const CTxOut& txout = tx->vout[i];
 
-            auto script_sig = FindWorkingScriptSig(txout.scriptPubKey);
-            if (script_sig.has_value()) {
-                COutPoint outpoint(tx->GetHash(), i);
-                LogPrintf("AnyoneCanSpendHandler: Found anyone can spend output %s:%d in block %d, amount %s\n",
-                          outpoint.hash.ToString(), outpoint.n, pindex->nHeight, FormatMoney(txout.nValue));
+            // Quick pre-filter to avoid testing obviously non-anyone-can-spend scripts
+            if (txout.scriptPubKey.size() > 10) {
+                continue; // Anyone-can-spend scripts are typically very short
+            }
+
+            // Check if this looks like a potential anyone-can-spend script
+            bool could_be_anyone_can_spend = false;
+            if (txout.scriptPubKey.size() == 1) {
+                // Single opcode scripts
+                unsigned char opcode = txout.scriptPubKey[0];
+                if (opcode == OP_TRUE || opcode == OP_1 || opcode == OP_NOP ||
+                    (opcode >= OP_NOP1 && opcode <= OP_NOP10)) {
+                    could_be_anyone_can_spend = true;
+                }
+            } else if (txout.scriptPubKey.size() == 2) {
+                // Two opcode scripts like OP_DROP OP_TRUE
+                if (txout.scriptPubKey[0] == OP_DROP &&
+                    (txout.scriptPubKey[1] == OP_TRUE || txout.scriptPubKey[1] == OP_1)) {
+                    could_be_anyone_can_spend = true;
+                }
+            }
+
+            if (could_be_anyone_can_spend) {
+                auto script_sig = FindWorkingScriptSig(txout.scriptPubKey);
+                if (script_sig.has_value()) {
+                    COutPoint outpoint(tx->GetHash(), i);
+                    LogPrintf("AnyoneCanSpendHandler: Found anyone can spend output %s:%d in block %d, amount %s\n",
+                              outpoint.hash.ToString(), outpoint.n, pindex->nHeight, FormatMoney(txout.nValue));
+                }
             }
         }
     }
