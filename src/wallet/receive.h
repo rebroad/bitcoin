@@ -56,6 +56,9 @@ struct Balance {
     CAmount m_watchonly_trusted{0};
     CAmount m_watchonly_untrusted_pending{0};
     CAmount m_watchonly_immature{0};
+    CAmount m_anyone_trusted{0};         //!< Anyone-can-spend outputs, trusted
+    CAmount m_anyone_untrusted_pending{0}; //!< Anyone-can-spend outputs, untrusted but in mempool
+    CAmount m_anyone_immature{0};        //!< Anyone-can-spend outputs, immature
 };
 Balance GetBalance(const CWallet& wallet, int min_depth = 0, bool avoid_reuse = true);
 

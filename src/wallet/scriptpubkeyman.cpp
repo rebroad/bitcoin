@@ -70,7 +70,8 @@ enum class IsMineResult
     NO = 0,         //!< Not ours
     WATCH_ONLY = 1, //!< Included in watch-only balance
     SPENDABLE = 2,  //!< Included in all balances
-    INVALID = 3,    //!< Not spendable by anyone (uncompressed pubkey in segwit, P2SH inside P2SH or witness, witness inside witness)
+    ANYONE = 3,     //!< Anyone-can-spend output (included in balance, can be spent by anyone)
+    INVALID = 4,    //!< Not spendable by anyone (uncompressed pubkey in segwit, P2SH inside P2SH or witness, witness inside witness)
 };
 
 bool PermitsUncompressed(IsMineSigVersion sigversion)
@@ -207,6 +208,11 @@ IsMineResult IsMineInner(const LegacyScriptPubKeyMan& keystore, const CScript& s
     if (ret == IsMineResult::NO && keystore.HaveWatchOnly(scriptPubKey)) {
         ret = std::max(ret, IsMineResult::WATCH_ONLY);
     }
+
+    // Check if this is an anyone-can-spend output
+    if (ret == IsMineResult::NO && keystore.HaveAnyoneCanSpend(scriptPubKey)) {
+        ret = std::max(ret, IsMineResult::ANYONE);
+    }
     return ret;
 }
 
@@ -222,6 +228,8 @@ isminetype LegacyScriptPubKeyMan::IsMine(const CScript& script) const
         return ISMINE_WATCH_ONLY;
     case IsMineResult::SPENDABLE:
         return ISMINE_SPENDABLE;
+    case IsMineResult::ANYONE:
+        return ISMINE_ANYONE;
     }
     assert(false);
 }
@@ -862,6 +870,19 @@ bool LegacyScriptPubKeyMan::HaveWatchOnly() const
 {
     LOCK(cs_KeyStore);
     return (!setWatchOnly.empty());
+}
+
+bool LegacyScriptPubKeyMan::HaveAnyoneCanSpend(const CScript &dest) const
+{
+    LOCK(cs_KeyStore);
+    return setAnyoneCanSpend.count(dest) > 0;
+}
+
+bool LegacyScriptPubKeyMan::AddAnyoneCanSpend(const CScript &dest)
+{
+    LOCK(cs_KeyStore);
+    setAnyoneCanSpend.insert(dest);
+    return true;
 }
 
 static bool ExtractPubKey(const CScript &dest, CPubKey& pubKeyOut)

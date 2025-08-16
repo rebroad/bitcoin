@@ -135,6 +135,9 @@ CAmount CachedTxGetCredit(const CWallet& wallet, const CWalletTx& wtx, const ism
     if (filter & ISMINE_WATCH_ONLY) {
         credit += GetCachableAmount(wallet, wtx, CWalletTx::CREDIT, ISMINE_WATCH_ONLY);
     }
+    if (filter & ISMINE_ANYONE) {
+        credit += GetCachableAmount(wallet, wtx, CWalletTx::CREDIT, ISMINE_ANYONE);
+    }
     return credit;
 }
 
@@ -149,6 +152,9 @@ CAmount CachedTxGetDebit(const CWallet& wallet, const CWalletTx& wtx, const ismi
     }
     if (filter & ISMINE_WATCH_ONLY) {
         debit += GetCachableAmount(wallet, wtx, CWalletTx::DEBIT, ISMINE_WATCH_ONLY);
+    }
+    if (filter & ISMINE_ANYONE) {
+        debit += GetCachableAmount(wallet, wtx, CWalletTx::DEBIT, ISMINE_ANYONE);
     }
     return debit;
 }
@@ -327,16 +333,20 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse)
             const int tx_depth{wallet.GetTxDepthInMainChain(wtx)};
             const CAmount tx_credit_mine{CachedTxGetAvailableCredit(wallet, wtx, /* fUseCache */ true, ISMINE_SPENDABLE | reuse_filter)};
             const CAmount tx_credit_watchonly{CachedTxGetAvailableCredit(wallet, wtx, /* fUseCache */ true, ISMINE_WATCH_ONLY | reuse_filter)};
+            const CAmount tx_credit_anyone{CachedTxGetAvailableCredit(wallet, wtx, /* fUseCache */ true, ISMINE_ANYONE | reuse_filter)};
             if (is_trusted && tx_depth >= min_depth) {
                 ret.m_mine_trusted += tx_credit_mine;
                 ret.m_watchonly_trusted += tx_credit_watchonly;
+                ret.m_anyone_trusted += tx_credit_anyone;
             }
             if (!is_trusted && tx_depth == 0 && wtx.InMempool()) {
                 ret.m_mine_untrusted_pending += tx_credit_mine;
                 ret.m_watchonly_untrusted_pending += tx_credit_watchonly;
+                ret.m_anyone_untrusted_pending += tx_credit_anyone;
             }
             ret.m_mine_immature += CachedTxGetImmatureCredit(wallet, wtx);
             ret.m_watchonly_immature += CachedTxGetImmatureWatchOnlyCredit(wallet, wtx);
+            ret.m_anyone_immature += CachedTxGetImmatureCredit(wallet, wtx); // Anyone-can-spend outputs don't have special immature handling
         }
     }
     return ret;

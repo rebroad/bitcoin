@@ -251,16 +251,16 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
         return std::nullopt;
     }
 
-    // Add the specific anyone-can-spend outputs to the wallet as watch-only
+    // Add the specific anyone-can-spend outputs to the wallet
     // This makes the wallet recognize these outputs as "mine" so they show in the balance
-    // Use LoadWatchOnly to avoid database operations that require cs_wallet
+    // They will be marked as ISMINE_ANYONE and can be spent by our custom logic
     {
         auto spk_man = wallet->GetLegacyScriptPubKeyMan();
         LOCK(spk_man->cs_KeyStore);
         for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
             const CTxOut& txout = tx->vout[output_index];
-            // Add the scriptPubKey as watch-only in memory only to avoid deadlock
-            spk_man->LoadWatchOnly(txout.scriptPubKey);
+            // Add the scriptPubKey as anyone-can-spend
+            spk_man->AddAnyoneCanSpend(txout.scriptPubKey);
         }
     }
 
@@ -312,7 +312,7 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
             total_amount += output.second.first;
         }
 
-        // Create coin control to specify the exact outputs to spend
+        // Create coin control to specify the exact outputs to spend and get fee estimation
         wallet::CCoinControl coin_control;
         for (const auto& output : outputs) {
             coin_control.Select(output.first);
@@ -321,28 +321,46 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
         // Set coin control to target next block inclusion
         coin_control.m_confirm_target = 1; // Target next block
 
-        // Create recipient with full amount - let CreateTransaction handle fee calculation
-        std::vector<wallet::CRecipient> recipients;
-        wallet::CRecipient recipient{GetScriptForDestination(dest), total_amount, true}; // fSubtractFeeFromAmount = true
-        recipients.push_back(recipient);
+        // Create a custom transaction for anyone-can-spend outputs
+        // Since these are ISMINE_ANYONE, we can't use the wallet's CreateTransaction method
+        // Instead, we'll manually construct the transaction
 
-        // Create the transaction using wallet's CreateTransaction method
-        CTransactionRef tx_new;
-        CAmount fee;
-        int change_pos = -1;
-        bilingual_str error;
-        FeeCalculation fee_calc_out;
+        // Get fee estimation using the coin control
+        FeeCalculation fee_calc;
+        CAmount estimated_fee = wallet->GetMinimumFee(coin_control, fee_calc);
+        if (estimated_fee == 0) {
+            // Fallback to a reasonable fee if estimation fails
+            estimated_fee = 1000; // 1000 sats as a reasonable fallback fee
+        }
+        CAmount amount_to_send = total_amount - estimated_fee;
 
-        if (!CreateTransaction(*wallet, recipients, tx_new, fee, change_pos, error, coin_control, fee_calc_out, true)) {
-            LogPrintf("AnyoneCanSpendHandler: Failed to create transaction: %s\n", error.original);
+        if (amount_to_send <= 0) {
+            LogPrintf("AnyoneCanSpendHandler: Amount too small to spend after fee deduction\n");
             return std::nullopt;
         }
+
+        // Create the transaction manually
+        CMutableTransaction mtx;
+
+        // Add inputs (anyone-can-spend outputs)
+        for (const auto& output : outputs) {
+            CTxIn txin(output.first);
+            // For anyone-can-spend outputs, we can use an empty scriptSig
+            txin.scriptSig = CScript();
+            mtx.vin.push_back(txin);
+        }
+
+        // Add output
+        mtx.vout.push_back(CTxOut(amount_to_send, GetScriptForDestination(dest)));
+
+        // Create the transaction
+        CTransactionRef tx_new = MakeTransactionRef(mtx);
 
         // Commit the transaction to the wallet
         wallet->CommitTransaction(tx_new, {}, {});
 
-        LogPrintf("AnyoneCanSpendHandler: Created and committed spending transaction %s for %zu outputs (total: %s, fee: %s)\n",
-                  tx_new->GetHash().ToString(), outputs.size(), FormatMoney(total_amount), FormatMoney(fee));
+        LogPrintf("AnyoneCanSpendHandler: Created and committed spending transaction %s for %zu outputs (total: %s, amount sent: %s, fee: %s)\n",
+                  tx_new->GetHash().ToString(), outputs.size(), FormatMoney(total_amount), FormatMoney(amount_to_send), FormatMoney(estimated_fee));
 
         return tx_new->GetHash();
 

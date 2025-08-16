@@ -277,6 +277,7 @@ private:
     CryptedKeyMap mapCryptedKeys GUARDED_BY(cs_KeyStore);
     WatchOnlySet setWatchOnly GUARDED_BY(cs_KeyStore);
     WatchKeyMap mapWatchKeys GUARDED_BY(cs_KeyStore);
+    WatchOnlySet setAnyoneCanSpend GUARDED_BY(cs_KeyStore);
 
     int64_t nTimeFirstKey GUARDED_BY(cs_KeyStore) = 0;
 
@@ -443,6 +444,10 @@ public:
     bool HaveWatchOnly() const;
     //! Remove a watch only script from the keystore
     bool RemoveWatchOnly(const CScript &dest);
+    //! Returns whether the anyone-can-spend script is in the wallet
+    bool HaveAnyoneCanSpend(const CScript &dest) const;
+    //! Adds an anyone-can-spend script to the wallet
+    bool AddAnyoneCanSpend(const CScript &dest);
     bool AddWatchOnly(const CScript& dest, int64_t nCreateTime) EXCLUSIVE_LOCKS_REQUIRED(cs_KeyStore);
 
     //! Fetches a pubkey from mapWatchKeys if it exists there

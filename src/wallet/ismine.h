@@ -28,6 +28,7 @@ class CWallet;
  * ISMINE_WATCH_ONLY: the scriptPubKey has been imported into the wallet;
  * ISMINE_SPENDABLE: the scriptPubKey corresponds to an address owned by the wallet user (can spend with the private key);
  * ISMINE_USED: the scriptPubKey corresponds to a used address owned by the wallet user;
+ * ISMINE_ANYONE: the scriptPubKey corresponds to an anyone-can-spend output (can be spent by anyone);
  * ISMINE_ALL: all ISMINE flags except for USED;
  * ISMINE_ALL_USED: all ISMINE flags including USED;
  * ISMINE_ENUM_ELEMENTS: the number of isminetype enum elements.
@@ -43,7 +44,8 @@ enum isminetype : unsigned int {
     ISMINE_WATCH_ONLY = 1 << 0,
     ISMINE_SPENDABLE  = 1 << 1,
     ISMINE_USED       = 1 << 2,
-    ISMINE_ALL        = ISMINE_WATCH_ONLY | ISMINE_SPENDABLE,
+    ISMINE_ANYONE     = 1 << 3,
+    ISMINE_ALL        = ISMINE_WATCH_ONLY | ISMINE_SPENDABLE | ISMINE_ANYONE,
     ISMINE_ALL_USED   = ISMINE_ALL | ISMINE_USED,
     ISMINE_ENUM_ELEMENTS,
 };
