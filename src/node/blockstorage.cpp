@@ -968,18 +968,37 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
 
     // scan for better chains in the block chain database, that are not yet connected in the active best chain
 
-    // Set flag to let validation thread handle chain activation instead of doing it directly
-    // This ensures proper thread separation and allows the validation thread to handle
-    // chain progression efficiently while loadblk focuses on block loading
-    fActivateChain = true;
+    bool genesis_loaded = chainman.ActiveChainstate().m_blockman.m_block_index.count(chainman.ActiveChainstate().m_params.GenesisBlock().GetHash()) > 0;
+
+    if (ShutdownRequested()) {
+        LogPrintf("%s: ShutdownRequested\n", __func__);
+        return;
+    }
+
+    if (!genesis_loaded) {
+        // We can't hold cs_main during ActivateBestChain even though we're accessing
+        // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
+        // the relevant pointers before the ABC call.
+        LogPrintf("%s: ActivateBestChain\n", __func__);
+        for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
+            BlockValidationState state;
+            if (!chainstate->ActivateBestChain(state, nullptr)) { // REBTODO - Set fActivateChain instead?
+                LogPrintf("Failed to connect best block (%s)\n", state.ToString());
+                StartShutdown();
+                return;
+            }
+        }
+    } else {
+        // Set flag to let validation thread handle chain activation instead of doing it directly
+        // This ensures proper thread separation and allows the validation thread to handle
+        // chain progression efficiently while loadblk focuses on block loading
+        LogPrintf("%s: Set fActivateChain\n", __func__);
+        fActivateChain = true;
+    }
 
     if (!ShutdownRequested()) {
         LogPrintf("%s: Start LoadMempool\n", __func__);
         chainman.ActiveChainstate().LoadMempool(args);
     } else LogPrintf("%s: ShutdownRequested\n", __func__);
-    while(!ShutdownRequested()) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        chainman.ActiveChainstate().LoadMempoolCache(args);
-    }
 }
 } // namespace node
