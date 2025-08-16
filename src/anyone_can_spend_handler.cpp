@@ -432,7 +432,7 @@ void AnyoneCanSpendHandler::StartHeartbeat()
     m_heartbeat_thread = std::thread([this]() {
         while (m_heartbeat_running.load() && !ShutdownRequested()) {
             // Sleep in shorter intervals to be more responsive to shutdown
-            for (int i = 0; i < 5 && !ShutdownRequested(); i++) {
+            for (int i = 0; i < 60 && !ShutdownRequested(); i++) {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
             }
 
