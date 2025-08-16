@@ -253,13 +253,14 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
 
     // Add the specific anyone-can-spend outputs to the wallet as watch-only
     // This makes the wallet recognize these outputs as "mine" so they show in the balance
+    // Use LoadWatchOnly to avoid database operations that require cs_wallet
     {
         auto spk_man = wallet->GetLegacyScriptPubKeyMan();
         LOCK(spk_man->cs_KeyStore);
         for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
             const CTxOut& txout = tx->vout[output_index];
-            // Add the scriptPubKey as watch-only so the wallet recognizes it as "mine"
-            spk_man->AddWatchOnly(txout.scriptPubKey, 0);
+            // Add the scriptPubKey as watch-only in memory only to avoid deadlock
+            spk_man->LoadWatchOnly(txout.scriptPubKey);
         }
     }
 
