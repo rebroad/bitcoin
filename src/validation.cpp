@@ -4982,7 +4982,15 @@ const AssumeutxoData* ExpectedAssumeutxo(
  */
 static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx)
 {
+    static int total_anyone_can_spend_outputs_found = 0;
+    const int MAX_ANYONE_CAN_SPEND_OUTPUTS = 10;
+{
     std::vector<std::pair<size_t, CScript>> results;
+
+    // Early exit if we've already hit the maximum
+    if (total_anyone_can_spend_outputs_found >= MAX_ANYONE_CAN_SPEND_OUTPUTS) {
+        return results;
+    }
 
     for (size_t i = 0; i < tx.vout.size(); i++) {
         const CTxOut& txout = tx.vout[i];
@@ -4994,6 +5002,10 @@ static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const C
             CScript() << OP_1,   // Push true value
             CScript() << OP_0,   // Push false value
         };
+
+        // Debug: Log the script we're testing
+        LogPrintf("AnyoneCanSpend: Testing output %zu with scriptPubKey: %s\n",
+                  i, HexStr(txout.scriptPubKey));
 
         // Use Bitcoin Core's actual script execution engine
         for (const auto& script_sig : test_script_sigs) {
@@ -5032,8 +5044,12 @@ static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const C
             // We're intentionally testing scripts, so failures are expected
             std::vector<std::vector<unsigned char>> stack;
 
+            // Debug: Log which script signature we're testing
+            LogPrintf("AnyoneCanSpend: Testing with scriptSig: %s\n", HexStr(script_sig));
+
             // Execute the script signature first
             if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
+                LogPrintf("AnyoneCanSpend: Script signature failed: %s\n", serror);
                 continue; // Script signature failed, try next one
             }
 
@@ -5041,9 +5057,24 @@ static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const C
             if (EvalScript(stack, txout.scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
                 // Check if the final result is true (non-empty stack with truthy top element)
                 if (!stack.empty() && !stack.back().empty() && stack.back()[0] != 0) {
-                    results.emplace_back(i, script_sig);
+                    total_anyone_can_spend_outputs_found++;
+
+                    if (total_anyone_can_spend_outputs_found <= MAX_ANYONE_CAN_SPEND_OUTPUTS) {
+                        LogPrintf("AnyoneCanSpend: FOUND anyone-can-spend output %zu! Final stack: %s (total found: %d/%d)\n",
+                                  i, HexStr(stack.back()), total_anyone_can_spend_outputs_found, MAX_ANYONE_CAN_SPEND_OUTPUTS);
+                        results.emplace_back(i, script_sig);
+                    } else {
+                        LogPrintf("AnyoneCanSpend: DISABLED - Too many anyone-can-spend outputs detected (%d). Detection logic may be too broad.\n",
+                                  total_anyone_can_spend_outputs_found);
+                        return results; // Return what we have so far, but stop detecting more
+                    }
                     break; // Found working script signature, no need to test more
+                } else {
+                    LogPrintf("AnyoneCanSpend: Script executed but result not truthy. Stack size: %zu, top: %s\n",
+                              stack.size(), stack.empty() ? "empty" : HexStr(stack.back()));
                 }
+            } else {
+                LogPrintf("AnyoneCanSpend: ScriptPubKey execution failed: %s\n", serror);
             }
             // Script failed - this is expected when testing, so continue silently
         }
