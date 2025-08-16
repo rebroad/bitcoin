@@ -90,7 +90,12 @@ CFeeRate GetMinimumFeeRate(const CWallet& wallet, const CCoinControl& coin_contr
         feerate_needed = required_feerate;
         if (feeCalc) feeCalc->reason = FeeReason::REQUIRED;
     }
-    printf("[DEBUG] GetMinimumFeeRate: feerate_needed = %ld, required_feerate = %ld\n", (long)feerate_needed.GetFeePerK(), (long)required_feerate.GetFeePerK());
+	static long old_feerate = 0;
+	long new_feerate = (long)feerate_needed.GetFeePerK();
+	if (new_feerate != old_feerate) {
+        LogPrintf("[DEBUG] GetMinimumFeeRate: feerate_needed = %ld, required_feerate = %ld\n", (long)feerate_needed.GetFeePerK(), (long)required_feerate.GetFeePerK());
+		old_feerate = new_feerate;
+	}
     return feerate_needed;
 }
 
