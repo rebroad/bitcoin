@@ -160,6 +160,12 @@ void AnyoneCanSpendHandler::TransactionAddedToMempool(const CTransactionRef& tx,
 
         // Process the anyone-can-spend outputs
         ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs, wallet::TxStateInMempool{});
+    } else {
+        // Log occasionally to see how many transactions we're processing
+        static int processed_count = 0;
+        if (++processed_count % 100 == 0) {
+            LogPrintf("AnyoneCanSpendHandler: Processed %d transactions, found no anyone-can-spend outputs\n", processed_count);
+        }
     }
 }
 
@@ -554,50 +560,13 @@ std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpen
     static int total_anyone_can_spend_outputs_found = 0;
     const int MAX_ANYONE_CAN_SPEND_OUTPUTS = 10;
 
-    // Get the "Anyone" wallet to access fee estimation
-    auto wallet = GetAnyoneWallet();
-    if (!wallet) {
-        LogPrintf("AnyoneCanSpendHandler: Cannot update fee rate - no wallet available\n");
-        return;
-    }
-
-    try {
-        // Create a dummy transaction to estimate fees for next-block inclusion
-        // The fee rate (sat/vB) is independent of transaction size, so we can use a reasonable estimate
-        wallet::CCoinControl coin_control;
-        coin_control.m_confirm_target = 1; // Target next block
-
-        // Use a reasonable transaction size estimate (250 bytes is typical for 1-input, 1-output)
-        unsigned int nTxBytes = 250;
-        FeeCalculation fee_calc;
-        CAmount estimated_fee = GetMinimumFee(*wallet, nTxBytes, coin_control, &fee_calc);
-
-        if (estimated_fee > 0) {
-            CFeeRate fee_rate = CFeeRate(estimated_fee, nTxBytes);
-            UpdateNextBlockFeeRateWithTimestamp(fee_rate);
-            LogPrintf("AnyoneCanSpendHandler: Updated fee rate to %s sat/vB for next-block inclusion\n",
-                     fee_rate.GetFeePerK() / 1000);
-        } else {
-            LogPrintf("AnyoneCanSpendHandler: Fee estimation failed, using fallback\n");
-            // Use a conservative fallback fee rate
-            UpdateNextBlockFeeRateWithTimestamp(CFeeRate(5000)); // 5 sat/vB
-        }
-    }
-
-    return results;
-}
-
-void AnyoneCanSpendHandler::UpdateNextBlockFeeRateWithTimestamp(const CFeeRate& fee_rate)
-{
-    UpdateNextBlockFeeRate(fee_rate);
-    m_last_fee_rate_update = std::chrono::steady_clock::now();
-}
-
-std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpendOutputs(const CTransaction& tx)
-{
-    std::vector<std::pair<size_t, CScript>> results;
-
     for (size_t i = 0; i < tx.vout.size(); i++) {
+        // Exit early if we've found too many anyone-can-spend outputs
+        if (total_anyone_can_spend_outputs_found >= MAX_ANYONE_CAN_SPEND_OUTPUTS) {
+            LogPrintf("AnyoneCanSpend: Reached maximum limit of %d anyone-can-spend outputs, stopping detection\n", 
+                      MAX_ANYONE_CAN_SPEND_OUTPUTS);
+            break;
+        }
         const CTxOut& txout = tx.vout[i];
 
         // Test every output with script execution to determine if it's anyone-can-spend
@@ -657,8 +626,10 @@ std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpen
                     // Found a working script signature for this anyone-can-spend output
                     // Add it to results - profitability checking will be done in the handler
                     results.emplace_back(i, script_sig);
-                    LogPrintf("AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s\n",
-                              tx.GetHash().ToString(), i, FormatMoney(txout.nValue));
+                    total_anyone_can_spend_outputs_found++;
+                    LogPrintf("AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s, scriptPubKey: %s, scriptSig: %s (total found: %d)\n",
+                              tx.GetHash().ToString(), i, FormatMoney(txout.nValue), 
+                              HexStr(txout.scriptPubKey), HexStr(script_sig), total_anyone_can_spend_outputs_found);
                     break; // Found working script signature, no need to test more
                 }
             }
