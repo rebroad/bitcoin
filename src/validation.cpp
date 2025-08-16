@@ -4984,7 +4984,7 @@ static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const C
 {
     static int total_anyone_can_spend_outputs_found = 0;
     const int MAX_ANYONE_CAN_SPEND_OUTPUTS = 10;
-{
+
     std::vector<std::pair<size_t, CScript>> results;
 
     // Early exit if we've already hit the maximum
