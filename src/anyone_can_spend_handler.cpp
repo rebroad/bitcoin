@@ -579,8 +579,7 @@ void AnyoneCanSpendHandler::StartHeartbeat()
         return; // Already running
     }
 
-    m_heartbeat_thread = std::thread([this]() {
-        int fee_update_counter = 0;
+        m_heartbeat_thread = std::thread([this]() {
         while (m_heartbeat_running.load() && !ShutdownRequested()) {
             // Sleep in shorter intervals to be more responsive to shutdown
             for (int i = 0; i < 60 && !ShutdownRequested(); i++) {
@@ -621,82 +620,41 @@ std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpen
     static int total_anyone_can_spend_outputs_found = 0;
     const int MAX_ANYONE_CAN_SPEND_OUTPUTS = 10;
 
-    for (size_t i = 0; i < tx.vout.size(); i++) {
-        // Exit early if we've found too many anyone-can-spend outputs
-        if (total_anyone_can_spend_outputs_found >= MAX_ANYONE_CAN_SPEND_OUTPUTS) {
-            LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Reached maximum limit of %d anyone-can-spend outputs, stopping detection\n", 
-                      MAX_ANYONE_CAN_SPEND_OUTPUTS);
-            break;
-        }
-        const CTxOut& txout = tx.vout[i];
+    // Get the "Anyone" wallet to access fee estimation
+    auto wallet = GetAnyoneWallet();
+    if (!wallet) {
+        LogPrintf("AnyoneCanSpendHandler: Cannot update fee rate - no wallet available\n");
+        return;
+    }
 
-        // Test every output with script execution to determine if it's anyone-can-spend
-        // Use a minimal but effective test set covering the most common anyone-can-spend patterns
-        std::vector<CScript> test_script_sigs = {
-            CScript(),           // Empty script signature (most common anyone-can-spend case)
-            CScript() << OP_1,   // Push true value
-            CScript() << OP_0,   // Push false value
-        };
+    try {
+        // Create a dummy transaction to estimate fees for next-block inclusion
+        // The fee rate (sat/vB) is independent of transaction size, so we can use a reasonable estimate
+        wallet::CCoinControl coin_control;
+        coin_control.m_confirm_target = 1; // Target next block
 
-        // Use Bitcoin Core's actual script execution engine
-        for (const auto& script_sig : test_script_sigs) {
-            ScriptError serror;
+        // Use a reasonable transaction size estimate (250 bytes is typical for 1-input, 1-output)
+        unsigned int nTxBytes = 250;
+        FeeCalculation fee_calc;
+        CAmount estimated_fee = GetMinimumFee(*wallet, nTxBytes, coin_control, &fee_calc);
 
-            // Create a dummy signature checker that always returns true for signature checks
-            class DummySignatureChecker : public BaseSignatureChecker {
-            public:
-                bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig,
-                                        const std::vector<unsigned char>& vchPubKey,
-                                        const CScript& scriptCode,
-                                        SigVersion sigversion) const override {
-                    return true; // Always return true for signature checks
-                }
-
-                bool CheckSchnorrSignature(Span<const unsigned char> sig,
-                                          Span<const unsigned char> pubkey,
-                                          SigVersion sigversion,
-                                          ScriptExecutionData& execdata,
-                                          ScriptError* serror) const override {
-                    return true; // Always return true for signature checks
-                }
-
-                bool CheckLockTime(const CScriptNum& nLockTime) const override {
-                    return true; // Always return true for lock time checks
-                }
-
-                bool CheckSequence(const CScriptNum& nSequence) const override {
-                    return true; // Always return true for sequence checks
-                }
-            };
-
-            DummySignatureChecker checker;
-
-            // Use EvalScript directly to avoid debug log noise from VerifyScript
-            // We're intentionally testing scripts, so failures are expected
-            std::vector<std::vector<unsigned char>> stack;
-
-            // Execute the script signature first
-            if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
-                continue; // Script signature failed, try next one - REBTODO is this right?!
-            }
-
-            // Then execute the scriptPubKey
-            if (EvalScript(stack, txout.scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
-                // Check if the final result is true (non-empty stack with truthy top element)
-                if (!stack.empty() && !stack.back().empty() && stack.back()[0] != 0) {
-                    // Found a working script signature for this anyone-can-spend output
-                    // Add it to results - profitability checking will be done in the handler
-                    results.emplace_back(i, script_sig);
-                    total_anyone_can_spend_outputs_found++;
-                    LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s, scriptPubKey: %s, scriptSig: %s (total found: %d)\n",
-                              tx.GetHash().ToString(), i, FormatMoney(txout.nValue), 
-                              HexStr(txout.scriptPubKey), HexStr(script_sig), total_anyone_can_spend_outputs_found);
-                    break; // Found working script signature, no need to test more
-                }
-            }
-            // Script failed - this is expected when testing, so continue silently
+        if (estimated_fee > 0) {
+            CFeeRate fee_rate = CFeeRate(estimated_fee, nTxBytes);
+            UpdateNextBlockFeeRateWithTimestamp(fee_rate);
+            LogPrintf("AnyoneCanSpendHandler: Updated fee rate to %s sat/vB for next-block inclusion\n",
+                     fee_rate.GetFeePerK() / 1000);
+        } else {
+            LogPrintf("AnyoneCanSpendHandler: Fee estimation failed, using fallback\n");
+            // Use a conservative fallback fee rate
+            UpdateNextBlockFeeRateWithTimestamp(CFeeRate(5000)); // 5 sat/vB
         }
     }
 
     return results;
+}
+
+void AnyoneCanSpendHandler::UpdateNextBlockFeeRateWithTimestamp(const CFeeRate& fee_rate)
+{
+    UpdateNextBlockFeeRate(fee_rate);
+    m_last_fee_rate_update = std::chrono::steady_clock::now();
 }
