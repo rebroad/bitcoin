@@ -117,9 +117,10 @@ private:
      *
      * @param tx The transaction containing "anyone can spend" outputs
      * @param anyone_can_spend_outputs Vector of (output_index, working_script_sig) pairs
+     * @param state The transaction state (mempool or confirmed)
      * @return The transaction hash if spending was successful, std::nullopt if failed or no outputs
      */
-    std::optional<uint256> ProcessAnyoneCanSpendOutputs(const CTransactionRef& tx, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs);
+    std::optional<uint256> ProcessAnyoneCanSpendOutputs(const CTransactionRef& tx, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs, const wallet::TxState& state);
 
     /**
      * Create a spending transaction using the wallet's transaction creation.

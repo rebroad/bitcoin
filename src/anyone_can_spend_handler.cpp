@@ -95,7 +95,7 @@ void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTrans
               tx->GetHash().ToString(), anyone_can_spend_outputs.size());
 
     // Process the outputs (add to wallet and optionally spend)
-    auto tx_hash_opt = ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs);
+    auto tx_hash_opt = ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs, wallet::TxStateInMempool{});
 
     if (tx_hash_opt.has_value()) {
         LogPrintf("AnyoneCanSpendHandler: Created spending transaction %s for tx %s\n",
@@ -142,7 +142,7 @@ void AnyoneCanSpendHandler::AnyoneCanSpendTransactionInBlock(const CTransactionR
     }
 
     // Process the outputs (add to wallet and optionally spend)
-    auto tx_hash_opt = ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs);
+    auto tx_hash_opt = ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs, wallet::TxStateInMempool{});
 
     if (tx_hash_opt.has_value()) {
         LogPrintf("AnyoneCanSpendHandler: Created spending transaction %s for tx %s\n",
@@ -223,7 +223,7 @@ std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
     }
 }
 
-std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const CTransactionRef& tx, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs)
+std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const CTransactionRef& tx, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs, const wallet::TxState& state)
 {
     auto wallet = GetAnyoneWallet();
     if (!wallet) {
@@ -251,9 +251,10 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
         return std::nullopt;
     }
 
-    // Add the transaction to the wallet as if it was received
-    // This will make the outputs available for spending
-    wallet->AddToWallet(tx, wallet::TxStateInactive{});
+    // Add the transaction to the wallet with the appropriate state
+    // This will make the outputs available for spending and show in the balance
+    // The wallet will automatically update the state when the transaction is included in a block
+    wallet->AddToWallet(tx, state);
 
     LogPrintf("AnyoneCanSpendHandler: Added transaction %s to 'Anyone' wallet with %zu anyone can spend outputs\n",
               tx->GetHash().ToString(), outputs_for_spending.size());
