@@ -338,11 +338,15 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse)
                 ret.m_mine_trusted += tx_credit_mine;
                 ret.m_watchonly_trusted += tx_credit_watchonly;
                 ret.m_anyone_trusted += tx_credit_anyone;
+                // Also include anyone-can-spend outputs in the spendable balance since they can be spent
+                ret.m_mine_trusted += tx_credit_anyone;
             }
             if (!is_trusted && tx_depth == 0 && wtx.InMempool()) {
                 ret.m_mine_untrusted_pending += tx_credit_mine;
                 ret.m_watchonly_untrusted_pending += tx_credit_watchonly;
                 ret.m_anyone_untrusted_pending += tx_credit_anyone;
+                // Also include anyone-can-spend outputs in the spendable pending balance
+                ret.m_mine_untrusted_pending += tx_credit_anyone;
             }
             ret.m_mine_immature += CachedTxGetImmatureCredit(wallet, wtx);
             ret.m_watchonly_immature += CachedTxGetImmatureWatchOnlyCredit(wallet, wtx);
