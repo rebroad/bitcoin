@@ -12,6 +12,7 @@
 #include <wallet/coincontrol.h>
 #include <wallet/load.h>
 #include <wallet/fees.h>
+#include <policy/policy.h>
 #include <logging.h>
 #include <txmempool.h>
 #include <net_processing.h>
@@ -233,12 +234,32 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
     }
 
     // Convert the signal data to the format expected by CreateSpendTransactionFromWallet
+    // Filter out dust outputs and outputs that would cost more to spend than they're worth
     std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>> outputs_for_spending;
     CAmount total_amount = 0;
 
     for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
         const CTxOut& txout = tx->vout[output_index];
         COutPoint outpoint(tx->GetHash(), output_index);
+
+        // Check if this is dust
+        if (IsDust(txout, wallet->chain().relayDustFee())) {
+            LogPrintf("AnyoneCanSpendHandler: Skipping dust output %s:%d, amount %s (below dust threshold)\n",
+                      outpoint.hash.ToString(), outpoint.n, FormatMoney(txout.nValue));
+            continue;
+        }
+
+        // Estimate the fee to spend this output (rough approximation)
+        // A single input + single output transaction is typically around 200-300 bytes
+        unsigned int estimated_tx_size = 250; // Conservative estimate
+        CAmount estimated_fee = wallet->chain().relayDustFee().GetFee(estimated_tx_size);
+
+        // Skip if the output value is less than the estimated fee
+        if (txout.nValue <= estimated_fee) {
+            LogPrintf("AnyoneCanSpendHandler: Skipping output %s:%d, amount %s (less than estimated fee %s)\n",
+                      outpoint.hash.ToString(), outpoint.n, FormatMoney(txout.nValue), FormatMoney(estimated_fee));
+            continue;
+        }
 
         LogPrintf("AnyoneCanSpendHandler: Processing anyone can spend output %s:%d, amount %s\n",
                   outpoint.hash.ToString(), outpoint.n, FormatMoney(txout.nValue));
@@ -255,13 +276,25 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
     // Add the specific anyone-can-spend outputs to the wallet
     // This makes the wallet recognize these outputs as "mine" so they show in the balance
     // They will be marked as ISMINE_ANYONE and can be spent by our custom logic
+    // Only add outputs that are profitable to spend
     {
         auto spk_man = wallet->GetLegacyScriptPubKeyMan();
         LOCK(spk_man->cs_KeyStore);
         for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
             const CTxOut& txout = tx->vout[output_index];
-            // Add the scriptPubKey as anyone-can-spend
-            spk_man->AddAnyoneCanSpend(txout.scriptPubKey);
+
+            // Only add to wallet if it's not dust and profitable to spend
+            if (!IsDust(txout, wallet->chain().relayDustFee())) {
+                // Estimate the fee to spend this output
+                unsigned int estimated_tx_size = 250; // Conservative estimate
+                CAmount estimated_fee = wallet->chain().relayDustFee().GetFee(estimated_tx_size);
+
+                // Only add if the output value is greater than the estimated fee
+                if (txout.nValue > estimated_fee) {
+                    // Add the scriptPubKey as anyone-can-spend
+                    spk_man->AddAnyoneCanSpend(txout.scriptPubKey);
+                }
+            }
         }
     }
 
