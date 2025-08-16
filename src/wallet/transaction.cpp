@@ -22,6 +22,13 @@ bool CWalletTx::InMempool() const
 int64_t CWalletTx::GetTxTime() const
 {
     int64_t n = nTimeSmart;
-    return n ? n : nTimeReceived;
+    if (n) return n;
+
+    // Convert milliseconds to seconds if needed
+    // New transactions use milliseconds, old ones use seconds
+    if (nTimeReceived >= 1000000000000) {
+        return nTimeReceived / 1000;
+    }
+    return nTimeReceived;
 }
 } // namespace wallet

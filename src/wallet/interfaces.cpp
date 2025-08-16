@@ -89,7 +89,12 @@ WalletTxStatus MakeWalletTxStatus(const CWallet& wallet, const CWalletTx& wtx)
         std::numeric_limits<int>::max();
     result.blocks_to_maturity = wallet.GetTxBlocksToMaturity(wtx);
     result.depth_in_main_chain = wallet.GetTxDepthInMainChain(wtx);
-    result.time_received = wtx.nTimeReceived;
+    // Convert milliseconds back to seconds for interface compatibility
+    int64_t timeReceived = wtx.nTimeReceived;
+    if (timeReceived >= 1000000000000) {
+        timeReceived = timeReceived / 1000;
+    }
+    result.time_received = timeReceived;
     result.lock_time = wtx.tx->nLockTime;
     result.is_trusted = CachedTxIsTrusted(wallet, wtx);
     result.is_abandoned = wtx.isAbandoned();

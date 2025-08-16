@@ -165,7 +165,7 @@ public:
     mapValue_t mapValue;
     std::vector<std::pair<std::string, std::string> > vOrderForm;
     unsigned int fTimeReceivedIsTxTime;
-    unsigned int nTimeReceived; //!< time received by this node
+    int64_t nTimeReceived; //!< time received by this node (milliseconds since epoch)
     /**
      * Stable timestamp that never changes, and reflects the order a transaction
      * was added to the wallet. Timestamp is based on the block time for a

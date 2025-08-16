@@ -41,7 +41,12 @@ static void WalletTxToJSON(const CWallet& wallet, const CWalletTx& wtx, UniValue
         conflicts.push_back(conflict.GetHex());
     entry.pushKV("walletconflicts", conflicts);
     entry.pushKV("time", wtx.GetTxTime());
-    entry.pushKV("timereceived", int64_t{wtx.nTimeReceived});
+    // Convert milliseconds back to seconds for RPC compatibility
+    int64_t timeReceived = wtx.nTimeReceived;
+    if (timeReceived >= 1000000000000) {
+        timeReceived = timeReceived / 1000;
+    }
+    entry.pushKV("timereceived", timeReceived);
 
     // Add opt-in RBF status
     std::string rbfStatus = "no";
