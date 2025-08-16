@@ -251,6 +251,14 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
         return std::nullopt;
     }
 
+    // Add the specific anyone-can-spend outputs to the wallet as watch-only
+    // This makes the wallet recognize these outputs as "mine" so they show in the balance
+    for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
+        const CTxOut& txout = tx->vout[output_index];
+        // Add the scriptPubKey as watch-only so the wallet recognizes it as "mine"
+        wallet->GetLegacyScriptPubKeyMan()->AddWatchOnly(txout.scriptPubKey, 0);
+    }
+
     // Add the transaction to the wallet with the appropriate state
     // This will make the outputs available for spending and show in the balance
     // The wallet will automatically update the state when the transaction is included in a block
