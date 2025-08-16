@@ -65,6 +65,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <thread>
 
 using node::BlockManager;
 using node::CCoinsStats;
@@ -2186,6 +2187,7 @@ static RPCHelpMan getanyonecanspendutxos()
 
     int64_t start_time = GetTimeMillis();
     int64_t last_progress_time = start_time;
+    int64_t last_lock_release_time = start_time;
 
     std::unique_ptr<CCoinsViewCursor> pcursor(coins_view->Cursor());
     COutPoint key;
@@ -2200,6 +2202,21 @@ static RPCHelpMan getanyonecanspendutxos()
         // Check for RPC interruption
         if (node.rpc_interruption_point) {
             node.rpc_interruption_point();
+        }
+
+        // Release locks every second to allow other operations (like GUI) to proceed
+        int64_t lock_check_time = GetTimeMillis();
+        if (lock_check_time - last_lock_release_time >= 1000) { // 1 second
+            // Release the main lock temporarily
+            LEAVE_CRITICAL_SECTION(cs_main);
+
+            // Sleep briefly to allow other operations
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            // Re-acquire the lock
+            ENTER_CRITICAL_SECTION(cs_main);
+
+            last_lock_release_time = lock_check_time;
         }
 
         current_count++;
