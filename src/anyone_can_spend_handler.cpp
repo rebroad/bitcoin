@@ -5,6 +5,7 @@
 #include "anyone_can_spend_handler.h"
 #include <validation.h>
 #include <util/strencodings.h>
+#include <shutdown.h>
 #include <util/translation.h>
 #include <util/moneystr.h>
 #include <wallet/spend.h>
@@ -432,19 +433,20 @@ void AnyoneCanSpendHandler::StartHeartbeat()
     }
 
     m_heartbeat_thread = std::thread([this]() {
-        while (m_heartbeat_running.load()) {
+        while (m_heartbeat_running.load() && !ShutdownRequested()) {
             // Sleep in shorter intervals to be more responsive to shutdown
-            for (int i = 0; i < 5 && m_heartbeat_running.load(); i++) {
+            for (int i = 0; i < 5 && !ShutdownRequested(); i++) {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
             }
 
-            if (m_heartbeat_running.load()) {
+            if (!ShutdownRequested()) {
                 std::lock_guard<std::mutex> lock(m_stats_mutex);
                 LogPrintf("AnyoneCanSpendHandler: Heartbeat - Transactions evaluated: %u blocks, %u mempool, Anyone-can-spend outputs detected: %u, Outputs spent: %u\n",
                          m_stats.transactions_evaluated_blocks, m_stats.transactions_evaluated_mempool,
                          m_stats.outputs_detected, m_stats.outputs_spent);
             }
         }
+        LogPrintf("AnyoneCanSpendHandler: Heartbeat thread shutting down\n");
     });
 }
 

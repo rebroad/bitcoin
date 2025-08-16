@@ -96,6 +96,9 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/signals2/signal.hpp>
 
+// Global AnyoneCanSpendHandler instance
+static std::unique_ptr<AnyoneCanSpendHandler> g_anyone_can_spend_handler;
+
 #if ENABLE_ZMQ
 #include <zmq/zmqabstractnotifier.h>
 #include <zmq/zmqnotificationinterface.h>
@@ -281,6 +284,12 @@ void Shutdown(NodeContext& node)
     }
     ForEachBlockFilterIndex([](BlockFilterIndex& index) { index.Stop(); });
     DestroyAllBlockFilterIndexes();
+
+    // Clean up AnyoneCanSpendHandler
+    if (g_anyone_can_spend_handler) {
+        LogPrintf("AnyoneCanSpendHandler: Shutting down global handler\n");
+        g_anyone_can_spend_handler.reset();
+    }
 
     // Any future callbacks will be dropped. This should absolutely be safe - if
     // missing a callback results in an unrecoverable situation, unclean shutdown
@@ -1585,7 +1594,6 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     if (!anyone_can_spend_destination.empty() && anyone_can_spend_auto_enable && node.wallet_loader) {
         try {
             // Create global AnyoneCanSpendHandler instance
-            static std::unique_ptr<AnyoneCanSpendHandler> g_anyone_can_spend_handler;
             if (!g_anyone_can_spend_handler) {
                 g_anyone_can_spend_handler = std::make_unique<AnyoneCanSpendHandler>();
                 auto* wallet_context = node.wallet_loader->context();
