@@ -208,13 +208,24 @@ void CMainSignals::TransactionAddedToMempool(const CTransactionRef& tx, uint64_t
                           tx->GetWitnessHash().ToString());
 }
 
-void CMainSignals::AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) {
-    auto event = [tx, mempool_sequence, this] {
-        m_internals->Iterate([&](CValidationInterface& callbacks) { callbacks.AnyoneCanSpendTransactionAddedToMempool(tx, mempool_sequence); });
+void CMainSignals::AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs) {
+    auto event = [tx, mempool_sequence, anyone_can_spend_outputs, this] {
+        m_internals->Iterate([&](CValidationInterface& callbacks) { callbacks.AnyoneCanSpendTransactionAddedToMempool(tx, mempool_sequence, anyone_can_spend_outputs); });
     };
-    ENQUEUE_AND_LOG_EVENT(event, "%s: txid=%s wtxid=%s (anyone can spend)", __func__,
+    ENQUEUE_AND_LOG_EVENT(event, "%s: txid=%s wtxid=%s (anyone can spend, %zu outputs)", __func__,
                           tx->GetHash().ToString(),
-                          tx->GetWitnessHash().ToString());
+                          tx->GetWitnessHash().ToString(),
+                          anyone_can_spend_outputs.size());
+}
+
+void CMainSignals::AnyoneCanSpendTransactionInBlock(const CTransactionRef& tx, int block_height, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs) {
+    auto event = [tx, block_height, anyone_can_spend_outputs, this] {
+        m_internals->Iterate([&](CValidationInterface& callbacks) { callbacks.AnyoneCanSpendTransactionInBlock(tx, block_height, anyone_can_spend_outputs); });
+    };
+    ENQUEUE_AND_LOG_EVENT(event, "%s: txid=%s block_height=%d outputs=%zu", __func__,
+                          tx->GetHash().ToString(),
+                          block_height,
+                          anyone_can_spend_outputs.size());
 }
 
 void CMainSignals::TransactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) {

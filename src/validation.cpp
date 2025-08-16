@@ -100,8 +100,8 @@ using node::nPruneTarget;
 #define MILLI 0.001
 
 // Forward declarations for anyone can spend detection
-static bool IsAnyoneCanSpendAddress(const CScript& scriptPubKey);
-static bool HasAnyoneCanSpendOutputs(const CTransaction& tx);
+static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx);
+static std::vector<std::pair<size_t, CScript>> CheckAndLogAnyoneCanSpendOutputs(const CTransaction& tx, const std::string& context_info);
 
 /**
  * An extra transaction can be added to a package, as long as it only has one
@@ -1169,11 +1169,9 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
             GetMainSignals().TransactionAddedToMempool(ws.m_ptx, m_pool.GetAndIncrementSequence());
 
             // Check for "anyone can spend" addresses and notify if found
-            if (HasAnyoneCanSpendOutputs(*ws.m_ptx)) {
-                LogPrintf("WARNING: Transaction %s in mempool contains outputs to 'anyone can spend' SegWit addresses!\n",
-                          ws.m_ptx->GetHash().ToString());
-                LogPrintf("This transaction can be spent by anyone without requiring signatures.\n");
-                GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ws.m_ptx, m_pool.GetAndIncrementSequence());
+            auto anyone_can_spend_outputs = CheckAndLogAnyoneCanSpendOutputs(*ws.m_ptx, " in mempool");
+            if (!anyone_can_spend_outputs.empty()) {
+                GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ws.m_ptx, m_pool.GetAndIncrementSequence(), anyone_can_spend_outputs);
             }
         } else {
             all_submitted = false;
@@ -1211,11 +1209,9 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
     GetMainSignals().TransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence());
 
     // Check for "anyone can spend" addresses and notify if found
-    if (HasAnyoneCanSpendOutputs(*ptx)) {
-        LogPrintf("WARNING: Transaction %s in mempool contains outputs to 'anyone can spend' SegWit addresses!\n",
-                  ptx->GetHash().ToString());
-        LogPrintf("This transaction can be spent by anyone without requiring signatures.\n");
-        GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence());
+    auto anyone_can_spend_outputs = CheckAndLogAnyoneCanSpendOutputs(*ptx, " in mempool");
+    if (!anyone_can_spend_outputs.empty()) {
+        GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence(), anyone_can_spend_outputs);
     }
 
     // update mempool stats cache
@@ -2258,9 +2254,10 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         }
 
         // Check for "anyone can spend" addresses and notify if found
-        if (HasAnyoneCanSpendOutputs(tx)) {
-            LogPrintf("WARNING: Transaction %s in block %s (height %d) contains outputs to 'anyone can spend' addresses!\n",
-                      tx.GetHash().ToString(), block_hash.ToString(), pindex->nHeight);
+        auto anyone_can_spend_outputs = CheckAndLogAnyoneCanSpendOutputs(tx, " in block " + block_hash.ToString() + " (height " + std::to_string(pindex->nHeight) + ")");
+        if (!anyone_can_spend_outputs.empty()) {
+            // Emit signal for AnyoneCanSpendHandler
+            GetMainSignals().AnyoneCanSpendTransactionInBlock(MakeTransactionRef(tx), pindex->nHeight, anyone_can_spend_outputs);
         }
 
         CTxUndo undoDummy;
@@ -4980,65 +4977,81 @@ const AssumeutxoData* ExpectedAssumeutxo(
 }
 
 /**
- * Check if a scriptPubKey represents a truly "anyone can spend" address.
- * These are scripts that will always succeed when executed, allowing anyone to spend them.
- *
- * Note: SegWit addresses (P2WPKH, P2WSH, P2TR) are NOT "anyone can spend"
- * as they still require proper witness data (signatures, public keys, etc.).
+ * Find working script signatures for "anyone can spend" outputs in a transaction.
+ * Returns a vector of (output_index, working_script_sig) pairs.
  */
-static bool IsAnyoneCanSpendAddress(const CScript& scriptPubKey)
+static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx)
 {
-    // Check for OP_TRUE (always evaluates to true)
-    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_TRUE) {
-        return true;
+    std::vector<std::pair<size_t, CScript>> results;
+
+    for (size_t i = 0; i < tx.vout.size(); i++) {
+        const CTxOut& txout = tx.vout[i];
+
+        // Test every output with script execution to determine if it's anyone-can-spend
+        // Use a minimal but effective test set covering the most common anyone-can-spend patterns
+        std::vector<CScript> test_script_sigs = {
+            CScript(),           // Empty script signature (most common anyone-can-spend case)
+            CScript() << OP_1,   // Push true value
+            CScript() << OP_0,   // Push false value
+        };
+
+        // Use Bitcoin Core's actual script execution engine
+        for (const auto& script_sig : test_script_sigs) {
+            ScriptError serror;
+
+            // Create a dummy signature checker that always returns true for signature checks
+            class DummySignatureChecker : public BaseSignatureChecker {
+            public:
+                bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig,
+                                        const std::vector<unsigned char>& vchPubKey,
+                                        const CScript& scriptCode,
+                                        SigVersion sigversion) const override {
+                    return true; // Always return true for signature checks
+                }
+
+                bool CheckSchnorrSignature(Span<const unsigned char> sig,
+                                          Span<const unsigned char> pubkey,
+                                          SigVersion sigversion,
+                                          ScriptExecutionData& execdata,
+                                          ScriptError* serror) const override {
+                    return true; // Always return true for signature checks
+                }
+
+                bool CheckLockTime(const CScriptNum& nLockTime) const override {
+                    return true; // Always return true for lock time checks
+                }
+
+                bool CheckSequence(const CScriptNum& nSequence) const override {
+                    return true; // Always return true for sequence checks
+                }
+            };
+
+            DummySignatureChecker checker;
+
+            // Use Bitcoin Core's VerifyScript function
+            if (VerifyScript(script_sig, txout.scriptPubKey, nullptr,
+                           STANDARD_SCRIPT_VERIFY_FLAGS, checker, &serror)) {
+                results.emplace_back(i, script_sig);
+                break; // Found working script signature, no need to test more
+            }
+        }
     }
 
-    // Check for OP_1 (pushes 1, which is true)
-    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_1) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_DROP followed by OP_TRUE
-    if (scriptPubKey.size() == 2 && scriptPubKey[0] == OP_DROP && scriptPubKey[1] == OP_TRUE) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_DROP followed by OP_1
-    if (scriptPubKey.size() == 2 && scriptPubKey[0] == OP_DROP && scriptPubKey[1] == OP_1) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_NOP (no operation, always succeeds)
-    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_NOP) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_NOP1 through OP_NOP10 (no operations)
-    if (scriptPubKey.size() == 1 && scriptPubKey[0] >= OP_NOP1 && scriptPubKey[0] <= OP_NOP10) {
-        return true;
-    }
-
-    // Note: We do NOT include:
-    // - SegWit witness programs (require proper witness data)
-    // - OP_RETURN outputs (provably unspendable)
-    // - Invalid/malformed scripts (will fail execution)
-    // - Oversized scripts (will fail validation)
-
-    return false;
+    return results;
 }
 
 /**
- * Check if a transaction has any outputs to "anyone can spend" addresses.
- * Returns true if such outputs are found, false otherwise.
+ * Check for "anyone can spend" outputs in a transaction and log warnings.
+ * Returns the found outputs for signal emission by the caller.
  */
-static bool HasAnyoneCanSpendOutputs(const CTransaction& tx)
+static std::vector<std::pair<size_t, CScript>> CheckAndLogAnyoneCanSpendOutputs(const CTransaction& tx, const std::string& context_info = "")
 {
-    for (const CTxOut& txout : tx.vout) {
-        if (IsAnyoneCanSpendAddress(txout.scriptPubKey)) {
-            return true;
-        }
+    auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(tx);
+    if (!anyone_can_spend_outputs.empty()) {
+        LogPrintf("WARNING: Transaction %s%s contains %zu outputs to 'anyone can spend' addresses!\n",
+                  tx.GetHash().ToString(), context_info.c_str(), anyone_can_spend_outputs.size());
     }
-    return false;
+    return anyone_can_spend_outputs;
 }
 
 bool ChainstateManager::ActivateSnapshot(

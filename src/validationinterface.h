@@ -104,7 +104,8 @@ protected:
      *
      * Called on a background thread.
      */
-    virtual void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) {}
+    virtual void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs) {}
+    virtual void AnyoneCanSpendTransactionInBlock(const CTransactionRef& tx, int block_height, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs) {}
 
     /**
      * Notifies listeners of a transaction leaving mempool.
@@ -206,7 +207,8 @@ public:
 
     void UpdatedBlockTip(const CBlockIndex *, const CBlockIndex *, bool fInitialDownload);
     void TransactionAddedToMempool(const CTransactionRef&, uint64_t mempool_sequence);
-    void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef&, uint64_t mempool_sequence);
+    void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef&, uint64_t mempool_sequence, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs);
+    void AnyoneCanSpendTransactionInBlock(const CTransactionRef&, int block_height, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs);
     void TransactionRemovedFromMempool(const CTransactionRef&, MemPoolRemovalReason, uint64_t mempool_sequence);
     void BlockConnected(const std::shared_ptr<const CBlock> &, const CBlockIndex *pindex);
     void BlockDisconnected(const std::shared_ptr<const CBlock> &, const CBlockIndex* pindex);

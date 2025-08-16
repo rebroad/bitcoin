@@ -75,7 +75,7 @@ void AnyoneCanSpendHandler::TransactionAddedToMempool(const CTransactionRef& tx,
     }
 }
 
-void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence)
+void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs)
 {
     LogPrintf("AnyoneCanSpendHandler: AnyoneCanSpendTransactionAddedToMempool called for tx %s\n", tx->GetHash().ToString());
 
@@ -91,11 +91,11 @@ void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTrans
         m_stats.outputs_detected++;
     }
 
-    LogPrintf("AnyoneCanSpendHandler: Detected transaction %s with anyone can spend outputs\n",
-              tx->GetHash().ToString());
+    LogPrintf("AnyoneCanSpendHandler: Detected transaction %s with %zu anyone can spend outputs\n",
+              tx->GetHash().ToString(), anyone_can_spend_outputs.size());
 
     // Process the outputs (add to wallet and optionally spend)
-    auto tx_hash_opt = ProcessAnyoneCanSpendOutputs(tx);
+    auto tx_hash_opt = ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs);
 
     if (tx_hash_opt.has_value()) {
         LogPrintf("AnyoneCanSpendHandler: Created spending transaction %s for tx %s\n",
@@ -106,6 +106,59 @@ void AnyoneCanSpendHandler::AnyoneCanSpendTransactionAddedToMempool(const CTrans
         m_stats.outputs_spent++;
         m_stats.total_amount_spent += tx->GetValueOut();
     }
+}
+
+void AnyoneCanSpendHandler::AnyoneCanSpendTransactionInBlock(const CTransactionRef& tx, int block_height, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs)
+{
+    LogPrintf("AnyoneCanSpendHandler: AnyoneCanSpendTransactionInBlock called for tx %s in block %d with %zu outputs\n",
+              tx->GetHash().ToString(), block_height, anyone_can_spend_outputs.size());
+
+    if (!m_auto_spend || !m_wallet_context) {
+        LogPrintf("AnyoneCanSpendHandler: Skipping transaction - auto_spend=%s, wallet_context=%p\n",
+                  m_auto_spend ? "true" : "false", (void*)m_wallet_context);
+        return;
+    }
+
+    // Update block transaction counter
+    {
+        std::lock_guard<std::mutex> lock(m_stats_mutex);
+        m_stats.transactions_evaluated_blocks++;
+    }
+
+    // Process each anyone-can-spend output
+    for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
+        const CTxOut& txout = tx->vout[output_index];
+        COutPoint outpoint(tx->GetHash(), output_index);
+
+        LogPrintf("AnyoneCanSpendHandler: Found anyone can spend output %s:%d in block %d, amount %s\n",
+                  outpoint.hash.ToString(), outpoint.n, block_height, FormatMoney(txout.nValue));
+
+        // Update detection statistics
+        {
+            std::lock_guard<std::mutex> lock(m_stats_mutex);
+            m_stats.outputs_detected++;
+            m_stats.total_amount_detected += txout.nValue;
+        }
+    }
+
+    // Process the outputs (add to wallet and optionally spend)
+    auto tx_hash_opt = ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs);
+
+    if (tx_hash_opt.has_value()) {
+        LogPrintf("AnyoneCanSpendHandler: Created spending transaction %s for tx %s\n",
+                  tx_hash_opt.value().ToString(), tx->GetHash().ToString());
+
+        // Update statistics
+        std::lock_guard<std::mutex> lock(m_stats_mutex);
+        m_stats.outputs_spent++;
+        m_stats.total_amount_spent += tx->GetValueOut();
+    }
+}
+
+void AnyoneCanSpendHandler::BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex)
+{
+    // Note: AnyoneCanSpend detection is now handled by AnyoneCanSpendTransactionInBlock signal
+    // which is emitted from the validation layer, eliminating duplicate processing
 }
 
 std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
@@ -170,7 +223,7 @@ std::shared_ptr<wallet::CWallet> AnyoneCanSpendHandler::GetAnyoneWallet()
     }
 }
 
-std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const CTransactionRef& tx)
+std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const CTransactionRef& tx, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs)
 {
     auto wallet = GetAnyoneWallet();
     if (!wallet) {
@@ -178,45 +231,36 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
         return std::nullopt;
     }
 
-    // Collect all "anyone can spend" outputs from the transaction
-    std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>> anyone_can_spend_outputs;
+    // Convert the signal data to the format expected by CreateSpendTransactionFromWallet
+    std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>> outputs_for_spending;
     CAmount total_amount = 0;
 
-    for (size_t i = 0; i < tx->vout.size(); i++) {
-        const CTxOut& txout = tx->vout[i];
+    for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
+        const CTxOut& txout = tx->vout[output_index];
+        COutPoint outpoint(tx->GetHash(), output_index);
 
-        auto script_sig = FindWorkingScriptSig(txout.scriptPubKey);
-        if (script_sig.has_value()) {
-            COutPoint outpoint(tx->GetHash(), i);
+        LogPrintf("AnyoneCanSpendHandler: Processing anyone can spend output %s:%d, amount %s\n",
+                  outpoint.hash.ToString(), outpoint.n, FormatMoney(txout.nValue));
 
-            LogPrintf("AnyoneCanSpendHandler: Found anyone can spend output %s:%d, amount %s\n",
-                      outpoint.hash.ToString(), outpoint.n, FormatMoney(txout.nValue));
-
-            anyone_can_spend_outputs.push_back({outpoint, {txout.nValue, txout.scriptPubKey}});
-            total_amount += txout.nValue;
-        }
+        outputs_for_spending.push_back({outpoint, {txout.nValue, txout.scriptPubKey}});
+        total_amount += txout.nValue;
     }
 
     // If no "anyone can spend" outputs found, return early
-    if (anyone_can_spend_outputs.empty()) {
+    if (outputs_for_spending.empty()) {
         return std::nullopt;
     }
-
-    // Update detection statistics
-    std::lock_guard<std::mutex> lock(m_stats_mutex);
-    m_stats.outputs_detected++;
-    m_stats.total_amount_detected += total_amount;
 
     // Add the transaction to the wallet as if it was received
     // This will make the outputs available for spending
     wallet->AddToWallet(tx, wallet::TxStateInactive{});
 
     LogPrintf("AnyoneCanSpendHandler: Added transaction %s to 'Anyone' wallet with %zu anyone can spend outputs\n",
-              tx->GetHash().ToString(), anyone_can_spend_outputs.size());
+              tx->GetHash().ToString(), outputs_for_spending.size());
 
     // If auto-spend is enabled, create a spending transaction
     if (m_auto_spend) {
-        return CreateSpendTransactionFromWallet(wallet, anyone_can_spend_outputs);
+        return CreateSpendTransactionFromWallet(wallet, outputs_for_spending);
     }
 
     return std::nullopt;
@@ -234,7 +278,7 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
         // Get destination address from configuration if not set
         std::string dest_address = m_destination_address;
         if (dest_address.empty()) {
-            dest_address = GetDestinationAddressFromConfig();
+            dest_address = gArgs.GetArg("-anyonecanspenddestination", "");
             if (dest_address.empty()) {
                 LogPrintf("AnyoneCanSpendHandler: No destination address configured\n");
                 return std::nullopt;
@@ -289,141 +333,6 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
         LogPrintf("AnyoneCanSpendHandler: Error creating spending transaction: %s\n", e.what());
         return std::nullopt;
     }
-}
-
-std::optional<CScript> AnyoneCanSpendHandler::FindWorkingScriptSig(const CScript& script) const
-{
-    // Test with different script signatures to see if the script can be spent
-    std::vector<CScript> test_script_sigs = {
-        CScript(),                    // Empty script signature
-        CScript() << OP_1,           // Push 1
-        CScript() << OP_0,           // Push 0
-        CScript() << OP_1 << OP_2,   // Push multiple values
-        CScript() << OP_0 << OP_0,   // Push multiple zeros
-        CScript() << OP_1 << OP_DROP, // Push 1, then drop it
-        CScript() << OP_1 << OP_1,   // Push two 1s
-        CScript() << OP_0 << OP_1,   // Push 0, then 1
-    };
-
-    // Use Bitcoin Core's actual script execution engine
-    // Return the first working script signature
-    for (const auto& script_sig : test_script_sigs) {
-        if (TestScriptExecution(script_sig, script)) {
-            return script_sig; // Return the working input
-        }
-    }
-
-    return std::nullopt; // No working input found
-}
-
-void AnyoneCanSpendHandler::BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex)
-{
-    LogPrintf("AnyoneCanSpendHandler: BlockConnected called for block %d\n", pindex->nHeight);
-
-    if (!m_auto_spend || !m_wallet_context) {
-        LogPrintf("AnyoneCanSpendHandler: Skipping block - auto_spend=%s, wallet_context=%p\n",
-                  m_auto_spend ? "true" : "false", (void*)m_wallet_context);
-        return;
-    }
-
-    // Update block transaction counter
-    {
-        std::lock_guard<std::mutex> lock(m_stats_mutex);
-        m_stats.transactions_evaluated_blocks += block->vtx.size();
-    }
-
-    LogPrintf("AnyoneCanSpendHandler: BlockConnected - Evaluating %zu transactions in block %d\n",
-              block->vtx.size(), pindex->nHeight);
-
-    // Process each transaction in the block
-    for (const auto& tx : block->vtx) {
-        // Skip coinbase transaction
-        if (tx->IsCoinBase()) {
-            continue;
-        }
-
-        // Check for anyone-can-spend outputs
-        for (size_t i = 0; i < tx->vout.size(); i++) {
-            const CTxOut& txout = tx->vout[i];
-
-            // Quick pre-filter to avoid testing obviously non-anyone-can-spend scripts
-            if (txout.scriptPubKey.size() > 10) {
-                continue; // Anyone-can-spend scripts are typically very short
-            }
-
-            // Check if this looks like a potential anyone-can-spend script
-            bool could_be_anyone_can_spend = false;
-            if (txout.scriptPubKey.size() == 1) {
-                // Single opcode scripts
-                unsigned char opcode = txout.scriptPubKey[0];
-                if (opcode == OP_TRUE || opcode == OP_1 || opcode == OP_NOP ||
-                    (opcode >= OP_NOP1 && opcode <= OP_NOP10)) {
-                    could_be_anyone_can_spend = true;
-                }
-            } else if (txout.scriptPubKey.size() == 2) {
-                // Two opcode scripts like OP_DROP OP_TRUE
-                if (txout.scriptPubKey[0] == OP_DROP &&
-                    (txout.scriptPubKey[1] == OP_TRUE || txout.scriptPubKey[1] == OP_1)) {
-                    could_be_anyone_can_spend = true;
-                }
-            }
-
-            if (could_be_anyone_can_spend) {
-                auto script_sig = FindWorkingScriptSig(txout.scriptPubKey);
-                if (script_sig.has_value()) {
-                    COutPoint outpoint(tx->GetHash(), i);
-                    LogPrintf("AnyoneCanSpendHandler: Found anyone can spend output %s:%d in block %d, amount %s\n",
-                              outpoint.hash.ToString(), outpoint.n, pindex->nHeight, FormatMoney(txout.nValue));
-                }
-            }
-        }
-    }
-}
-
-bool AnyoneCanSpendHandler::TestScriptExecution(const CScript& script_sig, const CScript& script_pub_key) const
-{
-    // Use Bitcoin Core's VerifyScript function with a dummy signature checker
-    ScriptError serror;
-
-    // Create a dummy signature checker that always returns true for signature checks
-    // This allows us to test script logic without needing real signatures
-    class DummySignatureChecker : public BaseSignatureChecker {
-    public:
-        bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig,
-                                const std::vector<unsigned char>& vchPubKey,
-                                const CScript& scriptCode,
-                                SigVersion sigversion) const override {
-            return true; // Always return true for signature checks
-        }
-
-        bool CheckSchnorrSignature(Span<const unsigned char> sig,
-                                  Span<const unsigned char> pubkey,
-                                  SigVersion sigversion,
-                                  ScriptExecutionData& execdata,
-                                  ScriptError* serror) const override {
-            return true; // Always return true for signature checks
-        }
-
-        bool CheckLockTime(const CScriptNum& nLockTime) const override {
-            return true; // Always return true for lock time checks
-        }
-
-        bool CheckSequence(const CScriptNum& nSequence) const override {
-            return true; // Always return true for sequence checks
-        }
-    };
-
-    DummySignatureChecker checker;
-
-    // Use Bitcoin Core's VerifyScript function
-    return VerifyScript(script_sig, script_pub_key, nullptr,
-                       STANDARD_SCRIPT_VERIFY_FLAGS, checker, &serror);
-}
-
-std::string AnyoneCanSpendHandler::GetDestinationAddressFromConfig() const
-{
-    // Get destination address from bitcoin.conf
-    return gArgs.GetArg("-anyonecanspenddestination", "");
 }
 
 void AnyoneCanSpendHandler::StartHeartbeat()

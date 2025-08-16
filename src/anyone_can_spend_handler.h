@@ -96,7 +96,8 @@ public:
 
 protected:
     // CValidationInterface overrides
-    void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) override;
+    void AnyoneCanSpendTransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs) override;
+    void AnyoneCanSpendTransactionInBlock(const CTransactionRef& tx, int block_height, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs) override;
     void BlockConnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex) override;
     void TransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) override;
 
@@ -115,9 +116,10 @@ private:
      * Adds them to the "Anyone" wallet and optionally spends them.
      *
      * @param tx The transaction containing "anyone can spend" outputs
+     * @param anyone_can_spend_outputs Vector of (output_index, working_script_sig) pairs
      * @return The transaction hash if spending was successful, std::nullopt if failed or no outputs
      */
-    std::optional<uint256> ProcessAnyoneCanSpendOutputs(const CTransactionRef& tx);
+    std::optional<uint256> ProcessAnyoneCanSpendOutputs(const CTransactionRef& tx, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs);
 
     /**
      * Create a spending transaction using the wallet's transaction creation.
@@ -129,23 +131,6 @@ private:
     std::optional<uint256> CreateSpendTransactionFromWallet(
         std::shared_ptr<wallet::CWallet> wallet,
         const std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>>& outputs);
-
-    /**
-     * Find a working script signature for a given script.
-     *
-     * @param script The script to find a working input for
-     * @return The working script signature if found, std::nullopt otherwise
-     */
-    std::optional<CScript> FindWorkingScriptSig(const CScript& script) const;
-
-    /**
-     * Test script execution with a specific script signature.
-     *
-     * @param script_sig The script signature to test
-     * @param script_pub_key The scriptPubKey to test against
-     * @return true if execution succeeds, false otherwise
-     */
-    bool TestScriptExecution(const CScript& script_sig, const CScript& script_pub_key) const;
 };
 
 #endif // BITCOIN_ANYONE_CAN_SPEND_HANDLER_H
