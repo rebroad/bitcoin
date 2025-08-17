@@ -58,8 +58,8 @@ class TxConfirmStats
 {
 private:
     //Define the buckets we will group transactions into
-    const std::vector<double>& buckets;              // The upper-bound of the range for the bucket (inclusive)
-    const std::map<double, unsigned int>& bucketMap; // Map of bucket upper-bound to index into all vectors by bucket
+    const std::vector<double> buckets;              // The upper-bound of the range for the bucket (inclusive)
+    const std::map<double, unsigned int> bucketMap; // Map of bucket upper-bound to index into all vectors by bucket
 
     // For each bucket X:
     // Count the total # of txs in each bucket
@@ -539,6 +539,14 @@ CBlockPolicyEstimator::CBlockPolicyEstimator()
 
 CBlockPolicyEstimator::~CBlockPolicyEstimator()
 {
+    // Ensure no concurrent access during destruction
+    LOCK(m_cs_fee_estimator);
+
+    // Clear any remaining mempool transactions to prevent use-after-free
+    mapMemPoolTxs.clear();
+
+    // Note: TxConfirmStats objects now store copies of buckets and bucketMap
+    // instead of references, preventing use-after-free issues during shutdown
 }
 
 void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, bool validFeeEstimate)
@@ -953,13 +961,6 @@ bool CBlockPolicyEstimator::Read(CAutoFile& filein)
                 throw std::runtime_error("Corrupt estimates file. Must have between 2 and 1000 feerate buckets");
             }
 
-            std::unique_ptr<TxConfirmStats> fileFeeStats(new TxConfirmStats(buckets, bucketMap, MED_BLOCK_PERIODS, MED_DECAY, MED_SCALE));
-            std::unique_ptr<TxConfirmStats> fileShortStats(new TxConfirmStats(buckets, bucketMap, SHORT_BLOCK_PERIODS, SHORT_DECAY, SHORT_SCALE));
-            std::unique_ptr<TxConfirmStats> fileLongStats(new TxConfirmStats(buckets, bucketMap, LONG_BLOCK_PERIODS, LONG_DECAY, LONG_SCALE));
-            fileFeeStats->Read(filein, nVersionThatWrote, numBuckets);
-            fileShortStats->Read(filein, nVersionThatWrote, numBuckets);
-            fileLongStats->Read(filein, nVersionThatWrote, numBuckets);
-
             // Fee estimates file parsed correctly
             // Copy buckets from file and refresh our bucketmap
             buckets = fileBuckets;
@@ -968,7 +969,15 @@ bool CBlockPolicyEstimator::Read(CAutoFile& filein)
                 bucketMap[buckets[i]] = i;
             }
 
-            // Destroy old TxConfirmStats and point to new ones that already reference buckets and bucketMap
+            // Create new TxConfirmStats with the updated buckets and bucketMap
+            std::unique_ptr<TxConfirmStats> fileFeeStats(new TxConfirmStats(buckets, bucketMap, MED_BLOCK_PERIODS, MED_DECAY, MED_SCALE));
+            std::unique_ptr<TxConfirmStats> fileShortStats(new TxConfirmStats(buckets, bucketMap, SHORT_BLOCK_PERIODS, SHORT_DECAY, SHORT_SCALE));
+            std::unique_ptr<TxConfirmStats> fileLongStats(new TxConfirmStats(buckets, bucketMap, LONG_BLOCK_PERIODS, LONG_DECAY, LONG_SCALE));
+            fileFeeStats->Read(filein, nVersionThatWrote, numBuckets);
+            fileShortStats->Read(filein, nVersionThatWrote, numBuckets);
+            fileLongStats->Read(filein, nVersionThatWrote, numBuckets);
+
+            // Destroy old TxConfirmStats and point to new ones
             feeStats = std::move(fileFeeStats);
             shortStats = std::move(fileShortStats);
             longStats = std::move(fileLongStats);
