@@ -24,10 +24,9 @@ int64_t CWalletTx::GetTxTime() const
     int64_t n = nTimeSmart;
     if (n) return n;
 
-    // Convert milliseconds to seconds if needed
-    // New transactions use milliseconds, old ones use seconds
-    if (nTimeReceived >= 1000000000000) {
-        return nTimeReceived / 1000;
+    // Use millisecond precision if available, otherwise fall back to seconds
+    if (nTimeReceivedMillis > 0) {
+        return nTimeReceivedMillis / 1000;
     }
     return nTimeReceived;
 }

@@ -774,11 +774,8 @@ DBErrors CWallet::ReorderTransactions()
     for (auto& entry : mapWallet)
     {
         CWalletTx* wtx = &entry.second;
-        // Convert nTimeReceived to seconds for ordering if it's in milliseconds
-        int64_t timeReceived = wtx->nTimeReceived;
-        if (timeReceived >= 1000000000000) {
-            timeReceived = timeReceived / 1000;
-        }
+        // Use millisecond precision if available, otherwise fall back to seconds for ordering
+        int64_t timeReceived = wtx->nTimeReceivedMillis > 0 ? wtx->nTimeReceivedMillis / 1000 : wtx->nTimeReceived;
         txByTime.insert(std::make_pair(timeReceived, wtx));
     }
 
@@ -954,7 +951,9 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
     bool fInsertedNew = ret.second;
     bool fUpdated = update_wtx && update_wtx(wtx, fInsertedNew);
     if (fInsertedNew) {
-        wtx.nTimeReceived = GetTimeMillis();
+        int64_t timeMillis = GetTimeMillis();
+        wtx.nTimeReceived = static_cast<unsigned int>(timeMillis / 1000); // Store seconds for compatibility
+        wtx.nTimeReceivedMillis = timeMillis; // Store milliseconds for precision
         wtx.nOrderPos = IncOrderPosNext(&batch);
         wtx.m_it_wtxOrdered = wtxOrdered.insert(std::make_pair(wtx.nOrderPos, &wtx));
         wtx.nTimeSmart = ComputeTimeSmart(wtx, rescanning_old_block);
@@ -1900,11 +1899,8 @@ void CWallet::ResendWalletTransactions()
             // Attempt to rebroadcast all txes more than 5 minutes older than
             // the last block. SubmitTxMemoryPoolAndRelay() will not rebroadcast
             // any confirmed or conflicting txs.
-            // Convert nTimeReceived to seconds for comparison if it's in milliseconds
-            int64_t timeReceived = wtx.nTimeReceived;
-            if (timeReceived >= 1000000000000) {
-                timeReceived = timeReceived / 1000;
-            }
+            // Use millisecond precision if available, otherwise fall back to seconds
+            int64_t timeReceived = wtx.nTimeReceivedMillis > 0 ? wtx.nTimeReceivedMillis / 1000 : wtx.nTimeReceived;
             if (timeReceived > m_best_block_time - 5 * 60) continue;
             std::string unused_err_string;
             if (SubmitTxMemoryPoolAndRelay(wtx, unused_err_string, true)) ++submitted_tx_count;
@@ -2561,11 +2557,8 @@ unsigned int CWallet::ComputeTimeSmart(const CWalletTx& wtx, bool rescanning_old
             if (rescanning_old_block) {
                 nTimeSmart = block_max_time;
             } else {
-                // Convert nTimeReceived to seconds for comparison if it's in milliseconds
-                int64_t latestNow = wtx.nTimeReceived;
-                if (latestNow >= 1000000000000) {
-                    latestNow = latestNow / 1000;
-                }
+                // Use millisecond precision if available, otherwise fall back to seconds
+                int64_t latestNow = wtx.nTimeReceivedMillis > 0 ? wtx.nTimeReceivedMillis / 1000 : wtx.nTimeReceived;
                 int64_t latestEntry = 0;
 
                 // Tolerate times up to the last timestamp in the wallet not more than 5 minutes into the future
@@ -2579,11 +2572,8 @@ unsigned int CWallet::ComputeTimeSmart(const CWalletTx& wtx, bool rescanning_old
                     int64_t nSmartTime;
                     nSmartTime = pwtx->nTimeSmart;
                     if (!nSmartTime) {
-                        // Convert nTimeReceived to seconds for comparison if it's in milliseconds
-                        nSmartTime = pwtx->nTimeReceived;
-                        if (nSmartTime >= 1000000000000) {
-                            nSmartTime = nSmartTime / 1000;
-                        }
+                        // Use millisecond precision if available, otherwise fall back to seconds
+                        nSmartTime = pwtx->nTimeReceivedMillis > 0 ? pwtx->nTimeReceivedMillis / 1000 : pwtx->nTimeReceived;
                     }
                     if (nSmartTime <= latestTolerated) {
                         latestEntry = nSmartTime;

@@ -165,7 +165,8 @@ public:
     mapValue_t mapValue;
     std::vector<std::pair<std::string, std::string> > vOrderForm;
     unsigned int fTimeReceivedIsTxTime;
-    int64_t nTimeReceived; //!< time received by this node (milliseconds since epoch)
+    unsigned int nTimeReceived; //!< time received by this node (seconds, for serialization compatibility)
+    int64_t nTimeReceivedMillis; //!< time received by this node (milliseconds, for precision)
     /**
      * Stable timestamp that never changes, and reflects the order a transaction
      * was added to the wallet. Timestamp is based on the block time for a
@@ -209,6 +210,7 @@ public:
         vOrderForm.clear();
         fTimeReceivedIsTxTime = false;
         nTimeReceived = 0;
+        nTimeReceivedMillis = 0;
         nTimeSmart = 0;
         fFromMe = false;
         fChangeCached = false;
@@ -251,6 +253,9 @@ public:
         uint256 serialized_block_hash;
         int serializedIndex;
         s >> tx >> serialized_block_hash >> dummy_vector1 >> serializedIndex >> dummy_vector2 >> mapValue >> vOrderForm >> fTimeReceivedIsTxTime >> nTimeReceived >> fFromMe >> dummy_bool;
+
+        // Set millisecond precision field from the seconds field
+        nTimeReceivedMillis = static_cast<int64_t>(nTimeReceived) * 1000;
 
         m_state = TxStateInterpretSerialized({serialized_block_hash, serializedIndex});
 

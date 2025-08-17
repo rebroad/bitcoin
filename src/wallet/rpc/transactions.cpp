@@ -41,11 +41,8 @@ static void WalletTxToJSON(const CWallet& wallet, const CWalletTx& wtx, UniValue
         conflicts.push_back(conflict.GetHex());
     entry.pushKV("walletconflicts", conflicts);
     entry.pushKV("time", wtx.GetTxTime());
-    // Convert milliseconds back to seconds for RPC compatibility
-    int64_t timeReceived = wtx.nTimeReceived;
-    if (timeReceived >= 1000000000000) {
-        timeReceived = timeReceived / 1000;
-    }
+    // Use millisecond precision if available, otherwise fall back to seconds
+    int64_t timeReceived = wtx.nTimeReceivedMillis > 0 ? wtx.nTimeReceivedMillis / 1000 : wtx.nTimeReceived;
     entry.pushKV("timereceived", timeReceived);
 
     // Add opt-in RBF status
