@@ -997,7 +997,7 @@ clean-libs: clean-wallet clean-crypto clean-consensus clean-common clean-util
 	@echo "Cleaned all library build artifacts"
 
 # Enhanced clean-local with better granularity
-clean-local:
+clean-local-enhanced:
 	-$(MAKE) -C secp256k1 clean
 	-rm -f leveldb/*/*.gcda leveldb/*/*.gcno leveldb/helpers/memenv/*.gcda leveldb/helpers/memenv/*.gcno
 	-rm -f config.h
@@ -1010,10 +1010,51 @@ clean-local:
 	-rm -f .deps/libbitcoin_util_a-*.Po
 	@echo "Enhanced clean completed"
 
+# Help target to show available custom build targets
+help-build:
+	@echo "=== Bitcoin Core Custom Build Targets ==="
+	@echo ""
+	@echo "VERIFICATION TARGETS (check if libraries are built correctly):"
+	@echo "  verify-wallet     - Verify wallet library contains expected object files"
+	@echo "  verify-crypto     - Verify crypto library contains expected object files"
+	@echo "  verify-consensus  - Verify consensus library contains expected object files"
+	@echo "  verify-common     - Verify common library contains expected object files"
+	@echo "  verify-util       - Verify util library contains expected object files"
+	@echo "  verify-build      - Verify ALL libraries (recommended after build issues)"
+	@echo ""
+	@echo "FORCE REBUILD TARGETS (rebuild specific libraries when you have issues):"
+	@echo "  force-rebuild-wallet    - Force rebuild wallet library (use when wallet functions missing)"
+	@echo "  force-rebuild-crypto    - Force rebuild crypto library (use when crypto functions missing)"
+	@echo "  force-rebuild-consensus - Force rebuild consensus library (use when consensus functions missing)"
+	@echo "  force-rebuild-common    - Force rebuild common library (use when common functions missing)"
+	@echo "  force-rebuild-util      - Force rebuild util library (use when util functions missing)"
+	@echo "  force-rebuild-all       - Force rebuild ALL libraries (nuclear option for build issues)"
+	@echo ""
+	@echo "CLEAN TARGETS (remove build artifacts):"
+	@echo "  clean-wallet     - Clean wallet build artifacts only"
+	@echo "  clean-crypto     - Clean crypto build artifacts only"
+	@echo "  clean-consensus  - Clean consensus build artifacts only"
+	@echo "  clean-common     - Clean common build artifacts only"
+	@echo "  clean-util       - Clean util build artifacts only"
+	@echo "  clean-libs       - Clean ALL library build artifacts"
+	@echo ""
+	@echo "USAGE EXAMPLES:"
+	@echo "  # If you get 'undefined reference' errors, try:"
+	@echo "  make force-rebuild-wallet    # for wallet-related errors"
+	@echo "  make verify-build            # to check if all libraries are OK"
+	@echo ""
+	@echo "  # If 'make clean' doesn't fix your build issues:"
+	@echo "  make clean-libs && make -j8  # clean libraries and rebuild"
+	@echo ""
+	@echo "  # If you're still having issues:"
+	@echo "  make force-rebuild-all       # nuclear option - rebuild everything"
+	@echo ""
+	@echo "=== End of Custom Build Targets ==="
+
 # Dependency tracking improvements
 .PHONY: verify-wallet verify-crypto verify-consensus verify-common verify-util verify-build
 .PHONY: force-rebuild-wallet force-rebuild-crypto force-rebuild-consensus force-rebuild-common force-rebuild-util force-rebuild-all
-.PHONY: clean-wallet clean-crypto clean-consensus clean-common clean-util clean-libs
+.PHONY: clean-wallet clean-crypto clean-consensus clean-common clean-util clean-libs clean-local-enhanced help-build
 
 EXTRA_DIST = $(CTAES_DIST)
 
@@ -1024,12 +1065,6 @@ config/stamp-h1: $(top_srcdir)/$(subdir)/config/bitcoin-config.h.in $(top_buildd
 	$(AM_V_at)$(MAKE) -C $(top_builddir) $(subdir)/$(@)
 $(top_srcdir)/$(subdir)/config/bitcoin-config.h.in:  $(am__configure_deps)
 	$(AM_V_at)$(MAKE) -C $(top_srcdir) $(subdir)/config/bitcoin-config.h.in
-
-clean-local:
-	-$(MAKE) -C secp256k1 clean
-	-rm -f leveldb/*/*.gcda leveldb/*/*.gcno leveldb/helpers/memenv/*.gcda leveldb/helpers/memenv/*.gcno
-	-rm -f config.h
-	-rm -rf test/__pycache__
 
 .rc.o:
 	@test -f $(WINDRES)
@@ -1106,3 +1141,17 @@ include Makefile.qttest.include
 endif
 
 include Makefile.univalue.include
+
+# ============================================================================
+# ENHANCED BUILD SYSTEM TARGETS
+# ============================================================================
+# These targets help developers debug and manage build issues more effectively.
+# They address common problems like "undefined reference" errors, "malformed archive"
+# errors, and dependency tracking issues that standard 'make clean' doesn't fix.
+# 
+# To see all available targets: make help-build
+# For detailed documentation: see BUILD_SYSTEM_IMPROVEMENTS.md
+# ============================================================================
+
+# Explicit dependencies for critical object files to improve dependency tracking
+wallet/libbitcoin_wallet_a-wallet.o: wallet/wallet.cpp wallet/wallet.h

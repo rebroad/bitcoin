@@ -40,6 +40,27 @@ that repository unless it is for development reasons.
 The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
 and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
 
+Build System
+------------
+
+This project includes enhanced build system features to help developers debug and manage build issues more effectively.
+
+### Quick Help
+
+To see all available custom build targets:
+```bash
+make help-build
+```
+
+### Common Build Issues
+
+If you encounter build problems like "undefined reference" errors or "malformed archive" errors, see [BUILD_SYSTEM_IMPROVEMENTS.md](BUILD_SYSTEM_IMPROVEMENTS.md) for detailed troubleshooting steps.
+
+Key targets for common issues:
+- `make verify-build` - Check if all libraries are built correctly
+- `make force-rebuild-wallet` - Force rebuild wallet library (for wallet-related errors)
+- `make clean-libs && make -j8` - Clean libraries and rebuild (when `make clean` isn't enough)
+
 Testing
 -------
 
