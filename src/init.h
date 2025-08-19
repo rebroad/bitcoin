@@ -70,4 +70,9 @@ bool AppInitMain(node::NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip
  */
 void SetupServerArgs(ArgsManager& argsman);
 
+/**
+ * Check if anyone-can-spend functionality is enabled
+ */
+bool IsAnyoneCanSpendEnabled();
+
 #endif // BITCOIN_INIT_H

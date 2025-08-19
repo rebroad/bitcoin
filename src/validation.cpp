@@ -4,6 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <validation.h>
+#include <init.h>
 
 // Forward declaration for GUI state (implemented in bitcoingui.cpp)
 #ifdef ENABLE_QT
@@ -1158,10 +1159,12 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
                 MempoolAcceptResult::Success(std::move(ws.m_replaced_transactions), ws.m_vsize, ws.m_base_fees));
             GetMainSignals().TransactionAddedToMempool(ws.m_ptx, m_pool.GetAndIncrementSequence());
 
-            // Check for "anyone can spend" addresses and notify if found
-            auto anyone_can_spend_outputs = CheckAndLogAnyoneCanSpendOutputs(*ws.m_ptx, " in mempool");
-            if (!anyone_can_spend_outputs.empty()) {
-                GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ws.m_ptx, m_pool.GetAndIncrementSequence(), anyone_can_spend_outputs);
+            // Check for "anyone can spend" addresses and notify if found (only if enabled)
+            if (IsAnyoneCanSpendEnabled()) {
+                auto anyone_can_spend_outputs = CheckAndLogAnyoneCanSpendOutputs(*ws.m_ptx, " in mempool");
+                if (!anyone_can_spend_outputs.empty()) {
+                    GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ws.m_ptx, m_pool.GetAndIncrementSequence(), anyone_can_spend_outputs);
+                }
             }
         } else {
             all_submitted = false;
@@ -1198,10 +1201,12 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
 
     GetMainSignals().TransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence());
 
-    // Check for "anyone can spend" addresses and notify if found
-    auto anyone_can_spend_outputs = CheckAndLogAnyoneCanSpendOutputs(*ptx, " in mempool");
-    if (!anyone_can_spend_outputs.empty()) {
-        GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence(), anyone_can_spend_outputs);
+    // Check for "anyone can spend" addresses and notify if found (only if enabled)
+    if (IsAnyoneCanSpendEnabled()) {
+        auto anyone_can_spend_outputs = CheckAndLogAnyoneCanSpendOutputs(*ptx, " in mempool");
+        if (!anyone_can_spend_outputs.empty()) {
+            GetMainSignals().AnyoneCanSpendTransactionAddedToMempool(ptx, m_pool.GetAndIncrementSequence(), anyone_can_spend_outputs);
+        }
     }
 
     // update mempool stats cache
@@ -2243,11 +2248,13 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
             control.Add(vChecks);
         }
 
-        // Check for "anyone can spend" addresses and notify if found
-        auto anyone_can_spend_outputs = CheckAndLogAnyoneCanSpendOutputs(tx, " in block " + block_hash.ToString() + " (height " + std::to_string(pindex->nHeight) + ")");
-        if (!anyone_can_spend_outputs.empty()) {
-            // Emit signal for AnyoneCanSpendHandler
-            GetMainSignals().AnyoneCanSpendTransactionInBlock(MakeTransactionRef(tx), pindex->nHeight, anyone_can_spend_outputs);
+        // Check for "anyone can spend" addresses and notify if found (only if enabled)
+        if (IsAnyoneCanSpendEnabled()) {
+            auto anyone_can_spend_outputs = CheckAndLogAnyoneCanSpendOutputs(tx, " in block " + block_hash.ToString() + " (height " + std::to_string(pindex->nHeight) + ")");
+            if (!anyone_can_spend_outputs.empty()) {
+                // Emit signal for AnyoneCanSpendHandler
+                GetMainSignals().AnyoneCanSpendTransactionInBlock(MakeTransactionRef(tx), pindex->nHeight, anyone_can_spend_outputs);
+            }
         }
 
         CTxUndo undoDummy;
@@ -5035,7 +5042,7 @@ static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const C
                     // Found a working script signature for this anyone-can-spend output
                     // Add it to results - profitability checking will be done in the handler
                     results.emplace_back(i, script_sig);
-                    LogPrintf("AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s\n",
+                    LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s\n",
                               tx.GetHash().ToString(), i, FormatMoney(txout.nValue));
                     break; // Found working script signature, no need to test more
                 }
@@ -5055,7 +5062,7 @@ static std::vector<std::pair<size_t, CScript>> CheckAndLogAnyoneCanSpendOutputs(
 {
     auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(tx);
     if (!anyone_can_spend_outputs.empty()) {
-        LogPrintf("WARNING: Transaction %s%s contains %zu outputs to 'anyone can spend' addresses!\n",
+        LogPrint(BCLog::ANYONECANSPEND, "WARNING: Transaction %s%s contains %zu outputs to 'anyone can spend' addresses!\n",
                   tx.GetHash().ToString(), context_info.c_str(), anyone_can_spend_outputs.size());
     }
     return anyone_can_spend_outputs;

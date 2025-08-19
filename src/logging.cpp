@@ -167,6 +167,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::LOCK, "lock"},
     {BCLog::UTIL, "util"},
     {BCLog::BLOCKSTORE, "blockstorage"},
+    {BCLog::ANYONECANSPEND, "anyonecanspend"},
     {BCLog::ALL, "1"},
     {BCLog::ALL, "all"},
 };

@@ -155,7 +155,7 @@ void AnyoneCanSpendHandler::TransactionAddedToMempool(const CTransactionRef& tx,
     // Check for anyone-can-spend outputs in this transaction
     auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(*tx);
     if (!anyone_can_spend_outputs.empty()) {
-        LogPrintf("AnyoneCanSpendHandler: Found %zu anyone-can-spend outputs in mempool transaction %s\n",
+        LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpendHandler: Found %zu anyone-can-spend outputs in mempool transaction %s\n",
                   anyone_can_spend_outputs.size(), tx->GetHash().ToString());
 
         // Process the anyone-can-spend outputs
@@ -189,8 +189,8 @@ void AnyoneCanSpendHandler::BlockConnected(const std::shared_ptr<const CBlock>& 
     for (const auto& tx : block->vtx) {
         auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(*tx);
         if (!anyone_can_spend_outputs.empty()) {
-            LogPrintf("AnyoneCanSpendHandler: Found %zu anyone-can-spend outputs in block transaction %s\n",
-                      anyone_can_spend_outputs.size(), tx->GetHash().ToString());
+            LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpendHandler: Found %zu anyone-can-spend outputs in block transaction %s\n",
+                  anyone_can_spend_outputs.size(), tx->GetHash().ToString());
 
             // Update block transaction counter
             {
@@ -337,7 +337,7 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
             continue;
         }
 
-        LogPrintf("AnyoneCanSpendHandler: Processing anyone can spend output %s:%d, amount %s\n",
+        LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpendHandler: Processing anyone can spend output %s:%d, amount %s\n",
                   outpoint.hash.ToString(), outpoint.n, FormatMoney(txout.nValue));
 
         outputs_for_spending.push_back({outpoint, {txout.nValue, txout.scriptPubKey}});
@@ -563,7 +563,7 @@ std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpen
     for (size_t i = 0; i < tx.vout.size(); i++) {
         // Exit early if we've found too many anyone-can-spend outputs
         if (total_anyone_can_spend_outputs_found >= MAX_ANYONE_CAN_SPEND_OUTPUTS) {
-            LogPrintf("AnyoneCanSpend: Reached maximum limit of %d anyone-can-spend outputs, stopping detection\n", 
+            LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Reached maximum limit of %d anyone-can-spend outputs, stopping detection\n", 
                       MAX_ANYONE_CAN_SPEND_OUTPUTS);
             break;
         }
@@ -627,7 +627,7 @@ std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpen
                     // Add it to results - profitability checking will be done in the handler
                     results.emplace_back(i, script_sig);
                     total_anyone_can_spend_outputs_found++;
-                    LogPrintf("AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s, scriptPubKey: %s, scriptSig: %s (total found: %d)\n",
+                    LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s, scriptPubKey: %s, scriptSig: %s (total found: %d)\n",
                               tx.GetHash().ToString(), i, FormatMoney(txout.nValue), 
                               HexStr(txout.scriptPubKey), HexStr(script_sig), total_anyone_can_spend_outputs_found);
                     break; // Found working script signature, no need to test more

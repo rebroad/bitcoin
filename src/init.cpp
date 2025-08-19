@@ -99,6 +99,12 @@
 // Global AnyoneCanSpendHandler instance
 static std::unique_ptr<AnyoneCanSpendHandler> g_anyone_can_spend_handler;
 
+// Function to check if anyone-can-spend functionality is enabled
+bool IsAnyoneCanSpendEnabled()
+{
+    return g_anyone_can_spend_handler != nullptr;
+}
+
 #if ENABLE_ZMQ
 #include <zmq/zmqabstractnotifier.h>
 #include <zmq/zmqnotificationinterface.h>
