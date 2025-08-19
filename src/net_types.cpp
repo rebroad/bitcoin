@@ -14,7 +14,10 @@ static const char* BANMAN_JSON_VERSION_KEY{"version"};
 CBanEntry::CBanEntry(const UniValue& json)
     : nVersion(json[BANMAN_JSON_VERSION_KEY].get_int()),
       nCreateTime(json["ban_created"].get_int64()),
-      nBanUntil(json["banned_until"].get_int64())
+      nBanUntil(json["banned_until"].get_int64()),
+      m_is_on_probation(json.exists("is_on_probation") ? json["is_on_probation"].get_bool() : false),
+      nProbationUntil(json.exists("probation_until") ? json["probation_until"].get_int64() : 0),
+      m_ban_count(json.exists("ban_count") ? json["ban_count"].get_int() : 0)
 {
 }
 
@@ -24,6 +27,9 @@ UniValue CBanEntry::ToJson() const
     json.pushKV(BANMAN_JSON_VERSION_KEY, nVersion);
     json.pushKV("ban_created", nCreateTime);
     json.pushKV("banned_until", nBanUntil);
+    json.pushKV("is_on_probation", m_is_on_probation);
+    json.pushKV("probation_until", nProbationUntil);
+    json.pushKV("ban_count", m_ban_count);
     return json;
 }
 

@@ -19,6 +19,11 @@ public:
     int64_t nCreateTime{0};
     int64_t nBanUntil{0};
 
+    // New fields for 3-tier system
+    bool m_is_on_probation{false};
+    int64_t nProbationUntil{0};
+    int m_ban_count{0}; // Number of times this address has been banned
+
     CBanEntry() {}
 
     explicit CBanEntry(int64_t nCreateTimeIn)

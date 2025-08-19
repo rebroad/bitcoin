@@ -33,6 +33,8 @@ bool BannedNodeLessThan::operator()(const CCombinedBan& left, const CCombinedBan
         return pLeft->subnet.ToString().compare(pRight->subnet.ToString()) < 0;
     case BanTableModel::Bantime:
         return pLeft->banEntry.nBanUntil < pRight->banEntry.nBanUntil;
+    case BanTableModel::Status:
+        return pLeft->banEntry.m_is_on_probation < pRight->banEntry.m_is_on_probation;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
@@ -94,7 +96,7 @@ BanTableModel::BanTableModel(interfaces::Node& node, QObject* parent) :
     QAbstractTableModel(parent),
     m_node(node)
 {
-    columns << tr("IP/Netmask") << tr("Banned Until");
+    columns << tr("IP/Netmask") << tr("Banned Until") << tr("Status");
     priv.reset(new BanTablePriv());
 
     // load initial data
@@ -135,9 +137,21 @@ QVariant BanTableModel::data(const QModelIndex &index, int role) const
         case Address:
             return QString::fromStdString(rec->subnet.ToString());
         case Bantime:
-            QDateTime date = QDateTime::fromMSecsSinceEpoch(0);
-            date = date.addSecs(rec->banEntry.nBanUntil);
-            return QLocale::system().toString(date, QLocale::LongFormat);
+            if (rec->banEntry.m_is_on_probation) {
+                QDateTime date = QDateTime::fromMSecsSinceEpoch(0);
+                date = date.addSecs(rec->banEntry.nProbationUntil);
+                return QLocale::system().toString(date, QLocale::LongFormat);
+            } else {
+                QDateTime date = QDateTime::fromMSecsSinceEpoch(0);
+                date = date.addSecs(rec->banEntry.nBanUntil);
+                return QLocale::system().toString(date, QLocale::LongFormat);
+            }
+        case Status:
+            if (rec->banEntry.m_is_on_probation) {
+                return tr("On Probation");
+            } else {
+                return tr("Banned");
+            }
         } // no default case, so the compiler can warn about missing cases
         assert(false);
     }

@@ -78,6 +78,31 @@ bool BanMan::IsDiscouraged(const CNetAddr& net_addr)
     return m_discouraged.contains(net_addr.GetAddrBytes());
 }
 
+bool BanMan::IsOnProbation(const CNetAddr& net_addr) {
+    auto current_time = GetTime();
+    LOCK(m_cs_banned);
+    for (const auto& it : m_banned) {
+        CSubNet sub_net = it.first;
+        CBanEntry ban_entry = it.second;
+
+        if (ban_entry.m_is_on_probation && current_time < ban_entry.nProbationUntil && sub_net.Match(net_addr)) return true;
+    }
+    return false;
+}
+
+bool BanMan::IsOnProbation(const CSubNet& sub_net) {
+    auto current_time = GetTime();
+    LOCK(m_cs_banned);
+    banmap_t::iterator i = m_banned.find(sub_net);
+    if (i != m_banned.end()) {
+        CBanEntry ban_entry = (*i).second;
+        if (ban_entry.m_is_on_probation && current_time < ban_entry.nProbationUntil) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool BanMan::IsBanned(const CNetAddr& net_addr) {
     auto current_time = GetTime();
     LOCK(m_cs_banned);
@@ -86,6 +111,7 @@ bool BanMan::IsBanned(const CNetAddr& net_addr) {
         CBanEntry ban_entry = it.second;
 
         if (current_time < ban_entry.nBanUntil && sub_net.Match(net_addr)) return true;
+        if (ban_entry.m_is_on_probation && current_time < ban_entry.nProbationUntil && sub_net.Match(net_addr)) return true; // TODO correct?
     }
     return false;
 }
@@ -99,6 +125,7 @@ bool BanMan::IsBanned(const CSubNet& sub_net) {
         if (current_time < ban_entry.nBanUntil) {
             return true;
         }
+        if (ban_entry.m_is_on_probation && current_time < ban_entry.nProbationUntil) return true; // TODO correct?
     }
     return false;
 }
@@ -118,17 +145,45 @@ void BanMan::Discourage(const CNetAddr& net_addr)
 void BanMan::Ban(const CSubNet& sub_net, int64_t ban_time_offset, bool since_unix_epoch)
 {
     CBanEntry ban_entry(GetTime());
-
     int64_t normalized_ban_time_offset = ban_time_offset;
     bool normalized_since_unix_epoch = since_unix_epoch;
-    if (ban_time_offset <= 0) {
-        normalized_ban_time_offset = m_default_ban_time;
-        normalized_since_unix_epoch = false;
-    }
-    ban_entry.nBanUntil = (normalized_since_unix_epoch ? 0 : GetTime()) + normalized_ban_time_offset;
-
+    
     {
         LOCK(m_cs_banned);
+        
+        // Check if this address is already in our ban list
+        auto existing_ban = m_banned.find(sub_net);
+        if (existing_ban != m_banned.end()) {
+            CBanEntry& existing_entry = existing_ban->second;
+            int64_t current_time = GetTime();
+            
+            // If currently on probation and being banned again, double the duration
+            if (existing_entry.m_is_on_probation && current_time < existing_entry.nProbationUntil) {
+                // Double the previous ban duration
+                int64_t previous_duration = existing_entry.nBanUntil - existing_entry.nCreateTime;
+                normalized_ban_time_offset = previous_duration * 2;
+                ban_entry.m_ban_count = existing_entry.m_ban_count + 1;
+                LogPrint(BCLog::NET, "Address %s on probation banned again, doubling duration to %d seconds\n", 
+                         sub_net.ToString(), normalized_ban_time_offset);
+            } else if (existing_entry.m_ban_count > 0) {
+                // Not on probation but has been banned before, increment count
+                ban_entry.m_ban_count = existing_entry.m_ban_count + 1;
+            } else {
+                ban_entry.m_ban_count = 1;
+            }
+        } else {
+            ban_entry.m_ban_count = 1;
+        }
+        
+        if (ban_time_offset <= 0) {
+            normalized_ban_time_offset = m_default_ban_time;
+            normalized_since_unix_epoch = false;
+        }
+        
+        ban_entry.nBanUntil = (normalized_since_unix_epoch ? 0 : GetTime()) + normalized_ban_time_offset;
+        ban_entry.m_is_on_probation = false;
+        ban_entry.nProbationUntil = 0;
+        
         if (m_banned[sub_net].nBanUntil < ban_entry.nBanUntil) {
             m_banned[sub_net] = ban_entry;
             m_is_dirty = true;
@@ -177,13 +232,31 @@ void BanMan::SweepBanned()
         while (it != m_banned.end()) {
             CSubNet sub_net = (*it).first;
             CBanEntry ban_entry = (*it).second;
-            if (!sub_net.IsValid() || now > ban_entry.nBanUntil) {
+            
+            if (!sub_net.IsValid()) {
                 m_banned.erase(it++);
                 m_is_dirty = true;
                 notify_ui = true;
                 LogPrint(BCLog::NET, "Removed banned node address/subnet: %s\n", sub_net.ToString());
-            } else
+            } else if (now > ban_entry.nBanUntil && !ban_entry.m_is_on_probation) {
+                // Ban has expired, transition to probation
+                ban_entry.m_is_on_probation = true;
+                ban_entry.nProbationUntil = now + (ban_entry.nBanUntil - ban_entry.nCreateTime); // Same duration as ban
+                ban_entry.nBanUntil = 0; // Clear ban time
+                m_banned[sub_net] = ban_entry;
+                m_is_dirty = true;
+                notify_ui = true;
+                LogPrint(BCLog::NET, "Address %s moved to probation until %d\n", sub_net.ToString(), ban_entry.nProbationUntil);
                 ++it;
+            } else if (ban_entry.m_is_on_probation && now > ban_entry.nProbationUntil) {
+                // Probation has expired, remove entry
+                m_banned.erase(it++);
+                m_is_dirty = true;
+                notify_ui = true;
+                LogPrint(BCLog::NET, "Removed probation node address/subnet: %s\n", sub_net.ToString());
+            } else {
+                ++it;
+            }
         }
     }
     // update UI

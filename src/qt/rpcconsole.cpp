@@ -744,6 +744,7 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         if (!ui->banlistWidget->horizontalHeader()->restoreState(m_banlist_widget_header_state)) {
             ui->banlistWidget->setColumnWidth(BanTableModel::Address, BANSUBNET_COLUMN_WIDTH);
             ui->banlistWidget->setColumnWidth(BanTableModel::Bantime, BANTIME_COLUMN_WIDTH);
+            ui->banlistWidget->setColumnWidth(BanTableModel::Status, STATUS_COLUMN_WIDTH);
         }
         ui->banlistWidget->horizontalHeader()->setStretchLastSection(true);
 

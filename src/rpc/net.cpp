@@ -824,6 +824,9 @@ static RPCHelpMan listbanned()
                         {RPCResult::Type::NUM_TIME, "banned_until", "The " + UNIX_EPOCH_TIME + " the ban expires"},
                         {RPCResult::Type::NUM_TIME, "ban_duration", "The ban duration, in seconds"},
                         {RPCResult::Type::NUM_TIME, "time_remaining", "The time remaining until the ban expires, in seconds"},
+                        {RPCResult::Type::BOOL, "is_on_probation", "Whether the address is currently on probation"},
+                        {RPCResult::Type::NUM_TIME, "probation_until", "The " + UNIX_EPOCH_TIME + " the probation expires"},
+                        {RPCResult::Type::NUM, "ban_count", "Number of times this address has been banned"},
                     }},
             }},
                 RPCExamples{
@@ -851,6 +854,9 @@ static RPCHelpMan listbanned()
         rec.pushKV("banned_until", banEntry.nBanUntil);
         rec.pushKV("ban_duration", (banEntry.nBanUntil - banEntry.nCreateTime));
         rec.pushKV("time_remaining", (banEntry.nBanUntil - current_time));
+        rec.pushKV("is_on_probation", banEntry.m_is_on_probation);
+        rec.pushKV("probation_until", banEntry.nProbationUntil);
+        rec.pushKV("ban_count", banEntry.m_ban_count);
 
         bannedAddresses.push_back(rec);
     }

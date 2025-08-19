@@ -1212,9 +1212,14 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
 
     // Don't accept connections from banned peers.
     bool banned = m_banman && m_banman->IsBanned(addr);
+    bool on_probation = m_banman && m_banman->IsOnProbation(addr);
     if (!NetPermissions::HasFlag(permissionFlags, NetPermissionFlags::NoBan) && banned)
     {
-        LogPrint(BCLog::NET, "connection from %s dropped (banned)\n", addr.ToString());
+        if (on_probation) {
+            LogPrint(BCLog::NET, "connection from %s dropped (on probation)\n", addr.ToString());
+        } else {
+            LogPrint(BCLog::NET, "connection from %s dropped (banned)\n", addr.ToString());
+        }
         return;
     }
 

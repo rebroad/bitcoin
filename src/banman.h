@@ -74,6 +74,12 @@ public:
     //! Return whether net_addr is discouraged.
     bool IsDiscouraged(const CNetAddr& net_addr);
 
+    //! Return whether net_addr is on probation
+    bool IsOnProbation(const CNetAddr& net_addr);
+
+    //! Return whether sub_net is on probation
+    bool IsOnProbation(const CSubNet& sub_net);
+
     bool Unban(const CNetAddr& net_addr);
     bool Unban(const CSubNet& sub_net);
     void GetBanned(banmap_t& banmap);
