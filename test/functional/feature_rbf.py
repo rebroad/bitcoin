@@ -20,7 +20,10 @@ from test_framework.script import CScript, OP_DROP
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
+    assert_greater_than,
+    assert_greater_than_or_equal,
     assert_raises_rpc_error,
+    get_fee,
 )
 from test_framework.script_util import (
     DUMMY_P2WPKH_SCRIPT,
