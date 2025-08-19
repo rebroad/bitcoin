@@ -825,6 +825,196 @@ CLEANFILES += wallet/test/*.gcda wallet/test/*.gcno
 CLEANFILES += zmq/*.gcda zmq/*.gcno
 CLEANFILES += obj/build.h
 
+# Enhanced build system improvements
+# These targets provide verification and debugging capabilities without overriding automake defaults
+
+# Verification targets for each library
+verify-wallet: libbitcoin_wallet.a
+	@echo "Verifying wallet library contents..."
+	@if ! ar t $< | grep -q "libbitcoin_wallet_a-wallet.o"; then \
+		echo "ERROR: wallet.o missing from wallet library"; \
+		exit 1; \
+	fi
+	@if ! ar t $< | grep -q "libbitcoin_wallet_a-interfaces.o"; then \
+		echo "ERROR: interfaces.o missing from wallet library"; \
+		exit 1; \
+	fi
+	@if ! ar t $< | grep -q "libbitcoin_wallet_a-load.o"; then \
+		echo "ERROR: load.o missing from wallet library"; \
+		exit 1; \
+	fi
+	@echo "Wallet library verification passed"
+
+verify-crypto: crypto/libbitcoin_crypto_base.a
+	@echo "Verifying crypto library contents..."
+	@if ! ar t $< | grep -q "libbitcoin_crypto_base_a-sha256.o"; then \
+		echo "ERROR: sha256.o missing from crypto library"; \
+		exit 1; \
+	fi
+	@if ! ar t $< | grep -q "libbitcoin_crypto_base_a-aes.o"; then \
+		echo "ERROR: aes.o missing from crypto library"; \
+		exit 1; \
+	fi
+	@echo "Crypto library verification passed"
+
+verify-consensus: libbitcoin_consensus.a
+	@echo "Verifying consensus library contents..."
+	@if ! ar t $< | grep -q "libbitcoin_consensus_a-merkle.o"; then \
+		echo "ERROR: merkle.o missing from consensus library"; \
+		exit 1; \
+	fi
+	@if ! ar t $< | grep -q "libbitcoin_consensus_a-block.o"; then \
+		echo "ERROR: block.o missing from consensus library"; \
+		exit 1; \
+	fi
+	@echo "Consensus library verification passed"
+
+verify-common: libbitcoin_common.a
+	@echo "Verifying common library contents..."
+	@if ! ar t $< | grep -q "libbitcoin_common_a-chainparams.o"; then \
+		echo "ERROR: chainparams.o missing from common library"; \
+		exit 1; \
+	fi
+	@if ! ar t $< | grep -q "libbitcoin_common_a-key.o"; then \
+		echo "ERROR: key.o missing from common library"; \
+		exit 1; \
+	fi
+	@echo "Common library verification passed"
+
+verify-util: libbitcoin_util.a
+	@echo "Verifying util library contents..."
+	@if ! ar t $< | grep -q "libbitcoin_util_a-system.o"; then \
+		echo "ERROR: system.o missing from util library"; \
+		exit 1; \
+	fi
+	@if ! ar t $< | grep -q "libbitcoin_util_a-logging.o"; then \
+		echo "ERROR: logging.o missing from util library"; \
+		exit 1; \
+	fi
+	@echo "Util library verification passed"
+
+# Comprehensive verification for all libraries
+verify-build: verify-wallet verify-crypto verify-consensus verify-common verify-util
+	@echo "Verifying all libraries..."
+	@for lib in *.a; do \
+		if [ -f "$$lib" ]; then \
+			echo "Checking $$lib..."; \
+			if ! ar t "$$lib" | head -1 > /dev/null 2>&1; then \
+				echo "ERROR: $$lib appears to be corrupted or empty"; \
+				exit 1; \
+			fi; \
+		fi; \
+	done
+	@echo "All library verification passed"
+
+# Force rebuild targets for debugging
+force-rebuild-wallet:
+	rm -f wallet/libbitcoin_wallet_a-wallet.o
+	rm -f wallet/libbitcoin_wallet_a-interfaces.o
+	rm -f wallet/libbitcoin_wallet_a-load.o
+	rm -f wallet/.deps/libbitcoin_wallet_a-wallet.Po
+	rm -f wallet/.deps/libbitcoin_wallet_a-interfaces.Po
+	rm -f wallet/.deps/libbitcoin_wallet_a-load.Po
+	$(MAKE) wallet/libbitcoin_wallet_a-wallet.o
+	$(MAKE) wallet/libbitcoin_wallet_a-interfaces.o
+	$(MAKE) wallet/libbitcoin_wallet_a-load.o
+	$(MAKE) libbitcoin_wallet.a
+	$(MAKE) verify-wallet
+
+force-rebuild-crypto:
+	rm -f crypto/libbitcoin_crypto_base_a-sha256.o
+	rm -f crypto/libbitcoin_crypto_base_a-aes.o
+	rm -f crypto/.deps/libbitcoin_crypto_base_a-sha256.Po
+	rm -f crypto/.deps/libbitcoin_crypto_base_a-aes.Po
+	$(MAKE) crypto/libbitcoin_crypto_base_a-sha256.o
+	$(MAKE) crypto/libbitcoin_crypto_base_a-aes.o
+	$(MAKE) crypto/libbitcoin_crypto_base.a
+	$(MAKE) verify-crypto
+
+force-rebuild-consensus:
+	rm -f consensus/libbitcoin_consensus_a-merkle.o
+	rm -f primitives/libbitcoin_consensus_a-block.o
+	rm -f consensus/.deps/libbitcoin_consensus_a-merkle.Po
+	rm -f primitives/.deps/libbitcoin_consensus_a-block.Po
+	$(MAKE) consensus/libbitcoin_consensus_a-merkle.o
+	$(MAKE) primitives/libbitcoin_consensus_a-block.o
+	$(MAKE) libbitcoin_consensus.a
+	$(MAKE) verify-consensus
+
+force-rebuild-common:
+	rm -f libbitcoin_common_a-chainparams.o
+	rm -f libbitcoin_common_a-key.o
+	rm -f .deps/libbitcoin_common_a-chainparams.Po
+	rm -f .deps/libbitcoin_common_a-key.Po
+	$(MAKE) libbitcoin_common_a-chainparams.o
+	$(MAKE) libbitcoin_common_a-key.o
+	$(MAKE) libbitcoin_common.a
+	$(MAKE) verify-common
+
+force-rebuild-util:
+	rm -f libbitcoin_util_a-system.o
+	rm -f libbitcoin_util_a-logging.o
+	rm -f .deps/libbitcoin_util_a-system.Po
+	rm -f .deps/libbitcoin_util_a-logging.Po
+	$(MAKE) libbitcoin_util_a-system.o
+	$(MAKE) libbitcoin_util_a-logging.o
+	$(MAKE) libbitcoin_util.a
+	$(MAKE) verify-util
+
+# Force rebuild all libraries
+force-rebuild-all: force-rebuild-wallet force-rebuild-crypto force-rebuild-consensus force-rebuild-common force-rebuild-util
+	@echo "All libraries rebuilt and verified"
+
+# Enhanced clean targets with better granularity
+clean-wallet:
+	rm -f wallet/*.o wallet/.deps/*.Po
+	rm -f libbitcoin_wallet.a
+	@echo "Cleaned wallet build artifacts"
+
+clean-crypto:
+	rm -f crypto/*.o crypto/.deps/*.Po
+	rm -f crypto/libbitcoin_crypto_*.a
+	@echo "Cleaned crypto build artifacts"
+
+clean-consensus:
+	rm -f consensus/*.o consensus/.deps/*.Po
+	rm -f primitives/*.o primitives/.deps/*.Po
+	rm -f libbitcoin_consensus.a
+	@echo "Cleaned consensus build artifacts"
+
+clean-common:
+	rm -f libbitcoin_common_a-*.o .deps/libbitcoin_common_a-*.Po
+	rm -f libbitcoin_common.a
+	@echo "Cleaned common build artifacts"
+
+clean-util:
+	rm -f libbitcoin_util_a-*.o .deps/libbitcoin_util_a-*.Po
+	rm -f libbitcoin_util.a
+	@echo "Cleaned util build artifacts"
+
+clean-libs: clean-wallet clean-crypto clean-consensus clean-common clean-util
+	rm -f *.a
+	@echo "Cleaned all library build artifacts"
+
+# Enhanced clean-local with better granularity
+clean-local:
+	-$(MAKE) -C secp256k1 clean
+	-rm -f leveldb/*/*.gcda leveldb/*/*.gcno leveldb/helpers/memenv/*.gcda leveldb/helpers/memenv/*.gcno
+	-rm -f config.h
+	-rm -rf test/__pycache__
+	-rm -f wallet/.deps/*.Po
+	-rm -f crypto/.deps/*.Po
+	-rm -f consensus/.deps/*.Po
+	-rm -f primitives/.deps/*.Po
+	-rm -f .deps/libbitcoin_common_a-*.Po
+	-rm -f .deps/libbitcoin_util_a-*.Po
+	@echo "Enhanced clean completed"
+
+# Dependency tracking improvements
+.PHONY: verify-wallet verify-crypto verify-consensus verify-common verify-util verify-build
+.PHONY: force-rebuild-wallet force-rebuild-crypto force-rebuild-consensus force-rebuild-common force-rebuild-util force-rebuild-all
+.PHONY: clean-wallet clean-crypto clean-consensus clean-common clean-util clean-libs
+
 EXTRA_DIST = $(CTAES_DIST)
 
 
