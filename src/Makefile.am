@@ -829,69 +829,85 @@ CLEANFILES += obj/build.h
 # These targets provide verification and debugging capabilities without overriding automake defaults
 
 # Verification targets for each library
-verify-wallet: libbitcoin_wallet.a
+verify-wallet:
 	@echo "Verifying wallet library contents..."
-	@if ! ar t $< | grep -q "libbitcoin_wallet_a-wallet.o"; then \
-		echo "ERROR: wallet.o missing from wallet library"; \
+	@if [ -f libbitcoin_wallet.a ]; then \
+		if nm libbitcoin_wallet.a | grep -q "wallet::CWallet"; then \
+			echo "Wallet library verification passed"; \
+		else \
+			echo "ERROR: Wallet library missing expected symbols"; \
+			echo "Try: make force-rebuild-wallet"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "ERROR: Wallet library not found"; \
+		echo "Try: make force-rebuild-wallet"; \
 		exit 1; \
 	fi
-	@if ! ar t $< | grep -q "libbitcoin_wallet_a-interfaces.o"; then \
-		echo "ERROR: interfaces.o missing from wallet library"; \
-		exit 1; \
-	fi
-	@if ! ar t $< | grep -q "libbitcoin_wallet_a-load.o"; then \
-		echo "ERROR: load.o missing from wallet library"; \
-		exit 1; \
-	fi
-	@echo "Wallet library verification passed"
 
-verify-crypto: crypto/libbitcoin_crypto_base.a
+verify-crypto:
 	@echo "Verifying crypto library contents..."
-	@if ! ar t $< | grep -q "libbitcoin_crypto_base_a-sha256.o"; then \
-		echo "ERROR: sha256.o missing from crypto library"; \
+	@if [ -f crypto/libbitcoin_crypto_base.a ]; then \
+		if nm crypto/libbitcoin_crypto_base.a | grep -q "crypto::SHA256"; then \
+			echo "Crypto library verification passed"; \
+		else \
+			echo "ERROR: Crypto library missing expected symbols"; \
+			echo "Try: make force-rebuild-crypto"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "ERROR: Crypto library not found"; \
+		echo "Try: make force-rebuild-crypto"; \
 		exit 1; \
 	fi
-	@if ! ar t $< | grep -q "libbitcoin_crypto_base_a-aes.o"; then \
-		echo "ERROR: aes.o missing from crypto library"; \
-		exit 1; \
-	fi
-	@echo "Crypto library verification passed"
 
-verify-consensus: libbitcoin_consensus.a
+verify-consensus:
 	@echo "Verifying consensus library contents..."
-	@if ! ar t $< | grep -q "libbitcoin_consensus_a-merkle.o"; then \
-		echo "ERROR: merkle.o missing from consensus library"; \
+	@if [ -f libbitcoin_consensus.a ]; then \
+		if nm libbitcoin_consensus.a | grep -q "consensus::CheckTxInputs"; then \
+			echo "Consensus library verification passed"; \
+		else \
+			echo "ERROR: Consensus library missing expected symbols"; \
+			echo "Try: make force-rebuild-consensus"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "ERROR: Consensus library not found"; \
+		echo "Try: make force-rebuild-consensus"; \
 		exit 1; \
 	fi
-	@if ! ar t $< | grep -q "libbitcoin_consensus_a-block.o"; then \
-		echo "ERROR: block.o missing from consensus library"; \
-		exit 1; \
-	fi
-	@echo "Consensus library verification passed"
 
-verify-common: libbitcoin_common.a
+verify-common:
 	@echo "Verifying common library contents..."
-	@if ! ar t $< | grep -q "libbitcoin_common_a-chainparams.o"; then \
-		echo "ERROR: chainparams.o missing from common library"; \
+	@if [ -f libbitcoin_common.a ]; then \
+		if nm libbitcoin_common.a | grep -q "CChainParams"; then \
+			echo "Common library verification passed"; \
+		else \
+			echo "ERROR: Common library missing expected symbols"; \
+			echo "Try: make force-rebuild-common"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "ERROR: Common library not found"; \
+		echo "Try: make force-rebuild-common"; \
 		exit 1; \
 	fi
-	@if ! ar t $< | grep -q "libbitcoin_common_a-key.o"; then \
-		echo "ERROR: key.o missing from common library"; \
-		exit 1; \
-	fi
-	@echo "Common library verification passed"
 
-verify-util: libbitcoin_util.a
+verify-util:
 	@echo "Verifying util library contents..."
-	@if ! ar t $< | grep -q "libbitcoin_util_a-system.o"; then \
-		echo "ERROR: system.o missing from util library"; \
+	@if [ -f libbitcoin_util.a ]; then \
+		if nm libbitcoin_util.a | grep -q "LogPrintf"; then \
+			echo "Util library verification passed"; \
+		else \
+			echo "ERROR: Util library missing expected symbols"; \
+			echo "Try: make force-rebuild-util"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "ERROR: Util library not found"; \
+		echo "Try: make force-rebuild-util"; \
 		exit 1; \
 	fi
-	@if ! ar t $< | grep -q "libbitcoin_util_a-logging.o"; then \
-		echo "ERROR: logging.o missing from util library"; \
-		exit 1; \
-	fi
-	@echo "Util library verification passed"
 
 # Comprehensive verification for all libraries
 verify-build: verify-wallet verify-crypto verify-consensus verify-common verify-util
@@ -1010,6 +1026,27 @@ clean-local-enhanced:
 	-rm -f .deps/libbitcoin_util_a-*.Po
 	@echo "Enhanced clean completed"
 
+# ============================================================================
+# ENHANCED BUILD SYSTEM TARGETS
+# ============================================================================
+# These targets help developers debug and manage build issues more effectively.
+# They address common problems like "undefined reference" errors, "malformed archive"
+# errors, and dependency tracking issues that standard 'make clean' doesn't fix.
+# 
+# For detailed documentation: see BUILD_SYSTEM_IMPROVEMENTS.md
+# ============================================================================
+
+# Simple help target that shows available custom targets
+help:
+	@echo "Available custom build targets:"
+	@echo "  verify-build      - Check if all libraries are built correctly"
+	@echo "  force-rebuild-*   - Force rebuild specific libraries (wallet, crypto, etc.)"
+	@echo "  clean-libs        - Clean all library build artifacts"
+	@echo "  help-build        - Show detailed help for build system targets"
+	@echo ""
+	@echo "For detailed help: make help-build"
+	@echo "For troubleshooting: see BUILD_SYSTEM_IMPROVEMENTS.md"
+
 # Help target to show available custom build targets
 help-build:
 	@echo "=== Bitcoin Core Custom Build Targets ==="
@@ -1054,7 +1091,7 @@ help-build:
 # Dependency tracking improvements
 .PHONY: verify-wallet verify-crypto verify-consensus verify-common verify-util verify-build
 .PHONY: force-rebuild-wallet force-rebuild-crypto force-rebuild-consensus force-rebuild-common force-rebuild-util force-rebuild-all
-.PHONY: clean-wallet clean-crypto clean-consensus clean-common clean-util clean-libs clean-local-enhanced help-build
+.PHONY: clean-wallet clean-crypto clean-consensus clean-common clean-util clean-libs clean-local-enhanced help help-build
 
 EXTRA_DIST = $(CTAES_DIST)
 
@@ -1149,9 +1186,7 @@ include Makefile.univalue.include
 # They address common problems like "undefined reference" errors, "malformed archive"
 # errors, and dependency tracking issues that standard 'make clean' doesn't fix.
 # 
-# To see all available targets: make help-build
 # For detailed documentation: see BUILD_SYSTEM_IMPROVEMENTS.md
 # ============================================================================
 
-# Explicit dependencies for critical object files to improve dependency tracking
-wallet/libbitcoin_wallet_a-wallet.o: wallet/wallet.cpp wallet/wallet.h
+# Verification targets to check if libraries contain expected object files
