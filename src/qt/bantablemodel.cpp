@@ -31,11 +31,12 @@ bool BannedNodeLessThan::operator()(const CCombinedBan& left, const CCombinedBan
     switch (static_cast<BanTableModel::ColumnIndex>(column)) {
     case BanTableModel::Address:
         return pLeft->subnet.ToString().compare(pRight->subnet.ToString()) < 0;
-    case BanTableModel::Bantime:
+    case BanTableModel::Bantime: {
         // For sorting, use the appropriate time field based on status
         int64_t leftTime = pLeft->banEntry.m_is_on_probation ? pLeft->banEntry.nProbationUntil : pLeft->banEntry.nBanUntil;
         int64_t rightTime = pRight->banEntry.m_is_on_probation ? pRight->banEntry.nProbationUntil : pRight->banEntry.nBanUntil;
         return leftTime < rightTime;
+    }
     case BanTableModel::Status:
         return pLeft->banEntry.m_is_on_probation < pRight->banEntry.m_is_on_probation;
     case BanTableModel::BanCount:
