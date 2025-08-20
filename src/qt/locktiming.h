@@ -28,13 +28,13 @@ extern bool g_gui_heartbeat_initialized;
         g_gui_heartbeat_initialized = true; \
     } \
     qint64 heartbeatDelay = g_gui_heartbeat_timer.nsecsElapsed() / 1000000; \
-    if (heartbeatDelay >= 1000) { /* Every second */ \
+    /*if (heartbeatDelay >= 1000) { \
         QString threadName = QThread::currentThread()->objectName().isEmpty() ? "unnamed" : QThread::currentThread()->objectName(); \
         qDebug() << "[GUI_HEARTBEAT] GUI thread alive at" << QDateTime::currentDateTime().toString("hh:mm:ss.zzz") \
                 << "from" << __FILE__ << ":" << __LINE__ << __FUNCTION__ << "[" << threadName << "]" \
                 << "(delay:" << heartbeatDelay << "ms)"; \
         g_gui_heartbeat_timer.restart(); \
-    } \
+    } \ */
     QElapsedTimer lockTimer; \
     lockTimer.start(); \
     std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock); \
@@ -87,7 +87,7 @@ extern bool g_gui_heartbeat_initialized;
             lastFailureTimer.restart(); \
         } \
         qint64 timeSinceLastLog = lastLogTimer.nsecsElapsed() / 1000000; \
-        if (timeSinceLastLog >= 1000) { \
+        if (waited > 0 && timeSinceLastLog >= 1000) { \
             QString successIntervals = (minSuccessInterval == -1) ? "none" : QString("%1-%2").arg(minSuccessInterval).arg(maxSuccessInterval); \
             QString failureIntervals = (minFailureInterval == -1) ? "none" : QString("%1-%2").arg(minFailureInterval).arg(maxFailureInterval); \
             QString threadName = QThread::currentThread()->objectName().isEmpty() ? "unnamed" : QThread::currentThread()->objectName(); \
@@ -107,15 +107,6 @@ extern bool g_gui_heartbeat_initialized;
             maxSuccessInterval = 0; \
             minFailureInterval = -1; \
             maxFailureInterval = 0; \
-        } else { \
-            /* Log every attempt for debugging, but skip 0ms acquisitions to reduce noise */ \
-            if (waited > 0 || !lock.owns_lock()) { \
-                QString threadName = QThread::currentThread()->objectName().isEmpty() ? "unnamed" : QThread::currentThread()->objectName(); \
-                qDebug() << "[LOCK_TIMED] cs_main try_to_lock at" << __FILE__ << ":" << __LINE__ << __FUNCTION__ \
-                         << "[" << threadName << "]" \
-                         << (lock.owns_lock() ? "ACQUIRED" : "FAILED") << "after" << waited << "ms" \
-                         << "| Heartbeat delay:" << heartbeatDelay << "ms"; \
-            } \
         } \
     } \
     UpdateGuiLastUsed();
