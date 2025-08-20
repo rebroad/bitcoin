@@ -738,8 +738,9 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         ui->banlistWidget->setModel(model->getBanTableModel());
         ui->banlistWidget->verticalHeader()->hide();
         ui->banlistWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
-        ui->banlistWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+        ui->banlistWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
         ui->banlistWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+        ui->banlistWidget->setToolTip(tr("Select multiple entries by holding Ctrl or Shift. Use Ctrl+U to unban selected items."));
 
         if (!ui->banlistWidget->horizontalHeader()->restoreState(m_banlist_widget_header_state)) {
             ui->banlistWidget->setColumnWidth(BanTableModel::Address, BANSUBNET_COLUMN_WIDTH);
@@ -942,6 +943,15 @@ void RPCConsole::keyPressEvent(QKeyEvent *event)
             return;
         }
         close();
+    }
+    
+    // Handle Ctrl+U for unbanning selected items in the ban table
+    if (event->key() == Qt::Key_U && event->modifiers() == Qt::ControlModifier) {
+        if (ui->tabWidget->currentWidget() == ui->tab_peers && !ui->banlistWidget->selectionModel()->selectedRows().isEmpty()) {
+            unbanSelectedNode();
+            event->accept();
+            return;
+        }
     }
 }
 
@@ -1324,8 +1334,28 @@ void RPCConsole::showPeersTableContextMenu(const QPoint& point)
 void RPCConsole::showBanTableContextMenu(const QPoint& point)
 {
     QModelIndex index = ui->banlistWidget->indexAt(point);
-    if (index.isValid())
+    if (index.isValid()) {
+        // Update the unban action text to show number of selected items
+        QList<QModelIndex> selectedNodes = GUIUtil::getEntryData(ui->banlistWidget, BanTableModel::Address);
+        if (selectedNodes.count() > 1) {
+            // Find the unban action and update its text
+            for (QAction* action : banTableContextMenu->actions()) {
+                if (action->text().contains("Unban")) {
+                    action->setText(tr("&Unban %1 selected").arg(selectedNodes.count()));
+                    break;
+                }
+            }
+        } else {
+            // Reset to default text for single selection
+            for (QAction* action : banTableContextMenu->actions()) {
+                if (action->text().contains("Unban")) {
+                    action->setText(tr("&Unban"));
+                    break;
+                }
+            }
+        }
         banTableContextMenu->exec(QCursor::pos());
+    }
 }
 
 void RPCConsole::disconnectSelectedNode()
@@ -1366,6 +1396,8 @@ void RPCConsole::unbanSelectedNode()
 
     // Get selected ban addresses
     QList<QModelIndex> nodes = GUIUtil::getEntryData(ui->banlistWidget, BanTableModel::Address);
+    int unbannedCount = 0;
+    
     for(int i = 0; i < nodes.count(); i++)
     {
         // Get currently selected ban address
@@ -1375,7 +1407,18 @@ void RPCConsole::unbanSelectedNode()
         LookupSubNet(strNode.toStdString(), possibleSubnet);
         if (possibleSubnet.IsValid() && m_node.unban(possibleSubnet))
         {
-            clientModel->getBanTableModel()->refresh();
+            unbannedCount++;
+        }
+    }
+    
+    if (unbannedCount > 0) {
+        clientModel->getBanTableModel()->refresh();
+        
+        // Show feedback message
+        if (unbannedCount == 1) {
+            message(CMD_REPLY, tr("1 address unbanned."), false);
+        } else {
+            message(CMD_REPLY, tr("%1 addresses unbanned.").arg(unbannedCount), false);
         }
     }
 }
