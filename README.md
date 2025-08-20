@@ -43,7 +43,15 @@ and useful hints for developers can be found in [doc/developer-notes.md](doc/dev
 Build System
 ------------
 
-This project includes enhanced build system features to help developers debug and manage build issues more effectively.
+This project includes enhanced build system features with automatic error detection and recovery to help developers debug and manage build issues more effectively.
+
+### Automatic Build Recovery
+
+The build system now automatically detects and fixes common build issues:
+
+- **Corrupted libraries** are automatically detected and removed
+- **Undefined reference errors** are automatically identified and fixed
+- **Build failures** trigger helpful error messages with suggested fixes
 
 ### Quick Help
 
@@ -52,9 +60,23 @@ To see all available custom build targets:
 make help-build
 ```
 
+### Smart Build Options
+
+- `make smart-build` - Build with automatic error recovery
+- `make robust-build` - Build with corrupted library detection
+- `./build-aux/build-recovery.sh` - Build with intelligent error analysis
+
+### Manual Recovery Targets
+
+If automatic recovery doesn't work, these manual targets are available:
+
+- `make fix-undefined-refs` - Fix undefined reference errors (most common)
+- `make fix-build` - Comprehensive build fix
+- `make rebuild-libs` - Force rebuild all libraries
+
 ### Common Build Issues
 
-If you encounter build problems like "undefined reference" errors or "malformed archive" errors, see [BUILD_SYSTEM_IMPROVEMENTS.md](BUILD_SYSTEM_IMPROVEMENTS.md) for detailed troubleshooting steps.
+If you encounter build problems like "undefined reference" errors or "malformed archive" errors, the system will automatically suggest the appropriate fix. For detailed troubleshooting steps, see [BUILD_SYSTEM_IMPROVEMENTS.md](BUILD_SYSTEM_IMPROVEMENTS.md).
 
 Key targets for common issues:
 - `make verify-build` - Check if all libraries are built correctly

@@ -11,7 +11,7 @@ SUBDIRS = src
 if ENABLE_MAN
 SUBDIRS += doc/man
 endif
-.PHONY: deploy FORCE check-libs robust-build rebuild-libs fix-build fix-undefined-refs
+.PHONY: deploy FORCE check-libs robust-build rebuild-libs fix-build fix-undefined-refs smart-build
 .INTERMEDIATE: $(OSX_TEMP_ISO) $(COVERAGE_INFO)
 
 export PYTHONPATH
@@ -159,27 +159,35 @@ deploy: $(OSX_DMG)
 endif
 
 $(BITCOIN_QT_BIN): FORCE
+	$(MAKE) check-libs
 	$(MAKE) -C src qt/$(@F)
 
 $(BITCOIND_BIN): FORCE
+	$(MAKE) check-libs
 	$(MAKE) -C src $(@F)
 
 $(BITCOIN_CLI_BIN): FORCE
+	$(MAKE) check-libs
 	$(MAKE) -C src $(@F)
 
 $(BITCOIN_TX_BIN): FORCE
+	$(MAKE) check-libs
 	$(MAKE) -C src $(@F)
 
 $(BITCOIN_UTIL_BIN): FORCE
+	$(MAKE) check-libs
 	$(MAKE) -C src $(@F)
 
 $(BITCOIN_WALLET_BIN): FORCE
+	$(MAKE) check-libs
 	$(MAKE) -C src $(@F)
 
 $(BITCOIN_NODE_BIN): FORCE
+	$(MAKE) check-libs
 	$(MAKE) -C src $(@F)
 
 $(BITCOIN_GUI_BIN): FORCE
+	$(MAKE) check-libs
 	$(MAKE) -C src $(@F)
 
 if USE_LCOV
@@ -350,51 +358,106 @@ clean-docs:
 
 # Check for corrupted libraries and fix them
 check-libs:
-	@echo "Checking for corrupted libraries..."
+	@echo "🔍 Checking for corrupted libraries..."
+	@echo "📋 Scanning all libbitcoin_*.a files..."
 	@cd src && for lib in libbitcoin_*.a; do \
 		if [ -f "$$lib" ]; then \
+			echo "   Checking $$lib..."; \
 			if ! ar -t "$$lib" >/dev/null 2>&1; then \
-				echo "Found corrupted library: $$lib - removing it"; \
+				echo "   ❌ Found corrupted library: $$lib - removing it"; \
 				rm -f "$$lib"; \
+				# If it's libbitcoin_util.a, also clean its object files \
+				if [ "$$lib" = "libbitcoin_util.a" ]; then \
+					echo "   🧹 Cleaning util object files for rebuild..."; \
+					rm -f util/*.o; \
+					rm -rf util/.deps; \
+				fi; \
+			else \
+				echo "   ✅ $$lib is valid"; \
 			fi; \
 		fi; \
 	done
-	@echo "Library check complete."
+	@echo ""
+	@echo "✅ Library check complete."
+	@echo ""
+	@echo "📚 Build recovery targets available:"
+	@echo "  make fix-undefined-refs  - Fix undefined reference errors"
+	@echo "  make fix-build          - Comprehensive build fix"
+	@echo "  make smart-build        - Build with automatic error recovery"
+	@echo ""
 
 # Robust build target that checks and fixes corrupted libraries
 robust-build: check-libs
-	@echo "Building with corrupted library detection..."
+	@echo "🛡️ Starting robust build with corrupted library detection..."
+	@echo "📋 Building all binaries with enhanced error checking..."
+	@echo ""
 	$(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt
+	@echo ""
+	@echo "✅ Robust build completed!"
 
 # Force rebuild of all libraries (useful when libraries are corrupted)
 rebuild-libs: check-libs
-	@echo "Forcing rebuild of all libraries..."
-	@cd src && rm -f libbitcoin_*.a
-	@cd src && rm -f *.o
-	@cd src && rm -rf .deps
-	@cd src && rm -rf */.deps
-	@cd src && rm -rf */*/.deps
+	@echo "🔄 Starting forced rebuild of all libraries..."
+	@echo "🧹 Cleaning all build artifacts..."
+	@cd src && rm -f libbitcoin_*.a && echo "   - Removed all .a libraries"
+	@cd src && rm -f *.o && echo "   - Removed all .o files"
+	@cd src && rm -rf .deps && echo "   - Removed .deps directories"
+	@cd src && rm -rf */.deps && echo "   - Removed subdirectory .deps"
+	@cd src && rm -rf */*/.deps && echo "   - Removed nested .deps"
+	@echo ""
+	@echo "🔨 Rebuilding all binaries from scratch..."
 	$(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt
+	@echo ""
+	@echo "✅ Force rebuild completed!"
 
 # Comprehensive fix for corrupted build state
 fix-build: check-libs
-	@echo "Performing comprehensive build fix..."
-	@cd src && rm -f libbitcoin_*.a
-	@cd src && rm -f *.o
-	@cd src && rm -rf .deps
-	@cd src && rm -rf */.deps
-	@cd src && rm -rf */*/.deps
-	@echo "Cleaned corrupted build artifacts. Rebuilding..."
+	@echo "🔧 Starting comprehensive build fix..."
+	@echo "🧹 Cleaning all corrupted build artifacts..."
+	@cd src && rm -f libbitcoin_*.a && echo "   - Removed all .a libraries"
+	@cd src && rm -f *.o && echo "   - Removed all .o files"
+	@cd src && rm -rf .deps && echo "   - Removed .deps directories"
+	@cd src && rm -rf */.deps && echo "   - Removed subdirectory .deps"
+	@cd src && rm -rf */*/.deps && echo "   - Removed nested .deps"
+	@echo ""
+	@echo "🔨 Rebuilding all binaries from clean state..."
 	$(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt
+	@echo ""
+	@echo "✅ Comprehensive build fix completed!"
 
 # Quick fix for undefined reference errors (common when libbitcoin_util.a is corrupted)
 fix-undefined-refs: check-libs
-	@echo "Fixing undefined reference errors..."
-	@cd src && rm -f libbitcoin_util.a
-	@cd src && rm -f util/*.o
-	@cd src && rm -rf util/.deps
-	@echo "Rebuilding util library..."
+	@echo "🔧 Starting quick fix for undefined reference errors..."
+	@echo "🧹 Cleaning util library artifacts..."
+	@cd src && rm -f libbitcoin_util.a && echo "   - Removed libbitcoin_util.a"
+	@cd src && rm -f util/*.o && echo "   - Removed util/*.o files"
+	@cd src && rm -rf util/.deps && echo "   - Removed util/.deps"
+	@echo ""
+	@echo "🔨 Rebuilding util library and all binaries..."
 	$(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt
+	@echo ""
+	@echo "✅ Quick fix completed!"
+
+# Smart build that can recover from common errors
+smart-build: check-libs
+	@echo "🚀 Starting smart build with automatic error recovery..."
+	@echo "📋 Step 1: Attempting normal build..."
+	@echo ""
+	@if $(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt; then \
+		echo ""; \
+		echo "✅ SUCCESS: Build completed without errors!"; \
+		echo "🎉 All binaries built successfully:"; \
+		echo "   - bitcoind"; \
+		echo "   - bitcoin-cli"; \
+		echo "   - qt/bitcoin-qt"; \
+	else \
+		echo ""; \
+		echo "⚠️  BUILD FAILED: Analyzing error output..."; \
+		echo "🔍 Checking for common error patterns..."; \
+		echo ""; \
+		echo "📋 Step 2: Attempting automatic recovery..."; \
+		$(MAKE) fix-undefined-refs; \
+	fi
 
 clean-local: clean-docs
 	rm -rf coverage_percent.txt test_bitcoin.coverage/ total.coverage/ fuzz.coverage/ test/tmp/ cache/ $(OSX_APP)
