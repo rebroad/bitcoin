@@ -11,7 +11,7 @@ SUBDIRS = src
 if ENABLE_MAN
 SUBDIRS += doc/man
 endif
-.PHONY: deploy FORCE
+.PHONY: deploy FORCE check-libs robust-build rebuild-libs fix-build fix-undefined-refs
 .INTERMEDIATE: $(OSX_TEMP_ISO) $(COVERAGE_INFO)
 
 export PYTHONPATH
@@ -347,6 +347,54 @@ endif
 
 clean-docs:
 	rm -rf doc/doxygen
+
+# Check for corrupted libraries and fix them
+check-libs:
+	@echo "Checking for corrupted libraries..."
+	@cd src && for lib in libbitcoin_*.a; do \
+		if [ -f "$$lib" ]; then \
+			if ! ar -t "$$lib" >/dev/null 2>&1; then \
+				echo "Found corrupted library: $$lib - removing it"; \
+				rm -f "$$lib"; \
+			fi; \
+		fi; \
+	done
+	@echo "Library check complete."
+
+# Robust build target that checks and fixes corrupted libraries
+robust-build: check-libs
+	@echo "Building with corrupted library detection..."
+	$(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt
+
+# Force rebuild of all libraries (useful when libraries are corrupted)
+rebuild-libs: check-libs
+	@echo "Forcing rebuild of all libraries..."
+	@cd src && rm -f libbitcoin_*.a
+	@cd src && rm -f *.o
+	@cd src && rm -rf .deps
+	@cd src && rm -rf */.deps
+	@cd src && rm -rf */*/.deps
+	$(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt
+
+# Comprehensive fix for corrupted build state
+fix-build: check-libs
+	@echo "Performing comprehensive build fix..."
+	@cd src && rm -f libbitcoin_*.a
+	@cd src && rm -f *.o
+	@cd src && rm -rf .deps
+	@cd src && rm -rf */.deps
+	@cd src && rm -rf */*/.deps
+	@echo "Cleaned corrupted build artifacts. Rebuilding..."
+	$(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt
+
+# Quick fix for undefined reference errors (common when libbitcoin_util.a is corrupted)
+fix-undefined-refs: check-libs
+	@echo "Fixing undefined reference errors..."
+	@cd src && rm -f libbitcoin_util.a
+	@cd src && rm -f util/*.o
+	@cd src && rm -rf util/.deps
+	@echo "Rebuilding util library..."
+	$(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt
 
 clean-local: clean-docs
 	rm -rf coverage_percent.txt test_bitcoin.coverage/ total.coverage/ fuzz.coverage/ test/tmp/ cache/ $(OSX_APP)
