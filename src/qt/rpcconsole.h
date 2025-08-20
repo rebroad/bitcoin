@@ -160,7 +160,8 @@ private:
         PING_COLUMN_WIDTH = 80,
         BANSUBNET_COLUMN_WIDTH = 200,
         BANTIME_COLUMN_WIDTH = 250,
-        STATUS_COLUMN_WIDTH = 100
+        STATUS_COLUMN_WIDTH = 100,
+        BANCOUNT_COLUMN_WIDTH = 80
     };
 
     interfaces::Node& m_node;

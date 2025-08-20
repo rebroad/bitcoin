@@ -22,7 +22,7 @@ BanMan::BanMan(fs::path ban_file, CClientUIInterface* client_interface, int64_t 
     if (m_ban_db.Read(m_banned)) {
         SweepBanned(); // sweep out unused entries
 
-        LogPrint(BCLog::NET, "Loaded %d banned node addresses/subnets  %dms\n", m_banned.size(),
+        LogPrint(BCLog::BANMAN, "Loaded %d banned node addresses/subnets  %dms\n", m_banned.size(),
                  GetTimeMillis() - n_start);
     } else {
         LogPrintf("Recreating the banlist database\n");
@@ -57,7 +57,7 @@ void BanMan::DumpBanlist()
         SetBannedSetDirty(true);
     }
 
-    LogPrint(BCLog::NET, "Flushed %d banned node addresses/subnets to disk  %dms\n", banmap.size(),
+    LogPrint(BCLog::BANMAN, "Flushed %d banned node addresses/subnets to disk  %dms\n", banmap.size(),
              GetTimeMillis() - n_start);
 }
 
@@ -110,8 +110,8 @@ bool BanMan::IsBanned(const CNetAddr& net_addr) {
         CSubNet sub_net = it.first;
         CBanEntry ban_entry = it.second;
 
+        // Only return true if actively banned (not on probation)
         if (current_time < ban_entry.nBanUntil && sub_net.Match(net_addr)) return true;
-        if (ban_entry.m_is_on_probation && current_time < ban_entry.nProbationUntil && sub_net.Match(net_addr)) return true; // TODO correct?
     }
     return false;
 }
@@ -122,10 +122,10 @@ bool BanMan::IsBanned(const CSubNet& sub_net) {
     banmap_t::iterator i = m_banned.find(sub_net);
     if (i != m_banned.end()) {
         CBanEntry ban_entry = (*i).second;
+        // Only return true if actively banned (not on probation)
         if (current_time < ban_entry.nBanUntil) {
             return true;
         }
-        if (ban_entry.m_is_on_probation && current_time < ban_entry.nProbationUntil) return true; // TODO correct?
     }
     return false;
 }
@@ -163,7 +163,7 @@ void BanMan::Ban(const CSubNet& sub_net, int64_t ban_time_offset, bool since_uni
                 int64_t previous_duration = existing_entry.nBanUntil - existing_entry.nCreateTime;
                 normalized_ban_time_offset = previous_duration * 2;
                 ban_entry.m_ban_count = existing_entry.m_ban_count + 1;
-                LogPrint(BCLog::NET, "Address %s on probation banned again, doubling duration to %d seconds\n", 
+                LogPrint(BCLog::BANMAN, "Address %s on probation banned again, doubling duration to %d seconds\n", 
                          sub_net.ToString(), normalized_ban_time_offset);
             } else if (existing_entry.m_ban_count > 0) {
                 // Not on probation but has been banned before, increment count
@@ -237,7 +237,7 @@ void BanMan::SweepBanned()
                 m_banned.erase(it++);
                 m_is_dirty = true;
                 notify_ui = true;
-                LogPrint(BCLog::NET, "Removed banned node address/subnet: %s\n", sub_net.ToString());
+                LogPrint(BCLog::BANMAN, "Removed banned node address/subnet: %s\n", sub_net.ToString());
             } else if (now > ban_entry.nBanUntil && !ban_entry.m_is_on_probation) {
                 // Ban has expired, transition to probation
                 ban_entry.m_is_on_probation = true;
@@ -246,14 +246,14 @@ void BanMan::SweepBanned()
                 m_banned[sub_net] = ban_entry;
                 m_is_dirty = true;
                 notify_ui = true;
-                LogPrint(BCLog::NET, "Address %s moved to probation until %d\n", sub_net.ToString(), ban_entry.nProbationUntil);
+                LogPrint(BCLog::BANMAN, "Ban address %s moved to probation until %d\n", sub_net.ToString(), ban_entry.nProbationUntil);
                 ++it;
             } else if (ban_entry.m_is_on_probation && now > ban_entry.nProbationUntil) {
                 // Probation has expired, remove entry
                 m_banned.erase(it++);
                 m_is_dirty = true;
                 notify_ui = true;
-                LogPrint(BCLog::NET, "Removed probation node address/subnet: %s\n", sub_net.ToString());
+                LogPrint(BCLog::BANMAN, "Removed ban probation node address/subnet: %s\n", sub_net.ToString());
             } else {
                 ++it;
             }

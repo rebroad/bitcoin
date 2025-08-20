@@ -32,9 +32,14 @@ bool BannedNodeLessThan::operator()(const CCombinedBan& left, const CCombinedBan
     case BanTableModel::Address:
         return pLeft->subnet.ToString().compare(pRight->subnet.ToString()) < 0;
     case BanTableModel::Bantime:
-        return pLeft->banEntry.nBanUntil < pRight->banEntry.nBanUntil;
+        // For sorting, use the appropriate time field based on status
+        int64_t leftTime = pLeft->banEntry.m_is_on_probation ? pLeft->banEntry.nProbationUntil : pLeft->banEntry.nBanUntil;
+        int64_t rightTime = pRight->banEntry.m_is_on_probation ? pRight->banEntry.nProbationUntil : pRight->banEntry.nBanUntil;
+        return leftTime < rightTime;
     case BanTableModel::Status:
         return pLeft->banEntry.m_is_on_probation < pRight->banEntry.m_is_on_probation;
+    case BanTableModel::BanCount:
+        return pLeft->banEntry.m_ban_count < pRight->banEntry.m_ban_count;
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
@@ -96,7 +101,7 @@ BanTableModel::BanTableModel(interfaces::Node& node, QObject* parent) :
     QAbstractTableModel(parent),
     m_node(node)
 {
-    columns << tr("IP/Netmask") << tr("Banned Until") << tr("Status");
+    columns << tr("IP/Netmask") << tr("Banned Until") << tr("Status") << tr("Ban Count");
     priv.reset(new BanTablePriv());
 
     // load initial data
@@ -152,6 +157,8 @@ QVariant BanTableModel::data(const QModelIndex &index, int role) const
             } else {
                 return tr("Banned");
             }
+        case BanCount:
+            return QString::number(rec->banEntry.m_ban_count);
         } // no default case, so the compiler can warn about missing cases
         assert(false);
     }

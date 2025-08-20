@@ -1215,11 +1215,7 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
     bool on_probation = m_banman && m_banman->IsOnProbation(addr);
     if (!NetPermissions::HasFlag(permissionFlags, NetPermissionFlags::NoBan) && banned)
     {
-        if (on_probation) {
-            LogPrint(BCLog::NET, "connection from %s dropped (on probation)\n", addr.ToString());
-        } else {
-            LogPrint(BCLog::NET, "connection from %s dropped (banned)\n", addr.ToString());
-        }
+        LogPrint(BCLog::BANMAN, "connection from %s dropped (banned)\n", addr.ToString());
         return;
     }
 
@@ -1271,7 +1267,7 @@ void CConnman::CreateNodeFromAcceptedSocket(std::unique_ptr<Sock>&& sock,
 
     pnode->AddRef(1); // REB - Creation (in)
     pnode->m_permissionFlags = permissionFlags;
-    pnode->m_prefer_evict = discouraged;
+    pnode->m_prefer_evict = discouraged || on_probation;
     m_msgproc->InitializeNode(pnode);
 
     LogPrint(BCLog::NET, "connection from %s accepted\n", addr.ToString());
@@ -2608,7 +2604,8 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
     if (!fNetworkActive) return;
     if (!pszDest) {
         bool banned_or_discouraged = m_banman && (m_banman->IsDiscouraged(addrConnect) || m_banman->IsBanned(addrConnect));
-        if (IsLocal(addrConnect) || banned_or_discouraged || AlreadyConnectedToAddress(addrConnect))
+        bool on_probation = m_banman && m_banman->IsOnProbation(addrConnect);
+        if (IsLocal(addrConnect) || banned_or_discouraged || on_probation || AlreadyConnectedToAddress(addrConnect))
             return;
     } else if (FindNode(std::string(pszDest))) return;
 
