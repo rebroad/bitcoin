@@ -238,22 +238,21 @@ void BanMan::SweepBanned()
                 m_is_dirty = true;
                 notify_ui = true;
                 LogPrint(BCLog::BANMAN, "Removed banned node address/subnet: %s\n", sub_net.ToString());
-            } else if (now > ban_entry.nBanUntil && !ban_entry.m_is_on_probation) {
-                // Ban has expired, transition to probation
-                ban_entry.m_is_on_probation = true;
-                ban_entry.nProbationUntil = now + (ban_entry.nBanUntil - ban_entry.nCreateTime); // Same duration as ban
-                ban_entry.nBanUntil = 0; // Clear ban time
-                m_banned[sub_net] = ban_entry;
-                m_is_dirty = true;
-                notify_ui = true;
-                LogPrint(BCLog::BANMAN, "Ban address %s moved to probation until %d\n", sub_net.ToString(), ban_entry.nProbationUntil);
-                ++it;
             } else if (ban_entry.m_is_on_probation && now > ban_entry.nProbationUntil) {
                 // Probation has expired, remove entry
                 m_banned.erase(it++);
                 m_is_dirty = true;
                 notify_ui = true;
                 LogPrint(BCLog::BANMAN, "Removed ban probation node address/subnet: %s\n", sub_net.ToString());
+            } else if (!ban_entry.m_is_on_probation && now > ban_entry.nBanUntil) {
+                // Ban has expired, transition to probation
+                ban_entry.m_is_on_probation = true;
+                ban_entry.nProbationUntil = now + (ban_entry.nBanUntil - ban_entry.nCreateTime); // Same duration as ban
+                m_banned[sub_net] = ban_entry;
+                m_is_dirty = true;
+                notify_ui = true;
+                LogPrint(BCLog::BANMAN, "Ban address %s moved to probation until %d\n", sub_net.ToString(), ban_entry.nProbationUntil);
+                ++it;
             } else {
                 ++it;
             }
