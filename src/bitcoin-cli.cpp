@@ -850,10 +850,14 @@ static UniValue ConnectAndCallRPC(BaseRequestHandler* rh, const std::string& str
         try {
             response = CallRPC(rh, strMethod, args, rpcwallet);
             if (fWait) {
+#if __GNUC__ >= 12
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdangling-reference"
+#endif
                 const UniValue& error = find_value(response, "error");
+#if __GNUC__ >= 12
 #pragma GCC diagnostic pop
+#endif
                 if (!error.isNull() && error["code"].get_int() == RPC_IN_WARMUP) {
                     throw CConnectionFailed("server in warmup");
                 }
@@ -882,11 +886,15 @@ static void ParseResult(const UniValue& result, std::string& strPrint)
 static void ParseError(const UniValue& error, std::string& strPrint, int& nRet)
 {
     if (error.isObject()) {
+#if __GNUC__ >= 12
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdangling-reference"
+#endif
         const UniValue& err_code = find_value(error, "code");
         const UniValue& err_msg = find_value(error, "message");
+#if __GNUC__ >= 12
 #pragma GCC diagnostic pop
+#endif
         if (!err_code.isNull()) {
             strPrint = "error code: " + err_code.getValStr() + "\n";
         }
