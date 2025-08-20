@@ -28,13 +28,13 @@ extern bool g_gui_heartbeat_initialized;
         g_gui_heartbeat_initialized = true; \
     } \
     qint64 heartbeatDelay = g_gui_heartbeat_timer.nsecsElapsed() / 1000000; \
-    /*if (heartbeatDelay >= 1000) { \
+    /* if (heartbeatDelay >= 1000) { \
         QString threadName = QThread::currentThread()->objectName().isEmpty() ? "unnamed" : QThread::currentThread()->objectName(); \
         qDebug() << "[GUI_HEARTBEAT] GUI thread alive at" << QDateTime::currentDateTime().toString("hh:mm:ss.zzz") \
                 << "from" << __FILE__ << ":" << __LINE__ << __FUNCTION__ << "[" << threadName << "]" \
                 << "(delay:" << heartbeatDelay << "ms)"; \
         g_gui_heartbeat_timer.restart(); \
-    } \ */
+    } */ \
     QElapsedTimer lockTimer; \
     lockTimer.start(); \
     std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock); \
