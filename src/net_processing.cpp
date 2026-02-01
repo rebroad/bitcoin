@@ -5798,7 +5798,9 @@ void PeerManagerImpl::AddCompactBlock(const CBlockHeaderAndShortTxIDs& cmpctbloc
     // If not found, add it to the rolling list
     if (!found) {
         // Check if we're about to overwrite a non-empty compact block (indicating buffer overflow)
-        if (m_recent_compact_blocks[m_next_compact_block_index].header.GetHash() != uint256{}) {
+        // Use IsNull() rather than GetHash() != uint256{}: a SetNull() header's GetHash() is the
+        // hash of 80 zero bytes, not all zeros, so the latter would falsely flag empty slots.
+        if (!m_recent_compact_blocks[m_next_compact_block_index].header.IsNull()) {
             LogPrintf("ERROR: Compact block buffer overflow! Hash %s will overwrite %s\n",
                      hash.ToString(), m_recent_compact_blocks[m_next_compact_block_index].header.GetHash().ToString());
 
