@@ -1737,7 +1737,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                     nSendBps = 8 * (float)nSendBytes / (now - m_connected);
                 }
                 if ((now - m_connected >= 120) && (nMempoolPct < 10) && ((nRecvBps > 120) || (nSendBps > 1200))) {
-                    if (!pnode->HasPermission(NetPermissionFlags::NoBan)) {
+                    if (!pnode->HasPermission(NetPermissionFlags::NoBan) && !pnode->fDisconnect) {
                         pnode->fDisconnect = 1;
                         if (m_banman) m_banman->Ban(pnode->addr, 60 * 60); // Ban for 1 hour
                         LogPrintf("%s: Pct=%d%% Send=%s Recv=%s TimeConn=%d %s disconnect incoming peer=%d\n", __func__, nMempoolPct, nSendBps, nRecvBps, now - m_connected, pnode->addr.ToString(), pnode->GetId());
@@ -1810,7 +1810,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             std::string strReason;
             std::string strDetails;
             int64_t m_connected = std::max(count_seconds(pnode->m_connected), tIBDEnded);
-            if (pnode->GetId() == worstNode) {
+            if (pnode->GetId() == worstNode && !pnode->fDisconnect) {
                 if (MaxedOut) {
                     // A block came in and so the lowest will always be the lowest - disconnect it
                     if (m_last_block_time > latestOutboundConn && (pnode->nBTXpm || (pnode->nBTXpm == 0 && m_last_block_time - m_connected >= 120))) {
