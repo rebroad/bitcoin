@@ -25,6 +25,7 @@
 #include <util/strencodings.h>
 #include <util/syscall_sandbox.h>
 #include <util/system.h>
+#include <validation.h>
 
 #include <optional>
 #include <stdint.h>
@@ -911,6 +912,7 @@ static RPCHelpMan updateconfig()
                 RPCExamples{
                     HelpExampleCli("updateconfig", "\"maxmempool\" \"150\"")
                   + HelpExampleCli("updateconfig", "\"ibdtimethreshold\" \"20\"")
+                  + HelpExampleCli("updateconfig", "\"par\" \"-0.5\"")
                   + HelpExampleRpc("updateconfig", "\"maxmempool\", \"150\"")
                 },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
@@ -934,6 +936,10 @@ static RPCHelpMan updateconfig()
     }
 
     gArgs.ForceSetArg(name, value);
+
+    if (name == "par") {
+        ApplyScriptCheckThreads();
+    }
 
     result.pushKV("success", true);
     result.pushKV("message", strprintf("Updated configuration: %s = %s", name, value));

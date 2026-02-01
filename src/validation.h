@@ -148,6 +148,10 @@ void UnloadBlockIndex(CTxMemPool* mempool, ChainstateManager& chainman);
 void StartScriptCheckWorkerThreads(int threads_num);
 /** Stop all of the script checking worker threads */
 void StopScriptCheckWorkerThreads();
+/** Compute number of script-check threads from -par value (supports int, -0.5, -50% for "leave 50% of cores free"). */
+int ComputeScriptCheckThreadsFromParValue(const std::string& par_value);
+/** Reapply -par: stop script-check threads, recompute count from gArgs, start with new count. Call after changing -par at runtime. */
+void ApplyScriptCheckThreads();
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams);
 

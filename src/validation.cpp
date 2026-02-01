@@ -72,6 +72,7 @@ static constexpr int GUI_IDLE_THRESHOLD_MS = 20;
 #include <warnings.h>
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -1894,6 +1895,69 @@ void StartScriptCheckWorkerThreads(int threads_num)
 void StopScriptCheckWorkerThreads()
 {
     scriptcheckqueue.StopWorkerThreads();
+}
+
+int ComputeScriptCheckThreadsFromParValue(const std::string& par_value)
+{
+    int cores = GetNumCores();
+    int script_threads;
+
+    if (par_value.empty() || par_value == "0") {
+        script_threads = cores - 1;
+        } else {
+            std::string s = par_value;
+            while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) s.pop_back();
+            while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.erase(0, 1);
+            if (s.empty() || s == "0") {
+                script_threads = cores - 1;
+            } else {
+                bool is_percent = (s.size() > 1 && s.back() == '%');
+                if (is_percent) s.resize(s.size() - 1);
+                bool try_int = (s.find('.') == std::string::npos && !is_percent);
+                if (try_int) {
+                    // Integer: n>0 = n par threads, n=0 = auto, n<0 = leave |n| cores free
+                try {
+                    long long n = std::stoll(s);
+                    if (n > 0) {
+                        script_threads = static_cast<int>(n) - 1;
+                    } else if (n == 0) {
+                        script_threads = cores - 1;
+                    } else {
+                        script_threads = cores + static_cast<int>(n) - 1;
+                    }
+                } catch (...) {
+                    try_int = false;
+                }
+            }
+            if (!try_int) {
+                double fraction;
+                try {
+                    fraction = std::stod(s);
+                    if (fraction < 0) fraction = -fraction;
+                    if (is_percent) fraction /= 100.0;
+                    fraction = std::max(0.0, std::min(1.0, fraction));
+                } catch (...) {
+                    fraction = 0.5;
+                }
+                int cores_to_leave = static_cast<int>(std::round(cores * fraction));
+                script_threads = std::max(0, cores - cores_to_leave - 1);
+            }
+        }
+    }
+    script_threads = std::max(0, std::min(script_threads, MAX_SCRIPTCHECK_THREADS));
+    return script_threads;
+}
+
+void ApplyScriptCheckThreads()
+{
+    std::string par_value = gArgs.GetArg("-par", "0");
+    int script_threads = ComputeScriptCheckThreadsFromParValue(par_value);
+    StopScriptCheckWorkerThreads();
+    g_parallel_script_checks = (script_threads >= 1);
+    if (script_threads >= 1) {
+        StartScriptCheckWorkerThreads(script_threads);
+    }
+    LogPrintf("Script verification now uses %d additional threads (par=%s)\n", script_threads, par_value);
 }
 
 /**
