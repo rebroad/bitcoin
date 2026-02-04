@@ -232,7 +232,9 @@ void MempoolStats::drawChart()
             }
             fee_text->setPos(4+c_w+2, c_y);
             m_scene->addItem(fee_text);
-            connect(fee_text, &ClickableTextItem::objectClicked, [&fee_rect](QGraphicsItem*item) {
+            // Capture fee_rect by value (pointer) instead of by reference to avoid
+            // dangling references once this loop scope ends.
+            connect(fee_text, &ClickableTextItem::objectClicked, [fee_rect](QGraphicsItem* item) {
                 fee_rect->objectClicked(item);
             });
 
