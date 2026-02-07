@@ -11,7 +11,7 @@ SUBDIRS = src
 if ENABLE_MAN
 SUBDIRS += doc/man
 endif
-.PHONY: deploy FORCE check-libs robust-build rebuild-libs fix-build fix-undefined-refs smart-build
+.PHONY: deploy FORCE help check-libs robust-build rebuild-libs fix-build fix-undefined-refs smart-build
 .INTERMEDIATE: $(OSX_TEMP_ISO) $(COVERAGE_INFO)
 
 export PYTHONPATH
@@ -355,6 +355,34 @@ endif
 
 clean-docs:
 	rm -rf doc/doxygen
+
+# Simple help target that shows common make options and targets
+help:
+	@echo "Bitcoin Core make options:"
+	@echo "  -jN              - Parallel build with N jobs"
+	@echo "  V=1              - Verbose build output"
+	@echo "  V=0              - Quieter output (default)"
+	@echo "  AM_MAKEFLAGS=... - Extra flags passed to sub-makes"
+	@echo ""
+	@echo "Common targets:"
+	@echo "  all (default)    - Build default binaries"
+	@echo "  check            - Run test suite (unit/functional as configured)"
+	@echo "  install          - Install binaries and data files"
+	@echo "  uninstall        - Remove installed files"
+	@echo "  clean            - Remove built files"
+	@echo "  distclean        - Remove build and configure outputs"
+	@echo "  maintainer-clean - Remove generated files (developer use)"
+	@echo "  docs             - Build doxygen docs (if available)"
+	@echo ""
+	@echo "Build recovery targets:"
+	@echo "  check-libs        - Check for corrupted libraries"
+	@echo "  robust-build      - Build with corrupted library detection"
+	@echo "  rebuild-libs      - Force rebuild all libraries"
+	@echo "  fix-build         - Comprehensive build fix"
+	@echo "  fix-undefined-refs - Quick fix for undefined references"
+	@echo "  smart-build       - Build with automatic error recovery"
+	@echo ""
+	@echo "More build-system help: make -C src help"
 
 # Check for corrupted libraries and fix them
 check-libs:
