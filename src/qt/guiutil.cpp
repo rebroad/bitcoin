@@ -688,13 +688,13 @@ QString ConnectionTypeToQString(ConnectionType conn_type, bool fErlay, bool prep
 {
     QString prefix;
     if (prepend_direction) {
-        prefix = (conn_type == ConnectionType::INBOUND) ?
+        prefix = (conn_type == (ConnectionType::INBOUND) ?
                      /*: An inbound connection from a peer. An inbound connection
                          is a connection initiated by a peer. */
                      QObject::tr("Inbound") :
                      /*: An outbound connection to a peer. An outbound connection
                          is a connection initiated by us. */
-                     QObject::tr("Outbound") + " ";
+                     QObject::tr("Outbound")) + " ";
     }
     if (fErlay) return prefix + QObject::tr("Erlay");
     switch (conn_type) {
