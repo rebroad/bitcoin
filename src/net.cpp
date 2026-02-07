@@ -1741,6 +1741,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                         pnode->fDisconnect = 1;
                         if (m_banman) m_banman->Ban(pnode->addr, 60 * 60); // Ban for 1 hour
                         LogPrintf("%s: Pct=%d%% Send=%s Recv=%s TimeConn=%d %s disconnect incoming peer=%d\n", __func__, nMempoolPct, nSendBps, nRecvBps, now - m_connected, pnode->addr.ToString(), pnode->GetId());
+                        DisconnectNode(pnode->addr);
                     }
                 }
             } else if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
