@@ -163,13 +163,12 @@ void BanMan::Ban(const CSubNet& sub_net, int64_t ban_time_offset, bool since_uni
                 ban_entry.m_ban_count = existing_entry.m_ban_count + 1;
                 LogPrint(BCLog::BANMAN, "Address %s on probation banned again, ban duration: %d seconds\n",
                          sub_net.ToString(), normalized_ban_time_offset);
-            } else if (current_time >= existing_entry.nBanUntil)
+            } else if (current_time >= existing_entry.nBanUntil) {
                 // Not currently banned
                 ban_entry.m_ban_count = existing_entry.m_ban_count + 1;
             }
-        } else {
+        } else
             ban_entry.m_ban_count = 1;
-        }
 
         if (ban_time_offset <= 0) {
             normalized_ban_time_offset = m_default_ban_time;
