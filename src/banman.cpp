@@ -157,9 +157,8 @@ void BanMan::Ban(const CSubNet& sub_net, int64_t ban_time_offset, bool since_uni
             CBanEntry& existing_entry = existing_ban->second;
             int64_t current_time = GetTime();
 
-            // If currently on probation and being banned again, double the duration
+            // If currently on probation and being banned again, double the ban duration
             if (existing_entry.m_is_on_probation && current_time < existing_entry.nProbationUntil) {
-                // Ban duration = full probation duration (from start to end)
                 normalized_ban_time_offset = 2 * (existing_entry.nBanUntil - existing_entry.nCreateTime);
                 ban_entry.m_ban_count = existing_entry.m_ban_count + 1;
                 LogPrint(BCLog::BANMAN, "Address %s on probation banned again, ban duration: %d seconds\n",
@@ -246,13 +245,13 @@ void BanMan::SweepBanned()
             } else if (!ban_entry.m_is_on_probation && now > ban_entry.nBanUntil) {
                 // Ban has expired, transition to probation
                 ban_entry.m_is_on_probation = true;
-                ban_entry.nProbationUntil = now + 2 * (ban_entry.nBanUntil - ban_entry.nCreateTime); // Twice the ban duration
+                ban_entry.nProbationUntil = now + 8 * (ban_entry.nBanUntil - ban_entry.nCreateTime); // Eight times the ban duration
                 m_banned[sub_net] = ban_entry;
                 m_is_dirty = true;
                 notify_ui = true;
                 LogPrint(BCLog::BANMAN, "Ban address %s moved to probation until %d (duration: %d seconds)\n",
                          sub_net.ToString(), ban_entry.nProbationUntil,
-                         2 * (ban_entry.nBanUntil - ban_entry.nCreateTime));
+                         8 * (ban_entry.nBanUntil - ban_entry.nCreateTime));
                 ++it;
             } else {
                 ++it;
