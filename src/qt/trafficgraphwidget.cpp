@@ -208,7 +208,7 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
     painter.setPen(axisCol);
     for(float y = val; y < m_fmax; y += val) {
         int yy = yValue(y);
-        painter.drawLine(XMARGIN, yy, wid - XMARGIN, yy);
+        painter.drawLine(XMARGIN - 1, yy, wid - XMARGIN, yy);
     }
 
     // if we drew 10 (or 3 when toggles) or fewer lines, break them up at the next lower order of magnitude
@@ -220,12 +220,12 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
             // don't overwrite lines drawn above
             if (count % 10 == 0) continue;
             int yy = yValue(y);
-            painter.drawLine(XMARGIN, yy, wid - XMARGIN, yy);
+            painter.drawLine(XMARGIN - 1, yy, wid - XMARGIN, yy);
         }
         if (m_toggle) {
             int yy = yValue(val * 0.1);
             painter.setPen(axisCol.darker().darker());
-            painter.drawLine(XMARGIN, yy, wid - XMARGIN, yy);
+            painter.drawLine(XMARGIN - 1, yy, wid - XMARGIN, yy);
         }
     }
 
@@ -246,17 +246,18 @@ void TrafficGraphWidget::paintEvent(QPaintEvent *)
         painter.drawPath(p);
     }
 
+    // Draw the bottom axis line after the graph
+    painter.setPen(axisCol);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.drawLine(XMARGIN - 1, hgt - YMARGIN, wid - XMARGIN, hgt - YMARGIN);
+
     // Draw black bars and lines to mask the overscanned edges of the graph
     painter.fillRect(0, 0, XMARGIN - 1, hgt, Qt::black);
     painter.fillRect(wid - XMARGIN + 1, 0, XMARGIN, hgt, Qt::black);
     painter.setPen(Qt::black);
+    painter.setRenderHint(QPainter::Antialiasing);
     painter.drawLine(XMARGIN - 1, 0, XMARGIN - 1, hgt); // Antialiased lines to create some blur
     painter.drawLine(wid - XMARGIN + 1, 0, wid - XMARGIN + 1, hgt);
-
-    // Draw the bottom axis line after the graph
-    painter.setPen(axisCol);
-    painter.setRenderHint(QPainter::Antialiasing, false);
-    painter.drawLine(XMARGIN, hgt - YMARGIN, wid - XMARGIN, hgt - YMARGIN);
 
     int opacity = 0; // Opacity of the black outline around the text
     if (x < 70) opacity = 255;
@@ -626,7 +627,8 @@ int TrafficGraphWidget::findClosestPointByTimestamp(int dst_range) const
     }
 
     int dst_point = 0;
-    uint64_t avg_sample_interval = (m_values[dst_range] * 60 * 1000) / DESIRED_SAMPLES;
+    uint64_t avg_sample_interval =
+        (static_cast<uint64_t>(m_values[dst_range]) * 60000ULL) / DESIRED_SAMPLES;
     int64_t time_window = avg_sample_interval * 3;
     int64_t min_difference = time_window * 2;
 
