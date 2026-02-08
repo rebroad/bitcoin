@@ -582,21 +582,8 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
                 LogPrint(BCLog::TOR, "tor: Using stored private key for service %d\n", current_service_index);
             } else {
                 // No private key for this index, generate a new one
-                // Check if vanity address is requested
-                std::string prefix = gArgs.GetArg("-onionmatch", "");
-                if (!prefix.empty()) {
-                    std::string generated_key;
-                    // Generate a vanity address with the specified prefix
-                    // This will continue until a match is found
-                    GenerateVanityOnionAddress(prefix, generated_key);
-                    private_keys[current_service_index] = generated_key;
-                    LogPrint(BCLog::TOR, "tor: Generated vanity private key for service %d with prefix '%s'\n",
-                            current_service_index, prefix);
-                } else {
-                    // No vanity prefix requested, use standard key
-                    private_keys[current_service_index] = "NEW:ED25519-V3";
-                    LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
-                }
+                private_keys[current_service_index] = "NEW:ED25519-V3";
+                LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
             }
 
             // Request the next onion service
@@ -659,21 +646,8 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
                      current_service_index, private_keys[current_service_index].length());
         } else {
             // No private key for this index, generate a new one
-            // Check if vanity address is requested
-            std::string prefix = gArgs.GetArg("-onionmatch", "");
-            if (!prefix.empty()) {
-                std::string generated_key;
-                // Generate a vanity address with the specified prefix
-                // This will continue until a match is found
-                GenerateVanityOnionAddress(prefix, generated_key);
-                private_keys[current_service_index] = generated_key;
-                LogPrint(BCLog::TOR, "tor: Generated vanity private key for service %d with prefix '%s'\n",
-                        current_service_index, prefix);
-            } else {
-                // No vanity prefix requested, use standard key
-                private_keys[current_service_index] = "NEW:ED25519-V3"; // Explicitly request key type - see issue #9214
-                LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
-            }
+            private_keys[current_service_index] = "NEW:ED25519-V3"; // Explicitly request key type - see issue #9214
+            LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
         }
 
         // Request onion service, redirect port.
@@ -1386,110 +1360,3 @@ CService DefaultOnionServiceTarget() {
  * @param prefix The desired prefix for the onion address
  * @param[out] generated_private_key The generated private key if successful
  * @return true if a matching key was found, false otherwise */
-bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generated_private_key) {
-    if (prefix.empty()) {
-        // No prefix specified, use standard key generation
-        generated_private_key = "NEW:ED25519-V3";
-        return true;
-    }
-
-    LogPrintf("tor: Attempting to generate vanity onion address with prefix '%s'...\n", prefix);
-
-    // Setup for generation
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<uint8_t> dis(0, 255);
-
-    // ED25519 private key is 32 bytes
-    std::vector<uint8_t> private_key(32);
-
-    // Track attempts and timing
-    int attempts = 0;
-    int64_t start_time = GetTimeMillis();
-    int64_t last_progress_time = start_time;
-    std::string last_non_matching_address;
-
-    // Track statistics on partial matches
-    // Index is the number of matching characters, value is the count of addresses with that many matches
-    std::vector<int> match_stats(prefix.size() + 1, 0);
-
-    // Track the best match so far and its address
-    size_t best_match_length = 0;
-    std::string best_match_address;
-
-    // Continue generation until a matching key is found - no maximum limit
-    while (true) {
-        // Generate random private key
-        for (int i = 0; i < 32; i++) private_key[i] = dis(gen);
-
-        // Convert to base64 format that Tor expects
-        std::string key = "ED25519-V3:" + EncodeBase64(std::string(reinterpret_cast<char*>(private_key.data()), private_key.size()));
-
-        // Compute the public key (this is simplified - in a real implementation we'd use ED25519 crypto)
-        // For now we'll just use a hash of the private key to simulate the address derivation
-        // This should be replaced with actual ED25519 key derivation
-        uint256 hash;
-        CSHA256().Write(private_key.data(), private_key.size()).Finalize(hash.begin());
-        std::string simulated_address = hash.ToString().substr(0, 16);
-        last_non_matching_address = simulated_address;
-
-        // Calculate how many characters match with the prefix
-        size_t match_length = 0;
-        while (match_length < prefix.size() && match_length < simulated_address.size() &&
-                              simulated_address[match_length] == prefix[match_length])
-            match_length++;
-
-        // Update match statistics
-        match_stats[match_length]++;
-
-        // Update best match if this one is better
-        if (match_length > best_match_length) {
-            best_match_length = match_length;
-            best_match_address = simulated_address;
-        }
-
-        attempts++;
-
-        // Check if this key produces an address with the desired prefix
-        if (match_length == prefix.size()) {
-            int64_t elapsed_ms = GetTimeMillis() - start_time;
-            LogPrintf("tor: Found matching vanity address after %s attempts (%.2f seconds)\n",
-                    strUnit(static_cast<float>(attempts)), elapsed_ms/1000.0);
-            generated_private_key = key;
-            return true;
-        }
-
-        // Report progress every 5 seconds
-        int64_t current_time = GetTimeMillis();
-        if (current_time - last_progress_time > 5000) { // 5 seconds in milliseconds
-            int64_t elapsed_ms = current_time - start_time;
-            double attempts_per_second = attempts * 1000.0 / elapsed_ms;
-
-            // Build the statistics string for partial matches
-            std::string match_stats_str;
-            for (size_t i = 1; i <= best_match_length; i++) {
-                if (i > 1) match_stats_str += ", ";
-                match_stats_str += strprintf("%d char%s: %d", i, i == 1 ? "" : "s", match_stats[i]);
-            }
-
-            LogPrintf("tor: Vanity address search progress: %s attempts (%s attempts/sec)\n"
-                      "     Partial matches: %s\n"
-                      "     Best match so far: %s (%d/%d chars matched)\n"
-                      "     Last address: %s\n",
-                      strUnit(static_cast<float>(attempts)), strUnit(static_cast<float>(attempts_per_second)),
-                      match_stats_str.empty() ? "none yet" : match_stats_str,
-                      best_match_address, best_match_length, prefix.size(),
-                      last_non_matching_address);
-            last_progress_time = current_time;
-        }
-
-        // Check for shutdown request
-        if (ShutdownRequested()) {
-            LogPrintf("tor: Vanity address generation interrupted due to node shutdown\n");
-            return false;
-        }
-    }
-
-    // This code will never be reached as the loop continues until a match is found
-    return false;
-}

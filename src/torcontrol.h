@@ -185,7 +185,6 @@ public:
  * @param prefix The desired prefix for the onion address
  * @param[out] generated_private_key The generated private key if successful
  * @return true if a matching key was found, false otherwise */
-bool GenerateVanityOnionAddress(const std::string& prefix, std::string& generated_private_key);
 
 TorController* GetTorController();
 
