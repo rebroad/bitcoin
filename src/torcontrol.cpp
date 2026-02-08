@@ -59,6 +59,9 @@ static const float RECONNECT_TIMEOUT_EXP = 1.5;
 static const int MAX_LINE_LENGTH = 100000;
 /** Directory monitoring interval in seconds */
 static const int DIRECTORY_MONITOR_INTERVAL = 10;
+/** Onion service private key prefix */
+static constexpr const char* ONION_KEY_PREFIX = "ED25519-V3:";
+static constexpr size_t ONION_KEY_PREFIX_LEN = 11; // strlen("ED25519-V3:")
 /****** Low-level TorControlConnection ********/
 
 TorControlConnection::TorControlConnection(struct event_base *_base):
@@ -888,7 +891,8 @@ std::pair<bool, std::string> TorController::ValidateOnionKey(const std::string& 
     LogPrint(BCLog::TOR, "tor: 2. After trim length: %d\n", trimmed_key.length());
 
     // Only check for ED25519-V3 format
-    bool valid_key = (trimmed_key.substr(0, 12) == "ED25519-V3:" && trimmed_key.length() > 12);
+    bool valid_key = (trimmed_key.length() > ONION_KEY_PREFIX_LEN &&
+                      trimmed_key.compare(0, ONION_KEY_PREFIX_LEN, ONION_KEY_PREFIX) == 0);
     LogPrint(BCLog::TOR, "tor: Key validation %s\n", valid_key ? "PASSED" : "FAILED");
 
     return std::make_pair(valid_key, trimmed_key);
@@ -1111,7 +1115,8 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
                         try {
                             if (trimmed_key.size() > 4 && trimmed_key.compare(0, 4, "NEW:") == 0)
                                 valid_key = true;
-                            else if (trimmed_key.size() > 12 && trimmed_key.compare(0, 12, "ED25519-V3:") == 0)
+                            else if (trimmed_key.size() > ONION_KEY_PREFIX_LEN &&
+                                     trimmed_key.compare(0, ONION_KEY_PREFIX_LEN, ONION_KEY_PREFIX) == 0)
                                 valid_key = true;
                             else if (trimmed_key.find(":") != std::string::npos)
                                 valid_key = true;
