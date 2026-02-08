@@ -429,6 +429,8 @@ rebuild-libs: check-libs
 	@echo "🧹 Cleaning all build artifacts..."
 	@cd src && rm -f libbitcoin_*.a && echo "   - Removed all .a libraries"
 	@cd src && rm -f *.o && echo "   - Removed all .o files"
+	@cd src && rm -f *.lo && echo "   - Removed all .lo files"
+	@cd src && rm -f */*.lo && echo "   - Removed subdirectory .lo files"
 	@cd src && rm -rf .deps && echo "   - Removed .deps directories"
 	@cd src && rm -rf */.deps && echo "   - Removed subdirectory .deps"
 	@cd src && rm -rf */*/.deps && echo "   - Removed nested .deps"
@@ -444,6 +446,8 @@ fix-build: check-libs
 	@echo "🧹 Cleaning all corrupted build artifacts..."
 	@cd src && rm -f libbitcoin_*.a && echo "   - Removed all .a libraries"
 	@cd src && rm -f *.o && echo "   - Removed all .o files"
+	@cd src && rm -f *.lo && echo "   - Removed all .lo files"
+	@cd src && rm -f */*.lo && echo "   - Removed subdirectory .lo files"
 	@cd src && rm -rf .deps && echo "   - Removed .deps directories"
 	@cd src && rm -rf */.deps && echo "   - Removed subdirectory .deps"
 	@cd src && rm -rf */*/.deps && echo "   - Removed nested .deps"
@@ -517,6 +521,13 @@ smart-build: check-libs
 			exit 1; \
 		fi; \
 		if grep -q "cannot find -l" /tmp/bitcoin-build.log; then exit 1; fi; \
+		if grep -q "libbitcoinconsensus_la-.*\.o: No such file or directory" /tmp/bitcoin-build.log; then \
+			echo "🔍 Detected: missing libtool consensus object (stale .lo/.o)"; \
+			echo ""; \
+			echo "📋 Step 2: Running fix-build (clears stale .lo files)..."; \
+			$(MAKE) fix-build; \
+			exit $$?; \
+		fi; \
 		if grep -q "undefined reference" /tmp/bitcoin-build.log; then \
 			echo "🔍 Detected: undefined reference (likely corrupted or stale library)"; \
 			echo ""; \

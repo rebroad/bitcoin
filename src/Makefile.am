@@ -952,9 +952,12 @@ force-rebuild-consensus:
 	rm -f primitives/libbitcoin_consensus_a-block.o
 	rm -f consensus/.deps/libbitcoin_consensus_a-merkle.Po
 	rm -f primitives/.deps/libbitcoin_consensus_a-block.Po
+	rm -f libbitcoinconsensus_la-*.o libbitcoinconsensus_la-*.lo
+	rm -f .deps/libbitcoinconsensus_la-*.Plo .deps/libbitcoinconsensus_la-*.Po
 	$(MAKE) consensus/libbitcoin_consensus_a-merkle.o
 	$(MAKE) primitives/libbitcoin_consensus_a-block.o
 	$(MAKE) libbitcoin_consensus.a
+	$(MAKE) libbitcoinconsensus.la
 	$(MAKE) verify-consensus
 
 force-rebuild-common:
@@ -995,6 +998,8 @@ clean-crypto:
 clean-consensus:
 	rm -f consensus/*.o consensus/.deps/*.Po
 	rm -f primitives/*.o primitives/.deps/*.Po
+	rm -f libbitcoinconsensus_la-*.o libbitcoinconsensus_la-*.lo
+	rm -f .deps/libbitcoinconsensus_la-*.Plo .deps/libbitcoinconsensus_la-*.Po
 	rm -f libbitcoin_consensus.a
 	@echo "Cleaned consensus build artifacts"
 
