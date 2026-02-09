@@ -616,6 +616,11 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
             SetReachable(NET_ONION, true);
         }
 
+        if (services_initialized) {
+            LogPrint(BCLog::TOR, "tor: Services already initialized; skipping service creation on re-auth\n");
+            return;
+        }
+
         // Get the number of onion services to create
         size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
 
@@ -655,6 +660,8 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
         _conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
                     Params().GetDefaultPort(), m_target.ToStringIPPort()),
             std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2));
+
+        services_initialized = true;
     } else {
         LogPrintf("tor: Authentication failed\n");
     }
@@ -1337,15 +1344,27 @@ void StopTorControl() {
 }
 
 void ResetTorBackoff() {
-    // If the tor control thread is running, force a reconnection
-    if (torControlThread.joinable() && gBase) {
-        // Signal the event loop to perform a reconnection
-        // This will reconnect with the reset backoff timer
-        event_base_once(gBase, -1, EV_TIMEOUT, [](evutil_socket_t, short, void*) {
-            // No direct access to the controller from here, so we just
-            // break the loop which will force a reconnection
-            event_base_loopbreak(gBase);
-        }, nullptr, nullptr);
+    // If the tor control thread is running, schedule an immediate reconnect
+    if (!torControlThread.joinable() || !gBase) return;
+
+    TorController* ctrl = GetTorController();
+    if (!ctrl) {
+        LogPrint(BCLog::TOR, "tor: ResetTorBackoff called but TorController is not available\n");
+        return;
+    }
+
+    struct ResetEvent {
+        TorController* ctrl;
+    };
+
+    auto* data = new ResetEvent{ctrl};
+    if (event_base_once(gBase, -1, EV_TIMEOUT, [](evutil_socket_t, short, void* arg) {
+            auto* data = static_cast<ResetEvent*>(arg);
+            data->ctrl->ResetReconnectBackoff();
+            delete data;
+        }, data, nullptr) < 0) {
+        delete data;
+        LogPrint(BCLog::TOR, "tor: Failed to schedule tor reconnect\n");
     }
 }
 
