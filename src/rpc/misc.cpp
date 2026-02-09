@@ -20,6 +20,7 @@
 #include <rpc/util.h>
 #include <scheduler.h>
 #include <script/descriptor.h>
+#include <torcontrol.h>
 #include <util/check.h>
 #include <util/message.h> // For MessageSign(), MessageVerify()
 #include <util/strencodings.h>
@@ -891,6 +892,25 @@ static RPCHelpMan reloadconfig()
     };
 }
 
+static RPCHelpMan resettorbackoff()
+{
+    return RPCHelpMan{"resettorbackoff",
+                "\nResets the Tor control reconnect backoff and triggers an immediate reconnect attempt.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::BOOL, "success", "Whether the reconnect attempt was triggered"},
+                RPCExamples{
+                    HelpExampleCli("resettorbackoff", "")
+                  + HelpExampleRpc("resettorbackoff", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    ResetTorBackoff();
+    return true;
+}
+    };
+}
+
 static RPCHelpMan updateconfig()
 {
     return RPCHelpMan{"updateconfig",
@@ -1015,6 +1035,7 @@ static const CRPCCommand commands[] =
     { "control",            &getmemoryinfo,           },
     { "control",            &logging,                 },
     { "control",            &reloadconfig,            },
+    { "control",            &resettorbackoff,         },
     { "control",            &updateconfig,            },
     { "control",            &getconfig,               },
     { "util",               &validateaddress,         },
