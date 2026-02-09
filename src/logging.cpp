@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <mutex>
 
 const char * const DEFAULT_DEBUGLOGFILE = "debug.log";
@@ -39,6 +40,11 @@ BCLog::Logger& LogInstance()
 bool fLogIPs = DEFAULT_LOGIPS;
 std::atomic<bool> fActivatingChain(false);
 
+static fs::path LogFilePathWithSuffix(const fs::path& path, int64_t suffix)
+{
+    return fs::PathFromString(fs::PathToString(path) + "." + ToString(suffix));
+}
+
 static int FileWriteStr(const std::string &str, FILE *fp)
 {
     return fwrite(str.data(), 1, str.size(), fp);
@@ -53,6 +59,11 @@ bool BCLog::Logger::StartLogging()
 
     if (m_print_to_file) {
         assert(!m_file_path.empty());
+        bool had_contents = false;
+        try {
+            had_contents = fs::exists(m_file_path) && fs::file_size(m_file_path) > 0;
+        } catch (const fs::filesystem_error&) {
+        }
         m_fileout = fsbridge::fopen(m_file_path, "a");
         if (!m_fileout) {
             return false;
@@ -62,7 +73,9 @@ bool BCLog::Logger::StartLogging()
 
         // Add newlines to the logfile to distinguish this execution from the
         // last one.
-        FileWriteStr("\n\n\n\n\n", m_fileout);
+        if (had_contents) {
+            FileWriteStr("\n\n\n\n\n", m_fileout);
+        }
     }
 
     // dump buffered messages from before we opened the log
@@ -90,6 +103,29 @@ void BCLog::Logger::DisconnectTestLogger()
     if (m_fileout != nullptr) fclose(m_fileout);
     m_fileout = nullptr;
     m_print_callbacks.clear();
+}
+
+void BCLog::Logger::RotateDebugFile(int64_t max_files)
+{
+    assert(max_files > 0);
+    assert(!m_file_path.empty());
+    try {
+        if (!fs::exists(m_file_path)) return;
+
+        fs::path oldest = LogFilePathWithSuffix(m_file_path, max_files);
+        if (fs::exists(oldest)) {
+            fs::remove(oldest);
+        }
+        for (int64_t i = max_files - 1; i >= 1; --i) {
+            fs::path from = LogFilePathWithSuffix(m_file_path, i);
+            if (fs::exists(from)) {
+                fs::rename(from, LogFilePathWithSuffix(m_file_path, i + 1));
+            }
+        }
+        fs::rename(m_file_path, LogFilePathWithSuffix(m_file_path, 1));
+    } catch (const fs::filesystem_error& e) {
+        LogPrintf("Failed to rotate debug log file: %s\n", e.what());
+    }
 }
 
 void BCLog::Logger::EnableCategory(BCLog::LogFlags flag)
@@ -350,10 +386,15 @@ void BCLog::Logger::LogPrintStr(const std::string& str, const std::string& loggi
     }
 }
 
-void BCLog::Logger::ShrinkDebugFile()
+void BCLog::Logger::ShrinkDebugFile(int64_t size_mb)
 {
-    // Amount of debug.log to save at end when shrinking (must fit in memory)
-    constexpr size_t RECENT_DEBUG_HISTORY_SIZE = 10 * 1000000;
+    if (size_mb <= 0) return;
+
+    size_t recent_debug_history_size = static_cast<size_t>(size_mb);
+    if (recent_debug_history_size > std::numeric_limits<size_t>::max() / 1000000) {
+        recent_debug_history_size = std::numeric_limits<size_t>::max() / 1000000;
+    }
+    recent_debug_history_size *= 1000000;
 
     assert(!m_file_path.empty());
 
@@ -366,12 +407,12 @@ void BCLog::Logger::ShrinkDebugFile()
         log_size = fs::file_size(m_file_path);
     } catch (const fs::filesystem_error&) {}
 
-    // If debug.log file is more than 10% bigger the RECENT_DEBUG_HISTORY_SIZE
-    // trim it down by saving only the last RECENT_DEBUG_HISTORY_SIZE bytes
-    if (file && log_size > 11 * (RECENT_DEBUG_HISTORY_SIZE / 10))
+    // If debug.log file is more than 10% bigger the recent_debug_history_size
+    // trim it down by saving only the last recent_debug_history_size bytes
+    if (file && log_size > 11 * (recent_debug_history_size / 10))
     {
         // Restart the file with some of the end
-        std::vector<char> vch(RECENT_DEBUG_HISTORY_SIZE, 0);
+        std::vector<char> vch(recent_debug_history_size, 0);
         if (fseek(file, -((long)vch.size()), SEEK_END)) {
             LogPrintf("Failed to shrink debug log file: fseek(...) failed\n");
             fclose(file);

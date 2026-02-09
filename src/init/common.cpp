@@ -76,7 +76,8 @@ void AddLoggingArgs(ArgsManager& argsman)
     argsman.AddArg("-logtimemicros", strprintf("Add microsecond precision to debug timestamps (default: %u)", DEFAULT_LOGTIMEMICROS), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DEBUG_TEST);
     argsman.AddArg("-logtimeprecision=<n>", strprintf("Set timestamp precision to n decimal places (0-6, default: %d, 0=seconds, 3=milliseconds, 6=microseconds). Use 'auto' to automatically increase precision if timestamps are not unique.", DEFAULT_LOGTIMEPRECISION), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DEBUG_TEST);
     argsman.AddArg("-printtoconsole", "Send trace/debug info to console (default: 1 when no -daemon. To disable logging to file, set -nodebuglogfile)", ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
-    argsman.AddArg("-shrinkdebugfile", "Shrink debug.log file on client startup (default: 1 when no -debug)", ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-shrinkdebugfile=<n>", "Shrink debug.log file on client startup to the last n MB (default: 10 when no -debug, 0 to disable)", ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-rotatelog=<n>", "Rotate debug log file on client startup and keep n versions (default: 0, no rotation)", ArgsManager::ALLOW_ANY, OptionsCategory::DEBUG_TEST);
 }
 
 void SetLoggingTimePrecision(const ArgsManager& args)
@@ -142,10 +143,40 @@ void SetLoggingCategories(const ArgsManager& args)
 bool StartLogging(const ArgsManager& args)
 {
     if (LogInstance().m_print_to_file) {
-        if (args.GetBoolArg("-shrinkdebugfile", LogInstance().DefaultShrinkDebugFile())) {
-            // Do this first since it both loads a bunch of debug.log into memory,
-            // and because this needs to happen before any other debug.log printing
-            LogInstance().ShrinkDebugFile();
+        int64_t rotate_logs = args.GetIntArg("-rotatelog", 0);
+        if (rotate_logs < 0) {
+            LogPrintf("Warning: -rotatelog value %lld is invalid, using 0\n", static_cast<long long>(rotate_logs));
+            rotate_logs = 0;
+        }
+        if (rotate_logs > 0) {
+            int64_t keep_old = rotate_logs - 1;
+            if (keep_old == 0) {
+                try {
+                    if (fs::exists(LogInstance().m_file_path)) {
+                        fs::remove(LogInstance().m_file_path);
+                    }
+                } catch (const fs::filesystem_error& e) {
+                    LogPrintf("Failed to rotate debug log file: %s\n", e.what());
+                }
+            } else {
+                LogInstance().RotateDebugFile(keep_old);
+            }
+        } else {
+            int64_t shrink_mb = 0;
+            if (args.IsArgSet("-shrinkdebugfile")) {
+                shrink_mb = args.GetIntArg("-shrinkdebugfile", 0);
+            } else if (LogInstance().DefaultShrinkDebugFile()) {
+                shrink_mb = 10;
+            }
+            if (shrink_mb < 0) {
+                LogPrintf("Warning: -shrinkdebugfile value %lld is invalid, using 0\n", static_cast<long long>(shrink_mb));
+                shrink_mb = 0;
+            }
+            if (shrink_mb > 0) {
+                // Do this first since it both loads a bunch of debug.log into memory,
+                // and because this needs to happen before any other debug.log printing
+                LogInstance().ShrinkDebugFile(shrink_mb);
+            }
         }
     }
     if (!LogInstance().StartLogging()) {

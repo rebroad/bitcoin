@@ -148,7 +148,10 @@ namespace BCLog {
         /** Only for testing */
         void DisconnectTestLogger();
 
-        void ShrinkDebugFile();
+        /** Rotate debug log, keeping max_files old versions */
+        void RotateDebugFile(int64_t max_files);
+
+        void ShrinkDebugFile(int64_t size_mb);
 
         uint32_t GetCategoryMask() const { return m_categories.load(); }
 
