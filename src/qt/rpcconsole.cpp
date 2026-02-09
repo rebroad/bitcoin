@@ -1158,10 +1158,14 @@ void RPCConsole::on_tabWidget_currentChanged(int index)
     if (ui->tabWidget->widget(index) == ui->tab_console) {
         ui->lineEdit->setFocus();
     } else if (ui->tabWidget->widget(index) == ui->tab_blocks) {
-        // Load block data only when the blocks tab is actually selected
-        if (m_blockVisualizationWidget && !m_blockVisualizationWidget->isDataLoaded()) {
-            m_blockVisualizationWidget->updateBlockData();
-        }
+        // Load block data only when the blocks tab is actually selected.
+        // Defer work to keep the GUI thread responsive on tab switch.
+        QTimer::singleShot(0, this, [this] {
+            if (ui->tabWidget->currentWidget() == ui->tab_blocks &&
+                m_blockVisualizationWidget && !m_blockVisualizationWidget->isDataLoaded()) {
+                m_blockVisualizationWidget->updateBlockData();
+            }
+        });
     }
 }
 
@@ -1514,4 +1518,3 @@ void RPCConsole::updateLegend()
 
     ui->legendLabel->setText(legendText);
 }
-

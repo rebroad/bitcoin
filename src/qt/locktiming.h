@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QT_LOCKTIMING_H
 #define BITCOIN_QT_LOCKTIMING_H
 
+#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QDebug>
 #include <QDateTime>
@@ -39,8 +40,10 @@ extern bool g_gui_heartbeat_initialized;
     lockTimer.start(); \
     std::unique_lock<RecursiveMutex> lock(cs_main, std::try_to_lock); \
     qint64 waited = lockTimer.nsecsElapsed() / 1000000; \
+    /* Never sleep-spins on the GUI thread; keep it responsive. */ \
+    const bool is_gui_thread = (QCoreApplication::instance() != nullptr && QThread::currentThread() == QCoreApplication::instance()->thread()); \
     /* Try again with small delays until maxWaitMs or lock acquired */ \
-    while (!lock.owns_lock() && waited < maxWaitMs) { \
+    while (!lock.owns_lock() && !is_gui_thread && waited < maxWaitMs) { \
         std::this_thread::sleep_for(std::chrono::milliseconds(1)); \
         lockTimer.restart(); \
         lock = std::unique_lock<RecursiveMutex>(cs_main, std::try_to_lock); \
