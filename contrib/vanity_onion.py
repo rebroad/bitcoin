@@ -8,6 +8,7 @@ import argparse
 import base64
 import hashlib
 import os
+import math
 import queue
 import signal
 import sys
@@ -75,6 +76,42 @@ def load_prefixes(prefixes_arg: str, prefix_file: str) -> List[str]:
     if not prefixes:
         raise ValueError("no prefixes provided")
     return sorted(prefixes)
+
+
+def effective_prefixes(prefixes: Sequence[str]) -> List[str]:
+    # Remove any prefix that is covered by a shorter prefix.
+    sorted_p = sorted(prefixes, key=len)
+    effective: List[str] = []
+    for p in sorted_p:
+        if any(p.startswith(e) for e in effective):
+            continue
+        effective.append(p)
+    return effective
+
+
+def hit_probability(prefixes: Sequence[str]) -> float:
+    # Approximate hit probability per attempt as sum(32^-len),
+    # assuming no overlapping prefixes (handled via effective_prefixes).
+    eff = effective_prefixes(prefixes)
+    return sum(32.0 ** (-len(p)) for p in eff)
+
+
+def attempts_for_probability(p_hit: float, target: float) -> float:
+    if p_hit <= 0.0:
+        return float("inf")
+    if target <= 0.0:
+        return 0.0
+    if target >= 1.0:
+        return float("inf")
+    return math.log(1.0 - target) / math.log(1.0 - p_hit)
+
+
+def format_duration(seconds: float) -> str:
+    if seconds >= 24 * 3600:
+        return f"{seconds / 86400.0:,.1f} days"
+    if seconds >= 3600:
+        return f"{seconds / 3600.0:,.1f} hours"
+    return f"{seconds / 60.0:,.1f} min"
 
 
 def worker_loop(prefixes: Sequence[str], stop_event, out_queue, status_interval: float) -> None:
@@ -158,6 +195,10 @@ def main(argv: List[str]) -> int:
     attempts = 0
     last_print = time.time()
     start_time = last_print
+    p_hit = hit_probability(prefixes)
+    n50 = attempts_for_probability(p_hit, 0.5)
+    if math.isfinite(n50):
+        print(f"per-attempt hit probability ~ {p_hit:.6e}, 50% chance in ~ {n50:,.0f} attempts")
 
     try:
         while matches < args.count and not stop_event.is_set():
@@ -179,7 +220,11 @@ def main(argv: List[str]) -> int:
                 if args.status_interval > 0 and (now - last_print) >= args.status_interval:
                     elapsed = now - start_time
                     rate = attempts / elapsed if elapsed > 0 else 0.0
-                    print(f"attempts: {attempts} ({rate:,.0f} per sec)")
+                    eta = ""
+                    if math.isfinite(n50) and rate > 0:
+                        eta_seconds = max(0.0, n50 / rate)
+                        eta = f", est 50% time ~ {format_duration(eta_seconds)}"
+                    print(f"attempts: {attempts} ({rate:,.0f} per sec){eta}")
                     last_print = now
     finally:
         stop_event.set()
@@ -191,3 +236,4 @@ def main(argv: List[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
+
