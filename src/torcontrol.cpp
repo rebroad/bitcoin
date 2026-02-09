@@ -24,6 +24,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/filesystem.hpp>
+#include <algorithm>
 #include <functional>
 #include <set>
 #include <vector>
@@ -62,6 +63,31 @@ static const int DIRECTORY_MONITOR_INTERVAL = 10;
 /** Onion service private key prefix */
 static constexpr const char* ONION_KEY_PREFIX = "ED25519-V3:";
 static constexpr size_t ONION_KEY_PREFIX_LEN = 11; // strlen("ED25519-V3:")
+/** Onion service private key prefix length for logs */
+static constexpr size_t ONION_KEY_LOG_PREFIX_LEN = 12;
+
+static std::string KeyValuePrefix(const std::string& key)
+{
+    const size_t key_colon = key.find(':');
+    const size_t key_value_start = (key_colon == std::string::npos) ? 0 : key_colon + 1;
+    const size_t available = (key.size() > key_value_start) ? key.size() - key_value_start : 0;
+    return key.substr(key_value_start, std::min<size_t>(ONION_KEY_LOG_PREFIX_LEN, available));
+}
+
+bool TorController::EnsurePrivateKeyForServiceIndex(size_t index)
+{
+    if (index < private_keys.size() && !private_keys[index].empty()) {
+        LogPrint(BCLog::TOR, "tor: Using stored private key for service %d\n", index);
+        return true;
+    }
+
+    if (index >= private_keys.size()) {
+        private_keys.resize(index + 1);
+    }
+    private_keys[index] = "NEW:ED25519-V3";
+    LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", index);
+    return false;
+}
 /****** Low-level TorControlConnection ********/
 
 TorControlConnection::TorControlConnection(struct event_base *_base):
@@ -446,8 +472,11 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
     // Get the current service index being processed
     size_t service_index = current_service_index;
 
-    LogPrint(BCLog::TOR, "tor: add_onion_cb called for service index %d, vectors sizes - private_keys: %d, service_ids: %d, services: %d\n",
-             service_index, private_keys.size(), service_ids.size(), services.size());
+    const std::string& attempted_key = (service_index < private_keys.size()) ? private_keys[service_index] : std::string();
+    LogPrint(BCLog::TOR, "tor: add_onion_cb called for service index %d (key: %s), vectors sizes - private_keys: %d, service_ids: %d, services: %d\n",
+             service_index,
+             KeyValuePrefix(attempted_key),
+             private_keys.size(), service_ids.size(), services.size());
 
     if (reply.code == 250) {
         services_init_in_progress = false;
@@ -578,19 +607,12 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
             LogPrint(BCLog::TOR, "tor: Creating next onion service (%d of %d)\n",
                     current_service_index + 1, num_services);
 
-            // If we have a stored private key for this index, use it
-            if (current_service_index < private_keys.size() && !private_keys[current_service_index].empty()) {
-                LogPrint(BCLog::TOR, "tor: Using stored private key for service %d\n", current_service_index);
-            } else {
-                // No private key for this index, generate a new one
-                if (current_service_index >= private_keys.size()) {
-                    private_keys.resize(current_service_index + 1);
-                }
-                private_keys[current_service_index] = "NEW:ED25519-V3";
-                LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
-            }
+            EnsurePrivateKeyForServiceIndex(current_service_index);
 
             // Request the next onion service
+            LogPrint(BCLog::TOR, "tor: ADD_ONION request for service %d using key: %s\n",
+                     current_service_index,
+                     KeyValuePrefix(private_keys[current_service_index]));
             if (!_conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
                         Params().GetDefaultPort(), m_target.ToStringIPPort()),
                 std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2))) {
@@ -607,8 +629,33 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
         LogPrintf("tor: Add onion failed with unrecognized command (You probably need to upgrade Tor)\n");
         services_init_in_progress = false;
     } else {
-        LogPrintf("tor: Add onion failed for service %d; error code %d\n", service_index, reply.code);
-        services_init_in_progress = false;
+        const std::string& attempted_key = (service_index < private_keys.size()) ? private_keys[service_index] : std::string();
+        LogPrint(BCLog::TOR, "tor: Add onion failed for service %d; error code %d (key: %s)\n",
+                 service_index, reply.code,
+                 KeyValuePrefix(attempted_key));
+        for (const std::string &s : reply.lines) {
+            LogPrint(BCLog::TOR, "tor: ADD_ONION error detail: %s\n", SanitizeString(s));
+        }
+
+        // Continue trying remaining services, even if one failed.
+        size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
+        current_service_index = service_index + 1;
+        if (current_service_index < num_services) {
+            LogPrint(BCLog::TOR, "tor: Continuing with next onion service (%d of %d) after failure\n",
+                     current_service_index + 1, num_services);
+            EnsurePrivateKeyForServiceIndex(current_service_index);
+            LogPrint(BCLog::TOR, "tor: ADD_ONION request for service %d using key: %s\n",
+                     current_service_index,
+                     KeyValuePrefix(private_keys[current_service_index]));
+            if (!_conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
+                        Params().GetDefaultPort(), m_target.ToStringIPPort()),
+                std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2))) {
+                LogPrint(BCLog::TOR, "tor: Failed to send ADD_ONION for service %d\n", current_service_index);
+                services_init_in_progress = false;
+            }
+        } else {
+            services_init_in_progress = false;
+        }
     }
 }
 
@@ -666,21 +713,13 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
         // Start with the first service
         current_service_index = 0;
 
-        // If we have a stored private key for this index, use it
-        if (current_service_index < private_keys.size() && !private_keys[current_service_index].empty()) {
-            LogPrint(BCLog::TOR, "tor: Using stored private key for service %d (key length: %d)\n",
-                     current_service_index, private_keys[current_service_index].length());
-        } else {
-            // No private key for this index, generate a new one
-            if (current_service_index >= private_keys.size()) {
-                private_keys.resize(current_service_index + 1);
-            }
-            private_keys[current_service_index] = "NEW:ED25519-V3"; // Explicitly request key type - see issue #9214
-            LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
-        }
+        EnsurePrivateKeyForServiceIndex(current_service_index);
 
         // Request onion service, redirect port.
         // Note that the 'virtual' port is always the default port to avoid decloaking nodes using other ports.
+        LogPrint(BCLog::TOR, "tor: ADD_ONION request for service %d using key: %s\n",
+                 current_service_index,
+                 KeyValuePrefix(private_keys[current_service_index]));
         if (!_conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
                     Params().GetDefaultPort(), m_target.ToStringIPPort()),
             std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2))) {
@@ -1132,28 +1171,6 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
                         }
 
                         if (valid_key) {
-                            // Check if adding this key would exceed the configured limit
-                            size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
-                            if (self->monitored_files.size() >= num_services) {
-                                LogPrintf("tor: Skipping new key file %s - would exceed configured limit of %d onion services\n",
-                                         filepath, num_services);
-
-                                // Create .disabled subdirectory if it doesn't exist
-                                fs::path disabled_dir = directory / ".disabled";
-                                try {
-                                    if (!fs::exists(disabled_dir)) fs::create_directories(disabled_dir);
-
-                                    // Move the file to .disabled directory
-                                    fs::path source_path = fs::PathFromString(filepath);
-                                    fs::path target_path = disabled_dir / source_path.filename();
-                                    fs::rename(source_path, target_path);
-                                    LogPrint(BCLog::TOR, "tor: Moved skipped key file to %s\n", fs::PathToString(target_path));
-                                } catch (const fs::filesystem_error& e) {
-                                    LogPrintf("tor: Error moving skipped file to .disabled directory: %s\n", e.what());
-                                }
-                                continue;
-                            }
-
                             // Add to monitored files and cache
                             try {
                                 self->monitored_files.insert(filepath);
@@ -1168,29 +1185,53 @@ void TorController::directory_monitor_cb(evutil_socket_t fd, short what, void *a
                                 if (self->conn.Command("GETINFO status/circuit-established",
                                     [self, trimmed_key](TorControlConnection& conn, const TorControlReply& reply) {
                                         try {
-                                            if (reply.code == 250 && reply.lines.size() > 0 && reply.lines[0] == "1") {
-                                                // Connected to Tor, add the new service
-                                                try {
-                                                    conn.Command(strprintf("ADD_ONION %s Port=%i,%s",
-                                                                trimmed_key,
-                                                                Params().GetDefaultPort(),
-                                                                self->m_target.ToStringIPPort()),
-                                                        std::bind(&TorController::add_onion_cb, self,
-                                                                std::placeholders::_1, std::placeholders::_2));
-                                                } catch (const std::exception& e) {
-                                                    LogPrintf("tor: Error creating onion service: %s\n", e.what());
+                                            LogPrint(BCLog::TOR, "tor: GETINFO status/circuit-established reply code %d, lines %d\n",
+                                                     reply.code, reply.lines.size());
+                                            for (const std::string& s : reply.lines) {
+                                                LogPrint(BCLog::TOR, "tor: circuit status reply: %s\n", SanitizeString(s));
+                                            }
+
+                                            bool circuit_established = false;
+                                            if (reply.code == 250 && !reply.lines.empty()) {
+                                                // Expected format: "status/circuit-established=1"
+                                                const std::string& line0 = reply.lines[0];
+                                                const std::string key = "status/circuit-established=";
+                                                if (line0.rfind(key, 0) == 0) {
+                                                    circuit_established = (line0.substr(key.size()) == "1");
+                                                } else if (line0 == "1") {
+                                                    // Be tolerant of bare "1" responses.
+                                                    circuit_established = true;
                                                 }
                                             }
+                                            if (!circuit_established) {
+                                                LogPrint(BCLog::TOR, "tor: Circuit not established; skipping ADD_ONION for new key\n");
+                                                return;
+                                            }
+
+                                            // Connected to Tor, add the new service
+                                            try {
+                                                const bool sent = conn.Command(strprintf("ADD_ONION %s Port=%i,%s",
+                                                            trimmed_key,
+                                                            Params().GetDefaultPort(),
+                                                            self->m_target.ToStringIPPort()),
+                                                    std::bind(&TorController::add_onion_cb, self,
+                                                            std::placeholders::_1, std::placeholders::_2));
+                                                if (!sent) {
+                                                    LogPrint(BCLog::TOR, "tor: Failed to send ADD_ONION for new key\n");
+                                                }
+                                            } catch (const std::exception& e) {
+                                                LogPrint(BCLog::TOR, "tor: Error creating onion service: %s\n", e.what());
+                                            }
                                         } catch (const std::exception& e) {
-                                            LogPrintf("tor: Error in circuit status callback: %s\n", e.what());
+                                            LogPrint(BCLog::TOR, "tor: Error in circuit status callback: %s\n", e.what());
                                         }
                                     })) {
                                     LogPrint(BCLog::TOR, "tor: Attempting to create service with new key\n");
                                 } else {
-                                    LogPrintf("tor: Failed to send GETINFO command for circuit status\n");
+                                    LogPrint(BCLog::TOR, "tor: Failed to send GETINFO command for circuit status\n");
                                 }
                             } catch (const std::exception& e) {
-                                LogPrintf("tor: Error checking Tor connectivity: %s\n", e.what());
+                                LogPrint(BCLog::TOR, "tor: Error checking Tor connectivity: %s\n", e.what());
                             }
                         } else {
                             LogPrintf("tor: New file contains invalid key format, ignoring\n");

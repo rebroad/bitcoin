@@ -161,6 +161,7 @@ private:
     float reconnect_timeout;
 
     std::pair<bool, std::string> ValidateOnionKey(const std::string& key_data, const std::string& filename);
+    bool EnsurePrivateKeyForServiceIndex(size_t index);
 
 public:
     /** Callback for ADD_ONION result */
