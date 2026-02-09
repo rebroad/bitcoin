@@ -220,11 +220,13 @@ def main(argv: List[str]) -> int:
                 if args.status_interval > 0 and (now - last_print) >= args.status_interval:
                     elapsed = now - start_time
                     rate = attempts / elapsed if elapsed > 0 else 0.0
+                    p_so_far = 1.0 - (1.0 - p_hit) ** attempts if p_hit > 0.0 else 0.0
                     eta = ""
                     if math.isfinite(n50) and rate > 0:
-                        eta_seconds = max(0.0, n50 / rate)
+                        remaining_attempts = max(0.0, n50 - attempts)
+                        eta_seconds = remaining_attempts / rate
                         eta = f", est 50% time ~ {format_duration(eta_seconds)}"
-                    print(f"attempts: {attempts} ({rate:,.0f} per sec){eta}")
+                    print(f"attempts: {attempts} ({rate:,.0f} per sec){eta}, current hit chance ~ {p_so_far*100:.2f}%")
                     last_print = now
     finally:
         stop_event.set()
@@ -236,4 +238,3 @@ def main(argv: List[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-
