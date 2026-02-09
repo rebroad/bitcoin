@@ -80,6 +80,10 @@ noinst_PROGRAMS =
 TESTS =
 BENCHMARKS =
 
+if HAVE_SODIUM
+  bin_PROGRAMS += vanity-onion
+endif
+
 if BUILD_BITCOIND
   bin_PROGRAMS += bitcoind
 endif
@@ -104,6 +108,12 @@ endif
 
 if BUILD_BITCOIN_UTIL
   bin_PROGRAMS += bitcoin-util
+endif
+
+if HAVE_SODIUM
+  vanity_onion_SOURCES = vanity_onion.cpp
+  vanity_onion_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(SODIUM_CFLAGS)
+  vanity_onion_LDADD = $(SODIUM_LIBS) $(LIBBITCOIN_CRYPTO)
 endif
 
 .PHONY: FORCE check-symbols check-security

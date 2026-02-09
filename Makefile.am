@@ -11,10 +11,13 @@ SUBDIRS = src
 if ENABLE_MAN
 SUBDIRS += doc/man
 endif
-.PHONY: deploy FORCE help check-libs robust-build rebuild-libs fix-build fix-undefined-refs smart-build
+.PHONY: deploy FORCE help check-libs robust-build rebuild-libs fix-build fix-undefined-refs smart-build vanity-onion
 .INTERMEDIATE: $(OSX_TEMP_ISO) $(COVERAGE_INFO)
 
 export PYTHONPATH
+
+vanity-onion:
+	$(AM_V_at) $(MAKE) -C src vanity-onion
 
 if BUILD_BITCOIN_LIBS
 pkgconfigdir = $(libdir)/pkgconfig

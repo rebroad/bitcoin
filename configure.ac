@@ -1501,6 +1501,13 @@ if test "$use_zmq" = "yes"; then
   esac
 fi
 
+dnl libsodium check (for vanity_onion tool)
+
+PKG_CHECK_MODULES([SODIUM], [libsodium], [have_sodium=yes], [have_sodium=no])
+if test "$have_sodium" != "yes"; then
+  AC_MSG_WARN([libsodium not found; vanity_onion tool will not be built])
+fi
+
 dnl libmultiprocess library check
 
 libmultiprocess_found=no
@@ -1669,6 +1676,7 @@ if test "$bitcoin_enable_qt" != "no"; then
 fi
 
 AM_CONDITIONAL([ENABLE_ZMQ], [test "$use_zmq" = "yes"])
+AM_CONDITIONAL([HAVE_SODIUM], [test "$have_sodium" = "yes"])
 
 AC_MSG_CHECKING([whether to build test_bitcoin])
 if test "$use_tests" = "yes"; then
