@@ -401,16 +401,16 @@ TorController::TorController(struct event_base* _base, const std::string& tor_co
                 LogPrint(BCLog::TOR, "tor: Vector sizes - private_keys: %d, service_ids: %d, services: %d\n",
                          private_keys.size(), service_ids.size(), services.size());
 
-                // Resize if necessary to match the required number of services
+                // Do not pad the key list here; missing keys will be generated on connect.
+                // If more keys are present than requested, trim to the requested count.
                 size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
-                if (private_keys.size() < num_services) {
-                    LogPrint(BCLog::TOR, "tor: Need %d services but only %d keys found, will generate additional keys\n",
-                             num_services, private_keys.size());
-                    private_keys.resize(num_services);
-                } else if (private_keys.size() > num_services) {
+                if (private_keys.size() > num_services) {
                     LogPrint(BCLog::TOR, "tor: Found %d keys but only %d services requested, using first %d keys\n",
                              private_keys.size(), num_services, num_services);
                     private_keys.resize(num_services);
+                } else if (private_keys.size() < num_services) {
+                    LogPrint(BCLog::TOR, "tor: Loaded %d existing key(s); will generate %d additional key(s) on connect\n",
+                             private_keys.size(), num_services - private_keys.size());
                 }
             }
         }
@@ -450,6 +450,7 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
              service_index, private_keys.size(), service_ids.size(), services.size());
 
     if (reply.code == 250) {
+        services_init_in_progress = false;
         LogPrint(BCLog::TOR, "tor: ADD_ONION successful for service %d\n", service_index);
 
         // Temporary variables to store service data from this callback
@@ -582,23 +583,32 @@ void TorController::add_onion_cb(TorControlConnection& _conn, const TorControlRe
                 LogPrint(BCLog::TOR, "tor: Using stored private key for service %d\n", current_service_index);
             } else {
                 // No private key for this index, generate a new one
+                if (current_service_index >= private_keys.size()) {
+                    private_keys.resize(current_service_index + 1);
+                }
                 private_keys[current_service_index] = "NEW:ED25519-V3";
                 LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
             }
 
             // Request the next onion service
-            _conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
+            if (!_conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
                         Params().GetDefaultPort(), m_target.ToStringIPPort()),
-                std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2));
+                std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2))) {
+                LogPrintf("tor: Failed to send ADD_ONION for service %d\n", current_service_index);
+                services_init_in_progress = false;
+            }
         } else {
             LogPrint(BCLog::TOR, "tor: All %d onion services created successfully\n", num_services);
+            services_initialized = true;
         }
 
         // ... onion requested - keep connection open
     } else if (reply.code == 510) { // 510 Unrecognized command
         LogPrintf("tor: Add onion failed with unrecognized command (You probably need to upgrade Tor)\n");
+        services_init_in_progress = false;
     } else {
         LogPrintf("tor: Add onion failed for service %d; error code %d\n", service_index, reply.code);
+        services_init_in_progress = false;
     }
 }
 
@@ -620,6 +630,11 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
             LogPrint(BCLog::TOR, "tor: Services already initialized; skipping service creation on re-auth\n");
             return;
         }
+        if (services_init_in_progress) {
+            LogPrint(BCLog::TOR, "tor: Service initialization already in progress; skipping\n");
+            return;
+        }
+        services_init_in_progress = true;
 
         // Get the number of onion services to create
         size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
@@ -634,13 +649,19 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
         LogPrint(BCLog::TOR, "tor: Before resizing - private_keys: %d, service_ids: %d, services: %d\n",
                  private_keys.size(), service_ids.size(), services.size());
 
-        // Initialize/resize the service vectors to hold num_services entries
-        private_keys.resize(num_services);
+        // Initialize/resize the service vectors to hold num_services entries.
+        // Keep private_keys at the actual loaded count; missing keys will be generated as needed.
+        if (private_keys.size() > num_services) {
+            private_keys.resize(num_services);
+        }
         service_ids.resize(num_services);
         services.resize(num_services);
 
+        size_t existing_keys = private_keys.size();
         LogPrint(BCLog::TOR, "tor: After resizing - private_keys: %d, service_ids: %d, services: %d\n",
                  private_keys.size(), service_ids.size(), services.size());
+        LogPrint(BCLog::TOR, "tor: Existing private keys: %d (will generate %d new key(s))\n",
+                 existing_keys, num_services > existing_keys ? num_services - existing_keys : 0);
 
         // Start with the first service
         current_service_index = 0;
@@ -651,17 +672,21 @@ void TorController::auth_cb(TorControlConnection& _conn, const TorControlReply& 
                      current_service_index, private_keys[current_service_index].length());
         } else {
             // No private key for this index, generate a new one
+            if (current_service_index >= private_keys.size()) {
+                private_keys.resize(current_service_index + 1);
+            }
             private_keys[current_service_index] = "NEW:ED25519-V3"; // Explicitly request key type - see issue #9214
             LogPrint(BCLog::TOR, "tor: Generating new private key for service %d\n", current_service_index);
         }
 
         // Request onion service, redirect port.
         // Note that the 'virtual' port is always the default port to avoid decloaking nodes using other ports.
-        _conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
+        if (!_conn.Command(strprintf("ADD_ONION %s Port=%i,%s", private_keys[current_service_index],
                     Params().GetDefaultPort(), m_target.ToStringIPPort()),
-            std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2));
-
-        services_initialized = true;
+            std::bind(&TorController::add_onion_cb, this, std::placeholders::_1, std::placeholders::_2))) {
+            LogPrintf("tor: Error sending initial ADD_ONION command\n");
+            services_init_in_progress = false;
+        }
     } else {
         LogPrintf("tor: Authentication failed\n");
     }
@@ -981,16 +1006,16 @@ bool TorController::LoadPrivateKeysFromDirectory()
             event_add(directory_monitor_ev, &tv);
         }
 
-        // Resize if necessary to match the required number of services
+        // Do not pad the key list here; missing keys will be generated on connect.
+        // If more keys are present than requested, trim to the requested count.
         size_t num_services = static_cast<size_t>(gArgs.GetIntArg("-numonion", 1));
-        if (private_keys.size() < num_services) {
-            LogPrint(BCLog::TOR, "tor: Need %d services but only %d keys found, will generate additional keys\n",
-                    num_services, private_keys.size());
-            private_keys.resize(num_services);
-        } else if (private_keys.size() > num_services) {
+        if (private_keys.size() > num_services) {
             LogPrint(BCLog::TOR, "tor: Found %d keys but only %d services requested, using first %d keys\n",
                     private_keys.size(), num_services, num_services);
             private_keys.resize(num_services);
+        } else if (private_keys.size() < num_services) {
+            LogPrint(BCLog::TOR, "tor: Loaded %d existing key(s); will generate %d additional key(s) on connect\n",
+                    private_keys.size(), num_services - private_keys.size());
         }
     }
 

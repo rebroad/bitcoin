@@ -143,7 +143,8 @@ private:
     const CService m_target;
     size_t num_services{1}; // Default to 1 service
     size_t current_service_index{0}; // Tracks which service is currently being created
-    bool services_initialized{false}; // Create services only once per process
+    bool services_initialized{false}; // Create services only once per process (after success)
+    bool services_init_in_progress{false}; // Prevent duplicate in-flight init attempts
     /** Cookie for SAFECOOKIE auth */
     std::vector<uint8_t> cookie;
     /** ClientNonce for SAFECOOKIE auth */
