@@ -465,6 +465,10 @@ fix-undefined-refs: check-libs
 	@echo "🔧 Starting quick fix for undefined reference errors..."
 	@echo "🧹 Cleaning util library artifacts..."
 	@cd src && rm -f libbitcoin_util.a && echo "   - Removed libbitcoin_util.a"
+	@cd src && rm -f logging.o && echo "   - Removed logging.o (forces rebuild of logging.cpp)" || true
+	@cd src && rm -f libbitcoin_util_a-logging.o && echo "   - Removed libbitcoin_util_a-logging.o (forces rebuild of logging.cpp)" || true
+	@cd src && rm -f .deps/logging.Po && echo "   - Removed logging deps" || true
+	@cd src && rm -f .deps/libbitcoin_util_a-logging.Po && echo "   - Removed libbitcoin_util_a-logging deps" || true
 	@cd src && rm -f util/*.o && echo "   - Removed util/*.o files"
 	@cd src && rm -rf util/.deps && echo "   - Removed util/.deps"
 	@echo ""
@@ -476,6 +480,25 @@ fix-undefined-refs: check-libs
 # Smart build that analyzes failure and runs the appropriate fix
 smart-build: check-libs
 	@echo "🚀 Starting smart build with automatic error recovery..."
+	@echo "📋 Step 0: Checking build system files..."
+	@need_regen=0; \
+	if [ -f "$(top_srcdir)/Makefile.in" ] && [ "$(top_srcdir)/Makefile.in" -nt "Makefile" ]; then need_regen=1; fi; \
+	if [ -f "$(top_srcdir)/src/Makefile.in" ] && [ "$(top_srcdir)/src/Makefile.in" -nt "src/Makefile" ]; then need_regen=1; fi; \
+	if [ $$need_regen -eq 1 ]; then \
+		echo "🔄 Detected stale Makefile(s). Regenerating via ./config.status..."; \
+		if [ -x "./config.status" ]; then \
+			./config.status; \
+		else \
+			echo "❌ Missing ./config.status. Re-run ./configure in this build directory."; \
+			exit 1; \
+		fi; \
+	fi; \
+	if [ -f "$(top_srcdir)/Makefile.am" ] && [ -f "$(top_srcdir)/Makefile.in" ] && [ "$(top_srcdir)/Makefile.am" -nt "$(top_srcdir)/Makefile.in" ]; then \
+		echo "⚠️  Makefile.am is newer than Makefile.in. Run ./autogen.sh and ./configure to refresh build files."; \
+	fi; \
+	if [ -f "$(top_srcdir)/src/Makefile.am" ] && [ -f "$(top_srcdir)/src/Makefile.in" ] && [ "$(top_srcdir)/src/Makefile.am" -nt "$(top_srcdir)/src/Makefile.in" ]; then \
+		echo "⚠️  src/Makefile.am is newer than src/Makefile.in. Run ./autogen.sh and ./configure to refresh build files."; \
+	fi
 	@echo "📋 Step 1: Attempting normal build..."
 	@echo ""
 	@( $(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt ; echo $$? > /tmp/bitcoin-build.exit ) 2>&1 | tee /tmp/bitcoin-build.log; \
