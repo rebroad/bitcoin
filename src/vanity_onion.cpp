@@ -14,19 +14,12 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <map>
 #include <mutex>
 #include <sstream>
 #include <set>
 #include <string>
 #include <thread>
 #include <vector>
-
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
 #include <crypto/sha3.h>
 #include <span.h>
@@ -208,254 +201,6 @@ static bool WriteKeyFile(const fs::path& outdir, const std::string& service_id, 
     return true;
 }
 
-static std::string NormalizeServiceId(std::string s) {
-    while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' ' || s.back() == '\t')) s.pop_back();
-    while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.erase(s.begin());
-    for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    const std::string suffix = ".onion";
-    if (s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0) {
-        s.erase(s.size() - suffix.size());
-    }
-    return s;
-}
-
-static std::string TrimWhitespace(std::string s) {
-    while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' ' || s.back() == '\t')) s.pop_back();
-    while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.erase(s.begin());
-    return s;
-}
-
-static bool ExtractTorV3KeyB64(const std::string& key_data, std::string& key_b64_out) {
-    const std::string prefix = "ED25519-V3:";
-    if (key_data.rfind(prefix, 0) != 0) return false;
-    key_b64_out = TrimWhitespace(key_data.substr(prefix.size()));
-    return !key_b64_out.empty();
-}
-
-static bool ExtractTorV3Key(const std::string& key_data, std::array<uint8_t, crypto_sign_SECRETKEYBYTES>& sk_out) {
-    std::string key_b64;
-    if (!ExtractTorV3KeyB64(key_data, key_b64)) return false;
-    size_t sk_len = 0;
-    if (sodium_base642bin(sk_out.data(), sk_out.size(),
-                          key_b64.data(), key_b64.size(),
-                          nullptr, &sk_len, nullptr,
-                          sodium_base64_VARIANT_ORIGINAL) != 0 || sk_len != crypto_sign_SECRETKEYBYTES) {
-        return false;
-    }
-    return true;
-}
-
-static std::string OnionServiceIdFromTorKey(const std::array<uint8_t, crypto_sign_SECRETKEYBYTES>& sk) {
-    // Tor v3 key file stores 64 bytes: [secret scalar(32) || PRF secret(32)].
-    return OnionServiceIdFromTorKey(sk.data());
-}
-
-class TorControlClient {
-public:
-    explicit TorControlClient(std::string control, std::string cookie_path, std::string password)
-        : m_control(std::move(control)), m_cookie_path(std::move(cookie_path)), m_password(std::move(password)) {}
-
-    bool ConnectAndAuth(std::string& err) {
-        if (!Connect(err)) return false;
-        return Authenticate(err);
-    }
-
-    bool AddOnionServiceId(const std::string& key_b64, std::string& service_id, std::string& err) {
-        const std::string cmd = "ADD_ONION ED25519-V3:" + key_b64 + " Port=80,127.0.0.1:1";
-        std::vector<std::string> lines;
-        if (!Command(cmd, lines, err)) return false;
-        for (const auto& line : lines) {
-            const std::string prefix = "250-ServiceID=";
-            if (line.rfind(prefix, 0) == 0) {
-                service_id = line.substr(prefix.size());
-                return true;
-            }
-        }
-        err = "missing ServiceID in response";
-        return false;
-    }
-
-    void DelOnion(const std::string& service_id) {
-        std::string err;
-        std::vector<std::string> lines;
-        Command("DEL_ONION " + service_id, lines, err);
-    }
-
-    ~TorControlClient() {
-        if (m_fd >= 0) {
-            close(m_fd);
-            m_fd = -1;
-        }
-    }
-
-private:
-    bool Connect(std::string& err) {
-        std::string host = "127.0.0.1";
-        std::string port = "9051";
-        const auto colon = m_control.find(':');
-        if (colon != std::string::npos) {
-            host = m_control.substr(0, colon);
-            port = m_control.substr(colon + 1);
-        }
-
-        addrinfo hints{};
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-        addrinfo* res = nullptr;
-        if (getaddrinfo(host.c_str(), port.c_str(), &hints, &res) != 0) {
-            err = "getaddrinfo failed for control address";
-            return false;
-        }
-
-        int fd = -1;
-        for (addrinfo* p = res; p; p = p->ai_next) {
-            fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-            if (fd < 0) continue;
-            if (connect(fd, p->ai_addr, p->ai_addrlen) == 0) break;
-            close(fd);
-            fd = -1;
-        }
-        freeaddrinfo(res);
-
-        if (fd < 0) {
-            err = "failed to connect to control port";
-            return false;
-        }
-
-        m_fd = fd;
-        return true;
-    }
-
-    bool Authenticate(std::string& err) {
-        if (!m_password.empty()) {
-            return SimpleCommand("AUTHENTICATE \"" + m_password + "\"", err);
-        }
-        if (!m_cookie_path.empty()) {
-            std::ifstream f(m_cookie_path, std::ios::binary | std::ios::in);
-            if (!f.is_open()) {
-                err = "failed to open control auth cookie";
-                return false;
-            }
-            std::string cookie((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-            f.close();
-            if (cookie.size() != 32) {
-                err = "auth cookie size is not 32 bytes";
-                return false;
-            }
-            static const char hexmap[] = "0123456789ABCDEF";
-            std::string hex;
-            hex.resize(cookie.size() * 2);
-            for (size_t i = 0; i < cookie.size(); ++i) {
-                unsigned char c = static_cast<unsigned char>(cookie[i]);
-                hex[2 * i] = hexmap[(c >> 4) & 0x0F];
-                hex[2 * i + 1] = hexmap[c & 0x0F];
-            }
-            return SimpleCommand("AUTHENTICATE " + hex, err);
-        }
-        err = "no authentication method provided";
-        return false;
-    }
-
-    bool SimpleCommand(const std::string& cmd, std::string& err) {
-        std::vector<std::string> lines;
-        return Command(cmd, lines, err);
-    }
-
-    bool Command(const std::string& cmd, std::vector<std::string>& lines, std::string& err) {
-        if (m_fd < 0) {
-            err = "not connected";
-            return false;
-        }
-        std::string wire = cmd + "\r\n";
-        if (!WriteAll(wire, err)) return false;
-        return ReadReply(lines, err);
-    }
-
-    bool WriteAll(const std::string& data, std::string& err) {
-        size_t off = 0;
-        while (off < data.size()) {
-            ssize_t n = send(m_fd, data.data() + off, data.size() - off, 0);
-            if (n <= 0) {
-                err = "failed to write to control port";
-                return false;
-            }
-            off += static_cast<size_t>(n);
-        }
-        return true;
-    }
-
-    bool ReadReply(std::vector<std::string>& lines, std::string& err) {
-        lines.clear();
-        std::string line;
-        while (true) {
-            if (!ReadLine(line, err)) return false;
-            lines.push_back(line);
-            if (line.size() >= 4 && line.rfind("250 ", 0) == 0) return true;
-            if (line.size() >= 3 && (line[0] == '5' || line[0] == '4')) {
-                err = line;
-                return false;
-            }
-        }
-    }
-
-    bool ReadLine(std::string& out, std::string& err) {
-        out.clear();
-        while (true) {
-            auto pos = m_buf.find("\r\n");
-            if (pos != std::string::npos) {
-                out = m_buf.substr(0, pos);
-                m_buf.erase(0, pos + 2);
-                return true;
-            }
-            char tmp[512];
-            ssize_t n = recv(m_fd, tmp, sizeof(tmp), 0);
-            if (n <= 0) {
-                err = "failed to read from control port";
-                return false;
-            }
-            m_buf.append(tmp, tmp + n);
-        }
-    }
-
-    std::string m_control;
-    std::string m_cookie_path;
-    std::string m_password;
-    int m_fd{-1};
-    std::string m_buf;
-};
-
-// TEMPORARY: extra verification during algorithm development. Remove once key generation is trusted.
-static bool VerifyKeyFileMatchesFilename(const fs::path& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::in);
-    if (!f.is_open()) {
-        std::cerr << "temp-verify: could not open key file " << path << "\n";
-        return false;
-    }
-
-    std::string key_data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    f.close();
-    if (key_data.empty()) {
-        std::cerr << "temp-verify: empty key file " << path << "\n";
-        return false;
-    }
-
-    std::array<uint8_t, crypto_sign_SECRETKEYBYTES> sk;
-    if (!ExtractTorV3Key(key_data, sk)) {
-        std::cerr << "temp-verify: invalid key format in " << path << "\n";
-        return false;
-    }
-
-    const std::string computed_id = OnionServiceIdFromTorKey(sk);
-    const std::string filename_id = NormalizeServiceId(path.filename().string());
-    if (computed_id != filename_id) {
-        std::cerr << "temp-verify: mismatch in " << path << " (file name "
-                  << filename_id << " vs computed " << computed_id << ")\n";
-        return false;
-    }
-
-    return true;
-}
-
 struct Options {
     std::string prefixes;
     std::string prefix_file;
@@ -463,14 +208,6 @@ struct Options {
     uint64_t count{1};
     uint32_t workers{0};
     double status_interval{5.0};
-    bool temp_verify{true};
-    bool temp_verify_dir_mode{false};
-    fs::path temp_verify_dir;
-    bool temp_verify_dir_tor_mode{false};
-    fs::path temp_verify_dir_tor;
-    std::string tor_control{"127.0.0.1:9051"};
-    std::string tor_cookie{"/var/run/tor/control.authcookie"};
-    std::string tor_password;
 };
 
 static void PrintUsage();
@@ -489,16 +226,9 @@ static Options ParseArgs(int argc, char** argv) {
         else if (a == "--count") opts.count = std::stoull(need(a));
         else if (a == "--workers") opts.workers = static_cast<uint32_t>(std::stoul(need(a)));
         else if (a == "--status-interval") opts.status_interval = std::stod(need(a));
-        else if (a == "--temp-verify-dir") { opts.temp_verify_dir_mode = true; opts.temp_verify_dir = need(a); }
-        else if (a == "--temp-verify-dir-tor") { opts.temp_verify_dir_tor_mode = true; opts.temp_verify_dir_tor = need(a); }
-        else if (a == "--tor-control") { opts.tor_control = need(a); }
-        else if (a == "--tor-cookie") { opts.tor_cookie = need(a); }
-        else if (a == "--tor-password") { opts.tor_password = need(a); }
         else if (a == "--help" || a == "-h") {
             PrintUsage();
             std::exit(0);
-        } else if (a == "--no-temp-verify") {
-            opts.temp_verify = false;  // TEMP: option exists only while validating the generation algorithm
         } else {
             Die("unknown arg: " + a);
         }
@@ -512,13 +242,7 @@ static void PrintUsage() {
                  "  --outdir <dir>               Output directory (default: onion_v3_private_keys)\n"
                  "  --count <n>                  Number of matches (default: 1)\n"
                  "  --workers <n>                Worker threads (default: CPU count)\n"
-                 "  --status-interval <sec>      Status interval (default: 5)\n"
-                 "  --no-temp-verify             TEMP: Disable key/filename verification\n"
-                 "  --temp-verify-dir <dir>      TEMP: Scan existing directory and verify keys\n"
-                 "  --temp-verify-dir-tor <dir>  TEMP: Verify directory via Tor control port\n"
-                 "  --tor-control <host:port>    Tor control address (default: 127.0.0.1:9051)\n"
-                 "  --tor-cookie <path>          Tor control auth cookie path\n"
-                 "  --tor-password <pw>          Tor control password (overrides cookie)\n";
+                 "  --status-interval <sec>      Status interval (default: 5)\n";
 }
 
 int main(int argc, char** argv) {
@@ -533,70 +257,6 @@ int main(int argc, char** argv) {
     }
 
     Options opts = ParseArgs(argc, argv);
-    if (opts.temp_verify_dir_tor_mode) {
-        if (!fs::exists(opts.temp_verify_dir_tor) || !fs::is_directory(opts.temp_verify_dir_tor)) {
-            Die("temp verify directory does not exist or is not a directory");
-        }
-        TorControlClient client(opts.tor_control, opts.tor_cookie, opts.tor_password);
-        std::string err;
-        if (!client.ConnectAndAuth(err)) {
-            Die("tor control auth failed: " + err);
-        }
-        size_t total = 0;
-        size_t bad = 0;
-        for (const auto& entry : fs::directory_iterator(opts.temp_verify_dir_tor)) {
-            if (!fs::is_regular_file(entry.status())) continue;
-            std::ifstream f(entry.path(), std::ios::binary | std::ios::in);
-            if (!f.is_open()) {
-                std::cerr << "temp-verify-tor: could not open " << entry.path() << "\n";
-                bad++;
-                continue;
-            }
-            std::string key_data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-            f.close();
-
-            std::string key_b64;
-            if (!ExtractTorV3KeyB64(key_data, key_b64)) {
-                std::cerr << "temp-verify-tor: invalid key format in " << entry.path() << "\n";
-                bad++;
-                continue;
-            }
-
-            std::string service_id;
-            if (!client.AddOnionServiceId(key_b64, service_id, err)) {
-                std::cerr << "temp-verify-tor: ADD_ONION failed for " << entry.path() << ": " << err << "\n";
-                bad++;
-                continue;
-            }
-            client.DelOnion(service_id);
-
-            const std::string filename_id = NormalizeServiceId(entry.path().filename().string());
-            if (NormalizeServiceId(service_id) != filename_id) {
-                std::cerr << "temp-verify-tor: mismatch in " << entry.path() << " (file name "
-                          << filename_id << " vs tor " << service_id << ")\n";
-                bad++;
-            }
-            total++;
-        }
-        std::cout << "temp-verify-tor: scanned " << total << " file(s), failures: " << bad << "\n";
-        return bad == 0 ? 0 : 1;
-    }
-
-    if (opts.temp_verify_dir_mode) {
-        if (!fs::exists(opts.temp_verify_dir) || !fs::is_directory(opts.temp_verify_dir)) {
-            Die("temp verify directory does not exist or is not a directory");
-        }
-        size_t total = 0;
-        size_t bad = 0;
-        for (const auto& entry : fs::directory_iterator(opts.temp_verify_dir)) {
-            if (!fs::is_regular_file(entry.status())) continue;
-            total++;
-            if (!VerifyKeyFileMatchesFilename(entry.path())) bad++;
-        }
-        std::cout << "temp-verify: scanned " << total << " file(s), failures: " << bad << "\n";
-        return bad == 0 ? 0 : 1;
-    }
-
     if (opts.count < 1) Die("--count must be >= 1");
 
     auto prefixes = LoadPrefixes(opts.prefixes, opts.prefix_file);
@@ -648,16 +308,11 @@ int main(int argc, char** argv) {
 
             char b64[sodium_base64_ENCODED_LEN(crypto_sign_SECRETKEYBYTES, sodium_base64_VARIANT_ORIGINAL)];
             sodium_bin2base64(b64, sizeof(b64), tor_key, crypto_sign_SECRETKEYBYTES, sodium_base64_VARIANT_ORIGINAL);
-            fs::path out_path;
-            bool wrote = WriteKeyFile(opts.outdir, service_id, b64, &out_path);
+            bool wrote = WriteKeyFile(opts.outdir, service_id, b64, nullptr);
             if (wrote) {
                 uint64_t m = matches.fetch_add(1) + 1;
                 std::lock_guard<std::mutex> lock(io_mu);
                 std::cout << "match " << m << "/" << opts.count << ": " << service_id << ".onion\n";
-                // TEMPORARY: extra verification while the algorithm is being validated.
-                if (opts.temp_verify && !VerifyKeyFileMatchesFilename(out_path)) {
-                    std::cout << "temp-verify failed for " << out_path << "\n";
-                }
                 if (m >= opts.count) {
                     g_stop.store(true);
                     break;
