@@ -11,7 +11,7 @@ SUBDIRS = src
 if ENABLE_MAN
 SUBDIRS += doc/man
 endif
-.PHONY: deploy FORCE help check-libs robust-build rebuild-libs fix-build fix-undefined-refs smart-build vanity-onion
+.PHONY: deploy FORCE help check-libs robust-build rebuild-libs fix-build fix-undefined-refs smart-build smart vanity-onion
 .INTERMEDIATE: $(OSX_TEMP_ISO) $(COVERAGE_INFO)
 
 export PYTHONPATH
@@ -499,6 +499,9 @@ smart-build: check-libs
 	if [ -f "$(top_srcdir)/src/Makefile.am" ] && [ -f "$(top_srcdir)/src/Makefile.in" ] && [ "$(top_srcdir)/src/Makefile.am" -nt "$(top_srcdir)/src/Makefile.in" ]; then \
 		echo "⚠️  src/Makefile.am is newer than src/Makefile.in. Run ./autogen.sh and ./configure to refresh build files."; \
 	fi
+
+# Alias for smart-build
+smart: smart-build
 	@echo "📋 Step 1: Attempting normal build..."
 	@echo ""
 	@( $(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt ; echo $$? > /tmp/bitcoin-build.exit ) 2>&1 | tee /tmp/bitcoin-build.log; \
