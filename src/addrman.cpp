@@ -1123,6 +1123,28 @@ std::vector<CAddress> AddrManImpl::GetAddr(size_t max_addresses, size_t max_pct,
     return addresses;
 }
 
+std::vector<AddrManAddressInfo> AddrManImpl::GetAddrInfo(size_t max_addresses, size_t max_pct, std::optional<Network> network) const
+{
+    LOCK(cs);
+    Check();
+    const auto addresses = GetAddr_(max_addresses, max_pct, network);
+    std::vector<AddrManAddressInfo> out;
+    out.reserve(addresses.size());
+    for (const auto& addr : addresses) {
+        auto it = mapAddr.find(addr);
+        if (it == mapAddr.end()) {
+            continue;
+        }
+        const auto info_it = mapInfo.find(it->second);
+        if (info_it == mapInfo.end()) {
+            continue;
+        }
+        const AddrInfo& info = info_it->second;
+        out.push_back(AddrManAddressInfo{addr, info.nLastSuccess});
+    }
+    Check();
+    return out;
+}
 void AddrManImpl::Connected(const CService& addr, int64_t nTime)
 {
     LOCK(cs);
@@ -1219,6 +1241,10 @@ std::vector<CAddress> AddrMan::GetAddr(size_t max_addresses, size_t max_pct, std
     return m_impl->GetAddr(max_addresses, max_pct, network);
 }
 
+std::vector<AddrManAddressInfo> AddrMan::GetAddrInfo(size_t max_addresses, size_t max_pct, std::optional<Network> network) const
+{
+    return m_impl->GetAddrInfo(max_addresses, max_pct, network);
+}
 void AddrMan::Connected(const CService& addr, int64_t nTime)
 {
     m_impl->Connected(addr, nTime);

@@ -927,6 +927,7 @@ static RPCHelpMan getnodeaddresses()
                         {RPCResult::Type::OBJ, "", "",
                         {
                             {RPCResult::Type::NUM_TIME, "time", "The " + UNIX_EPOCH_TIME + " when the node was last seen"},
+                            {RPCResult::Type::NUM_TIME, "last_success", "The " + UNIX_EPOCH_TIME + " when we last successfully connected to this node (0 if never)"},
                             {RPCResult::Type::NUM, "services", "The services offered by the node"},
                             {RPCResult::Type::STR, "address", "The address of the node"},
                             {RPCResult::Type::NUM, "port", "The port number of the node"},
@@ -955,12 +956,14 @@ static RPCHelpMan getnodeaddresses()
     }
 
     // returns a shuffled list of CAddress
-    const std::vector<CAddress> vAddr{connman.GetAddresses(count, /* max_pct */ 0, network)};
+    const std::vector<AddrManAddressInfo> vAddr{connman.GetAddressesInfo(count, /* max_pct */ 0, network)};
     UniValue ret(UniValue::VARR);
 
-    for (const CAddress& addr : vAddr) {
+    for (const AddrManAddressInfo& info : vAddr) {
         UniValue obj(UniValue::VOBJ);
+        const CAddress& addr = info.address;
         obj.pushKV("time", (int)addr.nTime);
+        obj.pushKV("last_success", (int64_t)info.last_success);
         obj.pushKV("services", (uint64_t)addr.nServices);
         obj.pushKV("address", addr.ToStringIP());
         obj.pushKV("port", addr.GetPort());

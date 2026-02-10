@@ -3071,6 +3071,11 @@ std::vector<CAddress> CConnman::GetAddresses(size_t max_addresses, size_t max_pc
     return addresses;
 }
 
+std::vector<AddrManAddressInfo> CConnman::GetAddressesInfo(size_t max_addresses, size_t max_pct, std::optional<Network> network) const
+{
+    return addrman.GetAddrInfo(max_addresses, max_pct, network);
+}
+
 std::vector<CAddress> CConnman::GetAddresses(CNode& requestor, size_t max_addresses, size_t max_pct)
 {
     auto local_socket_bytes = requestor.addrBind.GetAddrBytes();

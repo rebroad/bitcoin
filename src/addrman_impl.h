@@ -5,6 +5,7 @@
 #ifndef BITCOIN_ADDRMAN_IMPL_H
 #define BITCOIN_ADDRMAN_IMPL_H
 
+#include <addrman.h>
 #include <logging.h>
 #include <logging/timer.h>
 #include <netaddress.h>
@@ -129,6 +130,8 @@ public:
         EXCLUSIVE_LOCKS_REQUIRED(!cs);
 
     std::vector<CAddress> GetAddr(size_t max_addresses, size_t max_pct, std::optional<Network> network) const
+        EXCLUSIVE_LOCKS_REQUIRED(!cs);
+    std::vector<AddrManAddressInfo> GetAddrInfo(size_t max_addresses, size_t max_pct, std::optional<Network> network) const
         EXCLUSIVE_LOCKS_REQUIRED(!cs);
 
     void Connected(const CService& addr, int64_t nTime)

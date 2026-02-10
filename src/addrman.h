@@ -47,6 +47,13 @@ struct AddressPosition {
         : tried{tried_in}, multiplicity{multiplicity_in}, bucket{bucket_in}, position{position_in} {}
 };
 
+/** RPC-oriented address info from AddrMan */
+struct AddrManAddressInfo {
+    CAddress address;
+    //! last successful connection by us (0 if never)
+    int64_t last_success{0};
+};
+
 /** Stochastic address manager
  *
  * Design goals:
@@ -149,6 +156,12 @@ public:
      * @return                   A vector of randomly selected addresses from vRandom.
      */
     std::vector<CAddress> GetAddr(size_t max_addresses, size_t max_pct, std::optional<Network> network) const;
+
+    /**
+     * Return address info including last successful connection by us.
+     * Intended for trusted/local callers (e.g. RPC).
+     */
+    std::vector<AddrManAddressInfo> GetAddrInfo(size_t max_addresses, size_t max_pct, std::optional<Network> network) const;
 
     /** We have successfully connected to this peer. Calling this function
      *  updates the CAddress's nTime, which is used in our IsTerrible()

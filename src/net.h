@@ -6,6 +6,7 @@
 #ifndef BITCOIN_NET_H
 #define BITCOIN_NET_H
 
+#include <addrman.h>
 #include <chainparams.h>
 #include <common/bloom.h>
 #include <compat.h>
@@ -926,6 +927,7 @@ public:
      * @param[in] network        Select only addresses of this network (nullopt = all).
      */
     std::vector<CAddress> GetAddresses(size_t max_addresses, size_t max_pct, std::optional<Network> network) const;
+    std::vector<AddrManAddressInfo> GetAddressesInfo(size_t max_addresses, size_t max_pct, std::optional<Network> network) const;
     /**
      * Cache is used to minimize topology leaks, so it should
      * be used for all non-trusted calls, for example, p2p.
