@@ -83,6 +83,7 @@ BENCHMARKS =
 if HAVE_SODIUM
   bin_PROGRAMS += vanity-onion
 endif
+bin_PROGRAMS += vanity-i2p
 
 if BUILD_BITCOIND
   bin_PROGRAMS += bitcoind
@@ -115,6 +116,14 @@ if HAVE_SODIUM
   vanity_onion_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(SODIUM_CFLAGS)
   vanity_onion_LDADD = $(SODIUM_LIBS) $(LIBBITCOIN_CRYPTO)
 endif
+vanity_i2p_SOURCES = vanity_i2p.cpp
+vanity_i2p_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
+vanity_i2p_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+vanity_i2p_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+vanity_i2p_LDADD = \
+  $(LIBBITCOIN_COMMON) \
+  $(LIBBITCOIN_UTIL) \
+  $(LIBBITCOIN_CRYPTO)
 
 .PHONY: FORCE check-symbols check-security
 # bitcoin core #

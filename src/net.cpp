@@ -56,6 +56,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <set>
 #include <unordered_map>
 
 #include <math.h>
@@ -467,9 +468,9 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     if (addrConnect.IsValid()) {
         bool proxyConnectionFailed = false;
 
-        if (addrConnect.GetNetwork() == NET_I2P && m_i2p_sam_session.get() != nullptr) {
+        if (addrConnect.GetNetwork() == NET_I2P && GetI2POutgoingSession() != nullptr) {
             i2p::Connection conn;
-            if (m_i2p_sam_session->Connect(addrConnect, conn, proxyConnectionFailed)) {
+            if (GetI2POutgoingSession()->Connect(addrConnect, conn, proxyConnectionFailed)) {
                 connected = true;
                 sock = std::move(conn.sock);
                 addr_bind = CAddress{conn.me, NODE_NONE};
@@ -2673,7 +2674,12 @@ void CConnman::ThreadMessageHandler()
     }
 }
 
-void CConnman::ThreadI2PAcceptIncoming()
+i2p::sam::Session* CConnman::GetI2POutgoingSession()
+{
+    return m_i2p_sam_sessions.empty() ? nullptr : m_i2p_sam_sessions.front().get();
+}
+
+void CConnman::ThreadI2PAcceptIncoming(i2p::sam::Session* session)
 {
     PERF_MONITOR("net_i2p_accept_thread");
     static constexpr auto err_wait_begin = 1s;
@@ -2685,7 +2691,7 @@ void CConnman::ThreadI2PAcceptIncoming()
 
     while (!interruptNet) {
 
-        if (!m_i2p_sam_session->Listen(conn)) {
+        if (!session->Listen(conn)) {
             if (advertising_listen_addr && conn.me.IsValid()) {
                 RemoveLocal(conn.me);
                 advertising_listen_addr = false;
@@ -2704,7 +2710,7 @@ void CConnman::ThreadI2PAcceptIncoming()
             advertising_listen_addr = true;
         }
 
-        if (!m_i2p_sam_session->Accept(conn)) {
+        if (!session->Accept(conn)) {
             continue;
         }
 
@@ -2869,6 +2875,43 @@ bool CConnman::InitBinds(const Options& options)
     return fBound;
 }
 
+static std::vector<fs::path> GetI2PPrivateKeyFiles()
+{
+    std::vector<fs::path> files;
+    std::set<fs::path> seen;
+
+    const fs::path main_key = gArgs.GetDataDirNet() / "i2p_private_key";
+    files.push_back(main_key);
+    seen.insert(main_key);
+
+    const fs::path directory = gArgs.GetDataDirNet() / "i2p_private_keys";
+    try {
+        if (!fs::exists(directory)) {
+            fs::create_directories(directory);
+        }
+
+        if (!fs::is_directory(directory)) {
+            LogPrintf("I2P: Failed to access private key directory %s\n", fs::PathToString(directory));
+            return files;
+        }
+
+        for (const auto& entry : fs::directory_iterator(directory)) {
+            if (!fs::is_regular_file(entry.status())) {
+                continue;
+            }
+            const fs::path path = entry.path();
+            if (seen.insert(path).second) {
+                files.push_back(path);
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        LogPrintf("I2P: Error reading private key directory %s: %s\n",
+                  fs::PathToString(directory), e.what());
+    }
+
+    return files;
+}
+
 bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
 {
     Init(connOptions);
@@ -2884,8 +2927,10 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
 
     proxyType i2p_sam;
     if (GetProxy(NET_I2P, i2p_sam)) {
-        m_i2p_sam_session = std::make_unique<i2p::sam::Session>(gArgs.GetDataDirNet() / "i2p_private_key",
-                                                                i2p_sam.proxy, &interruptNet);
+        for (const auto& key_file : GetI2PPrivateKeyFiles()) {
+            m_i2p_sam_sessions.push_back(std::make_unique<i2p::sam::Session>(key_file, i2p_sam.proxy,
+                                                                            &interruptNet));
+        }
     }
 
     for (const auto& strDest : connOptions.vSeedNodes) {
@@ -2948,9 +2993,13 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
     // Process messages
     threadMessageHandler = std::thread(&util::TraceThread, "msghand", [this] { ThreadMessageHandler(); });
 
-    if (connOptions.m_i2p_accept_incoming && m_i2p_sam_session.get() != nullptr) {
-        threadI2PAcceptIncoming =
-            std::thread(&util::TraceThread, "i2paccept", [this] { ThreadI2PAcceptIncoming(); });
+    if (connOptions.m_i2p_accept_incoming && !m_i2p_sam_sessions.empty()) {
+        threadI2PAcceptIncoming.reserve(m_i2p_sam_sessions.size());
+        for (auto& sess : m_i2p_sam_sessions) {
+            i2p::sam::Session* session = sess.get();
+            threadI2PAcceptIncoming.emplace_back(&util::TraceThread, "i2paccept",
+                                                 [this, session] { ThreadI2PAcceptIncoming(session); });
+        }
     }
 
     // Validate blocks
@@ -3004,8 +3053,10 @@ void CConnman::Interrupt()
 
 void CConnman::StopThreads()
 {
-    if (threadI2PAcceptIncoming.joinable()) {
-        threadI2PAcceptIncoming.join();
+    for (auto& t : threadI2PAcceptIncoming) {
+        if (t.joinable()) {
+            t.join();
+        }
     }
     if (threadMessageHandler.joinable())
         threadMessageHandler.join();

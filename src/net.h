@@ -1044,7 +1044,7 @@ private:
     void ThreadOpenConnections(std::vector<std::string> connect);
     void ThreadMessageHandler();
     void ThreadValidation();
-    void ThreadI2PAcceptIncoming();
+    void ThreadI2PAcceptIncoming(i2p::sam::Session* session);
     void AcceptConnection(const ListenSocket& hListenSocket);
 
     /**
@@ -1273,17 +1273,17 @@ private:
 
     /**
      * This is signaled when network activity should cease.
-     * A pointer to it is saved in `m_i2p_sam_session`, so make sure that
+     * A pointer to it is saved in `m_i2p_sam_sessions`, so make sure that
      * the lifetime of `interruptNet` is not shorter than
-     * the lifetime of `m_i2p_sam_session`.
+     * the lifetime of `m_i2p_sam_sessions`.
      */
     CThreadInterrupt interruptNet;
 
     /**
-     * I2P SAM session.
+     * I2P SAM sessions.
      * Used to accept incoming and make outgoing I2P connections.
      */
-    std::unique_ptr<i2p::sam::Session> m_i2p_sam_session;
+    std::vector<std::unique_ptr<i2p::sam::Session>> m_i2p_sam_sessions;
 
     std::thread threadDNSAddressSeed;
     std::thread threadSocketHandler;
@@ -1291,7 +1291,7 @@ private:
     std::thread threadOpenConnections;
     std::thread threadMessageHandler;
     std::thread threadValidation;
-    std::thread threadI2PAcceptIncoming;
+    std::vector<std::thread> threadI2PAcceptIncoming;
 
     /** flag for deciding to connect to an extra outbound peer,
      *  in excess of m_max_outbound_full_relay
@@ -1309,6 +1309,8 @@ private:
      * an address and port that are designated for incoming Tor connections.
      */
     std::vector<CService> m_onion_binds;
+
+    i2p::sam::Session* GetI2POutgoingSession();
 
     /**
      * RAII helper to atomically create a copy of `m_nodes` and add a reference
