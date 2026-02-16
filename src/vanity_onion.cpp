@@ -45,6 +45,10 @@ static bool IsValidBase32Char(char c) {
     return (c >= 'a' && c <= 'z') || (c >= '2' && c <= '7');
 }
 
+static bool IsNonLetterBase32Char(char c) {
+    return (c >= '2' && c <= '7');
+}
+
 static std::string NormalizePrefix(std::string p) {
     while (!p.empty() && (p.back() == '\r' || p.back() == '\n' || p.back() == ' ' || p.back() == '\t')) p.pop_back();
     while (!p.empty() && (p.front() == ' ' || p.front() == '\t')) p.erase(p.begin());
@@ -56,7 +60,8 @@ static std::string NormalizePrefix(std::string p) {
     if (p.empty()) Die("empty prefix");
     if (p.size() > 56) Die("prefix too long (max 56 chars)");
     for (char c : p) {
-        if (!IsValidBase32Char(c)) Die("invalid characters in prefix (allowed: a-z2-7)");
+        if (c == '.') continue; // '.' means any non-letter base32 char (2-7)
+        if (!IsValidBase32Char(c)) Die("invalid characters in prefix (allowed: a-z2-7 or '.')");
     }
     return p;
 }
@@ -78,8 +83,14 @@ static std::vector<std::string> LoadPrefixes(const std::string& prefixes_arg, co
         if (!f.is_open()) Die("could not open prefix file");
         std::string line;
         while (std::getline(f, line)) {
-            if (line.empty() || line[0] == '#') continue;
-            prefixes.insert(NormalizePrefix(line));
+            const size_t first_non_ws = line.find_first_not_of(" \t\r");
+            if (first_non_ws == std::string::npos) continue;
+            if (line[first_non_ws] == '#') continue;
+            std::istringstream line_in(line);
+            std::string token;
+            while (line_in >> token) {
+                prefixes.insert(NormalizePrefix(token));
+            }
         }
     }
     if (prefixes.empty()) Die("no prefixes provided");
@@ -102,7 +113,44 @@ static std::vector<std::string> EffectivePrefixes(std::vector<std::string> prefi
     return out;
 }
 
+static bool PrefixHasWildcard(const std::string& p) {
+    return p.find('.') != std::string::npos;
+}
+
+static bool PrefixMatchesServiceId(const std::string& service_id, const std::string& prefix) {
+    if (service_id.size() < prefix.size()) return false;
+    for (size_t i = 0; i < prefix.size(); ++i) {
+        const char pc = prefix[i];
+        const char sc = service_id[i];
+        if (pc == '.') {
+            if (!IsNonLetterBase32Char(sc)) return false;
+            continue;
+        }
+        if (pc != sc) return false;
+    }
+    return true;
+}
+
 static double HitProbability(const std::vector<std::string>& prefixes) {
+    bool has_wildcards = false;
+    for (const auto& p : prefixes) {
+        if (PrefixHasWildcard(p)) {
+            has_wildcards = true;
+            break;
+        }
+    }
+    if (has_wildcards) {
+        // Approximate union probability with overlap ignored for wildcard rules.
+        double p = 0.0;
+        for (const auto& pref : prefixes) {
+            double term = 1.0;
+            for (char c : pref) {
+                term *= (c == '.') ? (6.0 / 32.0) : (1.0 / 32.0);
+            }
+            p += term;
+        }
+        return std::min(1.0, p);
+    }
     auto eff = EffectivePrefixes(prefixes);
     double p = 0.0;
     for (const auto& pref : eff) {
@@ -290,7 +338,7 @@ int main(int argc, char** argv) {
             std::string service_id = OnionServiceIdFromTorKey(tor_key);
             bool hit = false;
             for (const auto& pref : prefixes) {
-                if (service_id.rfind(pref, 0) == 0) { hit = true; break; }
+                if (PrefixMatchesServiceId(service_id, pref)) { hit = true; break; }
             }
             attempts.fetch_add(1, std::memory_order_relaxed);
             if (!hit) continue;
