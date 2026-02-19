@@ -19,6 +19,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <crypto/sha3.h>
@@ -253,6 +254,8 @@ struct Options {
     std::string prefixes;
     std::string prefix_file;
     fs::path outdir{"onion_v3_private_keys"};
+    std::string timing_file;
+    bool estimate{false};
     uint64_t count{1};
     uint32_t workers{0};
     double status_interval{5.0};
@@ -260,8 +263,119 @@ struct Options {
 
 static void PrintUsage();
 
+static std::string DefaultTimingFile() {
+#ifdef __linux__
+    const char* home = std::getenv("HOME");
+    if (home && home[0]) {
+        fs::path p = fs::path(home) / ".cache" / "bitcoin-vanity";
+        std::error_code ec;
+        fs::create_directories(p, ec);
+        return (p / "onion-timing.log").string();
+    }
+#endif
+    return "onion-timing.log";
+}
+
+struct TimingProfile {
+    uint32_t threads;
+    uint64_t avg_ns;
+};
+
+static bool ParseThreadField(const std::string& line, uint32_t& out) {
+    const std::string key = "threads=";
+    const size_t p = line.find(key);
+    if (p == std::string::npos) return false;
+    size_t i = p + key.size();
+    if (i >= line.size() || !std::isdigit(static_cast<unsigned char>(line[i]))) return false;
+    uint64_t v = 0;
+    while (i < line.size() && std::isdigit(static_cast<unsigned char>(line[i]))) {
+        v = v * 10 + static_cast<uint64_t>(line[i] - '0');
+        if (v > std::numeric_limits<uint32_t>::max()) return false;
+        ++i;
+    }
+    out = static_cast<uint32_t>(v);
+    return true;
+}
+
+static bool ParseAvgNsField(const std::string& line, uint64_t& out) {
+    const std::string key = "avg_ns=";
+    const size_t p = line.find(key);
+    if (p == std::string::npos) return false;
+    size_t i = p + key.size();
+    if (i >= line.size() || !std::isdigit(static_cast<unsigned char>(line[i]))) return false;
+    uint64_t v = 0;
+    while (i < line.size() && std::isdigit(static_cast<unsigned char>(line[i]))) {
+        v = v * 10 + static_cast<uint64_t>(line[i] - '0');
+        ++i;
+    }
+    out = v;
+    return true;
+}
+
+static std::vector<TimingProfile> LoadTimingProfiles(const std::string& file) {
+    std::ifstream in(file);
+    if (!in.is_open()) return {};
+    std::unordered_map<uint32_t, uint64_t> latest;
+    std::string line;
+    while (std::getline(in, line)) {
+        uint32_t t = 0;
+        uint64_t avg = 0;
+        if (!ParseThreadField(line, t) || !ParseAvgNsField(line, avg) || avg == 0) continue;
+        latest[t] = avg;
+    }
+    std::vector<TimingProfile> profiles;
+    profiles.reserve(latest.size());
+    for (const auto& kv : latest) profiles.push_back({kv.first, kv.second});
+    std::sort(profiles.begin(), profiles.end(), [](const TimingProfile& a, const TimingProfile& b) {
+        if (a.avg_ns != b.avg_ns) return a.avg_ns < b.avg_ns;
+        return a.threads < b.threads;
+    });
+    return profiles;
+}
+
+static bool UpsertTimingEntry(const std::string& file, uint32_t threads, uint64_t tries, double elapsed_seconds) {
+    if (tries == 0 || elapsed_seconds <= 0.0) return false;
+    const uint64_t avg_ns = static_cast<uint64_t>(std::llround((elapsed_seconds * 1e9) / static_cast<double>(tries)));
+    const double rate = static_cast<double>(tries) / elapsed_seconds;
+
+    std::vector<std::string> keep;
+    {
+        std::ifstream in(file);
+        std::string line;
+        while (std::getline(in, line)) {
+            uint32_t t = 0;
+            if (ParseThreadField(line, t) && t == threads) continue;
+            if (!line.empty()) keep.push_back(line);
+        }
+    }
+
+    std::time_t now = std::time(nullptr);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &now);
+#else
+    localtime_r(&now, &tm);
+#endif
+    char ts[64];
+    std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm);
+    std::ostringstream newline;
+    newline << ts
+            << " threads=" << threads
+            << " tries=" << tries
+            << " elapsed_s=" << elapsed_seconds
+            << " avg_ns=" << avg_ns
+            << " rate_ids_per_sec=" << std::fixed << std::setprecision(2) << rate;
+    keep.push_back(newline.str());
+
+    std::ofstream out(file, std::ios::out | std::ios::trunc);
+    if (!out.is_open()) return false;
+    for (const auto& l : keep) out << l << "\n";
+    return out.good();
+}
+
 static Options ParseArgs(int argc, char** argv) {
     Options opts;
+    opts.timing_file = DefaultTimingFile();
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         auto need = [&](const std::string& name) -> std::string {
@@ -271,6 +385,8 @@ static Options ParseArgs(int argc, char** argv) {
         if (a == "--prefixes") opts.prefixes = need(a);
         else if (a == "--prefix-file") opts.prefix_file = need(a);
         else if (a == "--outdir") opts.outdir = need(a);
+        else if (a == "--timing-file") opts.timing_file = need(a);
+        else if (a == "--estimate") opts.estimate = true;
         else if (a == "--count") opts.count = std::stoull(need(a));
         else if (a == "--workers") opts.workers = static_cast<uint32_t>(std::stoul(need(a)));
         else if (a == "--status-interval") opts.status_interval = std::stod(need(a));
@@ -288,6 +404,8 @@ static void PrintUsage() {
     std::cout << "Usage: vanity_onion --prefixes <p1,p2> | --prefix-file <file>\n"
                  "Options:\n"
                  "  --outdir <dir>               Output directory (default: onion_v3_private_keys)\n"
+                 "  --timing-file <file>         Timing profile file (default: $HOME/.cache/bitcoin-vanity/onion-timing.log)\n"
+                 "  --estimate                   Print probability + 50% estimates from timing profiles and exit\n"
                  "  --count <n>                  Number of matches (default: 1)\n"
                  "  --workers <n>                Worker threads (default: CPU count)\n"
                  "  --status-interval <sec>      Status interval (default: 5)\n";
@@ -320,6 +438,27 @@ int main(int argc, char** argv) {
 
     double p_hit = HitProbability(prefixes);
     double n50 = AttemptsForProbability(p_hit, 0.5);
+    if (opts.estimate) {
+        std::cout << "probability_per_try: " << std::setprecision(12) << p_hit << "\n";
+        if (std::isfinite(n50)) std::cout << "tries_for_50pct: " << std::fixed << std::setprecision(0) << n50 << "\n";
+        else std::cout << "tries_for_50pct: unknown\n";
+        auto profiles = LoadTimingProfiles(opts.timing_file);
+        std::cout << "timing_profiles: " << profiles.size() << "\n";
+        for (const auto& p : profiles) {
+            const double rate = p.avg_ns > 0 ? (1e9 / static_cast<double>(p.avg_ns)) : 0.0;
+            std::cout << "threads=" << p.threads
+                      << " avg_ns=" << p.avg_ns
+                      << " est_rate_ids_per_sec=" << std::fixed << std::setprecision(2) << rate;
+            if (std::isfinite(n50) && rate > 0.0) {
+                std::cout << " est_time_for_50pct=" << FormatDuration(n50 / rate);
+            } else {
+                std::cout << " est_time_for_50pct=unknown";
+            }
+            std::cout << "\n";
+        }
+        return 0;
+    }
+
     if (std::isfinite(n50)) {
         std::cout << "per-attempt hit probability ~ " << std::scientific << std::setprecision(6) << p_hit
                   << ", 50% chance in ~ " << std::fixed << std::setprecision(0) << n50 << " attempts\n";
@@ -399,5 +538,11 @@ int main(int argc, char** argv) {
     }
 
     for (auto& t : threads) t.join();
+    {
+        const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        if (!UpsertTimingEntry(opts.timing_file, workers, attempts.load(), elapsed)) {
+            std::cout << "warning: unable to update timing file " << opts.timing_file << "\n";
+        }
+    }
     return 0;
 }
