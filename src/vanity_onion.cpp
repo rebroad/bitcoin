@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -178,6 +179,24 @@ static std::string FormatDuration(double seconds) {
     }
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(1) << (seconds / 60.0) << " min";
+    return oss.str();
+}
+
+static std::string FormatEtaClock(double seconds) {
+    if (!std::isfinite(seconds) || seconds <= 0.0) return "--:--";
+    const uint64_t total = static_cast<uint64_t>(std::llround(seconds));
+    const uint64_t h = total / 3600;
+    const uint64_t m = (total % 3600) / 60;
+    const uint64_t s = total % 60;
+    std::ostringstream oss;
+    if (h > 0) {
+        oss << std::setw(2) << std::setfill('0') << h << ":"
+            << std::setw(2) << std::setfill('0') << m << ":"
+            << std::setw(2) << std::setfill('0') << s;
+    } else {
+        oss << std::setw(2) << std::setfill('0') << m << ":"
+            << std::setw(2) << std::setfill('0') << s;
+    }
     return oss.str();
 }
 
@@ -515,21 +534,66 @@ int main(int argc, char** argv) {
     }
 
     auto start = std::chrono::steady_clock::now();
+    auto last_status = start;
     uint64_t last_attempts = 0;
+    struct RateSample {
+        std::chrono::steady_clock::time_point ts;
+        uint64_t attempts_delta;
+        double elapsed_seconds;
+    };
+    std::deque<RateSample> rate_samples;
     while (!g_stop.load()) {
         std::this_thread::sleep_for(std::chrono::duration<double>(opts.status_interval));
         uint64_t a = attempts.load();
         uint64_t delta = a - last_attempts;
         last_attempts = a;
         auto now = std::chrono::steady_clock::now();
-        double elapsed = std::chrono::duration<double>(now - start).count();
-        double rate = elapsed > 0 ? static_cast<double>(a) / elapsed : 0.0;
+        const double elapsed = std::chrono::duration<double>(now - start).count();
+        const double status_elapsed = std::chrono::duration<double>(now - last_status).count();
+        last_status = now;
+        const double rate = elapsed > 0 ? static_cast<double>(a) / elapsed : 0.0;
+        rate_samples.push_back({now, delta, status_elapsed});
+        const auto oldest_needed = now - std::chrono::seconds(15 * 60);
+        while (!rate_samples.empty() && rate_samples.front().ts < oldest_needed) rate_samples.pop_front();
+        auto boxcar_rate = [&rate_samples, now](double window_seconds) -> double {
+            const auto cutoff = now - std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(window_seconds));
+            uint64_t sum_delta = 0;
+            double sum_elapsed = 0.0;
+            for (const RateSample& s : rate_samples) {
+                if (s.ts >= cutoff) {
+                    sum_delta += s.attempts_delta;
+                    sum_elapsed += s.elapsed_seconds;
+                }
+            }
+            return (sum_elapsed > 0.0) ? (static_cast<double>(sum_delta) / sum_elapsed) : 0.0;
+        };
+        const double rate_1m = boxcar_rate(60.0);
+        const double rate_5m = boxcar_rate(300.0);
+        const double rate_15m = boxcar_rate(900.0);
         double p_so_far = (p_hit > 0.0) ? (1.0 - std::pow(1.0 - p_hit, static_cast<double>(a))) : 0.0;
         std::cout << "attempts: " << a << " (" << std::fixed << std::setprecision(0) << rate << " per sec)";
-        if (std::isfinite(n50) && rate > 0) {
-            double remaining_attempts = std::max(0.0, n50 - static_cast<double>(a));
-            double eta_seconds = remaining_attempts / rate;
-            std::cout << ", est 50% time ~ " << FormatDuration(eta_seconds);
+        if (std::isfinite(n50)) {
+            const bool reached50 = (static_cast<double>(a) >= n50);
+            const double remaining_attempts = reached50 ? 0.0 : std::max(0.0, n50 - static_cast<double>(a));
+            std::string eta_1m = "??:??";
+            std::string eta_5m = "??:??";
+            std::string eta_15m = "??:??";
+            if (reached50) {
+                eta_1m = "--:--";
+                eta_5m = "--:--";
+                eta_15m = "--:--";
+            } else {
+                if (rate_1m > 0.0) eta_1m = FormatEtaClock(remaining_attempts / rate_1m);
+                if (rate_5m > 0.0) eta_5m = FormatEtaClock(remaining_attempts / rate_5m);
+                if (rate_15m > 0.0) eta_15m = FormatEtaClock(remaining_attempts / rate_15m);
+            }
+            if (elapsed < 60.0) {
+                std::cout << ", 50% ETA(1m) " << eta_1m;
+            } else if (elapsed < 300.0) {
+                std::cout << ", 50% ETA(1m/5m) " << eta_1m << " / " << eta_5m;
+            } else {
+                std::cout << ", 50% ETA(1m/5m/15m) " << eta_1m << " / " << eta_5m << " / " << eta_15m;
+            }
         }
         std::cout << ", current hit chance ~ " << std::fixed << std::setprecision(2) << (p_so_far * 100.0) << "%";
         std::cout << "\n";
