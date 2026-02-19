@@ -11,13 +11,32 @@ SUBDIRS = src
 if ENABLE_MAN
 SUBDIRS += doc/man
 endif
-.PHONY: deploy FORCE help check-libs robust-build rebuild-libs fix-build fix-undefined-refs smart-build smart vanity-onion
+.PHONY: deploy FORCE help check-libs robust-build rebuild-libs fix-build fix-undefined-refs vanity-onion vanity-i2p __smart_internal
 .INTERMEDIATE: $(OSX_TEMP_ISO) $(COVERAGE_INFO)
 
 export PYTHONPATH
 
 vanity-onion:
-	$(AM_V_at) $(MAKE) -C src vanity-onion
+	$(AM_V_at) if [ "$(SMART)" != "0" ] && [ -z "$(SMART_INTERNAL)" ]; then \
+		if [ "$@" = "$(firstword $(MAKECMDGOALS))" ]; then \
+			targets="$(MAKECMDGOALS)"; \
+			if [ -z "$$targets" ]; then targets="$@"; fi; \
+			$(MAKE) $(AM_MAKEFLAGS) SMART=0 SMART_INTERNAL=1 __smart_internal SMART_TARGETS="$$targets"; \
+		fi; \
+	else \
+		$(MAKE) -C src vanity-onion; \
+	fi
+
+vanity-i2p:
+	$(AM_V_at) if [ "$(SMART)" != "0" ] && [ -z "$(SMART_INTERNAL)" ]; then \
+		if [ "$@" = "$(firstword $(MAKECMDGOALS))" ]; then \
+			targets="$(MAKECMDGOALS)"; \
+			if [ -z "$$targets" ]; then targets="$@"; fi; \
+			$(MAKE) $(AM_MAKEFLAGS) SMART=0 SMART_INTERNAL=1 __smart_internal SMART_TARGETS="$$targets"; \
+		fi; \
+	else \
+		$(MAKE) -C src vanity-i2p; \
+	fi
 
 if BUILD_BITCOIN_LIBS
 pkgconfigdir = $(libdir)/pkgconfig
@@ -383,7 +402,6 @@ help:
 	@echo "  rebuild-libs      - Force rebuild all libraries"
 	@echo "  fix-build         - Comprehensive build fix"
 	@echo "  fix-undefined-refs - Quick fix for undefined references"
-	@echo "  smart-build       - Build with automatic error recovery"
 	@echo ""
 	@echo "More build-system help: make -C src help"
 
@@ -414,7 +432,6 @@ check-libs:
 	@echo "📚 Build recovery targets available:"
 	@echo "  make fix-undefined-refs  - Fix undefined reference errors"
 	@echo "  make fix-build          - Comprehensive build fix"
-	@echo "  make smart-build        - Build with automatic error recovery"
 	@echo ""
 
 # Robust build target that checks and fixes corrupted libraries
@@ -477,8 +494,8 @@ fix-undefined-refs: check-libs
 	@echo ""
 	@echo "✅ Quick fix completed!"
 
-# Smart build that analyzes failure and runs the appropriate fix
-smart-build: check-libs
+# Internal SMART build dispatcher (invoked when SMART=1)
+__smart_internal: check-libs
 	@echo "🚀 Starting smart build with automatic error recovery..."
 	@echo "📋 Step 0: Checking build system files..."
 	@need_regen=0; \
@@ -500,19 +517,16 @@ smart-build: check-libs
 		echo "⚠️  src/Makefile.am is newer than src/Makefile.in. Run ./autogen.sh and ./configure to refresh build files."; \
 	fi
 
-# Alias for smart-build
-smart: smart-build
 	@echo "📋 Step 1: Attempting normal build..."
 	@echo ""
-	@( $(MAKE) $(AM_MAKEFLAGS) -C src bitcoind bitcoin-cli qt/bitcoin-qt ; echo $$? > /tmp/bitcoin-build.exit ) 2>&1 | tee /tmp/bitcoin-build.log; \
+	@smart_targets="$(SMART_TARGETS)"; \
+	if [ -z "$$smart_targets" ]; then smart_targets="bitcoind bitcoin-cli qt/bitcoin-qt"; fi; \
+	( $(MAKE) $(AM_MAKEFLAGS) -C src $$smart_targets ; echo $$? > /tmp/bitcoin-build.exit ) 2>&1 | tee /tmp/bitcoin-build.log; \
 	result=$$(cat /tmp/bitcoin-build.exit); \
 	if [ $$result -eq 0 ]; then \
 		echo ""; \
 		echo "✅ SUCCESS: Build completed without errors!"; \
-		echo "🎉 All binaries built successfully:"; \
-		echo "   - bitcoind"; \
-		echo "   - bitcoin-cli"; \
-		echo "   - qt/bitcoin-qt"; \
+		echo "🎉 Targets built successfully: $$smart_targets"; \
 	else \
 		echo ""; \
 		echo "⚠️  BUILD FAILED: Analyzing error output..."; \
@@ -540,7 +554,7 @@ smart: smart-build
 			SUDO_ASKPASS="$$HOME/bin/simple-askpass" sudo -A apt-get install -y $$apt_pkgs || exit 1; \
 			echo ""; \
 			echo "📋 Retrying build..."; \
-			$(MAKE) $(AM_MAKEFLAGS) smart-build; \
+			$(MAKE) $(AM_MAKEFLAGS) __smart_internal SMART_TARGETS="$$smart_targets"; \
 			exit $$?; \
 		fi; \
 		if grep -q "fatal error:.*No such file or directory" /tmp/bitcoin-build.log; then \
@@ -567,6 +581,19 @@ smart: smart-build
 			echo ""; \
 			$(MAKE) fix-build; \
 		fi; \
+	fi
+
+.DEFAULT:
+	$(AM_V_at) if [ "$(SMART)" != "0" ] && [ -z "$(SMART_INTERNAL)" ]; then \
+		if [ -n "$(SMART_DISPATCHED)" ]; then \
+			:; \
+		else \
+			targets="$(MAKECMDGOALS)"; \
+			if [ -z "$$targets" ]; then targets="$@"; fi; \
+			$(MAKE) $(AM_MAKEFLAGS) SMART=0 SMART_INTERNAL=1 SMART_DISPATCHED=1 __smart_internal SMART_TARGETS="$$targets"; \
+		fi; \
+	else \
+		$(MAKE) -C src $@; \
 	fi
 
 clean-local: clean-docs
