@@ -36,6 +36,7 @@ static const uint8_t ONION_VERSION = 3;
 static constexpr size_t ONION_CHECKSUM_PREFIX_LEN = 15;
 static constexpr size_t ONION_SERVICE_ID_LEN = 56;
 static constexpr size_t ONION_ADDRESS_LEN = 35;
+static constexpr uint64_t ATTEMPT_FLUSH_INTERVAL = 1024;
 
 static std::atomic<bool> g_stop{false};
 
@@ -246,6 +247,7 @@ static std::string OnionServiceIdFromPubkey(const uint8_t* pubkey32) {
 }
 
 static void ExpandSeedToTorKey(const uint8_t* seed32, uint8_t* out_scalar32, uint8_t* out_prf32) {
+    // TODO(perf): Generate Tor key material directly to avoid per-attempt SHA512 when safe for key format guarantees.
     unsigned char h[crypto_hash_sha512_BYTES];
     crypto_hash_sha512(h, seed32, 32);
     // Clamp per Ed25519 spec.
@@ -265,7 +267,6 @@ static void OnionServiceIdFromTorKey(const uint8_t* tor_key64, char out56[ONION_
 }
 
 static bool WriteKeyFile(const fs::path& outdir, const std::string& service_id, const std::string& key_b64, fs::path* out_path) {
-    fs::create_directories(outdir);
     fs::path path = outdir / service_id;
     if (out_path) *out_path = path;
     if (fs::exists(path)) return false;
@@ -415,7 +416,10 @@ static Options ParseArgs(int argc, char** argv) {
         else if (a == "--estimate") opts.estimate = true;
         else if (a == "--count") opts.count = std::stoull(need(a));
         else if (a == "--workers") opts.workers = static_cast<uint32_t>(std::stoul(need(a)));
-        else if (a == "--status-interval") opts.status_interval = std::stod(need(a));
+        else if (a == "--status-interval") {
+            opts.status_interval = std::stod(need(a));
+            if (opts.status_interval < 1.0) Die("--status-interval must be >= 1");
+        }
         else if (a == "--help" || a == "-h") {
             PrintUsage();
             std::exit(0);
@@ -490,6 +494,10 @@ int main(int argc, char** argv) {
                   << ", 50% chance in ~ " << std::fixed << std::setprecision(0) << n50 << " attempts\n";
     }
 
+    std::error_code ec;
+    fs::create_directories(opts.outdir, ec);
+    if (ec) Die("could not create output directory: " + opts.outdir.string());
+
     std::atomic<uint64_t> attempts{0};
     std::atomic<uint64_t> matches{0};
     std::mutex io_mu;
@@ -498,6 +506,7 @@ int main(int argc, char** argv) {
         uint8_t seed[32];
         uint8_t tor_key[crypto_sign_SECRETKEYBYTES];
         char service_id_buf[ONION_SERVICE_ID_LEN];
+        uint64_t local_attempts = 0;
         while (!g_stop.load()) {
             randombytes_buf(seed, sizeof(seed));
             ExpandSeedToTorKey(seed, tor_key, tor_key + 32);
@@ -506,20 +515,13 @@ int main(int argc, char** argv) {
             for (const auto& pref : prefixes) {
                 if (PrefixMatchesServiceId(service_id_buf, ONION_SERVICE_ID_LEN, pref)) { hit = true; break; }
             }
-            attempts.fetch_add(1, std::memory_order_relaxed);
+            ++local_attempts;
+            if (local_attempts >= ATTEMPT_FLUSH_INTERVAL) {
+                attempts.fetch_add(local_attempts, std::memory_order_relaxed);
+                local_attempts = 0;
+            }
             if (!hit) continue;
             const std::string service_id(service_id_buf, ONION_SERVICE_ID_LEN);
-
-            uint8_t pk_verify[crypto_sign_PUBLICKEYBYTES];
-            uint8_t sk_verify[crypto_sign_SECRETKEYBYTES];
-            crypto_sign_seed_keypair(pk_verify, sk_verify, seed);
-            const std::string verify_id = OnionServiceIdFromPubkey(pk_verify);
-            if (verify_id != service_id) {
-                std::lock_guard<std::mutex> lock(io_mu);
-                std::cout << "sanity check failed: key maps to " << verify_id
-                          << ".onion, expected " << service_id << ".onion\n";
-                continue;
-            }
 
             char b64[sodium_base64_ENCODED_LEN(crypto_sign_SECRETKEYBYTES, sodium_base64_VARIANT_ORIGINAL)];
             sodium_bin2base64(b64, sizeof(b64), tor_key, crypto_sign_SECRETKEYBYTES, sodium_base64_VARIANT_ORIGINAL);
@@ -534,6 +536,7 @@ int main(int argc, char** argv) {
                 }
             }
         }
+        if (local_attempts > 0) attempts.fetch_add(local_attempts, std::memory_order_relaxed);
     };
 
     std::vector<std::thread> threads;
