@@ -239,16 +239,12 @@ static std::string OnionServiceIdFromPubkey(const uint8_t* pubkey32) {
     return Base32Encode(address, sizeof(address));
 }
 
-static void ExpandSeedToTorKey(const uint8_t* seed32, uint8_t* out_scalar32, uint8_t* out_prf32) {
-    // TODO(perf): Generate Tor key material directly to avoid per-attempt SHA512 when safe for key format guarantees.
-    unsigned char h[crypto_hash_sha512_BYTES];
-    crypto_hash_sha512(h, seed32, 32);
-    // Clamp per Ed25519 spec.
-    h[0] &= 248;
-    h[31] &= 63;
-    h[31] |= 64;
-    std::memcpy(out_scalar32, h, 32);
-    std::memcpy(out_prf32, h + 32, 32);
+static void GenerateRandomTorKey(uint8_t* tor_key64) {
+    randombytes_buf(tor_key64, crypto_sign_SECRETKEYBYTES);
+    // Clamp scalar half per Ed25519 spec.
+    tor_key64[0] &= 248;
+    tor_key64[31] &= 63;
+    tor_key64[31] |= 64;
 }
 
 static std::string OnionServiceIdFromTorKey(const uint8_t* tor_key64) {
@@ -496,11 +492,9 @@ int main(int argc, char** argv) {
     std::mutex io_mu;
 
     auto worker_fn = [&](uint32_t) {
-        uint8_t seed[32];
         uint8_t tor_key[crypto_sign_SECRETKEYBYTES];
         while (!g_stop.load()) {
-            randombytes_buf(seed, sizeof(seed));
-            ExpandSeedToTorKey(seed, tor_key, tor_key + 32);
+            GenerateRandomTorKey(tor_key);
             std::string service_id = OnionServiceIdFromTorKey(tor_key);
             bool hit = false;
             for (const auto& pref : prefixes) {
@@ -585,7 +579,7 @@ int main(int argc, char** argv) {
                 if (rate_15m > 0.0) eta_15m = FormatEtaClock(remaining_attempts / rate_15m);
             }
             if (elapsed < 60.0) {
-                std::cout << ", 50% ETA(1m) " << eta_1m;
+                std::cout << ", 50% ETA " << eta_1m;
             } else if (elapsed < 300.0) {
                 std::cout << ", 50% ETA(1m/5m) " << eta_1m << " / " << eta_5m;
             } else {
