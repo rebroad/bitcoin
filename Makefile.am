@@ -521,49 +521,14 @@ __smart_internal: check-libs
 	@echo ""
 	@smart_targets="$(SMART_TARGETS)"; \
 	if [ -z "$$smart_targets" ]; then smart_targets="bitcoind bitcoin-cli qt/bitcoin-qt"; fi; \
-	( $(MAKE) $(AM_MAKEFLAGS) -C src $$smart_targets ; echo $$? > /tmp/bitcoin-build.exit ) 2>&1 | tee /tmp/bitcoin-build.log; \
-	result=$$(cat /tmp/bitcoin-build.exit); \
-	if [ $$result -eq 0 ]; then \
+	smart_tool="$${SMART_TOOL:-$$HOME/bin/smart-build-debian}"; \
+	if "$$smart_tool" --name bitcoin --log /tmp/bitcoin-build.log --sudo-askpass "$$HOME/bin/simple-askpass" -- $(MAKE) $(AM_MAKEFLAGS) -C src $$smart_targets; then \
 		echo ""; \
 		echo "✅ SUCCESS: Build completed without errors!"; \
 		echo "🎉 Targets built successfully: $$smart_targets"; \
 	else \
 		echo ""; \
-		echo "⚠️  BUILD FAILED: Analyzing error output..."; \
-		apt_pkgs=""; \
-		if grep -q "fatal error:.*No such file or directory" /tmp/bitcoin-build.log; then \
-			echo "🔍 Detected: missing header(s) / dependency"; \
-			echo "   Missing:"; \
-			grep "fatal error:.*No such file or directory" /tmp/bitcoin-build.log | sed -n 's/.*fatal error: *\([^:]*\):.*/\1/p' | sort -u | while read h; do echo "     - $$h"; done; \
-			echo ""; \
-			grep -q "event2/" /tmp/bitcoin-build.log && apt_pkgs="libevent-dev"; \
-			grep -q "sys/sdt\.h" /tmp/bitcoin-build.log && apt_pkgs="$$apt_pkgs systemtap-sdt-dev"; \
-			grep -qE "zmq\.h|zmq/" /tmp/bitcoin-build.log && apt_pkgs="$$apt_pkgs libzmq3-dev"; \
-			grep -q "sqlite3\.h" /tmp/bitcoin-build.log && apt_pkgs="$$apt_pkgs libsqlite3-dev"; \
-			grep -q "qrencode\.h" /tmp/bitcoin-build.log && apt_pkgs="$$apt_pkgs libqrencode-dev"; \
-		elif grep -q "cannot find -l" /tmp/bitcoin-build.log; then \
-			echo "🔍 Detected: missing library (linker cannot find -l...)"; \
-			link_libs=$$(grep "cannot find -l" /tmp/bitcoin-build.log | sed -n 's/.*cannot find -l\([^: ]*\).*/\1/p' | sort -u); \
-			echo "   Missing libs:"; \
-			for lib in $$link_libs; do echo "     - $$lib"; done; \
-			for lib in $$link_libs; do apt_pkgs="$$apt_pkgs lib$${lib}-dev"; done; \
-		fi; \
-		if [ -n "$$apt_pkgs" ]; then \
-			echo ""; \
-			echo "🔧 Installing $$apt_pkgs (using SUDO_ASKPASS)..."; \
-			SUDO_ASKPASS="$$HOME/bin/simple-askpass" sudo -A apt-get install -y $$apt_pkgs || exit 1; \
-			echo ""; \
-			echo "📋 Retrying build..."; \
-			$(MAKE) $(AM_MAKEFLAGS) __smart_internal SMART_TARGETS="$$smart_targets"; \
-			exit $$?; \
-		fi; \
-		if grep -q "fatal error:.*No such file or directory" /tmp/bitcoin-build.log; then \
-			echo "❌ No known package mapping. Install the dev package(s) for the header(s) above."; \
-			echo "   Or disable optional features: ./configure --without-tor --without-zmq --disable-tracing"; \
-			echo ""; \
-			exit 1; \
-		fi; \
-		if grep -q "cannot find -l" /tmp/bitcoin-build.log; then exit 1; fi; \
+		echo "⚠️  BUILD FAILED after smart dependency resolution. Analyzing remaining output..."; \
 		if grep -q "libbitcoinconsensus_la-.*\.o: No such file or directory" /tmp/bitcoin-build.log; then \
 			echo "🔍 Detected: missing libtool consensus object (stale .lo/.o)"; \
 			echo ""; \
