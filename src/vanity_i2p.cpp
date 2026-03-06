@@ -669,7 +669,7 @@ int main(int argc, char** argv)
                 if (rate_15m > 0.0) eta_15m = FormatEtaClock(remaining_attempts / rate_15m);
             }
             if (elapsed < 60.0) {
-                std::cout << ", 50% ETA(1m) " << eta_1m;
+                std::cout << ", 50% ETA " << eta_1m;
             } else if (elapsed < 300.0) {
                 std::cout << ", 50% ETA(1m/5m) " << eta_1m << " / " << eta_5m;
             } else {

@@ -34,6 +34,8 @@ static const char* BASE32_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 static const char* ONION_CHECKSUM_PREFIX = ".onion checksum";
 static const uint8_t ONION_VERSION = 3;
 static constexpr size_t ONION_CHECKSUM_PREFIX_LEN = 15;
+static constexpr size_t ONION_ADDRESS_LEN = 35;
+static constexpr size_t ONION_SERVICE_ID_LEN = 56;
 
 static std::atomic<bool> g_stop{false};
 
@@ -120,8 +122,8 @@ static bool PrefixHasWildcard(const std::string& p) {
     return p.find('.') != std::string::npos;
 }
 
-static bool PrefixMatchesServiceId(const std::string& service_id, const std::string& prefix) {
-    if (service_id.size() < prefix.size()) return false;
+static bool PrefixMatchesServiceId(const char* service_id, size_t service_id_len, const std::string& prefix) {
+    if (service_id_len < prefix.size()) return false;
     for (size_t i = 0; i < prefix.size(); ++i) {
         const char pc = prefix[i];
         const char sc = service_id[i];
@@ -222,7 +224,27 @@ static std::string Base32Encode(const uint8_t* data, size_t len) {
     return out;
 }
 
-static std::string OnionServiceIdFromPubkey(const uint8_t* pubkey32) {
+static size_t Base32EncodePrefix(const uint8_t* data, size_t len, char* out, size_t out_len) {
+    uint32_t buffer = 0;
+    int bits_left = 0;
+    size_t out_pos = 0;
+    for (size_t i = 0; i < len && out_pos < out_len; ++i) {
+        buffer = (buffer << 8) | data[i];
+        bits_left += 8;
+        while (bits_left >= 5 && out_pos < out_len) {
+            int idx = (buffer >> (bits_left - 5)) & 0x1f;
+            out[out_pos++] = BASE32_ALPHABET[idx];
+            bits_left -= 5;
+        }
+    }
+    if (bits_left > 0 && out_pos < out_len) {
+        int idx = (buffer << (5 - bits_left)) & 0x1f;
+        out[out_pos++] = BASE32_ALPHABET[idx];
+    }
+    return out_pos;
+}
+
+static void OnionAddressBytesFromPubkey(const uint8_t* pubkey32, uint8_t out_address35[ONION_ADDRESS_LEN]) {
     uint8_t checksum_full[SHA3_256::OUTPUT_SIZE];
     SHA3_256 hasher;
     hasher.Write(Span<const unsigned char>(reinterpret_cast<const unsigned char*>(ONION_CHECKSUM_PREFIX), ONION_CHECKSUM_PREFIX_LEN));
@@ -230,13 +252,14 @@ static std::string OnionServiceIdFromPubkey(const uint8_t* pubkey32) {
     hasher.Write(Span<const unsigned char>(&ONION_VERSION, 1));
     hasher.Finalize(checksum_full);
 
-    uint8_t address[32 + 2 + 1];
-    std::memcpy(address, pubkey32, 32);
-    address[32] = checksum_full[0];
-    address[33] = checksum_full[1];
-    address[34] = ONION_VERSION;
+    std::memcpy(out_address35, pubkey32, 32);
+    out_address35[32] = checksum_full[0];
+    out_address35[33] = checksum_full[1];
+    out_address35[34] = ONION_VERSION;
+}
 
-    return Base32Encode(address, sizeof(address));
+static std::string OnionServiceIdFromAddressBytes(const uint8_t address35[ONION_ADDRESS_LEN]) {
+    return Base32Encode(address35, ONION_ADDRESS_LEN);
 }
 
 static void GenerateRandomTorKey(uint8_t* tor_key64) {
@@ -247,12 +270,12 @@ static void GenerateRandomTorKey(uint8_t* tor_key64) {
     tor_key64[31] |= 64;
 }
 
-static std::string OnionServiceIdFromTorKey(const uint8_t* tor_key64) {
+static void OnionAddressBytesFromTorKey(const uint8_t* tor_key64, uint8_t out_address35[ONION_ADDRESS_LEN]) {
     uint8_t pk[crypto_sign_PUBLICKEYBYTES];
     if (crypto_scalarmult_ed25519_base(pk, tor_key64) != 0) {
         Die("failed to derive public key from tor key scalar");
     }
-    return OnionServiceIdFromPubkey(pk);
+    OnionAddressBytesFromPubkey(pk, out_address35);
 }
 
 static bool WriteKeyFile(const fs::path& outdir, const std::string& service_id, const std::string& key_b64, fs::path* out_path) {
@@ -445,15 +468,10 @@ int main(int argc, char** argv) {
     if (opts.count < 1) Die("--count must be >= 1");
 
     auto prefixes = LoadPrefixes(opts.prefixes, opts.prefix_file);
+    size_t max_prefix_len = 0;
+    for (const auto& p : prefixes) max_prefix_len = std::max(max_prefix_len, p.size());
     const uint32_t hw = std::max(1u, std::thread::hardware_concurrency());
     const uint32_t workers = opts.workers == 0 ? hw : std::max(1u, opts.workers);
-
-    std::cout << "prefixes: ";
-    for (size_t i = 0; i < prefixes.size(); ++i) {
-        if (i) std::cout << ", ";
-        std::cout << prefixes[i];
-    }
-    std::cout << "\noutput: " << opts.outdir << "\nworkers: " << workers << "\n";
 
     double p_hit = HitProbability(prefixes);
     double n50 = AttemptsForProbability(p_hit, 0.5);
@@ -493,15 +511,19 @@ int main(int argc, char** argv) {
 
     auto worker_fn = [&](uint32_t) {
         uint8_t tor_key[crypto_sign_SECRETKEYBYTES];
+        uint8_t address[ONION_ADDRESS_LEN];
+        char service_id_prefix[ONION_SERVICE_ID_LEN];
         while (!g_stop.load()) {
             GenerateRandomTorKey(tor_key);
-            std::string service_id = OnionServiceIdFromTorKey(tor_key);
+            OnionAddressBytesFromTorKey(tor_key, address);
+            const size_t encoded_len = Base32EncodePrefix(address, ONION_ADDRESS_LEN, service_id_prefix, max_prefix_len);
             bool hit = false;
             for (const auto& pref : prefixes) {
-                if (PrefixMatchesServiceId(service_id, pref)) { hit = true; break; }
+                if (PrefixMatchesServiceId(service_id_prefix, encoded_len, pref)) { hit = true; break; }
             }
             attempts.fetch_add(1, std::memory_order_relaxed);
             if (!hit) continue;
+            const std::string service_id = OnionServiceIdFromAddressBytes(address);
 
             char b64[sodium_base64_ENCODED_LEN(crypto_sign_SECRETKEYBYTES, sodium_base64_VARIANT_ORIGINAL)];
             sodium_bin2base64(b64, sizeof(b64), tor_key, crypto_sign_SECRETKEYBYTES, sodium_base64_VARIANT_ORIGINAL);
