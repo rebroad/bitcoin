@@ -1886,7 +1886,6 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
 
         // Get current time for snapshot operations
         int64_t now = GetTimeSeconds();
-
         // Handle both full blocks and compact blocks
         if (is_full_block) {
             // For full blocks, calculate statistics from the block data
@@ -1919,12 +1918,18 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
                         CNodeState* nodestate = State(pnode->GetId());
                         if (nodestate) {
                             nodestate->nBlocksRecv++;
-
                             const uint64_t block_bytes_base{use_peer_stats_snapshots ? pnode->nBlockBytesSnapOld : 0};
                             const uint64_t recv_bytes_base{use_peer_stats_snapshots ? pnode->nRecvBytesSnapOld : 0};
+                            const unsigned int block_txs_base{use_peer_stats_snapshots ? pnode->nBlockTXsSnapOld : 0};
+                            const int64_t time_base{
+                                (use_peer_stats_snapshots && pnode->nTimeSnapOld > 0)
+                                    ? pnode->nTimeSnapOld
+                                    : count_seconds(pnode->m_connected)};
                             const uint64_t block_bytes{pnode->nBlockBytes > block_bytes_base ? pnode->nBlockBytes - block_bytes_base : 0};
                             const uint64_t recv_bytes{pnode->nRecvBytes > recv_bytes_base ? pnode->nRecvBytes - recv_bytes_base : 0};
+                            const unsigned int block_txs{pnode->nBlockTXs > block_txs_base ? pnode->nBlockTXs - block_txs_base : 0};
                             pnode->nBTxBpsPct = recv_bytes > 0 ? 100.0 * block_bytes / recv_bytes : 0;
+                            pnode->nBTXpm = now > time_base ? 60.0 * block_txs / (now - time_base) : 0;
                             LogPrint(BCLog::BLOCK, "peer=%d, recv=%d Pct = (%d-%d) / %d = %d\n",
                                     pnode->GetId(), nodestate->nBlocksRecv, pnode->nBlockBytes, pnode->nBlockBytesSnapOld,
                                     pnode->nRecvBytes - pnode->nRecvBytesSnapOld, pnode->nBTxBpsPct);
