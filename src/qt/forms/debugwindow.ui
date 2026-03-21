@@ -920,6 +920,22 @@
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_7">
            <item>
+            <widget class="QLabel" name="geoipStatusLabel">
+             <property name="visible">
+              <bool>false</bool>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QLabel { color: #b36b00; }</string>
+             </property>
+             <property name="text">
+              <string>GeoIP DB warning</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QTableView" name="peerWidget">
              <property name="tabKeyNavigation">
               <bool>false</bool>

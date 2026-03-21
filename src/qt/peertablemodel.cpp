@@ -10,6 +10,7 @@
 #include <interfaces/node.h>
 #include <netbase.h>
 #include <sync.h>
+#include <util/system.h>
 #include <util/strencodings.h>
 #include <validation.h> // For cs_main
 #include <QElapsedTimer>
@@ -115,6 +116,18 @@ public:
         return PresentationForPeerAddress(peer_addr).flag;
     }
 
+    QString GeoIpStatusSummary()
+    {
+        InitOnce();
+        return m_geoip_status;
+    }
+
+    bool GeoIpNeedsAttention()
+    {
+        InitOnce();
+        return m_geoip_needs_attention;
+    }
+
 private:
     struct GeoPresentation {
         QString flag{};
@@ -204,9 +217,35 @@ private:
                 : QStringLiteral("%1 (%2)").arg(country_name, city_name);
             // Temporary debug aid: include the exact host/IP used for lookup.
             presentation.tooltip = QStringLiteral("%1\n%2").arg(location_text, QString::fromStdString(host));
+            if (m_geoip_needs_attention && !m_geoip_status.isEmpty()) {
+                presentation.tooltip += QStringLiteral("\n%1").arg(m_geoip_status);
+            }
         }
 
         return presentation;
+    }
+
+    int StaleWarnDays() const
+    {
+        const int64_t parsed = gArgs.GetIntArg("-qtgeoipstalewarn", 7);
+        return static_cast<int>(std::clamp<int64_t>(parsed, 1, 365));
+    }
+
+    QString DbAgeStatus(const QString& path) const
+    {
+        const QFileInfo file(path);
+        if (!file.exists()) return QStringLiteral("GeoIP database file missing");
+        const QDateTime modified = file.lastModified().toUTC();
+        if (!modified.isValid()) return QStringLiteral("GeoIP database timestamp unavailable");
+        const int age_days = modified.daysTo(QDateTime::currentDateTimeUtc());
+        const int warn_days = StaleWarnDays();
+        const QString base = QStringLiteral("GeoIP DB age: %1 days (updated %2 UTC)")
+                                 .arg(QString::number(std::max(age_days, 0)),
+                                      modified.toString(QStringLiteral("yyyy-MM-dd")));
+        if (age_days > warn_days) {
+            return QStringLiteral("GeoIP DB STALE: %1 (warn >= %2 days)").arg(base, QString::number(warn_days));
+        }
+        return base;
     }
 
     void InitOnce()
@@ -231,6 +270,17 @@ private:
         if (!m_mmdb_available) {
             m_tor_geoip4_available = LoadTorGeoIp4("/usr/share/tor/geoip");
             m_tor_geoip6_available = LoadTorGeoIp6("/usr/share/tor/geoip6");
+        }
+
+        if (m_mmdb_available) {
+            m_geoip_status = DbAgeStatus(m_mmdb_database_path);
+            m_geoip_needs_attention = m_geoip_status.startsWith(QStringLiteral("GeoIP DB STALE"));
+        } else if (m_tor_geoip4_available || m_tor_geoip6_available) {
+            m_geoip_status = QStringLiteral("GeoIP fallback in use: tor geoip (country only)");
+            m_geoip_needs_attention = true;
+        } else {
+            m_geoip_status = QStringLiteral("GeoIP unavailable: no MaxMind DB or tor geoip data");
+            m_geoip_needs_attention = true;
         }
     }
 
@@ -421,6 +471,8 @@ private:
     bool m_tor_geoip6_available{false};
     QString m_mmdb_binary{};
     QString m_mmdb_database_path{};
+    QString m_geoip_status{};
+    bool m_geoip_needs_attention{false};
     std::map<std::string, GeoPresentation> m_host_to_presentation{};
     std::vector<TorGeoIp4Range> m_tor_geoip4{};
     std::vector<TorGeoIp6Range> m_tor_geoip6{};
@@ -454,6 +506,16 @@ void PeerTableModel::startAutoRefresh()
 void PeerTableModel::stopAutoRefresh()
 {
     timer->stop();
+}
+
+QString PeerTableModel::geoIpStatusSummary() const
+{
+    return m_country_flag_resolver->GeoIpStatusSummary();
+}
+
+bool PeerTableModel::geoIpNeedsAttention() const
+{
+    return m_country_flag_resolver->GeoIpNeedsAttention();
 }
 
 int PeerTableModel::rowCount(const QModelIndex& parent) const

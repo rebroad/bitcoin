@@ -47,6 +47,8 @@ public:
     ~PeerTableModel();
     void startAutoRefresh();
     void stopAutoRefresh();
+    QString geoIpStatusSummary() const;
+    bool geoIpNeedsAttention() const;
 
     enum ColumnIndex {
         NetNodeId = 0,

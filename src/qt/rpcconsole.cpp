@@ -875,6 +875,11 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             }
             QToolTip::showText(QCursor::pos(), tooltip, ui->peerWidget);
         });
+        const QString geoip_status = model->getPeerTableModel()->geoIpStatusSummary();
+        const bool geoip_attention = model->getPeerTableModel()->geoIpNeedsAttention();
+        ui->geoipStatusLabel->setVisible(geoip_attention);
+        ui->geoipStatusLabel->setText(geoip_status);
+        ui->geoipStatusLabel->setToolTip(geoip_status);
 
         // create peer table context menu
         peersTableContextMenu = new QMenu(this);
