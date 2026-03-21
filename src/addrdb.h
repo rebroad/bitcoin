@@ -31,11 +31,13 @@ private:
      * JSON key under which the data is stored in the json database.
      */
     static constexpr const char* JSON_KEY = "banned_nets";
+    static constexpr const char* ASN_JSON_KEY = "banned_asns";
 
     const fs::path m_banlist_dat;
     const fs::path m_banlist_json;
 public:
     explicit CBanDB(fs::path ban_list_path);
+    bool Write(const banmap_t& banSet, const asnbanmap_t& asnBanSet);
     bool Write(const banmap_t& banSet);
 
     /**
@@ -44,6 +46,7 @@ public:
      * in an undefined state.
      * @return true on success
      */
+    bool Read(banmap_t& banSet, asnbanmap_t& asnBanSet);
     bool Read(banmap_t& banSet);
 };
 

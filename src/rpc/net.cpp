@@ -28,6 +28,8 @@
 #include <version.h>
 #include <warnings.h>
 
+#include <algorithm>
+#include <cctype>
 #include <optional>
 
 #include <univalue.h>
@@ -729,10 +731,10 @@ static RPCHelpMan getnetworkinfo()
 static RPCHelpMan setban()
 {
     return RPCHelpMan{"setban",
-                "\nAttempts to add or remove an IP/Subnet from the banned list.\n",
+                "\nAttempts to add or remove an IP/Subnet/ASN from the banned list.\n",
                 {
-                    {"subnet", RPCArg::Type::STR, RPCArg::Optional::NO, "The IP/Subnet (see getpeerinfo for nodes IP) with an optional netmask (default is /32 = single IP)"},
-                    {"command", RPCArg::Type::STR, RPCArg::Optional::NO, "'add' to add an IP/Subnet to the list, 'remove' to remove an IP/Subnet from the list"},
+                    {"subnet", RPCArg::Type::STR, RPCArg::Optional::NO, "The IP/Subnet (see getpeerinfo for nodes IP) with an optional netmask (default is /32 = single IP), or an ASN token like AS12345"},
+                    {"command", RPCArg::Type::STR, RPCArg::Optional::NO, "'add' to add an IP/Subnet/ASN to the list, 'remove' to remove an IP/Subnet/ASN from the list"},
                     {"bantime", RPCArg::Type::NUM, RPCArg::Default{0}, "time in seconds how long (or until when if [absolute] is set) the IP is banned (0 or empty means using the default time of 24h which can also be overwritten by the -bantime startup argument)"},
                     {"absolute", RPCArg::Type::BOOL, RPCArg::Default{false}, "If set, the bantime must be an absolute timestamp expressed in " + UNIX_EPOCH_TIME},
                 },
@@ -755,28 +757,41 @@ static RPCHelpMan setban()
         throw JSONRPCError(RPC_DATABASE_ERROR, "Error: Ban database not loaded");
     }
 
+    const std::string target = request.params[0].get_str();
+    std::string asn_token{};
+    if (target.size() >= 3 && (target[0] == 'A' || target[0] == 'a') && (target[1] == 'S' || target[1] == 's')) {
+        asn_token = target;
+        asn_token[0] = 'A';
+        asn_token[1] = 'S';
+        if (!std::all_of(asn_token.begin() + 2, asn_token.end(), [](unsigned char c) { return std::isdigit(c) != 0; })) {
+            throw JSONRPCError(RPC_CLIENT_INVALID_IP_OR_SUBNET, "Error: Invalid ASN");
+        }
+    }
+
     CSubNet subNet;
     CNetAddr netAddr;
     bool isSubnet = false;
+    const bool isAsn = !asn_token.empty();
 
-    if (request.params[0].get_str().find('/') != std::string::npos)
+    if (!isAsn && target.find('/') != std::string::npos)
         isSubnet = true;
 
-    if (!isSubnet) {
+    if (!isAsn && !isSubnet) {
         CNetAddr resolved;
-        LookupHost(request.params[0].get_str(), resolved, false);
+        LookupHost(target, resolved, false);
         netAddr = resolved;
     }
-    else
-        LookupSubNet(request.params[0].get_str(), subNet);
+    else if (isSubnet) {
+        LookupSubNet(target, subNet);
+    }
 
-    if (! (isSubnet ? subNet.IsValid() : netAddr.IsValid()) )
-        throw JSONRPCError(RPC_CLIENT_INVALID_IP_OR_SUBNET, "Error: Invalid IP/Subnet");
+    if (!isAsn && !(isSubnet ? subNet.IsValid() : netAddr.IsValid()))
+        throw JSONRPCError(RPC_CLIENT_INVALID_IP_OR_SUBNET, "Error: Invalid IP/Subnet/ASN");
 
     if (strCommand == "add")
     {
-        if (isSubnet ? node.banman->IsBanned(subNet) : node.banman->IsBanned(netAddr)) {
-            throw JSONRPCError(RPC_CLIENT_NODE_ALREADY_ADDED, "Error: IP/Subnet already banned");
+        if (isAsn ? node.banman->IsAsnBanned(asn_token) : (isSubnet ? node.banman->IsBanned(subNet) : node.banman->IsBanned(netAddr))) {
+            throw JSONRPCError(RPC_CLIENT_NODE_ALREADY_ADDED, "Error: IP/Subnet/ASN already banned");
         }
 
         int64_t banTime = 0; //use standard bantime if not specified
@@ -787,7 +802,9 @@ static RPCHelpMan setban()
         if (request.params[3].isTrue())
             absolute = true;
 
-        if (isSubnet) {
+        if (isAsn) {
+            node.banman->BanASN(asn_token, banTime, absolute);
+        } else if (isSubnet) {
             node.banman->Ban(subNet, banTime, absolute);
             if (node.connman) {
                 node.connman->DisconnectNode(subNet);
@@ -801,8 +818,8 @@ static RPCHelpMan setban()
     }
     else if(strCommand == "remove")
     {
-        if (!( isSubnet ? node.banman->Unban(subNet) : node.banman->Unban(netAddr) )) {
-            throw JSONRPCError(RPC_CLIENT_INVALID_IP_OR_SUBNET, "Error: Unban failed. Requested address/subnet was not previously manually banned.");
+        if (!(isAsn ? node.banman->UnbanASN(asn_token) : (isSubnet ? node.banman->Unban(subNet) : node.banman->Unban(netAddr)))) {
+            throw JSONRPCError(RPC_CLIENT_INVALID_IP_OR_SUBNET, "Error: Unban failed. Requested address/subnet/ASN was not previously manually banned.");
         }
     }
     return NullUniValue;
@@ -813,13 +830,18 @@ static RPCHelpMan setban()
 static RPCHelpMan listbanned()
 {
     return RPCHelpMan{"listbanned",
-                "\nList all manually banned IPs/Subnets.\n",
+                "\nList all manually banned IPs/Subnets/ASNs.\n",
                 {},
         RPCResult{RPCResult::Type::ARR, "", "",
             {
                 {RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::STR, "address", "The IP/Subnet of the banned node"},
+                        {RPCResult::Type::STR, "type", "Entry type: subnet or asn"},
+                        {RPCResult::Type::STR, "asn", /*optional=*/true, "ASN id for ASN entries"},
+                        {RPCResult::Type::ARR, "resolved_subnets", /*optional=*/true, "Resolved member CIDRs for ASN entries", {{RPCResult::Type::STR, "", "CIDR subnet"}}},
+                        {RPCResult::Type::NUM, "resolved_count", /*optional=*/true, "Resolved member CIDR count for ASN entries"},
+                        {RPCResult::Type::STR, "source_asn", /*optional=*/true, "ASN id if this subnet is derived from ASN (hidden in default output)"},
                         {RPCResult::Type::NUM_TIME, "ban_created", "The " + UNIX_EPOCH_TIME + " the ban was created"},
                         {RPCResult::Type::NUM_TIME, "banned_until", "The " + UNIX_EPOCH_TIME + " the ban expires"},
                         {RPCResult::Type::NUM_TIME, "ban_duration", "The ban duration, in seconds"},
@@ -841,15 +863,19 @@ static RPCHelpMan listbanned()
     }
 
     banmap_t banMap;
+    asnbanmap_t asnMap;
     node.banman->GetBanned(banMap);
+    node.banman->GetBannedAsns(asnMap);
     const int64_t current_time{GetTime()};
 
     UniValue bannedAddresses(UniValue::VARR);
     for (const auto& entry : banMap)
     {
         const CBanEntry& banEntry = entry.second;
+        if (!banEntry.m_source_asn.empty()) continue; // Hide ASN-derived subnet rows.
         UniValue rec(UniValue::VOBJ);
         rec.pushKV("address", entry.first.ToString());
+        rec.pushKV("type", "subnet");
         rec.pushKV("ban_created", banEntry.nCreateTime);
         rec.pushKV("banned_until", banEntry.nBanUntil);
         rec.pushKV("ban_duration", (banEntry.nBanUntil - banEntry.nCreateTime));
@@ -858,6 +884,28 @@ static RPCHelpMan listbanned()
         rec.pushKV("probation_until", banEntry.nProbationUntil);
         rec.pushKV("ban_count", banEntry.m_ban_count);
 
+        bannedAddresses.push_back(rec);
+    }
+
+    for (const auto& entry : asnMap)
+    {
+        const CAsnBanEntry& banEntry = entry.second;
+        UniValue rec(UniValue::VOBJ);
+        rec.pushKV("address", entry.first);
+        rec.pushKV("type", "asn");
+        rec.pushKV("asn", entry.first);
+        UniValue subnets(UniValue::VARR);
+        for (const auto& cidr : banEntry.m_resolved_cidrs) subnets.push_back(cidr);
+        rec.pushKV("resolved_subnets", subnets);
+        rec.pushKV("resolved_count", static_cast<int>(banEntry.m_resolved_cidrs.size()));
+        rec.pushKV("last_resolved", banEntry.nLastResolved);
+        rec.pushKV("ban_created", banEntry.nCreateTime);
+        rec.pushKV("banned_until", banEntry.nBanUntil);
+        rec.pushKV("ban_duration", (banEntry.nBanUntil - banEntry.nCreateTime));
+        rec.pushKV("time_remaining", (banEntry.nBanUntil - current_time));
+        rec.pushKV("is_on_probation", banEntry.m_is_on_probation);
+        rec.pushKV("probation_until", banEntry.nProbationUntil);
+        rec.pushKV("ban_count", banEntry.m_ban_count);
         bannedAddresses.push_back(rec);
     }
 

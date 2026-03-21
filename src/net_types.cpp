@@ -17,7 +17,8 @@ CBanEntry::CBanEntry(const UniValue& json)
       nBanUntil(json["banned_until"].get_int64()),
       m_is_on_probation(json.exists("is_on_probation") ? json["is_on_probation"].get_bool() : false),
       nProbationUntil(json.exists("probation_until") ? json["probation_until"].get_int64() : 0),
-      m_ban_count(json.exists("ban_count") ? json["ban_count"].get_int() : 0)
+      m_ban_count(json.exists("ban_count") ? json["ban_count"].get_int() : 0),
+      m_source_asn(json.exists("source_asn") ? json["source_asn"].get_str() : "")
 {
 }
 
@@ -30,6 +31,41 @@ UniValue CBanEntry::ToJson() const
     json.pushKV("is_on_probation", m_is_on_probation);
     json.pushKV("probation_until", nProbationUntil);
     json.pushKV("ban_count", m_ban_count);
+    if (!m_source_asn.empty()) {
+        json.pushKV("source_asn", m_source_asn);
+    }
+    return json;
+}
+
+CAsnBanEntry::CAsnBanEntry(const UniValue& json)
+    : nVersion(json[BANMAN_JSON_VERSION_KEY].get_int()),
+      nCreateTime(json["ban_created"].get_int64()),
+      nBanUntil(json["banned_until"].get_int64()),
+      m_is_on_probation(json.exists("is_on_probation") ? json["is_on_probation"].get_bool() : false),
+      nProbationUntil(json.exists("probation_until") ? json["probation_until"].get_int64() : 0),
+      m_ban_count(json.exists("ban_count") ? json["ban_count"].get_int() : 0),
+      nLastResolved(json.exists("last_resolved") ? json["last_resolved"].get_int64() : 0)
+{
+    if (json.exists("resolved_cidrs")) {
+        for (const auto& cidr : json["resolved_cidrs"].getValues()) {
+            m_resolved_cidrs.push_back(cidr.get_str());
+        }
+    }
+}
+
+UniValue CAsnBanEntry::ToJson() const
+{
+    UniValue json(UniValue::VOBJ);
+    json.pushKV(BANMAN_JSON_VERSION_KEY, nVersion);
+    json.pushKV("ban_created", nCreateTime);
+    json.pushKV("banned_until", nBanUntil);
+    json.pushKV("is_on_probation", m_is_on_probation);
+    json.pushKV("probation_until", nProbationUntil);
+    json.pushKV("ban_count", m_ban_count);
+    json.pushKV("last_resolved", nLastResolved);
+    UniValue cidrs(UniValue::VARR);
+    for (const auto& cidr : m_resolved_cidrs) cidrs.push_back(cidr);
+    json.pushKV("resolved_cidrs", cidrs);
     return json;
 }
 
@@ -76,5 +112,31 @@ void BanMapFromJson(const UniValue& bans_json, banmap_t& bans)
             continue;
         }
         bans.insert_or_assign(subnet, CBanEntry{ban_entry_json});
+    }
+}
+
+UniValue AsnBanMapToJson(const asnbanmap_t& bans)
+{
+    UniValue bans_json(UniValue::VARR);
+    for (const auto& it : bans) {
+        UniValue j = it.second.ToJson();
+        j.pushKV("asn", it.first);
+        bans_json.push_back(j);
+    }
+    return bans_json;
+}
+
+void AsnBanMapFromJson(const UniValue& bans_json, asnbanmap_t& bans)
+{
+    for (const auto& ban_entry_json : bans_json.getValues()) {
+        const int version{ban_entry_json[BANMAN_JSON_VERSION_KEY].get_int()};
+        if (version != CAsnBanEntry::CURRENT_VERSION) {
+            LogPrintf("Dropping ASN entry with unknown version (%s) from ban list\n", version);
+            continue;
+        }
+        if (!ban_entry_json.exists("asn")) continue;
+        const std::string asn_id = ban_entry_json["asn"].get_str();
+        if (asn_id.empty()) continue;
+        bans.insert_or_assign(asn_id, CAsnBanEntry{ban_entry_json});
     }
 }

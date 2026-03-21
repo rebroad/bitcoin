@@ -7,6 +7,8 @@
 
 #include <cstdint>
 #include <map>
+#include <string>
+#include <vector>
 
 class CSubNet;
 class UniValue;
@@ -23,6 +25,7 @@ public:
     bool m_is_on_probation{false};
     int64_t nProbationUntil{0};
     int m_ban_count{0}; // Number of times this address has been banned
+    std::string m_source_asn{}; // If non-empty this subnet is derived from an ASN ban
 
     CBanEntry() {}
 
@@ -45,6 +48,27 @@ public:
 
 using banmap_t = std::map<CSubNet, CBanEntry>;
 
+class CAsnBanEntry
+{
+public:
+    static constexpr int CURRENT_VERSION{1};
+    int nVersion{CAsnBanEntry::CURRENT_VERSION};
+    int64_t nCreateTime{0};
+    int64_t nBanUntil{0};
+    bool m_is_on_probation{false};
+    int64_t nProbationUntil{0};
+    int m_ban_count{0};
+    int64_t nLastResolved{0};
+    std::vector<std::string> m_resolved_cidrs{};
+
+    CAsnBanEntry() {}
+    explicit CAsnBanEntry(int64_t nCreateTimeIn) : nCreateTime{nCreateTimeIn} {}
+    explicit CAsnBanEntry(const UniValue& json);
+    UniValue ToJson() const;
+};
+
+using asnbanmap_t = std::map<std::string, CAsnBanEntry>;
+
 /**
  * Convert a `banmap_t` object to a JSON array.
  * @param[in] bans Bans list to convert.
@@ -61,5 +85,8 @@ UniValue BanMapToJson(const banmap_t& bans);
  * unparsable values.
  */
 void BanMapFromJson(const UniValue& bans_json, banmap_t& bans);
+
+UniValue AsnBanMapToJson(const asnbanmap_t& bans);
+void AsnBanMapFromJson(const UniValue& bans_json, asnbanmap_t& bans);
 
 #endif // BITCOIN_NET_TYPES_H

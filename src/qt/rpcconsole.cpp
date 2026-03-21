@@ -946,10 +946,10 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         banTableContextMenu->addSeparator();
         m_unban_action = banTableContextMenu->addAction(tr("&Unban"), this, &RPCConsole::unbanSelectedNode);
         banTableContextMenu->addSeparator();
-        m_ban_asn_1h_action = banTableContextMenu->addAction(ts.ban_for + " ASN " + tr("1 &hour"), [this] { banSelectedAsn(60 * 60); });
-        m_ban_asn_1d_action = banTableContextMenu->addAction(ts.ban_for + " ASN " + tr("1 d&ay"), [this] { banSelectedAsn(60 * 60 * 24); });
-        m_ban_asn_1w_action = banTableContextMenu->addAction(ts.ban_for + " ASN " + tr("1 &week"), [this] { banSelectedAsn(60 * 60 * 24 * 7); });
-        m_ban_asn_1y_action = banTableContextMenu->addAction(ts.ban_for + " ASN " + tr("1 &year"), [this] { banSelectedAsn(60 * 60 * 24 * 365); });
+        m_ban_asn_1h_action = banTableContextMenu->addAction(tr("Ban ASN for 1 &hour"), [this] { banSelectedAsn(60 * 60); });
+        m_ban_asn_1d_action = banTableContextMenu->addAction(tr("Ban ASN for 1 d&ay"), [this] { banSelectedAsn(60 * 60 * 24); });
+        m_ban_asn_1w_action = banTableContextMenu->addAction(tr("Ban ASN for 1 &week"), [this] { banSelectedAsn(60 * 60 * 24 * 7); });
+        m_ban_asn_1y_action = banTableContextMenu->addAction(tr("Ban ASN for 1 &year"), [this] { banSelectedAsn(60 * 60 * 24 * 365); });
         connect(ui->banlistWidget, &QTableView::customContextMenuRequested, this, &RPCConsole::showBanTableContextMenu);
 
         // ban table signal handling - clear peer details when clicking a peer in the ban table
@@ -1543,7 +1543,7 @@ void RPCConsole::showBanTableContextMenu(const QPoint& point)
 
         bool has_asn_target{false};
         for (const QModelIndex& node : selectedNodes) {
-            if (!node.data(BanTableModel::AsnNetworkRole).toString().isEmpty()) {
+            if (!node.data(BanTableModel::AsnBanTargetsRole).toStringList().isEmpty()) {
                 has_asn_target = true;
                 break;
             }
@@ -1631,9 +1631,12 @@ void RPCConsole::banSelectedAsn(int bantime)
     QList<QModelIndex> nodes = GUIUtil::getEntryData(ui->banlistWidget, BanTableModel::Address);
     QSet<QString> asn_targets;
     for (const QModelIndex& node : nodes) {
-        const QString asn_subnet = node.data(BanTableModel::AsnNetworkRole).toString().trimmed();
-        if (!asn_subnet.isEmpty()) {
-            asn_targets.insert(asn_subnet);
+        const QStringList asn_networks = node.data(BanTableModel::AsnBanTargetsRole).toStringList();
+        for (const QString& asn_subnet : asn_networks) {
+            const QString trimmed = asn_subnet.trimmed();
+            if (!trimmed.isEmpty()) {
+                asn_targets.insert(trimmed);
+            }
         }
     }
 
@@ -1655,8 +1658,20 @@ void RPCConsole::banSelectedAsn(int bantime)
             params.push_back(bantime);
             m_node.executeRpc("setban", params, "");
             ++banned_count;
+        } catch (UniValue& objError) {
+            try {
+                const int code = find_value(objError, "code").get_int();
+                const std::string msg = find_value(objError, "message").get_str();
+                message(CMD_ERROR, tr("Failed to ban ASN subnet %1: %2 (code %3)")
+                                       .arg(asn_subnet, QString::fromStdString(msg), QString::number(code)),
+                    false);
+            } catch (const std::runtime_error&) {
+                message(CMD_ERROR, tr("Failed to ban ASN subnet %1").arg(asn_subnet), false);
+            }
         } catch (const std::exception& e) {
             message(CMD_ERROR, tr("Failed to ban ASN subnet %1: %2").arg(asn_subnet, QString::fromStdString(e.what())), false);
+        } catch (...) {
+            message(CMD_ERROR, tr("Failed to ban ASN subnet %1: unknown error").arg(asn_subnet), false);
         }
     }
 

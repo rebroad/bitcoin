@@ -14,6 +14,8 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 // NOTE: When adjusting this, update rpcnet:setban's help ("24h")
 static constexpr unsigned int DEFAULT_MISBEHAVING_BANTIME = 60 * 60 * 24; // Default 24-hour ban
@@ -63,6 +65,7 @@ public:
     void Ban(const CNetAddr& net_addr, int64_t ban_time_offset = 0, bool since_unix_epoch = false);
     void Ban(const CSubNet& sub_net, int64_t ban_time_offset = 0, bool since_unix_epoch = false);
     void Discourage(const CNetAddr& net_addr);
+    void BanASN(const std::string& asn_id, int64_t ban_time_offset = 0, bool since_unix_epoch = false);
     void ClearBanned();
 
     //! Return whether net_addr is banned
@@ -70,6 +73,7 @@ public:
 
     //! Return whether sub_net is exactly banned
     bool IsBanned(const CSubNet& sub_net);
+    bool IsAsnBanned(const std::string& asn_id);
 
     //! Return whether net_addr is discouraged.
     bool IsDiscouraged(const CNetAddr& net_addr);
@@ -82,7 +86,10 @@ public:
 
     bool Unban(const CNetAddr& net_addr);
     bool Unban(const CSubNet& sub_net);
+    bool UnbanASN(const std::string& asn_id);
     void GetBanned(banmap_t& banmap);
+    void GetBannedAsns(asnbanmap_t& asnmap);
+    void RefreshAsnBans();
     void DumpBanlist();
 
 private:
@@ -91,9 +98,13 @@ private:
     void SetBannedSetDirty(bool dirty = true);
     //!clean unused entries (if bantime has expired)
     void SweepBanned();
+    void SweepAsnBanned();
+    std::vector<std::string> ResolveAsnNetworks(const std::string& asn_id) const;
+    void SyncDerivedSubnetsForAsn(const std::string& asn_id, const CAsnBanEntry& asn_entry);
 
     RecursiveMutex m_cs_banned;
     banmap_t m_banned GUARDED_BY(m_cs_banned);
+    asnbanmap_t m_banned_asns GUARDED_BY(m_cs_banned);
     bool m_is_dirty GUARDED_BY(m_cs_banned){false};
     CClientUIInterface* m_client_interface = nullptr;
     CBanDB m_ban_db;

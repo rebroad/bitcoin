@@ -26,9 +26,13 @@ struct CCombinedBan {
     QString countryFlag;
     QString countryTooltip;
     QString displayAddress;
+    QString asnId;
     QString asnDisplay;
     QString asnTooltip;
     QString asnNetwork;
+    QStringList asnNetworks;
+    QStringList asnBanTargets;
+    int asnBannedCount{0};
     QString rawSubnet;
 };
 
@@ -68,6 +72,9 @@ public:
 
     enum {
         AsnNetworkRole = Qt::UserRole,
+        AsnNetworksRole,
+        AsnBanTargetsRole,
+        AsnIdRole,
         RawSubnetRole
     };
 

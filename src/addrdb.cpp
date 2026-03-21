@@ -128,10 +128,10 @@ CBanDB::CBanDB(fs::path ban_list_path)
 {
 }
 
-bool CBanDB::Write(const banmap_t& banSet)
+bool CBanDB::Write(const banmap_t& banSet, const asnbanmap_t& asnBanSet)
 {
     std::vector<std::string> errors;
-    if (util::WriteSettings(m_banlist_json, {{JSON_KEY, BanMapToJson(banSet)}}, errors)) {
+    if (util::WriteSettings(m_banlist_json, {{JSON_KEY, BanMapToJson(banSet)}, {ASN_JSON_KEY, AsnBanMapToJson(asnBanSet)}}, errors)) {
         return true;
     }
 
@@ -141,7 +141,12 @@ bool CBanDB::Write(const banmap_t& banSet)
     return false;
 }
 
-bool CBanDB::Read(banmap_t& banSet)
+bool CBanDB::Write(const banmap_t& banSet)
+{
+    return Write(banSet, {});
+}
+
+bool CBanDB::Read(banmap_t& banSet, asnbanmap_t& asnBanSet)
 {
     if (fs::exists(m_banlist_dat)) {
         LogPrintf("banlist.dat ignored because it can only be read by " PACKAGE_NAME " version 22.x. Remove %s to silence this warning.\n", fs::quoted(fs::PathToString(m_banlist_dat)));
@@ -163,12 +168,22 @@ bool CBanDB::Read(banmap_t& banSet)
 
     try {
         BanMapFromJson(settings[JSON_KEY], banSet);
+        const auto asn_it = settings.find(ASN_JSON_KEY);
+        if (asn_it != settings.end()) {
+            AsnBanMapFromJson(asn_it->second, asnBanSet);
+        }
     } catch (const std::runtime_error& e) {
         LogPrintf("Cannot parse banlist %s: %s\n", fs::PathToString(m_banlist_json), e.what());
         return false;
     }
 
     return true;
+}
+
+bool CBanDB::Read(banmap_t& banSet)
+{
+    asnbanmap_t unused;
+    return Read(banSet, unused);
 }
 
 bool DumpPeerAddresses(const ArgsManager& args, const AddrMan& addr)
