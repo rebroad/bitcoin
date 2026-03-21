@@ -40,13 +40,16 @@
 
 #include <QAbstractButton>
 #include <QAbstractItemModel>
+#include <QCursor>
 #include <QDateTime>
 #include <QFont>
+#include <QFontDatabase>
 #include <QKeyEvent>
 #include <QLatin1String>
 #include <QLocale>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
 #include <QScreen>
 #include <QScrollBar>
 #include <QSettings>
@@ -56,8 +59,10 @@
 #include <QTextStream>
 #include <QTime>
 #include <QTimer>
+#include <QToolTip>
 #include <QVariant>
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 
 const int CONSOLE_HISTORY = 50;
@@ -151,6 +156,76 @@ public:
         // Additional spaces should visually separate right-aligned content
         // from the next column to the right.
         return value.toString() + QLatin1String("   ");
+    }
+};
+
+class DirectionFlagDelegate : public QStyledItemDelegate
+{
+public:
+    explicit DirectionFlagDelegate(QObject* parent = nullptr)
+        : QStyledItemDelegate(parent) {}
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        const QString display = index.data(Qt::DisplayRole).toString().trimmed();
+        const int sep = display.indexOf(' ');
+        if (sep <= 0) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        const QString arrow = display.left(sep);
+        const QString flag = display.mid(sep + 1).trimmed();
+        if (flag.isEmpty()) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        QStyleOptionViewItem opt(option);
+        initStyleOption(&opt, index);
+        opt.text.clear(); // keep style background/selection, draw text ourselves
+
+        const QWidget* widget = opt.widget;
+        QStyle* style = widget ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, widget);
+
+        QFont arrow_font = option.font;
+        QFont flag_font = option.font;
+        double scale_factor = 1.1;
+        try {
+            scale_factor = std::stod(gArgs.GetArg("-qtpeercountryflagscalefactor", "1.1"));
+        } catch (const std::exception&) {
+        }
+        scale_factor = std::clamp(scale_factor, 0.5, 4.0);
+        if (flag_font.pointSizeF() > 0) {
+            flag_font.setPointSizeF(flag_font.pointSizeF() * scale_factor);
+        } else if (flag_font.pixelSize() > 0) {
+            flag_font.setPixelSize(std::max(1, static_cast<int>(std::lround(flag_font.pixelSize() * scale_factor))));
+        }
+        const QFontDatabase db;
+        for (const QString& family : {QStringLiteral("Noto Color Emoji"), QStringLiteral("Segoe UI Emoji"), QStringLiteral("Apple Color Emoji")}) {
+            if (db.families().contains(family)) {
+                flag_font.setFamily(family);
+                break;
+            }
+        }
+
+        const QFontMetrics arrow_fm(arrow_font);
+        const QFontMetrics flag_fm(flag_font);
+        const int space_w = arrow_fm.horizontalAdvance(QStringLiteral(" "));
+        const int arrow_w = arrow_fm.horizontalAdvance(arrow);
+        const int flag_w = flag_fm.horizontalAdvance(flag);
+        const int total_w = arrow_w + space_w + flag_w;
+        const int start_x = option.rect.x() + (option.rect.width() - total_w) / 2;
+        const int baseline_y = option.rect.y() + (option.rect.height() + std::max(arrow_fm.ascent(), flag_fm.ascent()) - std::max(arrow_fm.descent(), flag_fm.descent())) / 2;
+
+        painter->save();
+        painter->setPen(opt.palette.color(QPalette::Text));
+        painter->setFont(arrow_font);
+        painter->drawText(start_x, baseline_y, arrow);
+        painter->setFont(flag_font);
+        painter->drawText(start_x + arrow_w + space_w, baseline_y, flag);
+        painter->restore();
     }
 };
 
@@ -703,18 +778,34 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         // set up peer table
         ui->peerWidget->setModel(model->peerTableSortProxy());
         ui->peerWidget->verticalHeader()->hide();
+        ui->peerWidget->setMouseTracking(true);
+        ui->peerWidget->viewport()->setMouseTracking(true);
         ui->peerWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
         ui->peerWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
         ui->peerWidget->setContextMenuPolicy(Qt::CustomContextMenu);
 
         if (!ui->peerWidget->horizontalHeader()->restoreState(m_peer_widget_header_state)) {
             ui->peerWidget->setColumnWidth(PeerTableModel::Address, ADDRESS_COLUMN_WIDTH);
+            ui->peerWidget->setColumnWidth(PeerTableModel::Direction, DIRECTION_COLUMN_WIDTH);
             ui->peerWidget->setColumnWidth(PeerTableModel::Subversion, SUBVERSION_COLUMN_WIDTH);
             ui->peerWidget->setColumnWidth(PeerTableModel::Ping, PING_COLUMN_WIDTH);
         }
         ui->peerWidget->horizontalHeader()->setStretchLastSection(true);
         ui->peerWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
         ui->peerWidget->setItemDelegateForColumn(PeerTableModel::NetNodeId, new PeerIdViewDelegate(this));
+        ui->peerWidget->setItemDelegateForColumn(PeerTableModel::Direction, new DirectionFlagDelegate(this));
+        connect(ui->peerWidget, &QTableView::entered, this, [this](const QModelIndex& index) {
+            if (!index.isValid() || index.column() != PeerTableModel::Direction) {
+                QToolTip::hideText();
+                return;
+            }
+            const QString tooltip = index.data(Qt::ToolTipRole).toString();
+            if (tooltip.isEmpty()) {
+                QToolTip::hideText();
+                return;
+            }
+            QToolTip::showText(QCursor::pos(), tooltip, ui->peerWidget);
+        });
 
         // create peer table context menu
         peersTableContextMenu = new QMenu(this);

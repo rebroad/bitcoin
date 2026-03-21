@@ -397,6 +397,14 @@ CLEANFILES += $(CLEAN_QT)
 bitcoin_qt_clean: FORCE
 	rm -f $(CLEAN_QT) $(qt_libbitcoinqt_a_OBJECTS) $(qt_bitcoin_qt_OBJECTS) qt/bitcoin-qt$(EXEEXT) $(LIBBITCOINQT)
 
+qt_emoji_font_warn:
+	@if command -v fc-list >/dev/null 2>&1; then \
+		if ! fc-list | grep -Eiq 'Noto Color Emoji|Segoe UI Emoji|Apple Color Emoji|Twemoji|EmojiOne|Symbola'; then \
+			echo "WARNING: No emoji font detected (flags may render as boxes in bitcoin-qt)."; \
+			echo "WARNING: Install e.g. fonts-noto-color-emoji."; \
+		fi; \
+	fi
+
 bitcoin_qt : qt/bitcoin-qt$(EXEEXT)
 
 APK_LIB_DIR = qt/android/libs/$(ANDROID_ARCH)

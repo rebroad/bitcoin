@@ -54,10 +54,12 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <optional>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <math.h>
 
@@ -66,6 +68,13 @@ static constexpr size_t MAX_BLOCK_RELAY_ONLY_ANCHORS = 0;
 static_assert (MAX_BLOCK_RELAY_ONLY_ANCHORS <= static_cast<size_t>(MAX_BLOCK_RELAY_ONLY_CONNECTIONS), "MAX_BLOCK_RELAY_ONLY_ANCHORS must not exceed MAX_BLOCK_RELAY_ONLY_CONNECTIONS.");
 /** Anchor IP address database file name */
 const char* const ANCHORS_DATABASE_FILENAME = "txanchors.dat";
+/** IBD anchor IP address database file name */
+const char* const IBD_ANCHORS_DATABASE_FILENAME = "IBDanchors.dat";
+
+static constexpr int64_t IBD_SPEED_MEASUREMENT_WINDOW{180};   // 3 minutes
+static constexpr int64_t IBD_SLOW_PEER_DISCONNECT_DELAY{180}; // 3 minutes
+static constexpr int64_t IBD_CALIBRATION_WINDOW{180};         // 3 minutes
+static constexpr int64_t IBD_ANCHOR_DUMP_INTERVAL{300};       // 5 minutes
 
 // How often to dump addresses to peers.dat
 static constexpr std::chrono::minutes DUMP_PEERS_INTERVAL{15};
@@ -712,7 +721,8 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                     if (nBlocksToBeProcessed == 1)
                         LogPrintf("%s: BlockToBeProcessed peer=%d\n", __func__, GetId());
                     ::nBlocksToBeProcessed++;
-                    nLastBlock = count_seconds(m_last_recv);
+					if (msg.m_type == NetMsgType::BLOCK)
+                        nLastBlock = count_seconds(m_last_recv);
                 }
 
                 // Store received bytes per message command
@@ -1681,6 +1691,16 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     static int64_t lastnow = 0;
     int nPeersIBD = 0;
     static bool IsIBD = true;
+    static std::unordered_map<NodeId, std::deque<std::pair<int64_t, uint64_t>>> ibd_block_samples;
+    static std::unordered_map<NodeId, int64_t> ibd_slow_since;
+    static int64_t ibd_calibration_started{0};
+    static int ibd_max_full_outbound{0};
+    static int ibd_target_peers{0};
+    static int64_t ibd_last_dump{0};
+    static std::vector<CAddress> ibd_last_dumped;
+    std::unordered_map<NodeId, uint64_t> ibd_block_bytes_now;
+    std::unordered_map<NodeId, CAddress> ibd_addrs;
+    std::unordered_set<NodeId> full_outbound_ids;
     if (now != lastnow) {
         m_max_outbound_full_relay = std::min(nMaxConnections, (int)gArgs.GetIntArg("-maxoutboundrelay", MAX_OUTBOUND_FULL_RELAY_CONNECTIONS));
         m_max_outbound = m_max_outbound_full_relay + m_max_outbound_block_relay + nMaxFeeler;
@@ -1702,6 +1722,9 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             float nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytesSnapOld + 1);
             int64_t m_connected = count_seconds(pnode->m_connected);
             if (pnode->IsFullOutboundConn()) {
+                full_outbound_ids.insert(pnode->GetId());
+                ibd_block_bytes_now.emplace(pnode->GetId(), pnode->nBlockBytes);
+                ibd_addrs.emplace(pnode->GetId(), pnode->addr);
                 nTotalBytesRecv += nRecvBytes - pnode->nRecvBytesSnapOld;
                 nTotalMempoolBytes += nMempoolBytes;
                 latestNode = pnode->GetId();
@@ -1764,6 +1787,117 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             latestOutboundConn = now;
             IsIBD = false;
         } else if (nPeersIBD) IsIBD = true;
+
+        if (nPeersIBD > 1) {
+            const int max_target_peers = std::max(2, m_max_outbound_full_relay);
+            if (ibd_calibration_started == 0) {
+                ibd_calibration_started = now;
+                ibd_max_full_outbound = nOutboundFullRelay;
+                LogPrintf("IBD anchor calibration started. peers=%d nIBD=%d\n", nOutboundFullRelay, nPeersIBD);
+            } else {
+                ibd_max_full_outbound = std::max(ibd_max_full_outbound, nOutboundFullRelay);
+            }
+
+            if (ibd_target_peers == 0 && now - ibd_calibration_started >= IBD_CALIBRATION_WINDOW) {
+                ibd_target_peers = std::clamp(ibd_max_full_outbound, 2, max_target_peers);
+                LogPrintf("IBD anchor calibration complete. target peers=%d (max observed=%d)\n", ibd_target_peers, ibd_max_full_outbound);
+            }
+
+            for (const auto& [node_id, block_bytes] : ibd_block_bytes_now) {
+                auto& samples = ibd_block_samples[node_id];
+                samples.emplace_back(now, block_bytes);
+                while (samples.size() > 2 && samples.front().first < now - IBD_SPEED_MEASUREMENT_WINDOW) {
+                    samples.pop_front();
+                }
+            }
+
+            for (auto it = ibd_block_samples.begin(); it != ibd_block_samples.end();) {
+                if (!full_outbound_ids.count(it->first)) {
+                    ibd_slow_since.erase(it->first);
+                    it = ibd_block_samples.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
+            std::unordered_map<NodeId, double> ibd_peer_bps;
+            double fastest_bps{0.0};
+            for (const auto& [node_id, samples] : ibd_block_samples) {
+                if (samples.size() < 2) continue;
+                const int64_t dt = samples.back().first - samples.front().first;
+                if (dt < IBD_SPEED_MEASUREMENT_WINDOW) continue;
+                const int64_t dbytes = static_cast<int64_t>(samples.back().second) - static_cast<int64_t>(samples.front().second);
+                if (dbytes <= 0) continue;
+                const double bps = static_cast<double>(dbytes) / static_cast<double>(dt);
+                ibd_peer_bps[node_id] = bps;
+                fastest_bps = std::max(fastest_bps, bps);
+            }
+
+            if (fastest_bps > 0.0) {
+                NodeId disconnect_candidate{-1};
+                double disconnect_candidate_bps{0.0};
+
+                for (CNode* pnode : nodes) {
+                    if (!pnode->IsFullOutboundConn()) continue;
+                    const NodeId node_id = pnode->GetId();
+                    const auto speed_it = ibd_peer_bps.find(node_id);
+                    if (speed_it == ibd_peer_bps.end()) continue;
+
+                    const double peer_bps = speed_it->second;
+                    if (peer_bps < (fastest_bps * 0.5) && !pnode->fDisconnect) {
+                        int64_t& slow_since = ibd_slow_since[node_id];
+                        if (slow_since == 0) slow_since = now;
+                        if (now - slow_since >= IBD_SLOW_PEER_DISCONNECT_DELAY) {
+                            if (disconnect_candidate == -1 || peer_bps < disconnect_candidate_bps) {
+                                disconnect_candidate = node_id;
+                                disconnect_candidate_bps = peer_bps;
+                            }
+                        }
+                    } else {
+                        ibd_slow_since[node_id] = 0;
+                    }
+                }
+
+                if (disconnect_candidate != -1 && nOutboundFullRelay > 2) {
+                    for (CNode* pnode : nodes) {
+                        if (pnode->GetId() != disconnect_candidate) continue;
+                        pnode->fDisconnect = true;
+                        LogPrintf("IBD speed eviction: peer=%d speed=%sB/s fastest=%sB/s window=%ds\n",
+                                  disconnect_candidate, strprintf("%.2f", disconnect_candidate_bps), strprintf("%.2f", fastest_bps), (int)IBD_SPEED_MEASUREMENT_WINDOW);
+                        break;
+                    }
+                }
+            }
+
+            const int snapshot_target = ibd_target_peers > 0 ? ibd_target_peers : std::clamp(ibd_max_full_outbound, 2, max_target_peers);
+            if (snapshot_target > 0 && static_cast<int>(ibd_peer_bps.size()) >= snapshot_target && (ibd_last_dump == 0 || now - ibd_last_dump >= IBD_ANCHOR_DUMP_INTERVAL)) {
+                std::vector<std::pair<double, CAddress>> ranked;
+                ranked.reserve(ibd_peer_bps.size());
+                for (const auto& [node_id, bps] : ibd_peer_bps) {
+                    const auto addr_it = ibd_addrs.find(node_id);
+                    if (addr_it != ibd_addrs.end()) ranked.emplace_back(bps, addr_it->second);
+                }
+                std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+
+                std::vector<CAddress> ibd_anchors_to_dump;
+                for (size_t i = 0; i < ranked.size() && static_cast<int>(i) < snapshot_target; ++i) {
+                    ibd_anchors_to_dump.push_back(ranked[i].second);
+                }
+
+                if (!ibd_anchors_to_dump.empty() && ibd_anchors_to_dump != ibd_last_dumped) {
+                    DumpIBDAnchors(gArgs.GetDataDirNet() / IBD_ANCHORS_DATABASE_FILENAME, ibd_anchors_to_dump);
+                    ibd_last_dumped = ibd_anchors_to_dump;
+                }
+                ibd_last_dump = now;
+            }
+        } else {
+            ibd_block_samples.clear();
+            ibd_slow_since.clear();
+            ibd_calibration_started = 0;
+            ibd_max_full_outbound = 0;
+            ibd_target_peers = 0;
+            ibd_last_dump = 0;
+        }
     } // if (now != lastnow)
 
     int nTechnique = 0;
@@ -2345,6 +2479,24 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
         int64_t nANow = GetAdjustedTime(); // REBTODO - why the Adjusted one?
         int nTries = 0;
+        static bool ibd_anchor_mode{true};
+        if (nPeersIBD == 0 && ibd_anchor_mode && !m_anchors.empty()) {
+            const std::vector<CAddress> ibd_anchors_on_disk = ReadIBDAnchors(gArgs.GetDataDirNet() / IBD_ANCHORS_DATABASE_FILENAME);
+            if (!ibd_anchors_on_disk.empty()) {
+                const std::set<CAddress> ibd_anchor_set(ibd_anchors_on_disk.begin(), ibd_anchors_on_disk.end());
+                const size_t before = m_anchors.size();
+                m_anchors.erase(std::remove_if(m_anchors.begin(), m_anchors.end(), [&](const CAddress& addr) {
+                    return ibd_anchor_set.count(addr) > 0;
+                }), m_anchors.end());
+                const size_t removed = before - m_anchors.size();
+                if (removed > 0) {
+                    LogPrintf("IBD complete: removed %d IBD anchors from in-memory anchor queue\n", (int)removed);
+                }
+            }
+            ibd_anchor_mode = false;
+        } else if (nPeersIBD > 0) {
+            ibd_anchor_mode = true;
+        }
         while (!interruptNet)
         {
             static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
@@ -2404,8 +2556,18 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                         return;
                 if (interruptNet) return;
-                // Load addresses from anchors.dat
-                m_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
+                // Load tx anchors always. Load IBD anchors only while IBD appears active.
+                std::vector<CAddress> tx_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
+                m_anchors.clear();
+                for (auto it = tx_anchors.rbegin(); it != tx_anchors.rend(); ++it) {
+                    m_anchors.push_back(*it);
+                }
+                if (nPeersIBD > 0) {
+                    std::vector<CAddress> ibd_anchors = ReadIBDAnchors(gArgs.GetDataDirNet() / IBD_ANCHORS_DATABASE_FILENAME);
+                    for (auto it = ibd_anchors.rbegin(); it != ibd_anchors.rend(); ++it) {
+                        m_anchors.push_back(*it);
+                    }
+                }
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                     return;
                 break;

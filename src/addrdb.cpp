@@ -235,3 +235,22 @@ std::vector<CAddress> ReadAnchors(const fs::path& anchors_db_path)
 
     return anchors;
 }
+
+void DumpIBDAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& anchors)
+{
+    LOG_TIME_SECONDS(strprintf("Flush %d outbound IBD peer addresses to IBDanchors.dat", anchors.size()));
+    SerializeFileDB("ibdanchors", anchors_db_path, anchors, CLIENT_VERSION | ADDRV2_FORMAT);
+}
+
+std::vector<CAddress> ReadIBDAnchors(const fs::path& anchors_db_path)
+{
+    std::vector<CAddress> anchors;
+    try {
+        DeserializeFileDB(anchors_db_path, anchors, CLIENT_VERSION | ADDRV2_FORMAT);
+        LogPrintf("Loaded %i addresses from %s\n", anchors.size(), fs::quoted(fs::PathToString(anchors_db_path.filename())));
+    } catch (const std::exception&) {
+        anchors.clear();
+    }
+
+    return anchors;
+}

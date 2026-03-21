@@ -14,7 +14,10 @@
 #include <QStringList>
 #include <QVariant>
 
+#include <memory>
+
 class PeerTablePriv;
+class CountryFlagResolver;
 
 namespace interfaces {
 class Node;
@@ -80,6 +83,7 @@ private:
     //! Internal peer data structure.
     QList<CNodeCombinedStats> m_peers_data{};
     interfaces::Node& m_node;
+    mutable std::unique_ptr<CountryFlagResolver> m_country_flag_resolver{};
     const QStringList columns{
         /*: Title of Peers Table column which contains a
             unique number used to identify a connection. */
