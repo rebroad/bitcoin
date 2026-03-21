@@ -521,7 +521,7 @@ __smart_internal: check-libs
 	@echo ""
 	@smart_targets="$(SMART_TARGETS)"; \
 	if [ -z "$$smart_targets" ]; then smart_targets="bitcoind bitcoin-cli qt/bitcoin-qt"; fi; \
-	smart_tool="$${SMART_TOOL:-$$HOME/bin/smart-build-debian}"; \
+	smart_tool="$${SMART_TOOL:-$$(command -v smart 2>/dev/null || printf '%s' "$$HOME/bin/smart")}"; \
 	if "$$smart_tool" --name bitcoin --log /tmp/bitcoin-build.log --sudo-askpass "$$HOME/bin/simple-askpass" -- $(MAKE) $(AM_MAKEFLAGS) -C src $$smart_targets; then \
 		echo ""; \
 		echo "✅ SUCCESS: Build completed without errors!"; \
@@ -529,6 +529,11 @@ __smart_internal: check-libs
 	else \
 		echo ""; \
 		echo "⚠️  BUILD FAILED after smart dependency resolution. Analyzing remaining output..."; \
+		if [ ! -f /tmp/bitcoin-build.log ]; then \
+			echo "❌ No /tmp/bitcoin-build.log was produced (smart tool likely missing or failed early)."; \
+			echo "   Set SMART_TOOL=<path-to-smart> and rerun make; skipping automatic fix-build to preserve incremental objects."; \
+			exit 1; \
+		fi; \
 		if grep -q "libbitcoinconsensus_la-.*\.o: No such file or directory" /tmp/bitcoin-build.log; then \
 			echo "🔍 Detected: missing libtool consensus object (stale .lo/.o)"; \
 			echo ""; \
