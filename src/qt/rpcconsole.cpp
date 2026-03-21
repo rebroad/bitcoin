@@ -52,6 +52,7 @@
 #include <QPainter>
 #include <QScreen>
 #include <QScrollBar>
+#include <QSet>
 #include <QSettings>
 #include <QString>
 #include <QStringList>
@@ -225,6 +226,74 @@ public:
         painter->drawText(start_x, baseline_y, arrow);
         painter->setFont(flag_font);
         painter->drawText(start_x + arrow_w + space_w, baseline_y, flag);
+        painter->restore();
+    }
+};
+
+class BanAddressFlagDelegate : public QStyledItemDelegate
+{
+public:
+    explicit BanAddressFlagDelegate(QObject* parent = nullptr)
+        : QStyledItemDelegate(parent) {}
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        const QString display = index.data(Qt::DisplayRole).toString().trimmed();
+        const int sep = display.indexOf(' ');
+        if (sep <= 0) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        const QString flag = display.left(sep);
+        const QString addr = display.mid(sep + 1).trimmed();
+        if (flag.isEmpty() || addr.isEmpty()) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        QStyleOptionViewItem opt(option);
+        initStyleOption(&opt, index);
+        opt.text.clear();
+
+        const QWidget* widget = opt.widget;
+        QStyle* style = widget ? widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, widget);
+
+        QFont flag_font = option.font;
+        QFont text_font = option.font;
+        double scale_factor = 1.1;
+        try {
+            scale_factor = std::stod(gArgs.GetArg("-qtpeercountryflagscalefactor", "1.1"));
+        } catch (const std::exception&) {
+        }
+        scale_factor = std::clamp(scale_factor, 0.5, 4.0);
+        if (flag_font.pointSizeF() > 0) {
+            flag_font.setPointSizeF(flag_font.pointSizeF() * scale_factor);
+        } else if (flag_font.pixelSize() > 0) {
+            flag_font.setPixelSize(std::max(1, static_cast<int>(std::lround(flag_font.pixelSize() * scale_factor))));
+        }
+        const QFontDatabase db;
+        for (const QString& family : {QStringLiteral("Noto Color Emoji"), QStringLiteral("Segoe UI Emoji"), QStringLiteral("Apple Color Emoji")}) {
+            if (db.families().contains(family)) {
+                flag_font.setFamily(family);
+                break;
+            }
+        }
+
+        const QFontMetrics flag_fm(flag_font);
+        const QFontMetrics text_fm(text_font);
+        const int left_pad = 6;
+        const int gap = text_fm.horizontalAdvance(QStringLiteral(" "));
+        const int x = option.rect.x() + left_pad;
+        const int baseline_y = option.rect.y() + (option.rect.height() + std::max(flag_fm.ascent(), text_fm.ascent()) - std::max(flag_fm.descent(), text_fm.descent())) / 2;
+
+        painter->save();
+        painter->setPen(opt.palette.color(QPalette::Text));
+        painter->setFont(flag_font);
+        painter->drawText(x, baseline_y, flag);
+        painter->setFont(text_font);
+        painter->drawText(x + flag_fm.horizontalAdvance(flag) + gap, baseline_y, addr);
         painter->restore();
     }
 };
@@ -828,6 +897,8 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         // set up ban table
         ui->banlistWidget->setModel(model->getBanTableModel());
         ui->banlistWidget->verticalHeader()->hide();
+        ui->banlistWidget->setMouseTracking(true);
+        ui->banlistWidget->viewport()->setMouseTracking(true);
         ui->banlistWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
         ui->banlistWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
         ui->banlistWidget->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -838,8 +909,26 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             ui->banlistWidget->setColumnWidth(BanTableModel::Bantime, BANTIME_COLUMN_WIDTH);
             ui->banlistWidget->setColumnWidth(BanTableModel::Status, STATUS_COLUMN_WIDTH);
             ui->banlistWidget->setColumnWidth(BanTableModel::BanCount, BANCOUNT_COLUMN_WIDTH);
+            ui->banlistWidget->setColumnWidth(BanTableModel::ASN, ASNCOLUMN_WIDTH);
         }
+        ui->banlistWidget->setItemDelegateForColumn(BanTableModel::Address, new BanAddressFlagDelegate(this));
         ui->banlistWidget->horizontalHeader()->setStretchLastSection(true);
+        connect(ui->banlistWidget, &QTableView::entered, this, [this](const QModelIndex& index) {
+            if (!index.isValid()) {
+                QToolTip::hideText();
+                return;
+            }
+            if (index.column() != BanTableModel::Address && index.column() != BanTableModel::ASN) {
+                QToolTip::hideText();
+                return;
+            }
+            const QString tooltip = index.data(Qt::ToolTipRole).toString();
+            if (tooltip.isEmpty()) {
+                QToolTip::hideText();
+                return;
+            }
+            QToolTip::showText(QCursor::pos(), tooltip, ui->banlistWidget);
+        });
 
         // create ban table context menu
         banTableContextMenu = new QMenu(this);
@@ -847,10 +936,15 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             IP/Netmask is the combination of a peer's IP address and its Netmask.
             For IP address, see: https://en.wikipedia.org/wiki/IP_address. */
         banTableContextMenu->addAction(tr("&Copy IP/Netmask"), [this] {
-            GUIUtil::copyEntryData(ui->banlistWidget, BanTableModel::Address, Qt::DisplayRole);
+            GUIUtil::copyEntryData(ui->banlistWidget, BanTableModel::Address, BanTableModel::RawSubnetRole);
         });
         banTableContextMenu->addSeparator();
-        banTableContextMenu->addAction(tr("&Unban"), this, &RPCConsole::unbanSelectedNode);
+        m_unban_action = banTableContextMenu->addAction(tr("&Unban"), this, &RPCConsole::unbanSelectedNode);
+        banTableContextMenu->addSeparator();
+        m_ban_asn_1h_action = banTableContextMenu->addAction(ts.ban_for + " ASN " + tr("1 &hour"), [this] { banSelectedAsn(60 * 60); });
+        m_ban_asn_1d_action = banTableContextMenu->addAction(ts.ban_for + " ASN " + tr("1 d&ay"), [this] { banSelectedAsn(60 * 60 * 24); });
+        m_ban_asn_1w_action = banTableContextMenu->addAction(ts.ban_for + " ASN " + tr("1 &week"), [this] { banSelectedAsn(60 * 60 * 24 * 7); });
+        m_ban_asn_1y_action = banTableContextMenu->addAction(ts.ban_for + " ASN " + tr("1 &year"), [this] { banSelectedAsn(60 * 60 * 24 * 365); });
         connect(ui->banlistWidget, &QTableView::customContextMenuRequested, this, &RPCConsole::showBanTableContextMenu);
 
         // ban table signal handling - clear peer details when clicking a peer in the ban table
@@ -1431,25 +1525,29 @@ void RPCConsole::showBanTableContextMenu(const QPoint& point)
 {
     QModelIndex index = ui->banlistWidget->indexAt(point);
     if (index.isValid()) {
-        // Update the unban action text to show number of selected items
+        if (!ui->banlistWidget->selectionModel()->isRowSelected(index.row(), QModelIndex())) {
+            ui->banlistWidget->selectRow(index.row());
+        }
+
         QList<QModelIndex> selectedNodes = GUIUtil::getEntryData(ui->banlistWidget, BanTableModel::Address);
         if (selectedNodes.count() > 1) {
-            // Find the unban action and update its text
-            for (QAction* action : banTableContextMenu->actions()) {
-                if (action->text().contains("Unban")) {
-                    action->setText(tr("&Unban %1 selected").arg(selectedNodes.count()));
-                    break;
-                }
-            }
+            m_unban_action->setText(tr("&Unban %1 selected").arg(selectedNodes.count()));
         } else {
-            // Reset to default text for single selection
-            for (QAction* action : banTableContextMenu->actions()) {
-                if (action->text().contains("Unban")) {
-                    action->setText(tr("&Unban"));
-                    break;
-                }
+            m_unban_action->setText(tr("&Unban"));
+        }
+
+        bool has_asn_target{false};
+        for (const QModelIndex& node : selectedNodes) {
+            if (!node.data(BanTableModel::AsnNetworkRole).toString().isEmpty()) {
+                has_asn_target = true;
+                break;
             }
         }
+        m_ban_asn_1h_action->setEnabled(has_asn_target);
+        m_ban_asn_1d_action->setEnabled(has_asn_target);
+        m_ban_asn_1w_action->setEnabled(has_asn_target);
+        m_ban_asn_1y_action->setEnabled(has_asn_target);
+
         banTableContextMenu->exec(QCursor::pos());
     }
 }
@@ -1497,7 +1595,7 @@ void RPCConsole::unbanSelectedNode()
     for(int i = 0; i < nodes.count(); i++)
     {
         // Get currently selected ban address
-        QString strNode = nodes.at(i).data().toString();
+        QString strNode = nodes.at(i).data(BanTableModel::RawSubnetRole).toString();
         CSubNet possibleSubnet;
 
         LookupSubNet(strNode.toStdString(), possibleSubnet);
@@ -1515,6 +1613,54 @@ void RPCConsole::unbanSelectedNode()
             message(CMD_REPLY, tr("1 address unbanned."), false);
         } else {
             message(CMD_REPLY, tr("%1 addresses unbanned.").arg(unbannedCount), false);
+        }
+    }
+}
+
+void RPCConsole::banSelectedAsn(int bantime)
+{
+    if (!clientModel) {
+        return;
+    }
+
+    QList<QModelIndex> nodes = GUIUtil::getEntryData(ui->banlistWidget, BanTableModel::Address);
+    QSet<QString> asn_targets;
+    for (const QModelIndex& node : nodes) {
+        const QString asn_subnet = node.data(BanTableModel::AsnNetworkRole).toString().trimmed();
+        if (!asn_subnet.isEmpty()) {
+            asn_targets.insert(asn_subnet);
+        }
+    }
+
+    if (asn_targets.isEmpty()) {
+        message(CMD_ERROR, tr("No ASN subnet information available for selected rows."), false);
+        return;
+    }
+
+    int banned_count{0};
+    for (const QString& asn_subnet : asn_targets) {
+        CSubNet possibleSubnet;
+        if (!LookupSubNet(asn_subnet.toStdString(), possibleSubnet) || !possibleSubnet.IsValid()) {
+            continue;
+        }
+        try {
+            UniValue params(UniValue::VARR);
+            params.push_back(asn_subnet.toStdString());
+            params.push_back("add");
+            params.push_back(bantime);
+            m_node.executeRpc("setban", params, "");
+            ++banned_count;
+        } catch (const std::exception& e) {
+            message(CMD_ERROR, tr("Failed to ban ASN subnet %1: %2").arg(asn_subnet, QString::fromStdString(e.what())), false);
+        }
+    }
+
+    if (banned_count > 0) {
+        clientModel->getBanTableModel()->refresh();
+        if (banned_count == 1) {
+            message(CMD_REPLY, tr("1 ASN subnet banned."), false);
+        } else {
+            message(CMD_REPLY, tr("%1 ASN subnets banned.").arg(banned_count), false);
         }
     }
 }

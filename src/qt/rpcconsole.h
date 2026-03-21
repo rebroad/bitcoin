@@ -139,6 +139,8 @@ public Q_SLOTS:
     void banSelectedNode(int bantime);
     /** Unban a selected node on the Bans tab */
     void unbanSelectedNode();
+    /** Ban ASN subnets for selected banned entries */
+    void banSelectedAsn(int bantime);
     /** set which tab has the focus (is visible) */
     void setTabFocus(enum TabTypes tabType);
 Q_SIGNALS:
@@ -162,7 +164,8 @@ private:
         BANSUBNET_COLUMN_WIDTH = 200,
         BANTIME_COLUMN_WIDTH = 250,
         STATUS_COLUMN_WIDTH = 100,
-        BANCOUNT_COLUMN_WIDTH = 80
+        BANCOUNT_COLUMN_WIDTH = 80,
+        ASNCOLUMN_WIDTH = 280
     };
 
     interfaces::Node& m_node;
@@ -177,6 +180,11 @@ private:
     RPCTimerInterface *rpcTimerInterface = nullptr;
     QMenu *peersTableContextMenu = nullptr;
     QMenu *banTableContextMenu = nullptr;
+    QAction* m_unban_action = nullptr;
+    QAction* m_ban_asn_1h_action = nullptr;
+    QAction* m_ban_asn_1d_action = nullptr;
+    QAction* m_ban_asn_1w_action = nullptr;
+    QAction* m_ban_asn_1y_action = nullptr;
     int consoleFontSize = 0;
     QCompleter *autoCompleter = nullptr;
     QThread thread;

@@ -12,6 +12,7 @@
 
 #include <QAbstractTableModel>
 #include <QStringList>
+#include <QString>
 
 class BanTablePriv;
 
@@ -22,6 +23,13 @@ namespace interfaces {
 struct CCombinedBan {
     CSubNet subnet;
     CBanEntry banEntry;
+    QString countryFlag;
+    QString countryTooltip;
+    QString displayAddress;
+    QString asnDisplay;
+    QString asnTooltip;
+    QString asnNetwork;
+    QString rawSubnet;
 };
 
 class BannedNodeLessThan
@@ -54,7 +62,13 @@ public:
         Address = 0,
         Bantime = 1,
         Status = 2,
-        BanCount = 3
+        BanCount = 3,
+        ASN = 4
+    };
+
+    enum {
+        AsnNetworkRole = Qt::UserRole,
+        RawSubnetRole
     };
 
     /** @name Methods overridden from QAbstractTableModel
