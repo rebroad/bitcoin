@@ -528,8 +528,12 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             if (now - count_seconds(rec->nodeStats.m_connected) >= 120) dots="";
             else if (now - count_seconds(rec->nodeStats.m_connected) >= 60) dots=".";
             else dots="..";
-            if (rec->nodeStats.nRecvBytesSnapOld) {
-                int nTxBpsPct = int((100.0 * (rec->nodeStats.nMempoolBytes - rec->nodeStats.nMempoolBytesSnapOld) / (rec->nodeStats.nRecvBytes - rec->nodeStats.nRecvBytesSnapOld)) + 0.5);
+            const uint64_t recv_bytes_base{rec->nodeStats.nRecvBytesSnapOld};
+            const uint64_t mempool_bytes_base{rec->nodeStats.nMempoolBytesSnapOld};
+            const uint64_t recv_bytes{rec->nodeStats.nRecvBytes > recv_bytes_base ? rec->nodeStats.nRecvBytes - recv_bytes_base : rec->nodeStats.nRecvBytes};
+            const uint64_t mempool_bytes{rec->nodeStats.nMempoolBytes > mempool_bytes_base ? rec->nodeStats.nMempoolBytes - mempool_bytes_base : rec->nodeStats.nMempoolBytes};
+            if (recv_bytes > 0) {
+                int nTxBpsPct = int((100.0 * mempool_bytes / recv_bytes) + 0.5);
                 int nBTxBpsPct = int(rec->nodeStats.nBTxBpsPct + 0.5);
                 return QString::fromStdString(strprintf("%s%d%s", dots, nTxBpsPct, nBTxBpsPct ? strprintf("+%d", nBTxBpsPct) : ""));
             } else
@@ -537,8 +541,11 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
         }
         case MPpm: {
             int64_t now = GetTimeSeconds();
-            if (rec->nodeStats.nRecvBytesSnapOld) {
-                float nMPpm = 60.0 * (rec->nodeStats.nMempoolTXs - rec->nodeStats.nMempoolTXsSnapOld) / (now - rec->nodeStats.nTimeSnapOld);
+            const unsigned int mempool_txs_base{rec->nodeStats.nMempoolTXsSnapOld};
+            const int64_t time_base{rec->nodeStats.nTimeSnapOld > 0 ? rec->nodeStats.nTimeSnapOld : count_seconds(rec->nodeStats.m_connected)};
+            if (now > time_base) {
+                const unsigned int mempool_txs{rec->nodeStats.nMempoolTXs > mempool_txs_base ? rec->nodeStats.nMempoolTXs - mempool_txs_base : rec->nodeStats.nMempoolTXs};
+                float nMPpm = 60.0 * mempool_txs / (now - time_base);
                 float nBTxpm = rec->nodeStats.nBTXpm;
                 std::string strMPpm; std::string strBTpm;
                 if (nMPpm < 1) strMPpm = strprintf("%d", 0.1 * (int)(nMPpm * 10));

@@ -1853,6 +1853,7 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
 void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationState& state)
 {
     LOCK(cs_main);
+    const bool use_peer_stats_snapshots{gArgs.GetBoolArg("-peerstatssnapshots", false)};
 
     const uint256 hash(block.GetHash());
     std::map<uint256, std::pair<NodeId, bool>>::iterator it = mapBlockSource.find(hash);
@@ -1909,7 +1910,7 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
                 auto [bytes, txs] = stats;
                 if (bytes > 0 || txs > 0) {
                     // Find the CNode and CNodeState for this nodeid
-                    m_connman.ForNode(nodeid, [this, bytes, txs, now](CNode* pnode) {
+                    m_connman.ForNode(nodeid, [this, bytes, txs, now, use_peer_stats_snapshots](CNode* pnode) {
                         // Transfer stats to permanent storage
                         pnode->nBlockBytes += bytes;
                         pnode->nBlockTXs += txs;
@@ -1919,13 +1920,16 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
                         if (nodestate) {
                             nodestate->nBlocksRecv++;
 
-                            pnode->nBTxBpsPct = 100.0 * (pnode->nBlockBytes - pnode->nBlockBytesSnapOld) /
-                                    (pnode->nRecvBytes - pnode->nRecvBytesSnapOld);
+                            const uint64_t block_bytes_base{use_peer_stats_snapshots ? pnode->nBlockBytesSnapOld : 0};
+                            const uint64_t recv_bytes_base{use_peer_stats_snapshots ? pnode->nRecvBytesSnapOld : 0};
+                            const uint64_t block_bytes{pnode->nBlockBytes > block_bytes_base ? pnode->nBlockBytes - block_bytes_base : 0};
+                            const uint64_t recv_bytes{pnode->nRecvBytes > recv_bytes_base ? pnode->nRecvBytes - recv_bytes_base : 0};
+                            pnode->nBTxBpsPct = recv_bytes > 0 ? 100.0 * block_bytes / recv_bytes : 0;
                             LogPrint(BCLog::BLOCK, "peer=%d, recv=%d Pct = (%d-%d) / %d = %d\n",
                                     pnode->GetId(), nodestate->nBlocksRecv, pnode->nBlockBytes, pnode->nBlockBytesSnapOld,
                                     pnode->nRecvBytes - pnode->nRecvBytesSnapOld, pnode->nBTxBpsPct);
 
-                            if (nodestate->nBlocksRecv % 3 == 0) {
+                            if (use_peer_stats_snapshots && nodestate->nBlocksRecv % 3 == 0) {
                                 // Rotate snapshots for this peer
                                 RotateNodeSnapshots(pnode, now);
                             }
@@ -1941,7 +1945,7 @@ void PeerManagerImpl::BlockChecked(const CBlock& block, const BlockValidationSta
             CNodeState* nodestate = State(nodeid);
             if (nodestate) {
                 nodestate->nBlocksRecv++;
-                if (nodestate->nBlocksRecv % 3 == 0) {
+                if (use_peer_stats_snapshots && nodestate->nBlocksRecv % 3 == 0) {
                     // Rotate snapshots only for this specific peer
                     m_connman.ForNode(nodeid, [this, now](CNode* pnode) {
                         RotateNodeSnapshots(pnode, now);
@@ -4358,7 +4362,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
 
         // Set initial sync finished when we reach the best header we know about
-        if (!m_initial_sync_finished && pindex && pindex == pindexBestHeader) {
+        if (gArgs.GetBoolArg("-peerstatssnapshots", false) && !m_initial_sync_finished && pindex && pindex == pindexBestHeader) {
             // IBD just completed AND this is the best block we know about, take a snapshot
             int64_t now = GetTimeSeconds();
             int64_t time_since_last_snap = now - pfrom.nTimeSnap;
@@ -5713,6 +5717,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
 }
 
 void PeerManagerImpl::RotateNodeSnapshots(CNode* pnode, int64_t now) {
+    if (!gArgs.GetBoolArg("-peerstatssnapshots", false)) return;
     pnode->nRecvBytesSnapOld = pnode->nRecvBytesSnap;
     pnode->nRecvBytesSnap = pnode->nRecvBytes;
     pnode->nMempoolBytesSnapOld = pnode->nMempoolBytesSnap;
@@ -5728,6 +5733,7 @@ void PeerManagerImpl::RotateNodeSnapshots(CNode* pnode, int64_t now) {
 }
 
 void PeerManagerImpl::UpdatePeerSnapshots(int64_t now) {
+    if (!gArgs.GetBoolArg("-peerstatssnapshots", false)) return;
     m_connman.ForEachNode([&](CNode* pnode) {
         pnode->nRecvBytesSnap = pnode->nRecvBytes;
         pnode->nMempoolBytesSnap = pnode->nMempoolBytes;

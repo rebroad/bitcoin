@@ -660,6 +660,7 @@ void CNode::CopyStats(CNodeStats& stats) {
 
 bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
 {
+    const bool use_peer_stats_snapshots{gArgs.GetBoolArg("-peerstatssnapshots", false)};
     complete = false;
     const auto time = GetTime<std::chrono::microseconds>();
     LOCK(cs_vRecv);
@@ -696,7 +697,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
 
             {
                 PERF_MONITOR("net_receive_msg_bytes_queue");
-                if ((msg.m_type == NetMsgType::INV || msg.m_type == NetMsgType::BLOCKTXN || msg.m_type == NetMsgType::TX) && !nRecvBytesSnapOld) { // Fine as long this happens within 300 seconds of connection
+                if (use_peer_stats_snapshots && (msg.m_type == NetMsgType::INV || msg.m_type == NetMsgType::BLOCKTXN || msg.m_type == NetMsgType::TX) && !nRecvBytesSnapOld) { // Fine as long this happens within 300 seconds of connection
                     nRecvBytesSnap = nRecvBytes - msg.m_raw_message_size - msg_bytes.size();
                     nRecvBytesSnapOld = nRecvBytesSnap - 1; // -1 to avoid divide by zero
                     nTimeSnap = count_seconds(m_last_recv);
@@ -705,7 +706,7 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                 }
 
                 // REBTODO - best place to do this?
-                if ((count_seconds(m_last_recv) - nTimeSnap) >= 300) {
+                if (use_peer_stats_snapshots && (count_seconds(m_last_recv) - nTimeSnap) >= 300) {
                     nTimeSnapOld = nTimeSnap;
                     nTimeSnap = count_seconds(m_last_recv);
                     nMempoolBytesSnapOld = nMempoolBytesSnap;
@@ -1701,6 +1702,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     std::unordered_map<NodeId, uint64_t> ibd_block_bytes_now;
     std::unordered_map<NodeId, CAddress> ibd_addrs;
     std::unordered_set<NodeId> full_outbound_ids;
+    const bool use_peer_stats_snapshots{gArgs.GetBoolArg("-peerstatssnapshots", false)};
     if (now != lastnow) {
         m_max_outbound_full_relay = std::min(nMaxConnections, (int)gArgs.GetIntArg("-maxoutboundrelay", MAX_OUTBOUND_FULL_RELAY_CONNECTIONS));
         m_max_outbound = m_max_outbound_full_relay + m_max_outbound_block_relay + nMaxFeeler;
@@ -1715,21 +1717,29 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 LOCK(pnode->cs_vSend);
                 nSendBytes = pnode->nSendBytes;
             }
-            unsigned int nMempoolBytes = pnode->nMempoolBytes - pnode->nMempoolBytesSnapOld;
-            unsigned int nMempoolTXs = pnode->nMempoolTXs - pnode->nMempoolTXsSnapOld;
+            const uint64_t mempool_bytes_base{use_peer_stats_snapshots ? pnode->nMempoolBytesSnapOld : 0};
+            const unsigned int mempool_txs_base{use_peer_stats_snapshots ? pnode->nMempoolTXsSnapOld : 0};
+            const uint64_t recv_bytes_base{use_peer_stats_snapshots ? pnode->nRecvBytesSnapOld : 0};
+            const int64_t interval_start_time{
+                (use_peer_stats_snapshots && pnode->nTimeSnapOld > 0)
+                    ? pnode->nTimeSnapOld
+                    : count_seconds(pnode->m_connected)};
+            const uint64_t nMempoolBytes{pnode->nMempoolBytes > mempool_bytes_base ? pnode->nMempoolBytes - mempool_bytes_base : 0};
+            const unsigned int nMempoolTXs{pnode->nMempoolTXs > mempool_txs_base ? pnode->nMempoolTXs - mempool_txs_base : 0};
+            const uint64_t nRecvBytesInterval{nRecvBytes > recv_bytes_base ? nRecvBytes - recv_bytes_base : 0};
             if ((pnode->nLastBlock >= now - 60) || (pnode->m_tx_relay && pnode->m_tx_relay->lastSentFeeFilter > 9000000)) nPeersIBD++;
             if (count_seconds(pnode->m_last_block_time) > m_last_block_time) m_last_block_time = count_seconds(pnode->m_last_block_time);
-            float nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytes - pnode->nRecvBytesSnapOld + 1);
+            float nMempoolPct = 100.0 * nMempoolBytes / (nRecvBytesInterval + 1);
             int64_t m_connected = count_seconds(pnode->m_connected);
             if (pnode->IsFullOutboundConn()) {
                 full_outbound_ids.insert(pnode->GetId());
                 ibd_block_bytes_now.emplace(pnode->GetId(), pnode->nBlockBytes);
                 ibd_addrs.emplace(pnode->GetId(), pnode->addr);
-                nTotalBytesRecv += nRecvBytes - pnode->nRecvBytesSnapOld;
+                nTotalBytesRecv += nRecvBytesInterval;
                 nTotalMempoolBytes += nMempoolBytes;
                 latestNode = pnode->GetId();
                 nOutboundFullRelay++;
-                if (pnode->nTimeSnapOld > latestSnapOld) latestSnapOld = pnode->nTimeSnapOld;
+                if (interval_start_time > latestSnapOld) latestSnapOld = interval_start_time;
                 if (m_connected > latestOutboundConn) latestOutboundConn = m_connected;
                 float nBlockPct = pnode->nBTxBpsPct;
                 nLatestNodePct = nMempoolPct;
@@ -1747,9 +1757,11 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 } else if (nBlockPct && nBlockPct < nSecondLowestBPct)
                     nSecondLowestBPct = nBlockPct;
                 //int nMempoolBps = nMempoolPct * .08 * (nRecvBytes - pnode-nRecvBytesSnapOld) / (now - pnode->nTimeSnapOld);
-                float nMempoolBps = nMempoolBytes * 8.0 / (now - pnode->nTimeSnapOld);
+                float nMempoolBps = 0;
+                if (now > interval_start_time) nMempoolBps = nMempoolBytes * 8.0 / (now - interval_start_time);
                 nGlobalBps += nMempoolBps;
-                float nTXpm = 60.0 * nMempoolTXs / (now - pnode->nTimeSnapOld);
+                float nTXpm = 0;
+                if (now > interval_start_time) nTXpm = 60.0 * nMempoolTXs / (now - interval_start_time);
                 float nBTXpm = pnode->nBTXpm;
                 nLatestNodeTXpm = nTXpm;
                 nGlobalTXpm += (int)nTXpm;
