@@ -651,15 +651,21 @@ void CNode::CopyStats(CNodeStats& stats) {
 
 bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
 {
-    PERF_MONITOR("net_receive_msg_bytes");
     complete = false;
     const auto time = GetTime<std::chrono::microseconds>();
     LOCK(cs_vRecv);
-    m_last_recv = std::chrono::duration_cast<std::chrono::seconds>(time);
-    nRecvBytes += msg_bytes.size();
+    {
+        PERF_MONITOR("net_receive_msg_bytes_account");
+        m_last_recv = std::chrono::duration_cast<std::chrono::seconds>(time);
+        nRecvBytes += msg_bytes.size();
+    }
     while (msg_bytes.size() > 0) {
         // absorb network data
-        int handled = m_deserializer->Read(msg_bytes);
+        int handled = 0;
+        {
+            PERF_MONITOR("net_receive_msg_bytes_deserialize");
+            handled = m_deserializer->Read(msg_bytes);
+        }
         if (handled < 0) {
             // Serious header problem, disconnect from the peer.
             return false;
@@ -668,7 +674,10 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
         if (m_deserializer->Complete()) {
             // decompose a transport agnostic CNetMessage from the deserializer
             bool reject_message{false};
-            CNetMessage msg = m_deserializer->GetMessage(time, reject_message);
+            CNetMessage msg{[&] {
+                PERF_MONITOR("net_receive_msg_bytes_get_message");
+                return m_deserializer->GetMessage(time, reject_message);
+            }()};
             if (reject_message) {
                 // Message deserialization failed.  Drop the message but don't disconnect the peer.
                 // store the size of the corrupt message
@@ -676,47 +685,50 @@ bool CNode::ReceiveMsgBytes(Span<const uint8_t> msg_bytes, bool& complete)
                 continue;
             }
 
-            if ((msg.m_type == NetMsgType::INV || msg.m_type == NetMsgType::BLOCKTXN || msg.m_type == NetMsgType::TX) && !nRecvBytesSnapOld) { // Fine as long this happens within 300 seconds of connection
-                nRecvBytesSnap = nRecvBytes - msg.m_raw_message_size - msg_bytes.size();
-                nRecvBytesSnapOld = nRecvBytesSnap - 1; // -1 to avoid divide by zero
-                nTimeSnap = count_seconds(m_last_recv);
-                nTimeSnapOld = nTimeSnap - 1; // -1 to avoid divide by zero
-                LogPrintf("%s: 1stTx %s t=%d size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, msg.m_type, nTimeSnap - count_seconds(m_connected), msg.m_raw_message_size, nRecvBytesSnap, nRecvBytes, handled, msg_bytes.size(), GetId());
+            {
+                PERF_MONITOR("net_receive_msg_bytes_queue");
+                if ((msg.m_type == NetMsgType::INV || msg.m_type == NetMsgType::BLOCKTXN || msg.m_type == NetMsgType::TX) && !nRecvBytesSnapOld) { // Fine as long this happens within 300 seconds of connection
+                    nRecvBytesSnap = nRecvBytes - msg.m_raw_message_size - msg_bytes.size();
+                    nRecvBytesSnapOld = nRecvBytesSnap - 1; // -1 to avoid divide by zero
+                    nTimeSnap = count_seconds(m_last_recv);
+                    nTimeSnapOld = nTimeSnap - 1; // -1 to avoid divide by zero
+                    LogPrintf("%s: 1stTx %s t=%d size=%d nRB1TX=%d nRB=%d handled=%d msg_bytes=%d peer=%d\n", __func__, msg.m_type, nTimeSnap - count_seconds(m_connected), msg.m_raw_message_size, nRecvBytesSnap, nRecvBytes, handled, msg_bytes.size(), GetId());
+                }
+
+                // REBTODO - best place to do this?
+                if ((count_seconds(m_last_recv) - nTimeSnap) >= 300) {
+                    nTimeSnapOld = nTimeSnap;
+                    nTimeSnap = count_seconds(m_last_recv);
+                    nMempoolBytesSnapOld = nMempoolBytesSnap;
+                    nMempoolBytesSnap = nMempoolBytes;
+                    nMempoolTXsSnapOld = nMempoolTXsSnap;
+                    nMempoolTXsSnap = nMempoolTXs;
+                    nRecvBytesSnapOld = nRecvBytesSnap;
+                    nRecvBytesSnap = nRecvBytes;
+                }
+
+                if (msg.m_type == NetMsgType::BLOCK || msg.m_type == NetMsgType::BLOCKTXN) {
+                    nBlocksToBeProcessed++;
+                    if (nBlocksToBeProcessed == 1)
+                        LogPrintf("%s: BlockToBeProcessed peer=%d\n", __func__, GetId());
+                    ::nBlocksToBeProcessed++;
+                    nLastBlock = count_seconds(m_last_recv);
+                }
+
+                // Store received bytes per message command
+                // to prevent a memory DOS, only allow valid commands
+                auto i = mapRecvBytesPerMsgCmd.find(msg.m_type);
+                if (i == mapRecvBytesPerMsgCmd.end()) {
+                    i = mapRecvBytesPerMsgCmd.find(NET_MESSAGE_COMMAND_OTHER);
+                }
+                assert(i != mapRecvBytesPerMsgCmd.end());
+                i->second += msg.m_raw_message_size;
+
+                // push the message to the process queue,
+                vRecvMsg.push_back(std::move(msg));
+
+                complete = true;
             }
-
-            // REBTODO - best place to do this?
-            if ((count_seconds(m_last_recv) - nTimeSnap) >= 300) {
-                nTimeSnapOld = nTimeSnap;
-                nTimeSnap = count_seconds(m_last_recv);
-                nMempoolBytesSnapOld = nMempoolBytesSnap;
-                nMempoolBytesSnap = nMempoolBytes;
-                nMempoolTXsSnapOld = nMempoolTXsSnap;
-                nMempoolTXsSnap = nMempoolTXs;
-                nRecvBytesSnapOld = nRecvBytesSnap;
-                nRecvBytesSnap = nRecvBytes;
-            }
-
-            if (msg.m_type == NetMsgType::BLOCK || msg.m_type == NetMsgType::BLOCKTXN) {
-                nBlocksToBeProcessed++;
-                if (nBlocksToBeProcessed == 1)
-                    LogPrintf("%s: BlockToBeProcessed peer=%d\n", __func__, GetId());
-                ::nBlocksToBeProcessed++;
-                nLastBlock = count_seconds(m_last_recv);
-            }
-
-            // Store received bytes per message command
-            // to prevent a memory DOS, only allow valid commands
-            auto i = mapRecvBytesPerMsgCmd.find(msg.m_type);
-            if (i == mapRecvBytesPerMsgCmd.end()) {
-                i = mapRecvBytesPerMsgCmd.find(NET_MESSAGE_COMMAND_OTHER);
-            }
-            assert(i != mapRecvBytesPerMsgCmd.end());
-            i->second += msg.m_raw_message_size;
-
-            // push the message to the process queue,
-            vRecvMsg.push_back(std::move(msg));
-
-            complete = true;
         }
     }
 
@@ -3193,7 +3205,6 @@ bool CConnman::RemoveAddedNode(const std::string& strNode)
 
 size_t CConnman::GetNodeCount(ConnectionDirection flags) const
 {
-    PERF_MONITOR("net_get_node_count");
     LOCK(m_nodes_mutex);
     if (flags == ConnectionDirection::Both) // Shortcut if we want total
         return m_nodes.size();
