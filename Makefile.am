@@ -16,6 +16,9 @@ endif
 
 export PYTHONPATH
 
+# Enable smart wrapper by default; override with SMART=0 when needed.
+SMART ?= 1
+
 vanity-onion:
 	$(AM_V_at) if [ "$(SMART)" != "0" ] && [ -z "$(SMART_INTERNAL)" ]; then \
 		if [ "$@" = "$(firstword $(MAKECMDGOALS))" ]; then \
@@ -501,6 +504,8 @@ __smart_internal: check-libs
 	@need_regen=0; \
 	if [ -f "$(top_srcdir)/Makefile.in" ] && [ "$(top_srcdir)/Makefile.in" -nt "Makefile" ]; then need_regen=1; fi; \
 	if [ -f "$(top_srcdir)/src/Makefile.in" ] && [ "$(top_srcdir)/src/Makefile.in" -nt "src/Makefile" ]; then need_regen=1; fi; \
+	if [ -f "$(top_srcdir)/Makefile.am" ] && [ "$(top_srcdir)/Makefile.am" -nt "Makefile" ]; then need_regen=1; fi; \
+	if [ -f "$(top_srcdir)/src/Makefile.am" ] && [ "$(top_srcdir)/src/Makefile.am" -nt "src/Makefile" ]; then need_regen=1; fi; \
 	if [ $$need_regen -eq 1 ]; then \
 		echo "🔄 Detected stale Makefile(s). Regenerating via ./config.status..."; \
 		if [ -x "./config.status" ]; then \
@@ -520,9 +525,14 @@ __smart_internal: check-libs
 	@echo "📋 Step 1: Attempting normal build..."
 	@echo ""
 	@smart_targets="$(SMART_TARGETS)"; \
-	if [ -z "$$smart_targets" ]; then smart_targets="bitcoind bitcoin-cli qt/bitcoin-qt"; fi; \
+	if [ -z "$$smart_targets" ]; then smart_targets="all"; fi; \
 	smart_tool="$${SMART_TOOL:-$$(command -v smart 2>/dev/null || printf '%s' "$$HOME/bin/smart")}"; \
-	if "$$smart_tool" --name bitcoin --log /tmp/bitcoin-build.log --sudo-askpass "$$HOME/bin/simple-askpass" -- $(MAKE) $(AM_MAKEFLAGS) -C src $$smart_targets; then \
+	if ! command -v "$$smart_tool" >/dev/null 2>&1 && [ ! -x "$$smart_tool" ]; then \
+		echo "ℹ️  smart not found; using plain make for: $$smart_targets"; \
+		$(MAKE) -j4 -C src $$smart_targets; \
+		exit $$?; \
+	fi; \
+	if "$$smart_tool" --verbose --name bitcoin --log /tmp/bitcoin-build.log --sudo-askpass "$$HOME/bin/simple-askpass" -- $(MAKE) -j4 -C src $$smart_targets; then \
 		echo ""; \
 		echo "✅ SUCCESS: Build completed without errors!"; \
 		echo "🎉 Targets built successfully: $$smart_targets"; \
@@ -547,15 +557,23 @@ __smart_internal: check-libs
 			echo "📋 Step 2: Running fix-undefined-refs..."; \
 			$(MAKE) fix-undefined-refs; \
 		else \
-			echo "🔍 No specific pattern matched. Trying comprehensive fix-build..."; \
-			echo ""; \
-			$(MAKE) fix-build; \
+			echo "🔍 No specific pattern matched. Leaving build artifacts intact for incremental retry/debug."; \
+			echo "   Re-run with SMART_AUTO_FIX=1 to force make fix-build on unknown failures."; \
+			if [ "$${SMART_AUTO_FIX:-0}" = "1" ]; then \
+				echo "📋 SMART_AUTO_FIX=1 set: running comprehensive fix-build..."; \
+				echo ""; \
+				$(MAKE) fix-build; \
+			else \
+				exit 1; \
+			fi; \
 		fi; \
 	fi
 
 .DEFAULT:
 	$(AM_V_at) if [ "$(SMART)" != "0" ] && [ -z "$(SMART_INTERNAL)" ]; then \
-		if [ -n "$(SMART_DISPATCHED)" ]; then \
+		if [ "$@" != "$(firstword $(MAKECMDGOALS))" ]; then \
+			:; \
+		elif [ -n "$(SMART_DISPATCHED)" ]; then \
 			:; \
 		else \
 			targets="$(MAKECMDGOALS)"; \

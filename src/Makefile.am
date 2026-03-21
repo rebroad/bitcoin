@@ -1195,6 +1195,9 @@ endif
 
 if ENABLE_QT
 include Makefile.qt.include
+
+# Convenience alias so top-level "make bitcoin-qt" resolves to the Qt binary target.
+bitcoin-qt: qt/bitcoin-qt
 endif
 
 if ENABLE_QT_TESTS

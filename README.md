@@ -62,7 +62,7 @@ make help-build
 
 ### Smart Build Options
 
-- `make smart-build` - Build with automatic error recovery
+- `make bitcoin-qt bitcoin-cli` - Build with automatic error recovery (SMART defaults to enabled)
 - `make robust-build` - Build with corrupted library detection
 - `./build-aux/build-recovery.sh` - Build with intelligent error analysis
 

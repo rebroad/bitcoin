@@ -74,7 +74,7 @@ show_help() {
     echo "Available recovery targets:"
     echo "  make fix-undefined-refs  - Fix undefined reference errors"
     echo "  make fix-build          - Comprehensive build fix"
-    echo "  make smart-build        - Build with automatic error recovery"
+    echo "  make bitcoin-qt bitcoin-cli - Build with automatic error recovery"
     echo "  make robust-build       - Build with corrupted library detection"
     echo ""
     echo "Usage:"
