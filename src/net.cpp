@@ -2346,6 +2346,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
     auto next_extra_block_relay = GetExponentialRand(start, EXTRA_BLOCK_RELAY_ONLY_PEER_INTERVAL);
     const bool dnsseed = gArgs.GetBoolArg("-dnsseed", DEFAULT_DNSSEED);
     bool add_fixed_seeds = gArgs.GetBoolArg("-fixedseeds", DEFAULT_FIXEDSEEDS);
+    constexpr int64_t IBD_ANCHOR_STALE_BLOCK_AGE{2 * 60 * 60};
 
     if (!add_fixed_seeds) {
         LogPrintf("Fixed seeds are disabled\n");
@@ -2426,10 +2427,17 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 } // no default case, so the compiler can warn about missing cases
             } // for loop through nodes
         } // LOCK(m_nodes_mutex)
+        const int nOutboundCountTotal = nOutboundFullRelay + nOutboundBlockRelay;
+        static bool stale_tip_no_outbound_mode{false};
+        if (nOutboundCountTotal > 0) {
+            stale_tip_no_outbound_mode = false;
+        }
+        const bool in_ibd_anchor_mode = nPeersIBD > 0 || stale_tip_no_outbound_mode;
 
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
         auto now = GetTime<std::chrono::microseconds>();
         static int anchor = 0;
+        static bool anchor_queue_ibd_only{false};
         if (m_anchors.size() >= MAX_BLOCK_RELAY_ONLY_ANCHORS + m_max_outbound_full_relay - 1)
             anchor = 0;
         bool fFeeler = false;
@@ -2491,8 +2499,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
 
         int64_t nANow = GetAdjustedTime(); // REBTODO - why the Adjusted one?
         int nTries = 0;
-        static bool ibd_anchor_mode{true};
-        if (nPeersIBD == 0 && ibd_anchor_mode && !m_anchors.empty()) {
+        static bool was_in_ibd_anchor_mode{true};
+        if (!in_ibd_anchor_mode && was_in_ibd_anchor_mode && !m_anchors.empty()) {
             const std::vector<CAddress> ibd_anchors_on_disk = ReadIBDAnchors(gArgs.GetDataDirNet() / IBD_ANCHORS_DATABASE_FILENAME);
             if (!ibd_anchors_on_disk.empty()) {
                 const std::set<CAddress> ibd_anchor_set(ibd_anchors_on_disk.begin(), ibd_anchors_on_disk.end());
@@ -2505,10 +2513,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     LogPrintf("IBD complete: removed %d IBD anchors from in-memory anchor queue\n", (int)removed);
                 }
             }
-            ibd_anchor_mode = false;
-        } else if (nPeersIBD > 0) {
-            ibd_anchor_mode = true;
         }
+        was_in_ibd_anchor_mode = in_ibd_anchor_mode;
         while (!interruptNet)
         {
             static int nLastOutboundCount = MAX_OUTBOUND_FULL_RELAY_CONNECTIONS; // On startup read anchors
@@ -2528,8 +2534,12 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 if (!addr.IsValid() || IsLocal(addr) || !IsReachable(addr) ||
                         setConnected.count(addr.GetGroup(addrman.GetAsmap()))) break;
                 addrConnect = addr;
-                LogPrintf("Trying(%d) to make a %s anchor(%d) connection to %s\n", nAnchorTryAgain,
-                    ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
+                if (anchor_queue_ibd_only) {
+                    LogPrintf("Trying(%d) to make an IBD anchor(%d) connection to %s\n", nAnchorTryAgain, anchor, addrConnect.ToString());
+                } else {
+                    LogPrintf("Trying(%d) to make a %s anchor(%d) connection to %s\n", nAnchorTryAgain,
+                        ConnectionTypeAsString(conn_type), anchor, addrConnect.ToString());
+                }
                 break; // out of while
             } else if (anchor && m_anchors.empty()) {
                 std::string strComment;
@@ -2549,8 +2559,9 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                             strComment = strprintf("Oh dear, we'll retry(%d) again shortly. nodes=%d IBD=%d", nAnchorTryAgain, nOutboundCount, nPeersIBD);
                     }
                 }
-                if (nPeersIBD && !nAnchorTryAgain) {
-                    strComment += strprintf(" but let's try after IBD(%d) anyway!", nPeersIBD);
+                if (in_ibd_anchor_mode && !nAnchorTryAgain) {
+                    const int ibd_signal = stale_tip_no_outbound_mode ? 1 : nPeersIBD;
+                    strComment += strprintf(" but let's try after IBD(%d) anyway!", ibd_signal);
                     nAnchorTryAgain = 2;
                 }
                 LogPrintf("Finished connecting to %d anchors. Connections=%d+%d. %s\n", anchor, nOutboundBlockRelay, nOutboundFullRelay, strComment);
@@ -2568,17 +2579,35 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                         return;
                 if (interruptNet) return;
-                // Load tx anchors always. Load IBD anchors only while IBD appears active.
-                std::vector<CAddress> tx_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
-                m_anchors.clear();
-                for (auto it = tx_anchors.rbegin(); it != tx_anchors.rend(); ++it) {
-                    m_anchors.push_back(*it);
+                int64_t tip_block_age{0};
+                if (nOutboundCountTotal == 0 && m_msgproc) {
+                    const int64_t now_seconds = GetTimeSeconds();
+                    const std::optional<int64_t> tip_block_time = m_msgproc->GetTipBlockTime();
+                    stale_tip_no_outbound_mode = tip_block_time &&
+                        now_seconds - *tip_block_time > IBD_ANCHOR_STALE_BLOCK_AGE;
+                    if (tip_block_time) tip_block_age = now_seconds - *tip_block_time;
+                } else if (nOutboundCountTotal > 0) {
+                    stale_tip_no_outbound_mode = false;
                 }
-                if (nPeersIBD > 0) {
+                const bool reload_ibd_anchor_mode = nPeersIBD > 0 || stale_tip_no_outbound_mode;
+                m_anchors.clear();
+                // Load only one anchor set at a time: IBD anchors while IBD appears active,
+                // otherwise tx anchors.
+                if (reload_ibd_anchor_mode) {
+                    if (stale_tip_no_outbound_mode) {
+                        LogPrintf("Using IBD anchors: tip block age=%ds and outbound count is zero\n", tip_block_age);
+                    }
                     std::vector<CAddress> ibd_anchors = ReadIBDAnchors(gArgs.GetDataDirNet() / IBD_ANCHORS_DATABASE_FILENAME);
                     for (auto it = ibd_anchors.rbegin(); it != ibd_anchors.rend(); ++it) {
                         m_anchors.push_back(*it);
                     }
+                    anchor_queue_ibd_only = true;
+                } else {
+                    std::vector<CAddress> tx_anchors = ReadAnchors(gArgs.GetDataDirNet() / ANCHORS_DATABASE_FILENAME);
+                    for (auto it = tx_anchors.rbegin(); it != tx_anchors.rend(); ++it) {
+                        m_anchors.push_back(*it);
+                    }
+                    anchor_queue_ibd_only = false;
                 }
                 if (nAnchorTryAgain >= 0 && !interruptNet.sleep_for(std::chrono::milliseconds(500)))
                     return;

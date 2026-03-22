@@ -320,6 +320,7 @@ public:
     void FinalizeNode(const CNode& node) override;
     bool ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt, bool fToggle) override;
     bool SendMessages(CNode* pto) override EXCLUSIVE_LOCKS_REQUIRED(pto->cs_sendProcessing);
+    std::optional<int64_t> GetTipBlockTime() const override;
 
     /** Implement PeerManager */
     void StartScheduledTasks(CScheduler& scheduler) override;
@@ -1335,6 +1336,14 @@ void PeerManagerImpl::InitializeNode(CNode *pnode)
     if (!pnode->IsInboundConn()) {
         PushNodeVersion(*pnode);
     }
+}
+
+std::optional<int64_t> PeerManagerImpl::GetTipBlockTime() const
+{
+    LOCK(cs_main);
+    const CBlockIndex* const tip = m_chainman.ActiveChain().Tip();
+    if (!tip) return std::nullopt;
+    return tip->GetBlockTime();
 }
 
 void PeerManagerImpl::ReattemptInitialBroadcast(CScheduler& scheduler)

@@ -807,6 +807,9 @@ public:
     */
     virtual bool SendMessages(CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(pnode->cs_sendProcessing) = 0;
 
+    /** Return local active-chain tip block time in seconds since epoch, if available. */
+    virtual std::optional<int64_t> GetTipBlockTime() const = 0;
+
 
 protected:
     /**
