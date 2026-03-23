@@ -13,6 +13,35 @@
 
 #include <cstdint>
 
+namespace {
+double GetTxBpsPctSortValue(const CNodeStats& stats)
+{
+    if (stats.nBTxBpsPct > 0) {
+        return stats.nBTxBpsPct;
+    }
+
+    const uint64_t recv_base{stats.nRecvBytesSnapOld};
+    const uint64_t send_base{stats.nSendBytesSnapOld};
+    const uint64_t mempool_base{stats.nMempoolBytesSnapOld};
+    const uint64_t recv{stats.nRecvBytes > recv_base ? stats.nRecvBytes - recv_base : stats.nRecvBytes};
+    const uint64_t send{stats.nSendBytes > send_base ? stats.nSendBytes - send_base : stats.nSendBytes};
+    const uint64_t mempool{stats.nMempoolBytes > mempool_base ? stats.nMempoolBytes - mempool_base : stats.nMempoolBytes};
+    return (recv + send) > 0 ? 100.0 * mempool / (recv + send) : 0.0;
+}
+
+double GetMPpmSortValue(const CNodeStats& stats, const int64_t now)
+{
+    if (stats.nBTXpm > 0) {
+        return stats.nBTXpm;
+    }
+
+    const int64_t time_base{stats.nTimeSnapOld > 0 ? stats.nTimeSnapOld : count_seconds(stats.m_connected)};
+    const unsigned int txs_base{stats.nMempoolTXsSnapOld};
+    const unsigned int txs{stats.nMempoolTXs > txs_base ? stats.nMempoolTXs - txs_base : stats.nMempoolTXs};
+    return now > time_base ? 60.0 * txs / (now - time_base) : 0.0;
+}
+} // namespace
+
 PeerTableSortProxy::PeerTableSortProxy(QObject* parent)
     : QSortFilterProxyModel(parent)
 {
@@ -66,39 +95,14 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
         return Left < Right;
     }
     case PeerTableModel::TxBpsPct: {
-        const uint64_t right_recv_base{right_stats.nRecvBytesSnapOld};
-        const uint64_t left_recv_base{left_stats.nRecvBytesSnapOld};
-        const uint64_t right_send_base{right_stats.nSendBytesSnapOld};
-        const uint64_t left_send_base{left_stats.nSendBytesSnapOld};
-        const uint64_t right_mempool_base{right_stats.nMempoolBytesSnapOld};
-        const uint64_t left_mempool_base{left_stats.nMempoolBytesSnapOld};
-        const uint64_t right_recv{right_stats.nRecvBytes > right_recv_base ? right_stats.nRecvBytes - right_recv_base : right_stats.nRecvBytes};
-        const uint64_t left_recv{left_stats.nRecvBytes > left_recv_base ? left_stats.nRecvBytes - left_recv_base : left_stats.nRecvBytes};
-        const uint64_t right_send{right_stats.nSendBytes > right_send_base ? right_stats.nSendBytes - right_send_base : right_stats.nSendBytes};
-        const uint64_t left_send{left_stats.nSendBytes > left_send_base ? left_stats.nSendBytes - left_send_base : left_stats.nSendBytes};
-        const uint64_t right_mempool{right_stats.nMempoolBytes > right_mempool_base ? right_stats.nMempoolBytes - right_mempool_base : right_stats.nMempoolBytes};
-        const uint64_t left_mempool{left_stats.nMempoolBytes > left_mempool_base ? left_stats.nMempoolBytes - left_mempool_base : left_stats.nMempoolBytes};
-        const double Right = (right_recv + right_send) > 0 ? 1.0 * right_mempool / (right_recv + right_send) : 0.0;
-        const double Left = (left_recv + left_send) > 0 ? 1.0 * left_mempool / (left_recv + left_send) : 0.0;
+        const double Right = GetTxBpsPctSortValue(right_stats);
+        const double Left = GetTxBpsPctSortValue(left_stats);
         return Left < Right;
     }
     case PeerTableModel::MPpm: {
-        int64_t now = GetTimeSeconds();
-        const int64_t right_time_base{right_stats.nTimeSnapOld > 0 ? right_stats.nTimeSnapOld : count_seconds(right_stats.m_connected)};
-        const int64_t left_time_base{left_stats.nTimeSnapOld > 0 ? left_stats.nTimeSnapOld : count_seconds(left_stats.m_connected)};
-        const unsigned int right_txs_base{right_stats.nMempoolTXsSnapOld};
-        const unsigned int left_txs_base{left_stats.nMempoolTXsSnapOld};
-        const unsigned int right_txs{right_stats.nMempoolTXs > right_txs_base ? right_stats.nMempoolTXs - right_txs_base : right_stats.nMempoolTXs};
-        const unsigned int left_txs{left_stats.nMempoolTXs > left_txs_base ? left_stats.nMempoolTXs - left_txs_base : left_stats.nMempoolTXs};
-        double Right;
-        double Left;
-        if (right_stats.nBTXpm && left_stats.nBTXpm) {
-            Right = right_stats.nBTXpm;
-            Left = left_stats.nBTXpm;
-        } else {
-            Right = now > right_time_base ? 1.0 * right_txs / (now - right_time_base) : 0.0;
-            Left = now > left_time_base ? 1.0 * left_txs / (now - left_time_base) : 0.0;
-        }
+        const int64_t now = GetTimeSeconds();
+        const double Right = GetMPpmSortValue(right_stats, now);
+        const double Left = GetMPpmSortValue(left_stats, now);
         return Left < Right;
     }
     case PeerTableModel::Subversion:

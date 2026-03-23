@@ -89,7 +89,7 @@ private:
     const QStringList columns{
         /*: Title of Peers Table column which contains a
             unique number used to identify a connection. */
-        tr("Peer"),
+        tr("#"),
         /*: Title of Peers Table column which contains the
             IP/Onion/I2P address of the connected peer. */
         tr("Address"),
