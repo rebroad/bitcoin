@@ -116,7 +116,7 @@ private:
         tr("MP%"),
         /*: Title of Peers Table column which indicates the number of TX
             that make it into the mempool per minute on average */
-        tr("MPpm"),
+        tr("MP/m"),
         /*: Title of Peers Table column which contains the peer's
             User Agent string. */
         tr("User Agent")};
