@@ -6,16 +6,38 @@
 
 #include <consensus/amount.h>
 
+#include <QDataStream>
+#include <QMetaType>
 #include <QStringList>
 
 #include <cassert>
 
 static constexpr auto MAX_DIGITS_BTC = 16;
 
+QDataStream& operator<<(QDataStream& out, const BitcoinUnits::Unit& unit)
+{
+    out << static_cast<qint32>(unit);
+    return out;
+}
+
+QDataStream& operator>>(QDataStream& in, BitcoinUnits::Unit& unit)
+{
+    qint32 value{BitcoinUnits::BTC};
+    in >> value;
+    unit = BitcoinUnits::valid(value) ? static_cast<BitcoinUnits::Unit>(value) : BitcoinUnits::BTC;
+    return in;
+}
+
 BitcoinUnits::BitcoinUnits(QObject *parent):
         QAbstractListModel(parent),
         unitlist(availableUnits())
 {
+}
+
+void BitcoinUnits::RegisterMetaType()
+{
+    qRegisterMetaType<BitcoinUnits::Unit>("BitcoinUnits::Unit");
+    qRegisterMetaTypeStreamOperators<BitcoinUnits::Unit>("BitcoinUnits::Unit");
 }
 
 QList<BitcoinUnits::Unit> BitcoinUnits::availableUnits()

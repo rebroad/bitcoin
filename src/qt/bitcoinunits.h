@@ -83,6 +83,7 @@ public:
     static bool parse(int unit, const QString &value, CAmount *val_out);
     //! Gets title for amount column including current display unit if optionsModel reference available */
     static QString getAmountColumnTitle(int unit);
+    static void RegisterMetaType();
     ///@}
 
     //! @name AbstractListModel implementation
@@ -110,5 +111,6 @@ private:
     QList<BitcoinUnits::Unit> unitlist;
 };
 typedef BitcoinUnits::Unit BitcoinUnit;
+Q_DECLARE_METATYPE(BitcoinUnits::Unit)
 
 #endif // BITCOIN_QT_BITCOINUNITS_H

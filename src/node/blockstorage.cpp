@@ -364,7 +364,7 @@ bool BlockManager::LoadBlockIndex(
 
     // Mark the cache as populated
     BlockStatusCache::getInstance().setPopulated();
-    printf("BlockStatusCache: populated with %zu entries during LoadBlockIndex\n", BlockStatusCache::getInstance().getCacheSize());
+    LogPrint(BCLog::QT, "BlockStatusCache: populated with %zu entries during LoadBlockIndex\n", BlockStatusCache::getInstance().getCacheSize());
 
     return true;
 }

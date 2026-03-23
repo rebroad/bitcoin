@@ -18,6 +18,7 @@
 #include <node/ui_interface.h>
 #include <noui.h>
 #include <qt/bitcoingui.h>
+#include <qt/bitcoinunits.h>
 #include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -49,6 +50,7 @@
 
 #include <QApplication>
 #include <QDebug>
+#include <QFileInfo>
 #include <QLatin1String>
 #include <QLibraryInfo>
 #include <QLocale>
@@ -64,6 +66,9 @@
 
 // For crash handling to save traffic widget data
 #include <signal.h>
+#if defined(Q_OS_UNIX) && !defined(Q_OS_ANDROID)
+#include <unistd.h>
+#endif
 #include <qt/trafficgraphwidget.h>
 #include <qt/rpcconsole.h>
 
@@ -106,6 +111,38 @@ static void RegisterMetaTypes()
     qRegisterMetaType<std::function<void()>>("std::function<void()>");
     qRegisterMetaType<QMessageBox::Icon>("QMessageBox::Icon");
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
+    BitcoinUnits::RegisterMetaType();
+}
+
+static void SanitizeAtSpiBusAddress()
+{
+#if defined(Q_OS_UNIX) && !defined(Q_OS_ANDROID)
+    const QString at_spi_bus_address{qEnvironmentVariable("AT_SPI_BUS_ADDRESS")};
+    if (at_spi_bus_address.isEmpty()) {
+        return;
+    }
+
+    const QString prefix{"unix:path="};
+    if (!at_spi_bus_address.startsWith(prefix)) {
+        return;
+    }
+
+    QString bus_path{at_spi_bus_address.mid(prefix.size())};
+    const int comma{bus_path.indexOf(',')};
+    if (comma >= 0) {
+        bus_path.truncate(comma);
+    }
+
+    if (bus_path.isEmpty()) {
+        return;
+    }
+
+    const QFileInfo bus_info{bus_path};
+    const bool stale_bus = !bus_info.exists() || bus_info.ownerId() != geteuid();
+    if (stale_bus) {
+        qunsetenv("AT_SPI_BUS_ADDRESS");
+    }
+#endif
 }
 
 static QString GetLangTerritory()
@@ -667,6 +704,7 @@ int GuiMain(int argc, char* argv[])
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
 #endif
 
+    SanitizeAtSpiBusAddress();
     BitcoinApplication app;
     GUIUtil::LoadFont(QStringLiteral(":/fonts/monospace"));
 
