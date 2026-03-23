@@ -22,6 +22,7 @@
 #include <chainparams.h>
 #include <interfaces/node.h>
 #include <key_io.h>
+#include <logging.h>
 #include <node/ui_interface.h>
 #include <policy/fees.h>
 #include <txmempool.h>
@@ -196,14 +197,14 @@ void SendCoinsDialog::setModel(WalletModel *_model)
         connect(ui->optInRBF, &QCheckBox::stateChanged, this, &SendCoinsDialog::updateSmartFeeLabel);
         connect(ui->optInRBF, &QCheckBox::stateChanged, this, &SendCoinsDialog::coinControlUpdateLabels);
         CAmount requiredFee = model->wallet().getRequiredFee(1000);
-        printf("[DEBUG] SendCoinsDialog: requiredFee from getRequiredFee(1000) = %ld\n", (long)requiredFee);
-        printf("[DEBUG] SendCoinsDialog: customFee value before SetMinValue = %ld\n", (long)ui->customFee->value());
+        LogPrintf("[DEBUG] SendCoinsDialog: requiredFee from getRequiredFee(1000) = %ld\n", (long)requiredFee);
+        LogPrintf("[DEBUG] SendCoinsDialog: customFee value before SetMinValue = %ld\n", (long)ui->customFee->value());
         ui->customFee->SetMinValue(requiredFee);
         if (ui->customFee->value() < requiredFee) {
-            printf("[DEBUG] SendCoinsDialog: customFee value %ld < requiredFee %ld, setting to requiredFee\n", (long)ui->customFee->value(), (long)requiredFee);
+            LogPrintf("[DEBUG] SendCoinsDialog: customFee value %ld < requiredFee %ld, setting to requiredFee\n", (long)ui->customFee->value(), (long)requiredFee);
             ui->customFee->setValue(requiredFee);
         }
-        printf("[DEBUG] SendCoinsDialog: customFee value after SetMinValue = %ld\n", (long)ui->customFee->value());
+        LogPrintf("[DEBUG] SendCoinsDialog: customFee value after SetMinValue = %ld\n", (long)ui->customFee->value());
         ui->customFee->setSingleStep(requiredFee);
         updateFeeSectionControls();
         updateSmartFeeLabel();

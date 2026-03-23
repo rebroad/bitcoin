@@ -13,9 +13,9 @@ namespace wallet {
 CAmount GetRequiredFee(const CWallet& wallet, unsigned int nTxBytes)
 {
     CFeeRate rate = GetRequiredFeeRate(wallet);
-    printf("[DEBUG] GetRequiredFee: rate = %ld, nTxBytes = %u\n", (long)rate.GetFeePerK(), nTxBytes);
+    LogPrintf("[DEBUG] GetRequiredFee: rate = %ld, nTxBytes = %u\n", (long)rate.GetFeePerK(), nTxBytes);
     CAmount fee = rate.GetFee(nTxBytes);
-    printf("[DEBUG] GetRequiredFee: fee = %ld\n", (long)fee);
+    LogPrintf("[DEBUG] GetRequiredFee: fee = %ld\n", (long)fee);
     return fee;
 }
 
