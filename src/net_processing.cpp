@@ -2453,7 +2453,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         //   don't connect before giving DoS points
         // - Once a headers message is received that is valid and does connect,
         //   nUnconnectingHeaders gets reset back to 0.
-        if (fDownloadBlocks && !m_chainman.m_blockman.LookupBlockIndex(headers[0].hashPrevBlock) && nCount < MAX_BLOCKS_TO_ANNOUNCE) {
+        if (fDownloadBlocks && !m_chainman.IsBootstrapChainstatePending() && !m_chainman.m_blockman.LookupBlockIndex(headers[0].hashPrevBlock) && nCount < MAX_BLOCKS_TO_ANNOUNCE) {
             nodestate->nUnconnectingHeaders++;
             m_connman.PushMessage(&pfrom, msgMaker.Make(NetMsgType::GETHEADERS, m_chainman.ActiveChain().GetLocator(pindexBestHeader), uint256()));
             LogPrint(BCLog::BLOCK, "received header %s: missing prev block %s, sending getheaders (%d) to end (peer=%d, nUnconnectingHeaders=%d)\n",
@@ -2543,7 +2543,7 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
         // If this set of headers is valid and ends in a block with at least as
         // much work as our tip, download as much as possible.
         bool fUpdateChain = gArgs.GetBoolArg("-updatechain", true);
-        if ((CanDirectFetch() || !fUpdateChain) && fDownloadBlocks && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork < pindexLast->nChainWork) {
+        if ((CanDirectFetch() || !fUpdateChain) && fDownloadBlocks && !m_chainman.IsBootstrapChainstatePending() && pindexLast->IsValid(BLOCK_VALID_TREE) && m_chainman.ActiveChain().Tip()->nChainWork < pindexLast->nChainWork) {
             std::vector<const CBlockIndex*> vToFetch;
             const CBlockIndex *pindexWalk = pindexLast;
             // Calculate all the blocks we'd need to switch to pindexLast, up to a limit.
@@ -2650,6 +2650,10 @@ void PeerManagerImpl::ProcessHeadersMessage(CNode& pfrom, const Peer& peer,
                 nodestate->m_chain_sync.m_protect = true;
                 ++m_outbound_peers_with_protect_from_disconnect;
             }
+        }
+
+        if (m_chainman.TryFinalizeBootstrapChainstate()) {
+            // no-op: transition is logged by ChainstateManager::TryFinalizeBootstrapChainstate()
         }
     }
 
@@ -3973,6 +3977,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LogPrint(BCLog::BLOCK, "Unexpected cmpctblock message received from peer=%d\n", pfrom.GetId());
             return;
         }
+        {
+            LOCK(cs_main);
+            if (m_chainman.IsBootstrapChainstatePending()) {
+                LogPrint(BCLog::BLOCK, "Ignoring cmpctblock while bootstrap headers are still anchoring chainstate tip (peer=%d)\n", pfrom.GetId());
+                return;
+            }
+        }
 
         CBlockHeaderAndShortTxIDs cmpctblock;
         int nSize = vRecv.size();
@@ -4348,6 +4359,13 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         if (fImporting || fReindex) {
             LogPrint(BCLog::NET, "Unexpected block message received from peer %d\n", pfrom.GetId());
             return;
+        }
+        {
+            LOCK(cs_main);
+            if (m_chainman.IsBootstrapChainstatePending()) {
+                LogPrint(BCLog::BLOCK, "Ignoring block while bootstrap headers are still anchoring chainstate tip (peer=%d)\n", pfrom.GetId());
+                return;
+            }
         }
 
         int nSize = vRecv.size();
@@ -5659,7 +5677,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         //
         std::vector<CInv> vGetData;
         bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
-        if (fDownloadBlocks && !pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+        if (fDownloadBlocks && !m_chainman.IsBootstrapChainstatePending() && !pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             state.BlockUnblocked(6);
             std::vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;

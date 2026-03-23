@@ -848,6 +848,7 @@ private:
     //! If true, the assumed-valid chainstate has been fully validated
     //! by the background validation chainstate.
     bool m_snapshot_validated{false};
+    std::optional<uint256> m_bootstrap_chainstate_tip_hash GUARDED_BY(::cs_main);
 
     CBlockIndex* m_best_invalid;
     friend bool node::BlockManager::LoadBlockIndex(const Consensus::Params&, ChainstateManager&);
@@ -989,6 +990,10 @@ public:
      * @param[out] ppindex If set, the pointer will be set to point to the last new block index object for the given headers
      */
     int ProcessNewBlockHeaders(const std::vector<CBlockHeader>& block, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
+
+    void SetBootstrapChainstateTipHash(const uint256& tip_hash) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool IsBootstrapChainstatePending() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+    bool TryFinalizeBootstrapChainstate() EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
     /**
      * Try to add a transaction to the memory pool.

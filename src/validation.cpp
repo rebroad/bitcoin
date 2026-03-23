@@ -4090,12 +4090,26 @@ bool CChainState::LoadChainTip()
     const CCoinsViewCache& coins_cache = CoinsTip();
     assert(!coins_cache.GetBestBlock().IsNull()); // Never called when the coins view is empty
     const CBlockIndex* tip = m_chain.Tip();
+    const uint256 coins_best_block = coins_cache.GetBestBlock();
 
-    if (tip && tip->GetBlockHash() == coins_cache.GetBestBlock()) return true;
+    if (tip && tip->GetBlockHash() == coins_best_block) return true;
+
+    if (tip) {
+        LogPrintf("%s: chain tip hash (%s) differs from coins best block (%s), updating\n",
+                  __func__, tip->GetBlockHash().ToString(), coins_best_block.ToString());
+    } else {
+        LogPrintf("%s: chain tip is null, loading from coins best block %s\n",
+                  __func__, coins_best_block.ToString());
+    }
 
     // Load pointer to end of best chain
-    CBlockIndex* pindex = m_blockman.LookupBlockIndex(coins_cache.GetBestBlock());
-    if (!pindex) return false;
+    CBlockIndex* pindex = m_blockman.LookupBlockIndex(coins_best_block);
+    if (!pindex) {
+        LogPrintf("%s: failed to find coins best block %s in block index (size=%u)\n",
+                  __func__, coins_best_block.ToString(),
+                  static_cast<unsigned int>(m_blockman.m_block_index.size()));
+        return false;
+    }
 
     m_chain.SetTip(pindex);
     if (!g_tiptowards || !fActivatingChain) {
@@ -4263,24 +4277,39 @@ bool CChainState::ReplayBlocks()
     CCoinsViewCache cache(&db);
 
     std::vector<uint256> hashHeads = db.GetHeadBlocks();
-    if (hashHeads.empty()) return true; // We're already in a consistent state.
-    if (hashHeads.size() != 2) return error("ReplayBlocks(): unknown inconsistent state");
+    if (hashHeads.empty()) {
+        LogPrintf("%s: head block metadata is empty; no replay needed\n", __func__);
+        return true; // We're already in a consistent state.
+    }
+    if (hashHeads.size() != 2) {
+        std::string head_hashes;
+        for (size_t i = 0; i < hashHeads.size(); ++i) {
+            if (!head_hashes.empty()) head_hashes += ",";
+            head_hashes += hashHeads[i].ToString();
+        }
+        return error("ReplayBlocks(): unknown inconsistent state (head_count=%u, heads=%s)",
+                     static_cast<unsigned int>(hashHeads.size()), head_hashes);
+    }
 
     uiInterface.ShowProgress(_("Replaying blocks…").translated, 0, false);
-    LogPrintf("Replaying blocks\n");
+    LogPrintf("Replaying blocks: new=%s old=%s\n", hashHeads[0].ToString(), hashHeads[1].ToString());
 
     const CBlockIndex* pindexOld = nullptr;  // Old tip during the interrupted flush.
     const CBlockIndex* pindexNew;            // New tip during the interrupted flush.
     const CBlockIndex* pindexFork = nullptr; // Latest block common to both the old and the new tip.
 
     if (m_blockman.m_block_index.count(hashHeads[0]) == 0) {
-        return error("ReplayBlocks(): reorganization to unknown block requested");
+        return error("ReplayBlocks(): reorganization to unknown block requested (new=%s, block_index_size=%u)",
+                     hashHeads[0].ToString(),
+                     static_cast<unsigned int>(m_blockman.m_block_index.size()));
     }
     pindexNew = m_blockman.m_block_index[hashHeads[0]];
 
     if (!hashHeads[1].IsNull()) { // The old tip is allowed to be 0, indicating it's the first flush.
         if (m_blockman.m_block_index.count(hashHeads[1]) == 0) {
-            return error("ReplayBlocks(): reorganization from unknown block requested");
+            return error("ReplayBlocks(): reorganization from unknown block requested (old=%s, block_index_size=%u)",
+                         hashHeads[1].ToString(),
+                         static_cast<unsigned int>(m_blockman.m_block_index.size()));
         }
         pindexOld = m_blockman.m_block_index[hashHeads[1]];
         pindexFork = LastCommonAncestor(pindexOld, pindexNew);
@@ -5432,6 +5461,39 @@ CChainState& ChainstateManager::ActiveChainstate() const
     LOCK(::cs_main);
     assert(m_active_chainstate);
     return *m_active_chainstate;
+}
+
+void ChainstateManager::SetBootstrapChainstateTipHash(const uint256& tip_hash)
+{
+    AssertLockHeld(::cs_main);
+    m_bootstrap_chainstate_tip_hash = tip_hash;
+}
+
+bool ChainstateManager::IsBootstrapChainstatePending() const
+{
+    AssertLockHeld(::cs_main);
+    return m_bootstrap_chainstate_tip_hash.has_value();
+}
+
+bool ChainstateManager::TryFinalizeBootstrapChainstate()
+{
+    AssertLockHeld(::cs_main);
+    if (!m_bootstrap_chainstate_tip_hash.has_value()) return true;
+
+    CChainState* active_chainstate = m_active_chainstate;
+    if (!active_chainstate) return false;
+    const uint256 target = *m_bootstrap_chainstate_tip_hash;
+    if (!m_blockman.LookupBlockIndex(target)) return false;
+
+    if (!active_chainstate->LoadChainTip()) {
+        LogPrintf("%s: failed while finalizing bootstrap at hash %s\n", __func__, target.ToString());
+        return false;
+    }
+
+    m_bootstrap_chainstate_tip_hash.reset();
+    LogPrintf("%s: finalized bootstrap using chainstate tip %s at height %d\n",
+              __func__, target.ToString(), active_chainstate->m_chain.Height());
+    return true;
 }
 
 bool ChainstateManager::IsSnapshotActive() const

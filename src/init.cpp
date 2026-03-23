@@ -475,6 +475,7 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-asmap=<file>", strprintf("Specify asn mapping used for bucketing of the peers (default: %s). Relative paths will be prefixed by the net-specific datadir location.", DEFAULT_ASMAP_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-bantime=<n>", strprintf("Default duration (in seconds) of manually configured bans (default: %u)", DEFAULT_MISBEHAVING_BANTIME), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-bind=<addr>[:<port>][=onion]", strprintf("Bind to given address and always listen on it (default: 0.0.0.0). Use [host]:port notation for IPv6. Append =onion to tag any incoming connections to that address and port as incoming Tor connections (default: 127.0.0.1:%u=onion, testnet3: 127.0.0.1:%u=onion, testnet4: 127.0.0.1:%u=onion, signet: 127.0.0.1:%u=onion, regtest: 127.0.0.1:%u=onion)", defaultBaseParams->OnionServiceTargetPort(), testnetBaseParams->OnionServiceTargetPort(), testnet4BaseParams->OnionServiceTargetPort(), signetBaseParams->OnionServiceTargetPort(), regtestBaseParams->OnionServiceTargetPort()), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-bootstrap=<ip>", "Attempt bootstrap recovery from a trusted peer over normal P2P headers sync by connecting to the specified peer", ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
     argsman.AddArg("-cjdnsreachable", "If set then this host is configured for CJDNS (connecting to fc00::/8 addresses would lead us to the CJDNS network) (default: 0)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-connect=<ip>", "Connect only to the specified node; -noconnect disables automatic connections (the rules for this peer are the same as for -addnode). This option can be specified multiple times to connect to multiple nodes.", ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
     argsman.AddArg("-discover", "Discover own IP addresses (default: 1 when listening and no -externalip or -proxy)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
@@ -855,6 +856,13 @@ bool AppInitParameterInteraction(const ArgsManager& args)
 
     if (!fs::is_directory(gArgs.GetBlocksDirPath())) {
         return InitError(strprintf(_("Specified blocks directory \"%s\" does not exist."), args.GetArg("-blocksdir", "")));
+    }
+
+    if (args.IsArgSet("-bootstrap")) {
+        const std::string bootstrap_peer = args.GetArg("-bootstrap", "");
+        if (bootstrap_peer.empty()) {
+            return InitError(_("Invalid -bootstrap value (must be a non-empty peer address)."));
+        }
     }
 
     // parse and validate enabled filter types
@@ -1551,6 +1559,18 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     if (ShutdownRequested()) {
         LogPrintf("Shutdown requested. Exiting.\n");
         return false;
+    }
+
+    if (args.IsArgSet("-bootstrap")) {
+        const bool bootstrap_needed = WITH_LOCK(::cs_main, return chainman.IsBootstrapChainstatePending());
+        const std::string bootstrap_peer = args.GetArg("-bootstrap", "");
+        if (bootstrap_needed && !bootstrap_peer.empty()) {
+            if (node.connman->AddNode(bootstrap_peer)) {
+                LogPrintf("Bootstrap mode active: added trusted bootstrap peer %s\n", bootstrap_peer);
+            } else {
+                LogPrintf("Bootstrap mode active, but failed to add trusted bootstrap peer %s\n", bootstrap_peer);
+            }
+        }
     }
 
     // ********************************************************* Step 8: start indexers

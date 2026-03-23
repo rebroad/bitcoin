@@ -4,8 +4,10 @@
 
 #include <node/chainstate.h>
 
+#include <chainparams.h>
 #include <consensus/params.h>
 #include <node/blockstorage.h>
+#include <util/system.h>
 #include <validation.h>
 
 namespace node {
@@ -55,17 +57,23 @@ std::optional<ChainstateLoadingError> LoadChainstate(bool fReset,
     // From here on out fReindex and fReset mean something different!
     if (!chainman.LoadBlockIndex()) {
         if (shutdown_requested && shutdown_requested()) return ChainstateLoadingError::SHUTDOWN_PROBED;
+        LogPrintf("%s: chainman.LoadBlockIndex() failed\n", __func__);
         return ChainstateLoadingError::ERROR_LOADING_BLOCK_DB;
     }
 
     if (!chainman.BlockIndex().empty() &&
             !chainman.m_blockman.LookupBlockIndex(consensus_params.hashGenesisBlock)) {
+        LogPrintf("%s: missing genesis hash %s from non-empty block index (size=%u)\n",
+                  __func__,
+                  consensus_params.hashGenesisBlock.ToString(),
+                  static_cast<unsigned int>(chainman.BlockIndex().size()));
         return ChainstateLoadingError::ERROR_BAD_GENESIS_BLOCK;
     }
 
     // Check for changed -prune state.  What we are concerned about is a user who has pruned blocks
     // in the past, but is now trying to run unpruned.
     if (fHavePruned && !fPruneMode) {
+        LogPrintf("%s: fHavePruned=true while prune mode disabled\n", __func__);
         return ChainstateLoadingError::ERROR_PRUNED_NEEDS_REINDEX;
     }
 
@@ -74,6 +82,7 @@ std::optional<ChainstateLoadingError> LoadChainstate(bool fReset,
     // (otherwise we use the one already on disk).
     // This is called again in ThreadImport after the reindex completes.
     if (!fReindex && !chainman.ActiveChainstate().LoadGenesisBlock()) {
+        LogPrintf("%s: LoadGenesisBlock() failed while not reindexing\n", __func__);
         return ChainstateLoadingError::ERROR_LOAD_GENESIS_BLOCK_FAILED;
     }
 
@@ -93,11 +102,13 @@ std::optional<ChainstateLoadingError> LoadChainstate(bool fReset,
         // If necessary, upgrade from older database format.
         // This is a no-op if we cleared the coinsviewdb with -reindex or -reindex-chainstate
         if (!chainstate->CoinsDB().Upgrade()) {
+            LogPrintf("%s: CoinsDB().Upgrade() failed\n", __func__);
             return ChainstateLoadingError::ERROR_CHAINSTATE_UPGRADE_FAILED;
         }
 
         // ReplayBlocks is a no-op if we cleared the coinsviewdb with -reindex or -reindex-chainstate
         if (!chainstate->ReplayBlocks()) {
+            LogPrintf("%s: ReplayBlocks() failed\n", __func__);
             return ChainstateLoadingError::ERROR_REPLAYBLOCKS_FAILED;
         }
 
@@ -108,9 +119,24 @@ std::optional<ChainstateLoadingError> LoadChainstate(bool fReset,
         if (!is_coinsview_empty(chainstate)) {
             // LoadChainTip initializes the chain based on CoinsTip()'s best block
             if (!chainstate->LoadChainTip()) {
-                return ChainstateLoadingError::ERROR_LOADCHAINTIP_FAILED;
+                const uint256 coins_tip_hash = chainstate->CoinsTip().GetBestBlock();
+                if (gArgs.IsArgSet("-bootstrap")) {
+                    chainman.SetBootstrapChainstateTipHash(coins_tip_hash);
+                    CBlockIndex* genesis_index = chainman.m_blockman.LookupBlockIndex(consensus_params.hashGenesisBlock);
+                    if (genesis_index) {
+                        chainstate->m_chain.SetTip(genesis_index);
+                    }
+                    LogPrintf("%s: deferring LoadChainTip() for coins tip hash %s while bootstrapping headers via -bootstrap\n",
+                              __func__, coins_tip_hash.ToString());
+                } else {
+                    LogPrintf("%s: LoadChainTip() failed for coins tip hash %s\n",
+                              __func__, coins_tip_hash.ToString());
+                    return ChainstateLoadingError::ERROR_LOADCHAINTIP_FAILED;
+                }
             }
-            assert(chainstate->m_chain.Tip() != nullptr);
+            if (!chainman.IsBootstrapChainstatePending()) {
+                assert(chainstate->m_chain.Tip() != nullptr);
+            }
         } else
             LogPrintf("%s: Skipped LoadChainTip()\n", __func__);
     }
@@ -119,6 +145,7 @@ std::optional<ChainstateLoadingError> LoadChainstate(bool fReset,
         auto chainstates{chainman.GetAll()};
         if (std::any_of(chainstates.begin(), chainstates.end(),
                         [](const CChainState* cs) EXCLUSIVE_LOCKS_REQUIRED(cs_main) { return cs->NeedsRedownload(); })) {
+            LogPrintf("%s: chainstate requires redownload due to insufficient witness validation\n", __func__);
             return ChainstateLoadingError::ERROR_BLOCKS_WITNESS_INSUFFICIENTLY_VALIDATED;
         }
     }
