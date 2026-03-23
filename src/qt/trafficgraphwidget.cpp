@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <interfaces/node.h>
+#include <net_processing.h>
 #include <qt/trafficgraphwidget.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
@@ -16,6 +17,7 @@
 #include <QTimer>
 #include <QToolTip>
 #include <cmath>
+#include <tuple>
 
 #define DESIRED_SAMPLES         800
 
@@ -166,8 +168,33 @@ void TrafficGraphWidget::drawTooltipPoint(QPainter& painter)
         else
             str_tt += " +" + GUIUtil::formatPingTime(std::chrono::microseconds{duration * 1000});
     }
-    str_tt += "\n   " + tr("In") + " " + GUIUtil::formatBytesps(m_samples_in[m_value].at(m_tt_point-1) * 1000) +
-                    "\n" + tr("Out") + " " + GUIUtil::formatBytesps(m_samples_out[m_value].at(m_tt_point-1) * 1000);
+    const QString in_rate_text = GUIUtil::formatBytesps(m_samples_in[m_value].at(m_tt_point-1) * 1000);
+    const QString out_rate_text = GUIUtil::formatBytesps(m_samples_out[m_value].at(m_tt_point-1) * 1000);
+    const int sample_index = m_tt_point - 1;
+    const auto format_direction_detail = [&](const QQueue<DirectionSampleStats>& stats_queue) {
+        if (!(sample_index >= 0 && sample_index < stats_queue.size())) {
+            return QString();
+        }
+        const auto& stats = stats_queue.at(sample_index);
+        QString details;
+        if (stats.has_peer) {
+            std::string top_peer_label = stats.top_peer_addr;
+            if (stats.top_peer_id >= 0 && m_connected_peer_addr.find(stats.top_peer_id) != m_connected_peer_addr.end()) {
+                top_peer_label = "peer=" + std::to_string(stats.top_peer_id);
+            }
+            const QString top_peer_text = QString::fromStdString(top_peer_label) + " (" + GUIUtil::formatBytesps(stats.top_peer_rate_bps) + ")";
+            const QString avg_peer_text = GUIUtil::formatBytesps(stats.avg_peer_rate_bps) + " (" + tr("%n peer(s)", "", stats.peer_count) + ")";
+            details += QString(" | %1 %2 | %3 %4").arg(tr("top peer"), top_peer_text, tr("avg/peer"), avg_peer_text);
+        }
+        if (stats.has_msg_type) {
+            const QString top_msg_text = QString::fromStdString(stats.top_msg_type) + " (" + GUIUtil::formatBytesps(stats.top_msg_type_rate_bps) + ")";
+            details += QString(" | %1 %2").arg(tr("top msg"), top_msg_text);
+        }
+        return details;
+    };
+
+    str_tt += "\n   " + tr("In") + " " + in_rate_text + format_direction_detail(m_incoming_sample_stats[m_value]);
+    str_tt += "\n" + tr("Out") + " " + out_rate_text + format_direction_detail(m_outgoing_sample_stats[m_value]);
 
     // Line below allows ToolTip to move faster than the default ToolTip timeout (10 seconds).
     QToolTip::showText(QPoint(x + m_x_offset, y + m_y_offset), str_tt + ".");
@@ -341,7 +368,9 @@ void TrafficGraphWidget::updateStuff()
     int64_t expected_gap = m_timer->interval();
     int64_t now = GetTimeMillis();
     bool latest_bytes = false;
+    bool latest_peer_stats = false;
     quint64 bytes_in = 0, bytes_out = 0;
+    std::vector<CNodeStats> peer_stats;
 
     // Check for new sample and update display if a new sample is taken for current range
     for (int i = 0; i < VALUES_SIZE; i++) {
@@ -351,8 +380,22 @@ void TrafficGraphWidget::updateStuff()
                 latest_bytes = true;
                 bytes_in = m_client_model->node().getTotalBytesRecv() + m_baseline_bytes_recv;
                 bytes_out = m_client_model->node().getTotalBytesSent() + m_baseline_bytes_sent;
+                interfaces::Node::NodesStats peers_stats_with_state;
+                latest_peer_stats = m_client_model->node().getNodesStats(peers_stats_with_state);
+                if (latest_peer_stats) {
+                    peer_stats.reserve(peers_stats_with_state.size());
+                    m_connected_peer_addr.clear();
+                    for (const auto& peer_stats_entry : peers_stats_with_state) {
+                        const auto& stats = std::get<0>(peer_stats_entry);
+                        peer_stats.push_back(stats);
+                        const std::string peer_addr = stats.addr.ToStringIPPort().empty() ? stats.m_addr_name : stats.addr.ToStringIPPort();
+                        m_connected_peer_addr.emplace(stats.nodeid, peer_addr);
+                    }
+                } else {
+                    m_connected_peer_addr.clear();
+                }
             }
-            updateRates(i, now, bytes_in, bytes_out);
+            updateRates(i, now, bytes_in, bytes_out, latest_peer_stats ? &peer_stats : nullptr);
             if (i == m_value) {
                 if (m_tt_point && m_tt_point <= DESIRED_SAMPLES) {
                     m_tt_point++; // Move the selected point to the left
@@ -407,7 +450,95 @@ void TrafficGraphWidget::updateStuff()
     }
 }
 
-void TrafficGraphWidget::updateRates(int i, int64_t now, quint64 bytes_in, quint64 bytes_out)
+void TrafficGraphWidget::updateDirectionalSampleStats(int range_index, int64_t sample_duration_msecs, const std::vector<CNodeStats>& peer_stats, bool outgoing)
+{
+    DirectionSampleStats sample_stats;
+    sample_stats.peer_count = peer_stats.size();
+    auto& target_stats_queue = outgoing ? m_outgoing_sample_stats[range_index] : m_incoming_sample_stats[range_index];
+    auto& last_peer_bytes = outgoing ? m_last_peer_send_bytes[range_index] : m_last_peer_recv_bytes[range_index];
+    auto& last_msg_bytes = outgoing ? m_last_msg_send_bytes[range_index] : m_last_msg_recv_bytes[range_index];
+    if (sample_duration_msecs <= 0 || peer_stats.empty()) {
+        target_stats_queue.push_front(sample_stats);
+        return;
+    }
+
+    std::map<NodeId, uint64_t> current_peer_send_bytes;
+    std::map<NodeId, std::string> current_peer_addr;
+    mapMsgCmdSize current_msg_send_bytes;
+
+    for (const auto& stats : peer_stats) {
+        current_peer_send_bytes.emplace(stats.nodeid, outgoing ? stats.nSendBytes : stats.nRecvBytes);
+        const std::string peer_addr = stats.addr.ToStringIPPort().empty() ? stats.m_addr_name : stats.addr.ToStringIPPort();
+        current_peer_addr.emplace(stats.nodeid, peer_addr);
+        const auto& per_msg_map = outgoing ? stats.mapSendBytesPerMsgCmd : stats.mapRecvBytesPerMsgCmd;
+        for (const auto& [msg_type, bytes_sent] : per_msg_map) {
+            current_msg_send_bytes[msg_type] += bytes_sent;
+        }
+    }
+
+    if (last_peer_bytes.empty() && last_msg_bytes.empty()) {
+        last_peer_bytes = std::move(current_peer_send_bytes);
+        last_msg_bytes = std::move(current_msg_send_bytes);
+        target_stats_queue.push_front(sample_stats);
+        return;
+    }
+
+    uint64_t top_peer_delta{0};
+    NodeId top_peer_id{-1};
+    uint64_t total_peer_delta{0};
+
+    for (const auto& [node_id, bytes_sent] : current_peer_send_bytes) {
+        const auto it_prev = last_peer_bytes.find(node_id);
+        const uint64_t prev_bytes = it_prev == last_peer_bytes.end() ? 0 : it_prev->second;
+        const uint64_t delta_bytes = bytes_sent >= prev_bytes ? bytes_sent - prev_bytes : 0;
+        total_peer_delta += delta_bytes;
+        if (delta_bytes > top_peer_delta) {
+            top_peer_delta = delta_bytes;
+            top_peer_id = node_id;
+        }
+    }
+
+    uint64_t top_msg_delta{0};
+    std::string top_msg_type;
+    for (const auto& [msg_type, bytes_sent] : current_msg_send_bytes) {
+        const auto it_prev = last_msg_bytes.find(msg_type);
+        const uint64_t prev_bytes = it_prev == last_msg_bytes.end() ? 0 : it_prev->second;
+        const uint64_t delta_bytes = bytes_sent >= prev_bytes ? bytes_sent - prev_bytes : 0;
+        if (delta_bytes > top_msg_delta) {
+            top_msg_delta = delta_bytes;
+            top_msg_type = msg_type;
+        }
+    }
+
+    const auto rate_from_delta = [sample_duration_msecs](uint64_t delta_bytes) {
+        return delta_bytes * 1000 / static_cast<uint64_t>(sample_duration_msecs);
+    };
+
+    if (top_peer_delta > 0) {
+        sample_stats.has_peer = true;
+        sample_stats.top_peer_id = top_peer_id;
+        sample_stats.top_peer_rate_bps = rate_from_delta(top_peer_delta);
+        sample_stats.avg_peer_rate_bps = sample_stats.peer_count > 0
+            ? rate_from_delta(total_peer_delta) / static_cast<uint64_t>(sample_stats.peer_count)
+            : 0;
+        const auto it_top_peer_addr = current_peer_addr.find(top_peer_id);
+        sample_stats.top_peer_addr = it_top_peer_addr != current_peer_addr.end()
+            ? it_top_peer_addr->second
+            : "";
+    }
+
+    if (top_msg_delta > 0) {
+        sample_stats.has_msg_type = true;
+        sample_stats.top_msg_type = std::move(top_msg_type);
+        sample_stats.top_msg_type_rate_bps = rate_from_delta(top_msg_delta);
+    }
+
+    last_peer_bytes = std::move(current_peer_send_bytes);
+    last_msg_bytes = std::move(current_msg_send_bytes);
+    target_stats_queue.push_front(std::move(sample_stats));
+}
+
+void TrafficGraphWidget::updateRates(int i, int64_t now, quint64 bytes_in, quint64 bytes_out, const std::vector<CNodeStats>* peer_stats)
 {
     // Counters should be monotonic. If they reset (restart/load edge), rebase to avoid spike artifacts.
     if (m_last_time[i] <= 0 || bytes_in < m_last_bytes_in[i] || bytes_out < m_last_bytes_out[i]) {
@@ -422,6 +553,13 @@ void TrafficGraphWidget::updateRates(int i, int64_t now, quint64 bytes_in, quint
     float out_rate_kilobytes_per_msec = static_cast<float>(bytes_out - m_last_bytes_out[i]) / actual_gap;
     m_samples_in[i].push_front(in_rate_kilobytes_per_msec);
     m_samples_out[i].push_front(out_rate_kilobytes_per_msec);
+    if (peer_stats) {
+        updateDirectionalSampleStats(i, actual_gap, *peer_stats, /*outgoing=*/false);
+        updateDirectionalSampleStats(i, actual_gap, *peer_stats, /*outgoing=*/true);
+    } else {
+        m_incoming_sample_stats[i].push_front(DirectionSampleStats{});
+        m_outgoing_sample_stats[i].push_front(DirectionSampleStats{});
+    }
     m_time_stamp[i].push_front(now);
     m_last_bytes_in[i] = bytes_in;
     m_last_bytes_out[i] = bytes_out;
@@ -433,6 +571,8 @@ void TrafficGraphWidget::updateRates(int i, int64_t now, quint64 bytes_in, quint
         full[i] = 1;
         m_samples_in[i].pop_back();
         m_samples_out[i].pop_back();
+        m_incoming_sample_stats[i].pop_back();
+        m_outgoing_sample_stats[i].pop_back();
         m_time_stamp[i].pop_back();
     }
 }
@@ -466,13 +606,15 @@ void TrafficGraphWidget::saveData()
         if (fileout.IsNull()) throw std::runtime_error("File stream is null");
         fileout << static_cast<uint32_t>(1); // Version 1
 
-        // Get current node values and add them to our baseline
+        // Always persist effective totals so autosave is crash-safe.
+        quint64 total_bytes_recv = m_baseline_bytes_recv;
+        quint64 total_bytes_sent = m_baseline_bytes_sent;
         if (m_node) {
-            m_baseline_bytes_recv += m_node->getTotalBytesRecv();
-            m_baseline_bytes_sent += m_node->getTotalBytesSent();
+            total_bytes_recv += m_node->getTotalBytesRecv();
+            total_bytes_sent += m_node->getTotalBytesSent();
         }
 
-        fileout << VARINT(m_baseline_bytes_recv) << VARINT(m_baseline_bytes_sent);
+        fileout << VARINT(total_bytes_recv) << VARINT(total_bytes_sent);
 
         for (unsigned int i = 0; i < VALUES_SIZE; i++) {
             fileout << VARINT(m_last_bytes_in[i]) << VARINT(m_last_bytes_out[i]);
@@ -559,6 +701,13 @@ bool TrafficGraphWidget::loadDataFromBinary()
                 memcpy(&value, &uint_value, sizeof(float));
                 m_samples_out[i].push_back(value);
             }
+
+            while (m_incoming_sample_stats[i].size() < m_time_stamp[i].size()) {
+                m_incoming_sample_stats[i].push_back(DirectionSampleStats{});
+            }
+            while (m_outgoing_sample_stats[i].size() < m_time_stamp[i].size()) {
+                m_outgoing_sample_stats[i].push_back(DirectionSampleStats{});
+            }
         }
         filein.fclose();
         return true;
@@ -580,7 +729,13 @@ bool TrafficGraphWidget::loadData()
             m_last_bytes_in[i] = m_last_bytes_out[i] = m_last_time[i] = 0;
             m_samples_in[i].clear();
             m_samples_out[i].clear();
+            m_incoming_sample_stats[i].clear();
+            m_outgoing_sample_stats[i].clear();
             m_time_stamp[i].clear();
+            m_last_peer_recv_bytes[i].clear();
+            m_last_peer_send_bytes[i].clear();
+            m_last_msg_recv_bytes[i].clear();
+            m_last_msg_send_bytes[i].clear();
         }
         return false;
     }

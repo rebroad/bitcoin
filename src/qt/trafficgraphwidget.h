@@ -12,6 +12,9 @@
 #include <QWidget>
 
 #include <chrono>
+#include <map>
+#include <string>
+#include <vector>
 
 class ClientModel;
 
@@ -47,12 +50,25 @@ public Q_SLOTS:
     int setGraphRange(int);
 
 private:
+    struct DirectionSampleStats {
+        bool has_peer{false};
+        bool has_msg_type{false};
+        NodeId top_peer_id{-1};
+        std::string top_peer_addr;
+        std::string top_msg_type;
+        uint64_t top_peer_rate_bps{0};
+        uint64_t avg_peer_rate_bps{0};
+        uint64_t top_msg_type_rate_bps{0};
+        int peer_count{0};
+    };
+
     void saveData();
     int paintPath(QPainterPath&, const QQueue<float>&);
     bool loadDataFromBinary();
     bool loadData();
     void updateFmax();
-    void updateRates(int, int64_t, quint64, quint64);
+    void updateDirectionalSampleStats(int range_index, int64_t sample_duration_msecs, const std::vector<CNodeStats>& peer_stats, bool outgoing);
+    void updateRates(int range_index, int64_t now, quint64 bytes_in, quint64 bytes_out, const std::vector<CNodeStats>* peer_stats);
     void focusSlider();
     void drawTooltipPoint(QPainter&);
 
@@ -62,10 +78,17 @@ private:
     float m_range{0};
     QQueue<float> m_samples_in[VALUES_SIZE] = {};
     QQueue<float> m_samples_out[VALUES_SIZE] = {};
+    QQueue<DirectionSampleStats> m_incoming_sample_stats[VALUES_SIZE] = {};
+    QQueue<DirectionSampleStats> m_outgoing_sample_stats[VALUES_SIZE] = {};
     QQueue<int64_t> m_time_stamp[VALUES_SIZE] = {};
     quint64 m_last_bytes_in[VALUES_SIZE] = {};
     quint64 m_last_bytes_out[VALUES_SIZE] = {};
     int64_t m_last_time[VALUES_SIZE] = {};
+    std::map<NodeId, uint64_t> m_last_peer_recv_bytes[VALUES_SIZE] = {};
+    std::map<NodeId, uint64_t> m_last_peer_send_bytes[VALUES_SIZE] = {};
+    mapMsgCmdSize m_last_msg_recv_bytes[VALUES_SIZE] = {};
+    mapMsgCmdSize m_last_msg_send_bytes[VALUES_SIZE] = {};
+    std::map<NodeId, std::string> m_connected_peer_addr = {};
     ClientModel* m_client_model{nullptr};
     int m_value{0};
     int m_new_value{0};
