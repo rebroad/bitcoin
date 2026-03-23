@@ -847,6 +847,7 @@ void BitcoinApplication::setupPerfMonitoring()
     QTimer* perfTimer = new QTimer(this);
     perfTimer->setInterval(60000); // Log stats every minute
     connect(perfTimer, &QTimer::timeout, []() {
+        if (!LogAcceptCategory(BCLog::PERFMON)) return;
         LogPerfStats();
         PerfMonitor::Instance().Reset(); // Reset stats after logging
     });

@@ -70,6 +70,7 @@ namespace BCLog {
         BLOCKBLOCK  = (1ULL << 29),
         ANYONECANSPEND = (1ULL << 30),
         BANMAN         = (1ULL << 31),
+        PERFMON        = (1ULL << 32),
         ALL         = ~(uint64_t)0,
     };
 

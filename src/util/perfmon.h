@@ -15,6 +15,7 @@
 #include <unistd.h> // for sysconf
 #include <sched.h>  // for sched_getcpu
 #include <algorithm> // for std::find and std::sort
+#include <logging.h>
 
 // Forward declare logging function
 void LogPerfStats();
@@ -36,15 +37,19 @@ public:
         std::thread::id thread_id;
         std::chrono::steady_clock::time_point start_time;
         struct rusage start_usage;
+        bool enabled;
 
-        SectionTimer(PerfMonitor& m, const std::string& name)
+        SectionTimer(PerfMonitor& m, const std::string& name, bool enabled_in = true)
             : monitor(m), section_name(name), thread_id(std::this_thread::get_id()),
-              start_time(std::chrono::steady_clock::now())
+              enabled(enabled_in)
         {
+            if (!enabled) return;
+            start_time = std::chrono::steady_clock::now();
             getrusage(RUSAGE_THREAD, &start_usage);
         }
 
         ~SectionTimer() {
+            if (!enabled) return;
             auto end_time = std::chrono::steady_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
                 end_time - start_time);
@@ -160,6 +165,6 @@ private:
 
 // Macro for easy performance monitoring
 #define PERF_MONITOR(name) \
-    PerfMonitor::SectionTimer perf_timer##__LINE__(PerfMonitor::Instance(), name)
+    PerfMonitor::SectionTimer perf_timer##__LINE__(PerfMonitor::Instance(), name, LogAcceptCategory(BCLog::PERFMON))
 
 #endif // BITCOIN_UTIL_PERFMON_H

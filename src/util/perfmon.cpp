@@ -3,5 +3,5 @@
 
 // Implementation is mostly in the header, but we'll add some logging functionality here
 void LogPerfStats() {
-    LogPrintf("Performance Monitor Stats:\n%s", PerfMonitor::Instance().GetStats());
+    LogPrint(BCLog::PERFMON, "Performance Monitor Stats:\n%s", PerfMonitor::Instance().GetStats());
 }
