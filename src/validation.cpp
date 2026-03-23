@@ -88,6 +88,8 @@ using node::CCoinsStats;
 using node::CoinStatsHashType;
 using node::GetUTXOStats;
 using node::OpenBlockFile;
+
+static constexpr CAmount MAX_MISSING_DUST_INPUT_VALUE{546};
 using node::ReadBlockFromDisk;
 using node::SnapshotMetadata;
 using node::UNDOFILE_CHUNK_SIZE;
@@ -1684,6 +1686,7 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
                        bool cacheFullScriptStore, PrecomputedTransactionData& txdata,
                        std::vector<CScriptCheck>* pvChecks)
 {
+    const bool allow_missing_dust_inputs{gArgs.GetBoolArg("-allowmissingdustinputs", false)};
     if (tx.IsCoinBase()) return true;
 
     if (pvChecks) {
@@ -1703,7 +1706,11 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
         return true;
     }
 
-    std::vector<bool> spent_flags(tx.vin.size(), false);
+    std::vector<bool> spent_flags;
+    spent_flags.reserve(tx.vin.size());
+    for (const auto& txin : tx.vin) {
+        spent_flags.emplace_back(inputs.AccessCoin(txin.prevout).IsSpent());
+    }
 
     if (!txdata.m_spent_outputs_ready) {
         std::vector<CTxOut> spent_outputs;
@@ -1713,14 +1720,16 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
             const COutPoint& prevout = txin.prevout;
             const Coin& coin = inputs.AccessCoin(prevout);
             spent_outputs.emplace_back(coin.out);
-            spent_flags.emplace_back(coin.IsSpent());
         }
         txdata.Init(tx, std::move(spent_outputs));
     }
     assert(txdata.m_spent_outputs.size() == tx.vin.size());
 
     for (unsigned int i = 0; i < tx.vin.size(); i++) {
-        if (!spent_flags[i]) continue; // Skip UTXO dust
+        if (spent_flags[i]) {
+            if (allow_missing_dust_inputs) continue; // Missing input accepted in dust-pruned mode
+            return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent");
+        }
 
         // We very carefully only pass in things to CScriptCheck which
         // are clearly committed to by tx' witness hash. This provides
@@ -1842,17 +1851,9 @@ DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockI
                 COutPoint out(hash, o);
                 Coin coin;
                 bool is_spent = view.SpendCoin(out, &coin);
-                //if (!is_spent || tx.vout[o] != coin.out || pindex->nHeight != coin.nHeight || is_coinbase != coin.fCoinBase) {
-                //    fClean = false; // transaction output mismatch
-                //}
-                if (!is_spent)
-                    LogPrintf("%s: %s, o=%d !is_spent\n", __func__, tx.GetHash().ToString(), o+1);
-                if (tx.vout[o] != coin.out)
-                    LogPrintf("%s: %s, o=%d tx.vout != coin.out\n", __func__, tx.GetHash().ToString(), o+1);
-                if (pindex->nHeight != coin.nHeight)
-                    LogPrintf("%s: %s, o=%d pindex.nHeight (%d) != coin.nHeight (%d)\n", __func__, tx.GetHash().ToString(), o+1, pindex->nHeight, coin.nHeight);
-                if (is_coinbase != coin.fCoinBase)
-                    LogPrintf("%s: %s, o=%d is_coinbase (%d) != coin.fCoinBase (%d)\n", __func__, tx.GetHash().ToString(), o+1, is_coinbase, coin.fCoinBase);
+                if (!is_spent || tx.vout[o] != coin.out || pindex->nHeight != coin.nHeight || is_coinbase != coin.fCoinBase) {
+                    fClean = false; // transaction output mismatch
+                }
             }
         }
 
@@ -1860,20 +1861,15 @@ DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockI
         if (i > 0) { // not coinbases
             CTxUndo &txundo = blockUndo.vtxundo[i-1];
             if (txundo.vprevout.size() != tx.vin.size()) {
-                //error("DisconnectBlock(): transaction and undo data inconsistent");
-                //return DISCONNECT_FAILED;
-                LogPrintf("%s: %s txundo.vprevouts=%d tx.vins=%d\n", __func__, tx.GetHash().ToString(), txundo.vprevout.size(), tx.vin.size());
-            } else
+                error("DisconnectBlock(): transaction and undo data inconsistent");
+                return DISCONNECT_FAILED;
+            }
             for (unsigned int j = tx.vin.size(); j > 0;) {
                 --j;
                 const COutPoint& out = tx.vin[j].prevout;
                 int res = ApplyTxInUndo(std::move(txundo.vprevout[j]), view, out);
-                //if (res == DISCONNECT_FAILED) return DISCONNECT_FAILED;
-                //fClean = fClean && res != DISCONNECT_UNCLEAN;
-                if (res == DISCONNECT_FAILED)
-                    LogPrintf("%s: %s, j=%d TxUndo failed\n", __func__, tx.GetHash().ToString(), j+1);
-                if (res == DISCONNECT_UNCLEAN)
-                    LogPrintf("%s: %s, j=%d TxUndo unclean\n", __func__, tx.GetHash().ToString(), j+1);
+                if (res == DISCONNECT_FAILED) return DISCONNECT_FAILED;
+                fClean = fClean && res != DISCONNECT_UNCLEAN;
             }
             // At this point, all of txundo.vprevout should have been moved out.
         }
@@ -2331,8 +2327,17 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, m_params.GetConsensus());
-    if (block.vtx[0]->GetValueOut() > blockReward + missing_inputs * 250) {
-        LogPrintf("ERROR: ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d) missing=%d\n", block.vtx[0]->GetValueOut(), blockReward, missing_inputs);
+    const bool allow_missing_dust_inputs{gArgs.GetBoolArg("-allowmissingdustinputs", false)};
+    CAmount missing_inputs_allowance{0};
+    if (allow_missing_dust_inputs && missing_inputs > 0) {
+        if (missing_inputs > std::numeric_limits<CAmount>::max() / MAX_MISSING_DUST_INPUT_VALUE) {
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-missing-input-count-overflow");
+        }
+        missing_inputs_allowance = static_cast<CAmount>(missing_inputs) * MAX_MISSING_DUST_INPUT_VALUE;
+    }
+    if (block.vtx[0]->GetValueOut() > blockReward + missing_inputs_allowance) {
+        LogPrintf("ERROR: ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d) missing=%d allowance=%d\n",
+                block.vtx[0]->GetValueOut(), blockReward, missing_inputs, missing_inputs_allowance);
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
     }
 

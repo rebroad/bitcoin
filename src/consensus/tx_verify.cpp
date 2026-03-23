@@ -12,6 +12,7 @@
 #include <primitives/transaction.h>
 #include <script/interpreter.h>
 #include <util/moneystr.h>
+#include <util/system.h>
 
 bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime)
 {
@@ -149,6 +150,7 @@ unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& in
 
 int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& inputs, uint32_t flags)
 {
+    const bool allow_missing_dust_inputs{gArgs.GetBoolArg("-allowmissingdustinputs", false)};
     int64_t nSigOps = GetLegacySigOpCount(tx) * WITNESS_SCALE_FACTOR;
 
     if (tx.IsCoinBase())
@@ -162,6 +164,9 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
     {
         const Coin& coin = inputs.AccessCoin(tx.vin[i].prevout);
         if (coin.IsSpent()) {
+            if (!allow_missing_dust_inputs) {
+                return MAX_BLOCK_SIGOPS_COST + 1;
+            }
             LogPrintf("%s: %s, i=%d IsSpent!\n", __func__, tx.GetHash().ToString(), i+1);
             continue; // Probably pruned for being dust
         }
@@ -174,11 +179,16 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
 
 bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee, unsigned int *missing /* = nullptr */)
 {
+    const bool allow_missing_dust_inputs{gArgs.GetBoolArg("-allowmissingdustinputs", false)};
     CAmount nValueIn = 0;
     for (unsigned int i = 0; i < tx.vin.size(); ++i) {
         const COutPoint &prevout = tx.vin[i].prevout;
         const Coin& coin = inputs.AccessCoin(prevout);
         if (coin.IsSpent()) {
+            if (!allow_missing_dust_inputs || missing == nullptr) {
+                return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missingorspent",
+                             strprintf("%s: inputs missing/spent", __func__));
+            }
             LogPrintf("%s: %s, i=%d height:%d IsSpent!\n", __func__, tx.GetHash().ToString(), i+1, nSpendHeight);
             if (missing) (*missing)++;
             continue; // Probably pruned for being dust
