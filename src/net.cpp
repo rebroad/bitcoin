@@ -56,6 +56,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <set>
 #include <unordered_map>
@@ -1674,30 +1675,18 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     uint64_t nTotalMempoolBytes = 0;
     int nOutboundFullRelay = 0;
     int nOutboundBlockRelay = 0;
-    float nLowestPct = 100;
-    float nLowestBPct = 100;
-    float worstNodePctBPct = 0;
-    float nLowestTXpm = 10000;
-    float nLowestBTXpm = 10000;
-    float worstNodeTXpmBTXpm = 0;
-    float nSecondLowestPct = 0;
-    float nSecondLowestBPct = 0;
-    float nSecondLowestTXpm = 0;
-    float nSecondLowestBTXpm = 0;
-    float nLatestNodePct = 0;
-    float nLatestNodeTXpm = 0;
-    NodeId worstNodePct = -1;
-    NodeId worstNodeBPct = -1;
-    NodeId worstNodeTXpm = -1;
-    NodeId worstNodeBTXpm = -1;
+    double nLowestScore{std::numeric_limits<double>::infinity()};
+    double nSecondLowestScore{std::numeric_limits<double>::infinity()};
+    double nLowestEffectiveTXpm{0.0};
+    double nLatestNodeScore{0.0};
+    std::vector<std::pair<NodeId, std::pair<double, double>>> outbound_peer_metrics;
     NodeId latestNode = -1;
-    static NodeId lastWorstPct = -1;
-    static NodeId lastWorstTXpm = -1;
+    NodeId worstNodeCombined = -1;
+    static NodeId lastWorstCombined = -1;
     float nGlobalTXpm = 0;
     float nGlobalBps = 0;
     int64_t now = GetTimeSeconds();
-    static int64_t tWorstPctChanged = now;
-    static int64_t tWorstTXpmChanged = now;
+    static int64_t tWorstCombinedChanged = now;
     static int64_t tIBDEnded = now;
     static int64_t m_last_block_time = 0;
     static int64_t lastnow = 0;
@@ -1754,43 +1743,16 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 nOutboundFullRelay++;
                 if (interval_start_time > latestSnapOld) latestSnapOld = interval_start_time;
                 if (m_connected > latestOutboundConn) latestOutboundConn = m_connected;
-                float nBlockPct = pnode->nBTxBpsPct;
-                nLatestNodePct = nMempoolPct;
-                if (nMempoolPct < nLowestPct) {
-                    nSecondLowestPct = nLowestPct;
-                    nLowestPct = nMempoolPct;
-                    worstNodePct = pnode->GetId();
-                    worstNodePctBPct = nBlockPct;
-                } else if (nMempoolPct < nSecondLowestPct) nSecondLowestPct = nMempoolPct;
-                // REBTODO - Rather than check nBlockPct > 0, instead check if we've received a block since TimeConn+60
-                if (nBlockPct && nBlockPct < nLowestBPct) {
-                    nSecondLowestBPct = nLowestBPct;
-                    nLowestBPct = nBlockPct;
-                    worstNodeBPct = pnode->GetId();
-                } else if (nBlockPct && nBlockPct < nSecondLowestBPct)
-                    nSecondLowestBPct = nBlockPct;
                 //int nMempoolBps = nMempoolPct * .08 * (nRecvBytes - pnode-nRecvBytesSnapOld) / (now - pnode->nTimeSnapOld);
                 float nMempoolBps = 0;
                 if (now > interval_start_time) nMempoolBps = nMempoolBytes * 8.0 / (now - interval_start_time);
                 nGlobalBps += nMempoolBps;
                 float nTXpm = 0;
                 if (now > interval_start_time) nTXpm = 60.0 * nMempoolTXs / (now - interval_start_time);
-                float nBTXpm = pnode->nBTXpm;
-                nLatestNodeTXpm = nTXpm;
                 nGlobalTXpm += (int)nTXpm;
-                if (nTXpm < nLowestTXpm) {
-                    nSecondLowestTXpm = nLowestTXpm;
-                    nLowestTXpm = nTXpm;
-                    worstNodeTXpm = pnode->GetId();
-                    worstNodeTXpmBTXpm = nBTXpm;
-                } else if (nTXpm < nSecondLowestTXpm)
-                    nSecondLowestTXpm = nTXpm;
-                if (nBTXpm && nBTXpm < nLowestBTXpm) {
-                    nSecondLowestBTXpm = nLowestBTXpm;
-                    nLowestBTXpm = nBTXpm;
-                    worstNodeBTXpm = pnode->GetId();
-                } else if (nBTXpm && nBTXpm < nSecondLowestBTXpm)
-                    nSecondLowestBTXpm = nBTXpm;
+                const double nMempoolPctEffective{pnode->nBTxBpsPct > 0 ? pnode->nBTxBpsPct : nMempoolPct};
+                const double nTXpmEffective{pnode->nBTXpm > 0 ? pnode->nBTXpm : nTXpm};
+                outbound_peer_metrics.emplace_back(pnode->GetId(), std::make_pair(nMempoolPctEffective, nTXpmEffective));
             } else if (pnode->IsInboundConn()) {
                 float nRecvBps = 0; float nSendBps = 0;
                 if(now > m_connected) {
@@ -1925,42 +1887,50 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
         }
     } // if (now != lastnow)
 
-    int nTechnique = 0;
-    bool fLatestNodePctDegrading = false;
-    bool fLatestNodeTXpmDegrading = false;
+    bool fLatestNodeScoreDegrading = false;
     if (!IsIBD && lastnow != now) {
-        bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
-        int nRuntToggle = gArgs.GetIntArg("-runttoggle", fDownloadBlocks ? 180 : 0) * 60;
-        if (nRuntToggle < 2)
-            nTechnique = nRuntToggle;
-        else
-            nTechnique = (now / nRuntToggle) % 2; // 0 = Pct, 1 = TXpm
-
-        if (worstNodeTXpmBTXpm > nLowestBTXpm) {
-            worstNodeTXpm = worstNodeBTXpm;
-            nLowestTXpm = nLowestBTXpm;
-            nSecondLowestTXpm = nSecondLowestBTXpm;
+        auto Median = [](std::vector<double> values) {
+            if (values.empty()) return 0.0;
+            std::sort(values.begin(), values.end());
+            const size_t mid = values.size() / 2;
+            if (values.size() % 2 == 1) return values[mid];
+            return (values[mid - 1] + values[mid]) / 2.0;
+        };
+        constexpr double EPSILON{1e-6};
+        std::vector<double> mp_pct_values;
+        std::vector<double> mpm_values;
+        mp_pct_values.reserve(outbound_peer_metrics.size());
+        mpm_values.reserve(outbound_peer_metrics.size());
+        for (const auto& [_, metrics] : outbound_peer_metrics) {
+            mp_pct_values.push_back(metrics.first);
+            mpm_values.push_back(metrics.second);
         }
-        if (worstNodePctBPct > nLowestBPct) { // REBTODO - really not sure this is right
-            worstNodePct = worstNodeBPct;
-            nLowestPct = nLowestBPct;
-            nSecondLowestPct = nSecondLowestBPct;
+        const double median_mp_pct{std::max(Median(std::move(mp_pct_values)), EPSILON)};
+        const double median_mppm{std::max(Median(std::move(mpm_values)), EPSILON)};
+        for (const auto& [node_id, metrics] : outbound_peer_metrics) {
+            const double p{metrics.first / median_mp_pct};
+            const double t{metrics.second / median_mppm};
+            const double score{2.0 / ((1.0 / (p + EPSILON)) + (1.0 / (t + EPSILON)))};
+            if (node_id == latestNode) nLatestNodeScore = score;
+            if (score < nLowestScore) {
+                nSecondLowestScore = nLowestScore;
+                nLowestScore = score;
+                nLowestEffectiveTXpm = metrics.second;
+                worstNodeCombined = node_id;
+            } else if (score < nSecondLowestScore) {
+                nSecondLowestScore = score;
+            }
         }
-        if (lastWorstPct != worstNodePct || lastWorstTXpm != worstNodeTXpm)
-            LogPrintf("worst%d: Pct %d -> %d (%d%%:%d%%) TXpm %d -> %d (%d:%d) Global: TXpm=%d Pct=%d %sbps\n", nTechnique, lastWorstPct, worstNodePct, (int)nLowestPct, (int)nSecondLowestPct, lastWorstTXpm, worstNodeTXpm, (int)nLowestTXpm, (int)nSecondLowestTXpm, nGlobalTXpm, 100 * nTotalMempoolBytes / (nTotalBytesRecv+1), strUnit(nGlobalBps));
-        if (lastWorstPct != worstNodePct) {
-            tWorstPctChanged = now;
-            lastWorstPct = worstNodePct;
+        if (lastWorstCombined != worstNodeCombined) {
+            tWorstCombinedChanged = now;
+            LogPrintf("worstC: score %d -> %d (%.3f:%.3f) Global: TXpm=%d Pct=%d %sbps\n",
+                      lastWorstCombined, worstNodeCombined, nLowestScore, nSecondLowestScore,
+                      nGlobalTXpm, 100 * nTotalMempoolBytes / (nTotalBytesRecv + 1), strUnit(nGlobalBps));
+            lastWorstCombined = worstNodeCombined;
         }
-        if (lastWorstTXpm != worstNodeTXpm) {
-            tWorstTXpmChanged = now;
-            lastWorstTXpm = worstNodeTXpm;
-        }
-        static int LastLatestNodePct = 0; static int LastLatestNodeTXpm = 0;
-        if (nLatestNodePct < LastLatestNodePct) fLatestNodePctDegrading = true;
-        if (nLatestNodeTXpm < LastLatestNodeTXpm) fLatestNodeTXpmDegrading = true;
-        LastLatestNodePct = nLatestNodePct;
-        LastLatestNodeTXpm = nLatestNodeTXpm;
+        static double last_latest_node_score{0.0};
+        if (nLatestNodeScore < last_latest_node_score) fLatestNodeScoreDegrading = true;
+        last_latest_node_score = nLatestNodeScore;
     }
 
     for (CNode* pnode : nodes) {
@@ -1969,14 +1939,11 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
 
         // Evict worst performing outbound connection
         if (!IsIBD && lastnow != now) {
-            int worstNode; float nLowest; float nSecondLowest; int64_t tWorstChanged; bool fLatestNodeDegrading;
-            if (nTechnique) { // Change every 90 minutes
-                worstNode = worstNodeTXpm; nLowest = nLowestTXpm; nSecondLowest = nSecondLowestTXpm;
-                tWorstChanged = tWorstTXpmChanged; fLatestNodeDegrading = fLatestNodeTXpmDegrading;
-            } else {
-                worstNode = worstNodePct; nLowest = nLowestPct; nSecondLowest = nSecondLowestPct;
-                tWorstChanged = tWorstPctChanged; fLatestNodeDegrading = fLatestNodePctDegrading;
-            }
+            const NodeId worstNode = worstNodeCombined;
+            const double nLowest = nLowestScore;
+            const double nSecondLowest = nSecondLowestScore;
+            int64_t tWorstChanged = tWorstCombinedChanged;
+            const bool fLatestNodeDegrading = fLatestNodeScoreDegrading;
             if (tIBDEnded > tWorstChanged) tWorstChanged = tIBDEnded;
             bool MaxedOut = nOutboundFullRelay >= (int)m_max_outbound_full_relay;
             bool DoIt = false;
@@ -1998,7 +1965,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                         DoIt = true;
                     }
                     // Disconnect any nodes where out TX input is zero and connected over 3 minutes
-                    if (now - m_connected >= 180 && nLowest == 0) {
+                    if (now - m_connected >= 180 && nLowestEffectiveTXpm == 0) {
                         strReason += "R3";
                         DoIt = true;
                     }
@@ -2006,7 +1973,9 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             }
             if (DoIt) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
-                LogPrintf("Evict%d: %s=%d,%d %s %s TimeConn=%d LastOut=%d LastSnapOld=%d %sdisconnect peer=%d\n", nTechnique, nTechnique ? "TXpm":"TX%", nLowest, nSecondLowest, strReason, strDetails, now - m_connected, now - latestOutboundConn, now - latestSnapOld, MaxedOut ? "MO ":"", pnode->GetId());
+                LogPrintf("EvictC: score=%.3f,%.3f %s %s TimeConn=%d LastOut=%d LastSnapOld=%d %sdisconnect peer=%d\n",
+                          nLowest, nSecondLowest, strReason, strDetails, now - m_connected, now - latestOutboundConn,
+                          now - latestSnapOld, MaxedOut ? "MO " : "", pnode->GetId());
                 if ((now - latestOutboundConn) >= 120 && MaxedOut
                         && !nAnchorTryAgain && (now - latestSnapOld) >= 120) {
                     std::vector<CAddress> anchors_to_dump = GetCurrentFullNodesOnlyConns();
