@@ -162,11 +162,13 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
             else if (now - count_seconds(rec->nodeStats.m_connected) >= 60) dots=".";
             else dots="..";
             const uint64_t recv_bytes_base{rec->nodeStats.nRecvBytesSnapOld};
+            const uint64_t send_bytes_base{rec->nodeStats.nSendBytesSnapOld};
             const uint64_t mempool_bytes_base{rec->nodeStats.nMempoolBytesSnapOld};
             const uint64_t recv_bytes{rec->nodeStats.nRecvBytes > recv_bytes_base ? rec->nodeStats.nRecvBytes - recv_bytes_base : rec->nodeStats.nRecvBytes};
+            const uint64_t send_bytes{rec->nodeStats.nSendBytes > send_bytes_base ? rec->nodeStats.nSendBytes - send_bytes_base : rec->nodeStats.nSendBytes};
             const uint64_t mempool_bytes{rec->nodeStats.nMempoolBytes > mempool_bytes_base ? rec->nodeStats.nMempoolBytes - mempool_bytes_base : rec->nodeStats.nMempoolBytes};
-            if (recv_bytes > 0) {
-                int nTxBpsPct = int((100.0 * mempool_bytes / recv_bytes) + 0.5);
+            if ((recv_bytes + send_bytes) > 0) {
+                int nTxBpsPct = int((100.0 * mempool_bytes / (recv_bytes + send_bytes)) + 0.5);
                 int nBTxBpsPct = int(rec->nodeStats.nBTxBpsPct + 0.5);
                 return QString::fromStdString(strprintf("%s%d%s", dots, nTxBpsPct, nBTxBpsPct ? strprintf("+%d", nBTxBpsPct) : ""));
             } else

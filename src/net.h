@@ -277,6 +277,7 @@ public:
     bool m_bip152_highbandwidth_from;
     int m_starting_height;
     uint64_t nSendBytes;
+    uint64_t nSendBytesSnapOld;
     mapMsgCmdSize mapSendBytesPerMsgCmd;
     uint64_t nRecvBytes;
     uint64_t nRecvBytesSnap;
@@ -485,6 +486,8 @@ public:
     unsigned int nBlockTXs{0};
     unsigned int nBlockTXsSnap{0};
     unsigned int nBlockTXsSnapOld{0};
+    uint64_t nSendBytesSnap{0};
+    uint64_t nSendBytesSnapOld{0};
     uint64_t nRecvBytesSnap{0};
     uint64_t nRecvBytesSnapOld{0};
     int64_t nTimeSnap{0};

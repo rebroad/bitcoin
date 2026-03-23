@@ -68,14 +68,18 @@ bool PeerTableSortProxy::lessThan(const QModelIndex& left_index, const QModelInd
     case PeerTableModel::TxBpsPct: {
         const uint64_t right_recv_base{right_stats.nRecvBytesSnapOld};
         const uint64_t left_recv_base{left_stats.nRecvBytesSnapOld};
+        const uint64_t right_send_base{right_stats.nSendBytesSnapOld};
+        const uint64_t left_send_base{left_stats.nSendBytesSnapOld};
         const uint64_t right_mempool_base{right_stats.nMempoolBytesSnapOld};
         const uint64_t left_mempool_base{left_stats.nMempoolBytesSnapOld};
         const uint64_t right_recv{right_stats.nRecvBytes > right_recv_base ? right_stats.nRecvBytes - right_recv_base : right_stats.nRecvBytes};
         const uint64_t left_recv{left_stats.nRecvBytes > left_recv_base ? left_stats.nRecvBytes - left_recv_base : left_stats.nRecvBytes};
+        const uint64_t right_send{right_stats.nSendBytes > right_send_base ? right_stats.nSendBytes - right_send_base : right_stats.nSendBytes};
+        const uint64_t left_send{left_stats.nSendBytes > left_send_base ? left_stats.nSendBytes - left_send_base : left_stats.nSendBytes};
         const uint64_t right_mempool{right_stats.nMempoolBytes > right_mempool_base ? right_stats.nMempoolBytes - right_mempool_base : right_stats.nMempoolBytes};
         const uint64_t left_mempool{left_stats.nMempoolBytes > left_mempool_base ? left_stats.nMempoolBytes - left_mempool_base : left_stats.nMempoolBytes};
-        const double Right = right_recv > 0 ? 1.0 * right_mempool / right_recv : 0.0;
-        const double Left = left_recv > 0 ? 1.0 * left_mempool / left_recv : 0.0;
+        const double Right = (right_recv + right_send) > 0 ? 1.0 * right_mempool / (right_recv + right_send) : 0.0;
+        const double Left = (left_recv + left_send) > 0 ? 1.0 * left_mempool / (left_recv + left_send) : 0.0;
         return Left < Right;
     }
     case PeerTableModel::MPpm: {
