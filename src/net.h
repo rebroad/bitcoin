@@ -458,6 +458,8 @@ public:
     size_t nSendOffset GUARDED_BY(cs_vSend){0};
     uint64_t nSendBytes GUARDED_BY(cs_vSend){0};
     std::deque<std::vector<unsigned char>> vSendMsg GUARDED_BY(cs_vSend);
+    // Tracks queued outbound bytes by message type so actual socket sends can be attributed per msg command.
+    std::deque<std::pair<std::string, size_t>> m_send_msg_cmd_sizes GUARDED_BY(cs_vSend);
     Mutex cs_vSend;
     Mutex m_sock_mutex;
     Mutex cs_vRecv;

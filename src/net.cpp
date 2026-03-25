@@ -892,6 +892,20 @@ size_t CConnman::SocketSendData(CNode& node) const
         if (nBytes > 0) {
             node.m_last_send = GetTime<std::chrono::seconds>();
             node.nSendBytes += nBytes;
+            size_t bytes_to_attribute = static_cast<size_t>(nBytes);
+            while (bytes_to_attribute > 0 && !node.m_send_msg_cmd_sizes.empty()) {
+                auto& [msg_type, msg_bytes_remaining] = node.m_send_msg_cmd_sizes.front();
+                const size_t bytes_for_msg = std::min(bytes_to_attribute, msg_bytes_remaining);
+                node.mapSendBytesPerMsgCmd[msg_type] += bytes_for_msg;
+                msg_bytes_remaining -= bytes_for_msg;
+                bytes_to_attribute -= bytes_for_msg;
+                if (msg_bytes_remaining == 0) {
+                    node.m_send_msg_cmd_sizes.pop_front();
+                }
+            }
+            if (bytes_to_attribute > 0) {
+                node.mapSendBytesPerMsgCmd[NET_MESSAGE_COMMAND_OTHER] += bytes_to_attribute;
+            }
             node.nSendOffset += nBytes;
             nSentSize += nBytes;
             if (node.nSendOffset == data.size()) {
@@ -3624,8 +3638,8 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
         LOCK(pnode->cs_vSend);
         bool optimisticSend(pnode->vSendMsg.empty());
 
-        //log total amount of bytes per message type
-        pnode->mapSendBytesPerMsgCmd[msg.m_type] += nTotalSize;
+        // Track queued bytes by message type; actual sent bytes are accounted in SocketSendData().
+        pnode->m_send_msg_cmd_sizes.emplace_back(msg.m_type, nTotalSize);
         pnode->nSendSize += nTotalSize;
 
         if (pnode->nSendSize > nSendBufferMaxSize) pnode->fPauseSend = true;
