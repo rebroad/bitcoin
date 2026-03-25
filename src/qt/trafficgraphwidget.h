@@ -56,6 +56,7 @@ private:
         NodeId top_peer_id{-1};
         std::string top_peer_addr;
         std::string top_msg_type;
+        uint64_t total_rate_bps{0};
         uint64_t top_peer_rate_bps{0};
         uint64_t avg_peer_rate_bps{0};
         uint64_t top_msg_type_rate_bps{0};

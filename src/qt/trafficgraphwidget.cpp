@@ -513,6 +513,7 @@ void TrafficGraphWidget::updateDirectionalSampleStats(int range_index, int64_t s
     const auto rate_from_delta = [sample_duration_msecs](uint64_t delta_bytes) {
         return delta_bytes * 1000 / static_cast<uint64_t>(sample_duration_msecs);
     };
+    sample_stats.total_rate_bps = rate_from_delta(total_peer_delta);
 
     if (top_peer_delta > 0) {
         sample_stats.has_peer = true;
@@ -549,14 +550,20 @@ void TrafficGraphWidget::updateRates(int i, int64_t now, quint64 bytes_in, quint
     }
     int64_t actual_gap = now - m_last_time[i];
     if (actual_gap <= 0) return;
-    float in_rate_kilobytes_per_msec = static_cast<float>(bytes_in - m_last_bytes_in[i]) / actual_gap;
-    float out_rate_kilobytes_per_msec = static_cast<float>(bytes_out - m_last_bytes_out[i]) / actual_gap;
-    m_samples_in[i].push_front(in_rate_kilobytes_per_msec);
-    m_samples_out[i].push_front(out_rate_kilobytes_per_msec);
     if (peer_stats) {
         updateDirectionalSampleStats(i, actual_gap, *peer_stats, /*outgoing=*/false);
         updateDirectionalSampleStats(i, actual_gap, *peer_stats, /*outgoing=*/true);
+        const float in_rate_kilobytes_per_msec = static_cast<float>(m_incoming_sample_stats[i].front().total_rate_bps) / 1000.0f;
+        const float out_rate_kilobytes_per_msec = static_cast<float>(m_outgoing_sample_stats[i].front().total_rate_bps) / 1000.0f;
+        m_samples_in[i].push_front(in_rate_kilobytes_per_msec);
+        m_samples_out[i].push_front(out_rate_kilobytes_per_msec);
     } else {
+        const uint64_t in_delta_bytes = bytes_in - m_last_bytes_in[i];
+        const uint64_t out_delta_bytes = bytes_out - m_last_bytes_out[i];
+        const float in_rate_kilobytes_per_msec = static_cast<float>(in_delta_bytes) / actual_gap;
+        const float out_rate_kilobytes_per_msec = static_cast<float>(out_delta_bytes) / actual_gap;
+        m_samples_in[i].push_front(in_rate_kilobytes_per_msec);
+        m_samples_out[i].push_front(out_rate_kilobytes_per_msec);
         m_incoming_sample_stats[i].push_front(DirectionSampleStats{});
         m_outgoing_sample_stats[i].push_front(DirectionSampleStats{});
     }
