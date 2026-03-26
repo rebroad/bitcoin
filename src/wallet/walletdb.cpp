@@ -105,7 +105,11 @@ bool WalletBatch::WriteKeyMetadata(const CKeyMetadata& meta, const CPubKey& pubk
 bool WalletBatch::WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, const CKeyMetadata& keyMeta)
 {
     if (!WriteKeyMetadata(keyMeta, vchPubKey, false)) {
-        return false;
+        // Duplicate metadata can happen if a key is rederived after DB/in-memory
+        // state diverges. Overwrite to keep metadata consistent.
+        if (!WriteKeyMetadata(keyMeta, vchPubKey, true)) {
+            return false;
+        }
     }
 
     // hash pubkey/privkey to accelerate wallet load
@@ -114,7 +118,19 @@ bool WalletBatch::WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey,
     vchKey.insert(vchKey.end(), vchPubKey.begin(), vchPubKey.end());
     vchKey.insert(vchKey.end(), vchPrivKey.begin(), vchPrivKey.end());
 
-    return WriteIC(std::make_pair(DBKeys::KEY, vchPubKey), std::make_pair(vchPrivKey, Hash(vchKey)), false);
+    const auto key = std::make_pair(DBKeys::KEY, vchPubKey);
+    const auto value = std::make_pair(vchPrivKey, Hash(vchKey));
+    if (WriteIC(key, value, false)) {
+        return true;
+    }
+
+    // If the key already exists with identical contents, treat the write as
+    // successful to make key writes idempotent.
+    std::pair<CPrivKey, uint256> existing_value;
+    if (!m_batch->Read(key, existing_value)) {
+        return false;
+    }
+    return existing_value == value;
 }
 
 bool WalletBatch::WriteCryptedKey(const CPubKey& vchPubKey,
