@@ -71,6 +71,9 @@ public:
     /** Set the best height */
     virtual void SetBestHeight(int height) = 0;
 
+    /** Update runtime prune mode for block download behavior. */
+    virtual void SetPruneMode(bool prune_mode) = 0;
+
     /**
      * Increment peer's misbehavior score. If the new value >= DISCOURAGEMENT_THRESHOLD, mark the node
      * to be discouraged, meaning the peer might be disconnected and added to the discouragement filter.

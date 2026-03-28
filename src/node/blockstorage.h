@@ -82,9 +82,8 @@ private:
 
     /**
      * Prune block and undo files (blk???.dat and rev???.dat) so that the disk space used is less than a user-defined target.
-     * The user sets the target (in MB) on the command line or in config file.  This will be run on startup and whenever new
-     * space is allocated in a block or undo file, staying below the target. Changing back to unpruned requires a reindex
-     * (which in this case means the blockchain must be re-downloaded.)
+     * The user sets the target (in MB) on the command line or in config file. This will be run on startup and whenever new
+     * space is allocated in a block or undo file, staying below the target.
      *
      * Pruning functions are called from FlushStateToDisk when the m_check_for_pruning flag has been set.
      * Block and undo files are deleted in lock-step (when blk00003.dat is deleted, so is rev00003.dat.)

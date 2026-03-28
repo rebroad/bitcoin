@@ -70,12 +70,8 @@ std::optional<ChainstateLoadingError> LoadChainstate(bool fReset,
         return ChainstateLoadingError::ERROR_BAD_GENESIS_BLOCK;
     }
 
-    // Check for changed -prune state.  What we are concerned about is a user who has pruned blocks
-    // in the past, but is now trying to run unpruned.
-    if (fHavePruned && !fPruneMode) {
-        LogPrintf("%s: fHavePruned=true while prune mode disabled\n", __func__);
-        return ChainstateLoadingError::ERROR_PRUNED_NEEDS_REINDEX;
-    }
+    // Historically we required a reindex when switching from pruned to unpruned.
+    // Missing historical blocks can now be fetched after startup, so proceed.
 
     // At this point blocktree args are consistent with what's on disk.
     // If we're not mid-reindex (based on disk + args), add a genesis block on disk

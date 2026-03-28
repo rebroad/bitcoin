@@ -332,6 +332,7 @@ public:
     void SendPings() override;
     void RelayTransaction(const uint256& txid, const uint256& wtxid) override;
     void SetBestHeight(int height) override { m_best_height = height; };
+    void SetPruneMode(bool prune_mode) override;
     void Misbehaving(const NodeId pnode, const int howmuch, const std::string& message) override;
     void ProcessMessage(CNode& pfrom, const std::string& msg_type, CDataStream& vRecv,
                         const std::chrono::microseconds time_received, const std::atomic<bool>& interruptMsgProc) override;
@@ -598,6 +599,7 @@ private:
      *  at most count entries.
      */
     void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void FindNextBlocksToBackfill(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> > mapBlocksInFlight GUARDED_BY(cs_main);
 
@@ -634,6 +636,9 @@ private:
 
     /** Longest delay between reception when downloading a block. */
     int m_longest_delay = 0;
+
+    /** Most recent active-chain block index considered for historical backfill requests. */
+    const CBlockIndex* m_backfill_cursor GUARDED_BY(cs_main){nullptr};
 
     /** Storage for orphan information */
     TxOrphanage m_orphanage;
@@ -961,6 +966,14 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
     }
     state->m_stalling_since = 0us;
     mapBlocksInFlight.erase(it);
+
+    if (!fPruneMode) {
+        const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
+        if (pindex && m_chainman.ActiveChain().Contains(pindex) && !(pindex->nStatus & BLOCK_HAVE_DATA) &&
+            (m_backfill_cursor == nullptr || m_backfill_cursor->nHeight < pindex->nHeight)) {
+            m_backfill_cursor = pindex;
+        }
+    }
 }
 
 bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, std::list<QueuedBlock>::iterator** pit)
@@ -1222,8 +1235,11 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
                 // We wouldn't download this block or its descendants from this peer.
                 state->BlockBlocked(4, "Node without Segwit");
                 return;
-            } else state->BlockUnblocked(4);
-            if (pindex->nStatus & BLOCK_HAVE_DATA || m_chainman.ActiveChain().Contains(pindex)) {
+            }
+            state->BlockUnblocked(4);
+            const bool have_data_or_can_skip = (pindex->nStatus & BLOCK_HAVE_DATA) ||
+                                               (fPruneMode && m_chainman.ActiveChain().Contains(pindex));
+            if (have_data_or_can_skip) {
                 if (pindex->HaveTxsDownloaded())
                     state->pindexLastCommonBlock = pindex;
             } else if (!IsBlockRequested(pindex->GetBlockHash())) {
@@ -1246,6 +1262,31 @@ void PeerManagerImpl::FindNextBlocksToDownload(NodeId nodeid, unsigned int count
                 waitingfor = mapBlocksInFlight[pindex->GetBlockHash()].first;
             }
         }
+    }
+}
+
+void PeerManagerImpl::FindNextBlocksToBackfill(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks)
+{
+    if (count == 0 || fPruneMode) return;
+
+    CNodeState* state = State(nodeid);
+    assert(state != nullptr);
+    if (!state->fHaveWitness) return;
+
+    const CBlockIndex* tip = m_chainman.ActiveChain().Tip();
+    if (tip == nullptr) return;
+
+    if (m_backfill_cursor == nullptr || m_backfill_cursor->nHeight > tip->nHeight) {
+        m_backfill_cursor = tip;
+    }
+
+    while (m_backfill_cursor && vBlocks.size() < count) {
+        const CBlockIndex* pindex = m_backfill_cursor;
+        m_backfill_cursor = m_backfill_cursor->pprev;
+
+        if (pindex->nStatus & BLOCK_HAVE_DATA) continue;
+        if (IsBlockRequested(pindex->GetBlockHash())) continue;
+        vBlocks.push_back(pindex);
     }
 }
 
@@ -1678,6 +1719,18 @@ std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBl
     LogPrint(BCLog::BLOCK, "Requesting block %s from peer=%d\n",
                  stripZeros(hash.ToString()), peer_id);
     return std::nullopt;
+}
+
+void PeerManagerImpl::SetPruneMode(bool prune_mode)
+{
+    LOCK(cs_main);
+    fPruneMode = prune_mode;
+    if (fPruneMode) {
+        m_backfill_cursor = nullptr;
+        m_chainman.m_blockman.m_check_for_pruning = true;
+    } else {
+        m_backfill_cursor = m_chainman.ActiveChain().Tip();
+    }
 }
 
 std::unique_ptr<PeerManager> PeerManager::make(const CChainParams& chainparams, CConnman& connman, AddrMan& addrman,
@@ -5679,9 +5732,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
         if (fDownloadBlocks && !m_chainman.IsBootstrapChainstatePending() && !pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             state.BlockUnblocked(6);
+            const unsigned int request_budget = MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight;
             std::vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;
-            FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
+            FindNextBlocksToDownload(pto->GetId(), request_budget, vToDownload, staller);
             for (const CBlockIndex *pindex : vToDownload) {
                 CBlockHeaderAndShortTxIDs* cached_cmpctblock{nullptr};
                 for (size_t i = 0; i < 3; ++i) {
@@ -5701,6 +5755,19 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                     LogPrint(BCLog::BLOCK, "send getdata block %s peer=%d\n", strBlockInfo(pindex), pto->GetId());
                 }
                 BlockRequested(pto->GetId(), *pindex);
+            }
+
+            if (!fPruneMode && !pto->m_limited_node &&
+                request_budget > static_cast<unsigned int>(vToDownload.size())) {
+                std::vector<const CBlockIndex*> vBackfill;
+                FindNextBlocksToBackfill(pto->GetId(), request_budget - static_cast<unsigned int>(vToDownload.size()), vBackfill);
+                for (const CBlockIndex* pindex : vBackfill) {
+                    uint32_t nFetchFlags = GetFetchFlags(*pto);
+                    vGetData.push_back(CInv(MSG_BLOCK | nFetchFlags, pindex->GetBlockHash()));
+                    BlockRequested(pto->GetId(), *pindex);
+                    LogPrint(BCLog::NET, "Requesting historical block %s (%d) peer=%d\n",
+                        pindex->GetBlockHash().ToString(), pindex->nHeight, pto->GetId());
+                }
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->m_stalling_since == 0us) {
