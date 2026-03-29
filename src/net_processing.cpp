@@ -184,6 +184,8 @@ static constexpr size_t MAX_ADDR_PROCESSING_TOKEN_BUCKET{MAX_ADDR_TO_SEND};
 
 // Internal stuff
 namespace {
+static constexpr uint64_t BACKFILL_MIN_DEFICIT_BYTES = 130ULL * 1024 * 1024;
+
 bool IsAutomaticPruneTargetConfigured()
 {
     return fPruneMode && nPruneTarget > 0 &&
@@ -195,10 +197,7 @@ bool ShouldRunHistoricalBackfill(ChainstateManager& chainman)
     if (!IsAutomaticPruneTargetConfigured()) return false;
 
     const uint64_t usage = chainman.m_blockman.CalculateCurrentUsage();
-    // Keep a safety margin so historical backfill doesn't immediately trigger
-    // prune checks near the target boundary.
-    const uint64_t pause_buffer = node::BLOCKFILE_CHUNK_SIZE + node::UNDOFILE_CHUNK_SIZE;
-    return usage + pause_buffer < nPruneTarget;
+    return usage + BACKFILL_MIN_DEFICIT_BYTES < nPruneTarget;
 }
 
 /** Blocks that are in flight, and that are in the queue to be downloaded. */

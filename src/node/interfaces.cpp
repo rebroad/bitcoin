@@ -71,6 +71,8 @@ using interfaces::WalletLoader;
 
 namespace node {
 namespace {
+static constexpr uint64_t BACKFILL_MIN_DEFICIT_BYTES = 130ULL * 1024 * 1024;
+
 bool AutomaticPruneTargetEnabled()
 {
     return node::fPruneMode && node::nPruneTarget > 0 &&
@@ -81,8 +83,7 @@ bool ShouldBackfillHistoricalBlocksNow(ChainstateManager& chainman)
 {
     if (!AutomaticPruneTargetEnabled()) return false;
     const uint64_t usage = chainman.m_blockman.CalculateCurrentUsage();
-    const uint64_t pause_buffer = node::BLOCKFILE_CHUNK_SIZE + node::UNDOFILE_CHUNK_SIZE;
-    return usage + pause_buffer < node::nPruneTarget;
+    return usage + BACKFILL_MIN_DEFICIT_BYTES < node::nPruneTarget;
 }
 
 #ifdef ENABLE_EXTERNAL_SIGNER
@@ -901,8 +902,7 @@ public:
         if (!block || (block->nStatus & BLOCK_HAVE_DATA)) return false;
 
         const uint64_t usage = m_node.chainman->m_blockman.CalculateCurrentUsage();
-        const uint64_t pause_buffer = node::BLOCKFILE_CHUNK_SIZE + node::UNDOFILE_CHUNK_SIZE;
-        if (usage + pause_buffer >= node::nPruneTarget) return false;
+        if (usage + BACKFILL_MIN_DEFICIT_BYTES >= node::nPruneTarget) return false;
 
         int prune_height = tip->nHeight;
         const CBlockIndex* cursor = tip;
@@ -918,7 +918,7 @@ public:
         const double avg_block_bytes = static_cast<double>(usage) / retained_blocks;
         if (avg_block_bytes <= 0) return false;
 
-        const uint64_t deficit = node::nPruneTarget - (usage + pause_buffer);
+        const uint64_t deficit = node::nPruneTarget - (usage + BACKFILL_MIN_DEFICIT_BYTES);
         const int64_t approx_blocks_needed = std::max<int64_t>(
             1, static_cast<int64_t>(std::ceil(static_cast<double>(deficit) / avg_block_bytes)));
         const int backfill_start = std::max(0, prune_height - static_cast<int>(approx_blocks_needed));
