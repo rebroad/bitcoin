@@ -11,7 +11,7 @@ SUBDIRS = src
 if ENABLE_MAN
 SUBDIRS += doc/man
 endif
-.PHONY: deploy FORCE help check-libs robust-build rebuild-libs fix-build fix-undefined-refs vanity-onion vanity-i2p __smart_internal
+.PHONY: deploy FORCE help check-libs check-build-srcdir robust-build rebuild-libs fix-build fix-undefined-refs vanity-onion vanity-i2p __smart_internal
 .INTERMEDIATE: $(OSX_TEMP_ISO) $(COVERAGE_INFO)
 
 export PYTHONPATH
@@ -437,6 +437,18 @@ check-libs:
 	@echo "  make fix-build          - Comprehensive build fix"
 	@echo ""
 
+check-build-srcdir:
+	@cfg_src="$$(cd "$(top_srcdir)" && pwd -P)"; \
+	parent_src="$$(cd .. && pwd -P)"; \
+	if [ "$$cfg_src" != "$$parent_src" ] && [ -f "$$parent_src/src/Makefile.am" ]; then \
+		echo "❌ Build directory source mismatch detected."; \
+		echo "   Configured source tree: $$cfg_src"; \
+		echo "   Nearby source tree:     $$parent_src"; \
+		echo "   This build will ignore edits in $$parent_src and may report stale binaries as up-to-date."; \
+		echo "   Recreate/reconfigure this build directory so top_srcdir points at the intended source tree."; \
+		exit 1; \
+	fi
+
 # Robust build target that checks and fixes corrupted libraries
 robust-build: check-libs
 	@echo "🛡️ Starting robust build with corrupted library detection..."
@@ -498,7 +510,7 @@ fix-undefined-refs: check-libs
 	@echo "✅ Quick fix completed!"
 
 # Internal SMART build dispatcher (invoked when SMART=1)
-__smart_internal: check-libs
+__smart_internal: check-build-srcdir check-libs
 	@echo "🚀 Starting smart build with automatic error recovery..."
 	@echo "📋 Step 0: Checking build system files..."
 	@need_regen=0; \
