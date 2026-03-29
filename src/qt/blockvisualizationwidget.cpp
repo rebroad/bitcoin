@@ -44,9 +44,6 @@ static BlockVisualizationWidget::BlockStatus ToWidgetStatus(const BlockStatusCac
     case BlockStatusCache::NO_HEADER: return BlockVisualizationWidget::NO_HEADER;
     case BlockStatusCache::HEADER_ONLY: return BlockVisualizationWidget::HEADER_ONLY;
     case BlockStatusCache::HAVE_BLOCK: return BlockVisualizationWidget::HAVE_BLOCK;
-    case BlockStatusCache::PRUNED: return BlockVisualizationWidget::PRUNED;
-    case BlockStatusCache::HAVE_UTXOS: return BlockVisualizationWidget::HAVE_UTXOS;
-    case BlockStatusCache::WALLET_UTXOS: return BlockVisualizationWidget::WALLET_UTXOS;
     }
     return BlockVisualizationWidget::UNKNOWN;
 }
@@ -339,16 +336,10 @@ void BlockVisualizationWidget::updateBlockStatus(int height)
 
     // Classify by known state without forcing block reads from disk.
     try {
-        auto prev_it = m_statusCache.find(height);
-        const bool previously_had_block = prev_it != m_statusCache.end() && prev_it->second == HAVE_BLOCK;
         if (m_chain.haveBlockOnDisk(height)) {
             m_statusCache[height] = HAVE_BLOCK;
         } else if (m_chain.isBlockInFlight(height)) {
             m_statusCache[height] = IN_FLIGHT;
-        } else if (m_chain.isBackfillTargetHeight(height)) {
-            m_statusCache[height] = TO_BE_DOWNLOADED;
-        } else if (previously_had_block) {
-            m_statusCache[height] = PRUNED;
         } else {
             m_statusCache[height] = HEADER_ONLY;
         }
@@ -412,18 +403,10 @@ QColor BlockVisualizationWidget::getColorForStatus(BlockStatus status) const
             return QColor("#E69F00");
         case IN_FLIGHT:
             return QColor("#06B6D4");
-        case TO_BE_DOWNLOADED:
-            return QColor("#CC79A7");
         case COMPETING:
             return QColor("#7C3AED");
         case HAVE_BLOCK:
             return QColor("#009E73");
-        case PRUNED:
-            return QColor("#D55E00");
-        case HAVE_UTXOS:
-            return QColor(0, 0, 255); // Unused currently
-        case WALLET_UTXOS:
-            return QColor(255, 0, 255); // Unused currently
         default:
             return QColor("#6B7280");
     }
@@ -474,23 +457,11 @@ QString BlockVisualizationWidget::getTooltipForBlock(int height) const
     case IN_FLIGHT:
         statusText = tr("In flight");
         break;
-    case TO_BE_DOWNLOADED:
-        statusText = tr("To be downloaded");
-        break;
     case COMPETING:
         statusText = tr("Competing blocks");
         break;
     case HAVE_BLOCK:
         statusText = tr("Have block");
-        break;
-    case PRUNED:
-        statusText = tr("Pruned");
-        break;
-    case HAVE_UTXOS:
-        statusText = tr("Have UTXOs");
-        break;
-    case WALLET_UTXOS:
-        statusText = tr("Wallet UTXOs");
         break;
     }
 
@@ -574,17 +545,13 @@ void BlockVisualizationWidget::paintEvent(QPaintEvent *event)
     }
 
     // Pre-calculate colors for better performance
-    QColor colors[10];
+    QColor colors[HAVE_BLOCK + 1];
     colors[0] = getColorForStatus(UNKNOWN);
     colors[1] = getColorForStatus(NO_HEADER);
     colors[2] = getColorForStatus(HEADER_ONLY);
     colors[3] = getColorForStatus(IN_FLIGHT);
-    colors[4] = getColorForStatus(TO_BE_DOWNLOADED);
-    colors[5] = getColorForStatus(COMPETING);
-    colors[6] = getColorForStatus(HAVE_BLOCK);
-    colors[7] = getColorForStatus(PRUNED);
-    colors[8] = getColorForStatus(HAVE_UTXOS);
-    colors[9] = getColorForStatus(WALLET_UTXOS);
+    colors[4] = getColorForStatus(COMPETING);
+    colors[5] = getColorForStatus(HAVE_BLOCK);
 
     const QRect dirty = event ? event->rect() : rect();
     const int start_row = std::max(0, dirty.top() / m_blockHeight);
@@ -644,12 +611,9 @@ void BlockVisualizationWidget::drawLegend(QPainter& painter)
     std::vector<LegendItem> legendItems = {
         {HAVE_BLOCK, tr("Have Block")},
         {IN_FLIGHT, tr("In Flight")},
-        {TO_BE_DOWNLOADED, tr("To Be Downloaded")},
         {HEADER_ONLY, tr("Header Only")},
-        {PRUNED, tr("Pruned")},
-        {NO_HEADER, tr("No Header")},
-        {HAVE_UTXOS, tr("Have UTXOs")},
-        {WALLET_UTXOS, tr("Wallet UTXOs")}
+        {COMPETING, tr("Competing")},
+        {NO_HEADER, tr("No Header")}
     };
 
     for (const auto& item : legendItems) {

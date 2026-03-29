@@ -1813,17 +1813,13 @@ void RPCConsole::updateLegend()
     legendText += "<b>Block Status:</b> ";
     legendText += "<span style='color: #009E73;'>■</span> Have Block ";
     legendText += "<span style='color: #06B6D4;'>■</span> In Flight ";
-    legendText += "<span style='color: #CC79A7;'>■</span> To Be Downloaded ";
     legendText += "<span style='color: #7C3AED;'>■</span> Competing ";
-    legendText += "<span style='color: #E69F00;'>■</span> Header Only ";
-    legendText += "<span style='color: #D55E00;'>■</span> Pruned";
+    legendText += "<span style='color: #E69F00;'>■</span> Header Only";
     const bool prune_mode = m_chain.pruneModeEnabled();
     const uint64_t usage_bytes = m_chain.currentBlockDataUsage();
     const uint64_t target_bytes = m_chain.pruneTargetBytes();
     const bool has_prunable_files = m_chain.hasPrunableBlockFilesNow();
     const auto to_mib = [](uint64_t bytes) -> uint64_t { return bytes / 1024 / 1024; };
-    const int queued_cached = m_blockVisualizationWidget ?
-        m_blockVisualizationWidget->countCachedBlocksByStatus(BlockVisualizationWidget::TO_BE_DOWNLOADED) : 0;
     const int in_flight_now = static_cast<int>(m_chain.blockInFlightCount());
     legendText += "<br/><b>Prune:</b> ";
     if (!prune_mode) {
@@ -1835,7 +1831,6 @@ void RPCConsole::updateLegend()
                           .arg(to_mib(usage_bytes))
                           .arg(to_mib(target_bytes))
                           .arg(in_flight_now);
-        legendText += QString(" (to_download=%1)").arg(queued_cached);
     } else if (usage_bytes > target_bytes) {
         legendText += QString("Block_usage=%1 > prune=%2")
                           .arg(to_mib(usage_bytes))

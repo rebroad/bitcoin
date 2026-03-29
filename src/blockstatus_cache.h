@@ -13,10 +13,7 @@ public:
         UNKNOWN = 0,        // Status not yet determined
         NO_HEADER = 1,      // Don't have the header
         HEADER_ONLY = 2,    // Have header but no block data
-        HAVE_BLOCK = 3,     // Have the full block
-        PRUNED = 4,         // Had block but it's been pruned
-        HAVE_UTXOS = 5,     // Have unspent UTXOs from this block
-        WALLET_UTXOS = 6    // Have unspent UTXOs from this block that we own
+        HAVE_BLOCK = 3      // Have the full block
     };
 
     static BlockStatusCache& getInstance();

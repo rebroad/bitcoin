@@ -39,12 +39,8 @@ public:
         NO_HEADER,      // Don't have the header
         HEADER_ONLY,    // Have header but no block data
         IN_FLIGHT,      // Requested and currently downloading
-        TO_BE_DOWNLOADED, // Missing and queued by backfill policy
         COMPETING,      // Height has multiple known blocks (fork/side-chain competition)
-        HAVE_BLOCK,     // Have the full block
-        PRUNED,         // Had block but it's been pruned
-        HAVE_UTXOS,     // Have unspent UTXOs from this block
-        WALLET_UTXOS    // Have unspent UTXOs from this block that we own
+        HAVE_BLOCK      // Have the full block
     };
 
     explicit BlockVisualizationWidget(interfaces::Node& node, interfaces::Chain& chain, QWidget *parent = nullptr);
