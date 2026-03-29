@@ -2269,6 +2269,20 @@ bool CConnman::GetTryNewOutboundPeer() const
     return m_try_another_outbound_peer;
 }
 
+void CConnman::SetHistoricalBackfillBlockRelayPeers(int peers)
+{
+    const int clamped = std::max(0, peers);
+    const int old = m_historical_backfill_block_relay_peers.exchange(clamped);
+    if (old != clamped) {
+        LogPrint(BCLog::CONN, "net: set historical backfill block-relay peers=%d\n", clamped);
+    }
+}
+
+int CConnman::GetHistoricalBackfillBlockRelayPeers() const
+{
+    return m_historical_backfill_block_relay_peers.load();
+}
+
 void CConnman::SetTryNewOutboundPeer(bool flag)
 {
     m_try_another_outbound_peer = flag;
@@ -2284,6 +2298,7 @@ void CConnman::SetTryNewOutboundPeer(bool flag)
 int CConnman::GetExtraFullOutboundCount() const
 {
     int full_outbound_peers = 0;
+    const int full_target = std::max(1, m_max_outbound_full_relay - GetHistoricalBackfillBlockRelayPeers());
     {
         LOCK(m_nodes_mutex);
         for (const CNode* pnode : m_nodes) {
@@ -2292,12 +2307,13 @@ int CConnman::GetExtraFullOutboundCount() const
             }
         }
     }
-    return std::max(full_outbound_peers - m_max_outbound_full_relay, 0);
+    return std::max(full_outbound_peers - full_target, 0);
 }
 
 int CConnman::GetExtraBlockRelayCount() const
 {
     int block_relay_peers = 0;
+    const int block_relay_target = m_max_outbound_block_relay + GetHistoricalBackfillBlockRelayPeers();
     {
         LOCK(m_nodes_mutex);
         for (const CNode* pnode : m_nodes) {
@@ -2306,7 +2322,7 @@ int CConnman::GetExtraBlockRelayCount() const
             }
         }
     }
-    return std::max(block_relay_peers - m_max_outbound_block_relay, 0);
+    return std::max(block_relay_peers - block_relay_target, 0);
 }
 
 void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
@@ -2429,6 +2445,9 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             stale_tip_no_outbound_mode = false;
         }
         const bool in_ibd_anchor_mode = nPeersIBD > 0 || stale_tip_no_outbound_mode;
+        const int historical_backfill_block_relay = GetHistoricalBackfillBlockRelayPeers();
+        const int full_relay_target = std::max(1, m_max_outbound_full_relay - historical_backfill_block_relay);
+        const int block_relay_target = m_max_outbound_block_relay + historical_backfill_block_relay;
 
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
         auto now = GetTime<std::chrono::microseconds>();
@@ -2450,12 +2469,12 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // timer to decide if we should open a FEELER.
 
         if (!m_anchors.empty()) {
-            if (anchor < m_max_outbound_block_relay)
+            if (anchor < block_relay_target)
                 conn_type = ConnectionType::BLOCK_RELAY;
-        } else if (nOutboundFullRelay < m_max_outbound_full_relay) {
-            // OUTBOUND_FULL_RELAY
-        } else if (nOutboundBlockRelay < m_max_outbound_block_relay) {
+        } else if (nOutboundBlockRelay < block_relay_target) {
             conn_type = ConnectionType::BLOCK_RELAY;
+        } else if (nOutboundFullRelay < full_relay_target) {
+            // OUTBOUND_FULL_RELAY
         } else if (GetTryNewOutboundPeer()) {
             // OUTBOUND_FULL_RELAY
         } else if (now > next_extra_block_relay && m_start_extra_block_relay_peers) {

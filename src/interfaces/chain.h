@@ -38,6 +38,12 @@ namespace interfaces {
 class Handler;
 class Wallet;
 
+struct BlockHeightInfo {
+    uint256 hash;
+    bool in_active_chain{false};
+    bool have_data{false};
+};
+
 //! Helper for findBlock to selectively return pieces of block data. If block is
 //! found, data will be returned by setting specified output variables. If block
 //! is not found, output variables will keep their previous values.
@@ -96,6 +102,8 @@ class Chain
 {
 public:
     virtual ~Chain() {}
+    //! Return whether chainstate access is currently available.
+    virtual bool isUsable() = 0;
 
     //! Get current chain height, not including genesis block (returns 0 if
     //! chain only contains genesis block, nullopt if chain does not contain
@@ -108,6 +116,12 @@ public:
     //! Check that the block is available on disk (i.e. has not been
     //! pruned), and contains transactions.
     virtual bool haveBlockOnDisk(int height) = 0;
+    //! Check whether a block at height is currently in-flight for download.
+    virtual bool isBlockInFlight(int height) = 0;
+    //! Check whether there are known competing blocks at this height.
+    virtual bool hasCompetingBlocks(int height) = 0;
+    //! Return known blocks at this height (active and side-chain), with state flags.
+    virtual std::vector<BlockHeightInfo> getBlocksAtHeight(int height) = 0;
 
     //! Get locator for the current chain tip.
     virtual CBlockLocator getTipLocator() = 0;
@@ -208,6 +222,16 @@ public:
 
     //! Check if any block has been pruned.
     virtual bool havePruned() = 0;
+    //! Current on-disk usage of block and undo files in bytes.
+    virtual uint64_t currentBlockDataUsage() = 0;
+    //! Active prune target in bytes (0 if unset, max uint64 for manual prune mode).
+    virtual uint64_t pruneTargetBytes() = 0;
+    //! Whether prune mode is currently enabled.
+    virtual bool pruneModeEnabled() = 0;
+    //! Return whether historical backfill is currently active (missing blocks should be downloaded).
+    virtual bool shouldBackfillHistoricalBlocks() = 0;
+    //! Return whether an active-chain height is expected to be fetched by historical backfill.
+    virtual bool isBackfillTargetHeight(int height) = 0;
 
     //! Check if the node is ready to broadcast transactions.
     virtual bool isReadyToBroadcast() = 0;

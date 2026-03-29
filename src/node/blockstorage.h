@@ -157,6 +157,11 @@ public:
     /** Calculate the amount of disk space the block & undo files currently use */
     uint64_t CalculateCurrentUsage();
 
+    void SetCheckForPruning() EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+    {
+        m_check_for_pruning = true;
+    }
+
     //! Returns last CBlockIndex* that is a checkpoint
     CBlockIndex* GetLastCheckpoint(const CCheckpointData& data) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 

@@ -174,6 +174,7 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_banned_list_changed;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
     std::unique_ptr<interfaces::Handler> m_handler_notify_header_tip;
+    std::unique_ptr<interfaces::Handler> m_handler_notify_block_status_changed;
     std::unique_ptr<interfaces::Handler> m_handler_notify_initial_sync_finished;
     boost::signals2::scoped_connection m_connection_mempool_stats_did_change;
     OptionsModel *optionsModel;
@@ -195,6 +196,7 @@ Q_SIGNALS:
     void networkActiveChanged(bool networkActive);
     void alertsChanged(const QString &warnings);
     void bytesChanged(quint64 totalBytesIn, quint64 totalBytesOut);
+    void blockStatusesChanged();
 
     //! Fired when a message should be reported to the user
     void message(const QString &title, const QString &message, unsigned int style);

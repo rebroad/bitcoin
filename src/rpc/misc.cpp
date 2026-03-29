@@ -12,6 +12,7 @@
 #include <interfaces/init.h>
 #include <interfaces/ipc.h>
 #include <key_io.h>
+#include <net_processing.h>
 #include <node/context.h>
 #include <outputtype.h>
 #include <rpc/blockchain.h>
@@ -28,6 +29,7 @@
 #include <util/system.h>
 #include <validation.h>
 
+#include <limits>
 #include <optional>
 #include <stdint.h>
 #include <tuple>
@@ -38,6 +40,42 @@
 #include <univalue.h>
 
 using node::NodeContext;
+
+static std::optional<std::string> ApplyRuntimePruneSetting(const JSONRPCRequest& request)
+{
+    ArgsManager& args{EnsureAnyArgsman(request.context)};
+    const int64_t prune_arg{args.GetIntArg("-prune", 0)};
+    if (prune_arg < 0) {
+        return std::string{"Prune cannot be configured with a negative value."};
+    }
+
+    uint64_t prune_target = static_cast<uint64_t>(prune_arg) * 1024 * 1024;
+    bool prune_mode = false;
+    if (prune_arg == 1) {
+        prune_target = std::numeric_limits<uint64_t>::max();
+        prune_mode = true;
+    } else if (prune_target > 0) {
+        if (prune_target < MIN_DISK_SPACE_FOR_BLOCK_FILES) {
+            return strprintf("Prune configured below the minimum of %d MiB. Please use a higher number.",
+                             MIN_DISK_SPACE_FOR_BLOCK_FILES / 1024 / 1024);
+        }
+        prune_mode = true;
+    }
+
+    if (prune_mode) {
+        if (g_txindex) {
+            return std::string{"Prune mode is incompatible with -txindex."};
+        }
+        if (g_coin_stats_index) {
+            return std::string{"Prune mode is incompatible with -coinstatsindex."};
+        }
+    }
+
+    node::nPruneTarget = prune_target;
+    node::fPruneMode = prune_mode;
+    EnsurePeerman(EnsureAnyNodeContext(request.context)).SetPruneMode(prune_mode);
+    return std::nullopt;
+}
 
 static RPCHelpMan validateaddress()
 {
@@ -884,6 +922,13 @@ static RPCHelpMan reloadconfig()
         warnings.push_back(error);
     }
 
+    if (success) {
+        if (const auto prune_error{ApplyRuntimePruneSetting(request)}) {
+            warnings.push_back(*prune_error);
+            success = false;
+        }
+    }
+
     result.pushKV("success", success);
     result.pushKV("warnings", warnings);
 
@@ -955,7 +1000,19 @@ static RPCHelpMan updateconfig()
         return result;
     }
 
-    gArgs.ForceSetArg(name, value);
+    const std::string arg_name{"-" + name};
+    const std::string old_value{gArgs.GetArg(arg_name, "")};
+    gArgs.ForceSetArg(arg_name, value);
+
+    if (name == "prune") {
+        if (const auto prune_error{ApplyRuntimePruneSetting(request)}) {
+            gArgs.ForceSetArg(arg_name, old_value);
+            ApplyRuntimePruneSetting(request);
+            result.pushKV("success", false);
+            result.pushKV("message", *prune_error);
+            return result;
+        }
+    }
 
     if (name == "par") {
         ApplyScriptCheckThreads();

@@ -173,11 +173,13 @@ class BlockchainTest(BitcoinTestFramework):
         assert_equal(res['prune_target_size'], 576716800)
         assert_greater_than(res['size_on_disk'], 0)
 
-        self.log.info("Toggle runtime prune mode")
-        assert_equal(self.nodes[0].setprunemode(False), {"pruned": False})
+        self.log.info("Toggle runtime prune mode via prune setting")
+        update = self.nodes[0].updateconfig("prune", "0")
+        assert update["success"]
         assert not self.nodes[0].getblockchaininfo()["pruned"]
         assert_raises_rpc_error(-1, "Cannot prune blocks because node is not in prune mode", self.nodes[0].pruneblockchain, 100)
-        assert_equal(self.nodes[0].setprunemode(True), {"pruned": True})
+        update = self.nodes[0].updateconfig("prune", "550")
+        assert update["success"]
         assert self.nodes[0].getblockchaininfo()["pruned"]
 
     def check_signalling_deploymentinfo_result(self, gdi_result, height, blockhash, status_next):

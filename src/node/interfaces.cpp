@@ -51,13 +51,17 @@
 #endif
 
 #include <any>
+#include <cmath>
 #include <memory>
+#include <limits>
 #include <optional>
+#include <unordered_map>
 #include <utility>
 
 #include <boost/signals2/signal.hpp>
 
 using interfaces::BlockTip;
+using interfaces::BlockHeightInfo;
 using interfaces::Chain;
 using interfaces::FoundBlock;
 using interfaces::Handler;
@@ -441,6 +445,10 @@ public:
                     /* verification progress is unused when a header was received */ 0);
             }));
     }
+    std::unique_ptr<Handler> handleNotifyBlockStatusChanged(NotifyBlockStatusChangedFn fn) override
+    {
+        return MakeHandler(::uiInterface.NotifyBlockStatusChanged_connect(fn));
+    }
     std::unique_ptr<Handler> handleNotifyInitialSyncFinished(std::function<void()> fn) override
     {
         return MakeHandler(
@@ -564,8 +572,33 @@ class ChainImpl : public Chain
 {
 private:
     ChainstateManager& chainman() { return *Assert(m_node.chainman); }
+    void RefreshBlocksAtHeightCache(const CChain& active) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+    {
+        const CBlockIndex* tip = active.Tip();
+        if (!tip) {
+            m_blocks_at_height_cache.clear();
+            m_blocks_at_height_cache_tip.SetNull();
+            return;
+        }
+        const uint256 tip_hash = tip->GetBlockHash();
+        if (m_blocks_at_height_cache_tip == tip_hash) return;
+
+        m_blocks_at_height_cache.clear();
+        m_blocks_at_height_cache.reserve(m_node.chainman->m_blockman.m_block_index.size() / 16 + 1);
+        for (const auto& entry : m_node.chainman->m_blockman.m_block_index) {
+            const CBlockIndex* block = entry.second;
+            if (block && block->nHeight >= 0) {
+                m_blocks_at_height_cache[block->nHeight].push_back(block);
+            }
+        }
+        m_blocks_at_height_cache_tip = tip_hash;
+    }
 public:
     explicit ChainImpl(NodeContext& node) : m_node(node) {}
+    bool isUsable() override
+    {
+        return m_node.chainman != nullptr;
+    }
     std::optional<int> getHeight() override
     {
         LOCK(::cs_main);
@@ -579,17 +612,61 @@ public:
     uint256 getBlockHash(int height) override
     {
         LOCK(::cs_main);
-        const CChain& active = Assert(m_node.chainman)->ActiveChain();
+        if (!m_node.chainman) return uint256{};
+        const CChain& active = m_node.chainman->ActiveChain();
+        if (height < 0 || height > active.Height()) return uint256{};
         CBlockIndex* block = active[height];
-        assert(block);
-        return block->GetBlockHash();
+        return block ? block->GetBlockHash() : uint256{};
     }
     bool haveBlockOnDisk(int height) override
     {
         LOCK(cs_main);
-        const CChain& active = Assert(m_node.chainman)->ActiveChain();
+        if (!m_node.chainman) return false;
+        const CChain& active = m_node.chainman->ActiveChain();
+        if (height < 0 || height > active.Height()) return false;
         CBlockIndex* block = active[height];
-        return block && ((block->nStatus & BLOCK_HAVE_DATA) != 0) && block->nTx > 0;
+        return block && ((block->nStatus & BLOCK_HAVE_DATA) != 0);
+    }
+    bool isBlockInFlight(int height) override
+    {
+        LOCK(cs_main);
+        if (!m_node.chainman) return false;
+        const CChain& active = m_node.chainman->ActiveChain();
+        if (height < 0 || height > active.Height()) return false;
+        CBlockIndex* block = active[height];
+        if (!block || !m_node.peerman) return false;
+        return m_node.peerman->IsBlockInFlight(block->GetBlockHash());
+    }
+    bool hasCompetingBlocks(int height) override
+    {
+        LOCK(cs_main);
+        if (!m_node.chainman) return false;
+        const CChain& active = m_node.chainman->ActiveChain();
+        if (height < 0 || height > active.Height()) return false;
+        RefreshBlocksAtHeightCache(active);
+        const auto it = m_blocks_at_height_cache.find(height);
+        return it != m_blocks_at_height_cache.end() && it->second.size() > 1;
+    }
+    std::vector<BlockHeightInfo> getBlocksAtHeight(int height) override
+    {
+        LOCK(cs_main);
+        std::vector<BlockHeightInfo> result;
+        if (!m_node.chainman) return result;
+        const CChain& active = m_node.chainman->ActiveChain();
+        if (height < 0 || height > active.Height()) return result;
+        RefreshBlocksAtHeightCache(active);
+        const auto it = m_blocks_at_height_cache.find(height);
+        if (it == m_blocks_at_height_cache.end()) return result;
+
+        result.reserve(it->second.size());
+        for (const CBlockIndex* block : it->second) {
+            result.push_back(BlockHeightInfo{
+                block->GetBlockHash(),
+                active.Contains(block),
+                (block->nStatus & BLOCK_HAVE_DATA) != 0
+            });
+        }
+        return result;
     }
     CBlockLocator getTipLocator() override
     {
@@ -758,6 +835,71 @@ public:
         LOCK(cs_main);
         return node::fHavePruned;
     }
+    uint64_t currentBlockDataUsage() override
+    {
+        LOCK(cs_main);
+        if (!m_node.chainman) return 0;
+        return m_node.chainman->m_blockman.CalculateCurrentUsage();
+    }
+    uint64_t pruneTargetBytes() override
+    {
+        LOCK(cs_main);
+        return node::nPruneTarget;
+    }
+    bool pruneModeEnabled() override
+    {
+        LOCK(cs_main);
+        return node::fPruneMode;
+    }
+    bool shouldBackfillHistoricalBlocks() override
+    {
+        LOCK(cs_main);
+        if (!m_node.chainman) return false;
+        const bool automatic_target = node::nPruneTarget > 0 &&
+                                      node::nPruneTarget != std::numeric_limits<uint64_t>::max();
+        return node::fPruneMode &&
+               automatic_target &&
+               chainman().m_blockman.CalculateCurrentUsage() < node::nPruneTarget;
+    }
+    bool isBackfillTargetHeight(int height) override
+    {
+        LOCK(cs_main);
+        if (!m_node.chainman) return false;
+        const bool automatic_target = node::nPruneTarget > 0 &&
+                                      node::nPruneTarget != std::numeric_limits<uint64_t>::max();
+        if (!node::fPruneMode || !automatic_target) return false;
+
+        const CChain& active = m_node.chainman->ActiveChain();
+        const CBlockIndex* tip = active.Tip();
+        if (!tip || height < 0 || height > tip->nHeight) return false;
+
+        const CBlockIndex* block = active[height];
+        if (!block || (block->nStatus & BLOCK_HAVE_DATA)) return false;
+
+        const uint64_t usage = m_node.chainman->m_blockman.CalculateCurrentUsage();
+        if (usage >= node::nPruneTarget) return false;
+
+        int prune_height = tip->nHeight;
+        const CBlockIndex* cursor = tip;
+        while (cursor->pprev && (cursor->pprev->nStatus & BLOCK_HAVE_DATA)) {
+            cursor = cursor->pprev;
+            prune_height = cursor->nHeight;
+        }
+        if (height >= prune_height) return false;
+
+        const int retained_blocks = tip->nHeight - prune_height + 1;
+        if (retained_blocks <= 0 || usage == 0) return false;
+
+        const double avg_block_bytes = static_cast<double>(usage) / retained_blocks;
+        if (avg_block_bytes <= 0) return false;
+
+        const uint64_t deficit = node::nPruneTarget - usage;
+        const int64_t approx_blocks_needed = std::max<int64_t>(
+            1, static_cast<int64_t>(std::ceil(static_cast<double>(deficit) / avg_block_bytes)));
+        const int backfill_start = std::max(0, prune_height - static_cast<int>(approx_blocks_needed));
+
+        return height >= backfill_start && height < prune_height;
+    }
     bool isReadyToBroadcast() override { return !node::fImporting && !node::fReindex && !isInitialBlockDownload(); }
     bool isInitialBlockDownload() override {
         return chainman().ActiveChainstate().IsInitialBlockDownload();
@@ -831,6 +973,8 @@ public:
         }
     }
     NodeContext& m_node;
+    mutable uint256 m_blocks_at_height_cache_tip GUARDED_BY(cs_main){};
+    mutable std::unordered_map<int, std::vector<const CBlockIndex*>> m_blocks_at_height_cache GUARDED_BY(cs_main);
 };
 } // namespace
 } // namespace node

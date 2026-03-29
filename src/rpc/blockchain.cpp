@@ -1320,48 +1320,6 @@ static RPCHelpMan pruneblockchain()
     };
 }
 
-static RPCHelpMan setprunemode()
-{
-    return RPCHelpMan{"setprunemode",
-                "\nEnable or disable prune mode at runtime.\n"
-                "When disabled, the node will stop pruning and begin backfilling missing historical blocks.\n"
-                "When enabled, the node will stop historical backfill and resume pruning behavior.\n",
-                {
-                    {"enabled", RPCArg::Type::BOOL, RPCArg::Optional::NO, "True to enable prune mode, false to disable prune mode"},
-                },
-                RPCResult{
-                    RPCResult::Type::OBJ, "", "",
-                    {
-                        {RPCResult::Type::BOOL, "pruned", "Current prune mode state"},
-                    }},
-                RPCExamples{
-                    HelpExampleCli("setprunemode", "true")
-            + HelpExampleRpc("setprunemode", "true")
-                },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
-{
-    const bool enabled{request.params[0].get_bool()};
-    if (enabled) {
-        if (g_txindex) {
-            throw JSONRPCError(RPC_MISC_ERROR, "Prune mode is incompatible with -txindex.");
-        }
-        if (g_coin_stats_index) {
-            throw JSONRPCError(RPC_MISC_ERROR, "Prune mode is incompatible with -coinstatsindex.");
-        }
-    }
-
-    const NodeContext& node = EnsureAnyNodeContext(request.context);
-    PeerManager& peerman = EnsurePeerman(node);
-    peerman.SetPruneMode(enabled);
-    LogPrintf("Prune mode runtime toggle: %s\n", enabled ? "enabled" : "disabled");
-
-    UniValue result(UniValue::VOBJ);
-    result.pushKV("pruned", enabled);
-    return result;
-},
-    };
-}
-
 CoinStatsHashType ParseHashType(const std::string& hash_type_input)
 {
     if (hash_type_input == "hash_serialized_2") {
@@ -3509,7 +3467,6 @@ static const CRPCCommand commands[] =
     { "blockchain",         &gettxout,                           },
     { "blockchain",         &gettxoutsetinfo,                    },
     { "blockchain",         &pruneblockchain,                    },
-    { "blockchain",         &setprunemode,                       },
     { "blockchain",         &savemempool,                        },
     { "blockchain",         &maxmempool,                         },
     { "blockchain",         &updatechain,                        },

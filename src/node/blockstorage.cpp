@@ -113,6 +113,7 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
 
     m_blockfile_info[fileNumber].SetNull();
     m_dirty_fileinfo.insert(fileNumber);
+    uiInterface.NotifyBlockStatusChanged();
 }
 
 void BlockManager::FindFilesToPruneManual(std::set<int>& setFilesToPrune, int nManualPruneHeight, int chain_tip_height)

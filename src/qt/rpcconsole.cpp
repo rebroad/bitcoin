@@ -65,6 +65,7 @@
 #include <algorithm>
 #include <cmath>
 #include <chrono>
+#include <limits>
 
 const int CONSOLE_HISTORY = 50;
 const QSize FONT_RANGE(4, 40);
@@ -827,6 +828,9 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
 
         // Also update on mempool changes (which can indicate reorgs or new blocks)
         connect(model, &ClientModel::mempoolSizeChanged, this, &RPCConsole::updateBlocksDisplay);
+        connect(model, &ClientModel::blockStatusesChanged, this, [this]() {
+            if (m_blockVisualizationWidget) m_blockVisualizationWidget->refreshVisibleStatuses();
+        });
 
         // Update on header tip changes (for new headers)
         connect(model, &ClientModel::numBlocksChanged, this, [this](int count, const QDateTime& blockDate, double nVerificationProgress, bool header, SynchronizationState sync_state) {
@@ -1355,6 +1359,25 @@ void RPCConsole::on_tabWidget_currentChanged(int index)
                 m_blockVisualizationWidget && !m_blockVisualizationWidget->isDataLoaded()) {
                 m_blockVisualizationWidget->updateBlockData();
             }
+            if (QScrollBar* vbar = ui->blockVisualizationScrollArea->verticalScrollBar()) {
+                vbar->setValue(vbar->maximum());
+                m_block_view_initial_scroll_done = true;
+            }
+        });
+        // A delayed second scroll handles late layout/size updates.
+        QTimer::singleShot(100, this, [this] {
+            if (ui->tabWidget->currentWidget() == ui->tab_blocks) {
+                if (QScrollBar* vbar = ui->blockVisualizationScrollArea->verticalScrollBar()) {
+                    vbar->setValue(vbar->maximum());
+                }
+            }
+        });
+        QTimer::singleShot(300, this, [this] {
+            if (ui->tabWidget->currentWidget() == ui->tab_blocks) {
+                if (QScrollBar* vbar = ui->blockVisualizationScrollArea->verticalScrollBar()) {
+                    vbar->setValue(vbar->maximum());
+                }
+            }
         });
     }
 }
@@ -1742,6 +1765,22 @@ void RPCConsole::setupBlockVisualizationWidget()
     // Set the widget as the scroll area's widget
     ui->blockVisualizationScrollArea->setWidget(m_blockVisualizationWidget);
 
+    // Start at chain tip (bottom) when opening the block visualization.
+    if (QScrollBar* vbar = ui->blockVisualizationScrollArea->verticalScrollBar()) {
+        connect(vbar, &QScrollBar::rangeChanged, this, [this, vbar](int, int max) {
+            if (!m_block_view_initial_scroll_done && max > 0) {
+                vbar->setValue(max);
+                m_block_view_initial_scroll_done = true;
+            }
+        });
+        QTimer::singleShot(0, this, [this, vbar]() {
+            if (!m_block_view_initial_scroll_done && vbar->maximum() > 0) {
+                vbar->setValue(vbar->maximum());
+                m_block_view_initial_scroll_done = true;
+            }
+        });
+    }
+
     // Update the legend
     updateLegend();
 }
@@ -1768,9 +1807,42 @@ void RPCConsole::updateLegend()
 
     QString legendText = "<html><body style='background-color: rgba(255,255,255,0.9); padding: 5px;'>";
     legendText += "<b>Block Status:</b> ";
-    legendText += "<span style='color: #808080;'>■</span> Unknown ";
-    legendText += "<span style='color: #00FF00;'>■</span> Have Block ";
-    legendText += "<span style='color: #FFFF00;'>■</span> Header Only";
+    legendText += "<span style='color: #009E73;'>■</span> Have Block ";
+    legendText += "<span style='color: #06B6D4;'>■</span> In Flight ";
+    legendText += "<span style='color: #CC79A7;'>■</span> To Be Downloaded ";
+    legendText += "<span style='color: #7C3AED;'>■</span> Competing ";
+    legendText += "<span style='color: #E69F00;'>■</span> Header Only ";
+    legendText += "<span style='color: #D55E00;'>■</span> Pruned";
+    const bool prune_mode = m_chain.pruneModeEnabled();
+    const uint64_t usage_bytes = m_chain.currentBlockDataUsage();
+    const uint64_t target_bytes = m_chain.pruneTargetBytes();
+    const auto to_mib = [](uint64_t bytes) -> uint64_t { return bytes / 1024 / 1024; };
+    const int queued_cached = m_blockVisualizationWidget ?
+        m_blockVisualizationWidget->countCachedBlocksByStatus(BlockVisualizationWidget::TO_BE_DOWNLOADED) : 0;
+    const int in_flight_cached = m_blockVisualizationWidget ?
+        m_blockVisualizationWidget->countCachedBlocksByStatus(BlockVisualizationWidget::IN_FLIGHT) : 0;
+    legendText += "<br/><b>Prune:</b> ";
+    if (!prune_mode) {
+        legendText += QString("prune=0 (disabled) therefore DISABLED (in_flight=%1)").arg(in_flight_cached);
+    } else if (target_bytes == std::numeric_limits<uint64_t>::max() || target_bytes == 0) {
+        legendText += QString("prune=1/manual therefore MANUAL (in_flight=%1)").arg(in_flight_cached);
+    } else if (usage_bytes < target_bytes) {
+        legendText += QString("Block_usage=%1 < prune=%2 therefore backfilling (in_flight=%3)")
+                          .arg(to_mib(usage_bytes))
+                          .arg(to_mib(target_bytes))
+                          .arg(in_flight_cached);
+    } else if (usage_bytes > target_bytes) {
+        legendText += QString("Block_usage=%1 > prune=%2 therefore pruning (in_flight=%3)")
+                          .arg(to_mib(usage_bytes))
+                          .arg(to_mib(target_bytes))
+                          .arg(in_flight_cached);
+    } else {
+        legendText += QString("Block_usage=%1 = prune=%2 therefore balanced (in_flight=%3)")
+                          .arg(to_mib(usage_bytes))
+                          .arg(to_mib(target_bytes))
+                          .arg(in_flight_cached);
+    }
+    legendText += QString(" (to_download=%1)").arg(queued_cached);
     legendText += "</body></html>";
 
     ui->legendLabel->setText(legendText);

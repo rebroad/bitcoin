@@ -10,6 +10,7 @@
 #include <QPainter>
 #include <QMouseEvent>
 #include <QShowEvent>
+#include <QHideEvent>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -37,6 +38,9 @@ public:
         UNKNOWN,        // Status not yet determined
         NO_HEADER,      // Don't have the header
         HEADER_ONLY,    // Have header but no block data
+        IN_FLIGHT,      // Requested and currently downloading
+        TO_BE_DOWNLOADED, // Missing and queued by backfill policy
+        COMPETING,      // Height has multiple known blocks (fork/side-chain competition)
         HAVE_BLOCK,     // Have the full block
         PRUNED,         // Had block but it's been pruned
         HAVE_UTXOS,     // Have unspent UTXOs from this block
@@ -48,8 +52,11 @@ public:
 
     void updateBlockData();
     void refreshBlockStatus(int height);
+    void refreshVisibleStatuses();
+    int countCachedBlocksByStatus(BlockStatus status) const;
     bool isDataLoaded() const { return m_dataLoaded; }
     void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -62,7 +69,7 @@ private:
     interfaces::Chain& m_chain;
 
     int m_blockWidth = 4;  // Width of each block in pixels
-    int m_blockHeight = 20; // Height of each block in pixels
+    int m_blockHeight = 4; // Height of each block in pixels
     int m_blocksPerRow = 100; // Number of blocks per row
 
     QTimer* m_resizeTimer = nullptr;

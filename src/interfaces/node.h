@@ -270,6 +270,8 @@ public:
     using NotifyHeaderTipFn =
         std::function<void(SynchronizationState, interfaces::BlockTip tip, double verification_progress)>;
     virtual std::unique_ptr<Handler> handleNotifyHeaderTip(NotifyHeaderTipFn fn) = 0;
+    using NotifyBlockStatusChangedFn = std::function<void()>;
+    virtual std::unique_ptr<Handler> handleNotifyBlockStatusChanged(NotifyBlockStatusChangedFn fn) = 0;
     virtual std::unique_ptr<Handler> handleNotifyInitialSyncFinished(std::function<void()> fn) = 0;
 
     //! Get and set internal node context. Useful for testing, but not

@@ -194,6 +194,7 @@ private:
     QByteArray m_banlist_widget_header_state;
     bool m_slider_in_use{false};
     int m_set_slider_value{0};
+    bool m_block_view_initial_scroll_done{false};
 
     /** Update UI with latest network info from model. */
     void updateNetworkState();

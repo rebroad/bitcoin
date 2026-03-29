@@ -948,6 +948,8 @@ public:
     // a peer that is better than all our current peers.
     void SetTryNewOutboundPeer(bool flag);
     bool GetTryNewOutboundPeer() const;
+    void SetHistoricalBackfillBlockRelayPeers(int peers);
+    int GetHistoricalBackfillBlockRelayPeers() const;
 
     void StartExtraBlockRelayPeers() {
         LogPrint(BCLog::NET, "net: enabling extra block-relay-only peers\n");
@@ -1311,6 +1313,8 @@ private:
      *  as these connections are intended to be short-lived and low-bandwidth.
      */
     std::atomic_bool m_start_extra_block_relay_peers{false};
+    /** Additional block-relay peers reserved while historical prune backfill is active. */
+    std::atomic<int> m_historical_backfill_block_relay_peers{0};
 
     /**
      * A vector of -bind=<address>:<port>=onion arguments each of which is
