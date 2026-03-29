@@ -27,6 +27,16 @@
 #include <cmath>
 #include <map>
 
+static QScrollArea* FindParentScrollArea(QWidget* widget)
+{
+    QWidget* current = widget ? widget->parentWidget() : nullptr;
+    while (current) {
+        if (auto* scroll_area = qobject_cast<QScrollArea*>(current)) return scroll_area;
+        current = current->parentWidget();
+    }
+    return nullptr;
+}
+
 static BlockVisualizationWidget::BlockStatus ToWidgetStatus(const BlockStatusCache::BlockStatus status)
 {
     switch (status) {
@@ -139,11 +149,14 @@ void BlockVisualizationWidget::populateBlockStatusCache()
             // We have at least the header
             m_statusCache[height] = HEADER_ONLY;
 
-            // Check if we have the full block data on disk
+            // Check if we have the full block data on disk.
             if (m_chain.haveBlockOnDisk(height)) {
                 m_statusCache[height] = HAVE_BLOCK;
             } else {
-                m_statusCache[height] = PRUNED;
+                // Missing active-chain data is not necessarily "pruned" (it may
+                // have never been downloaded). Use HEADER_ONLY unless we later
+                // observe a HAVE_BLOCK -> missing transition.
+                m_statusCache[height] = HEADER_ONLY;
             }
         } catch (...) {
             m_statusCache[height] = NO_HEADER;
@@ -176,7 +189,7 @@ void BlockVisualizationWidget::refreshVisibleStatuses()
 {
     if (!m_chain.isUsable() || m_totalBlocks <= 0) return;
 
-    QScrollArea* scrollArea = qobject_cast<QScrollArea*>(parentWidget());
+    QScrollArea* scrollArea = FindParentScrollArea(this);
     int visibleStart = 0;
     int visibleEnd = m_totalBlocks;
     if (scrollArea) {
@@ -235,7 +248,7 @@ void BlockVisualizationWidget::updateBlockStatusesAsync()
     }
 
     // Get visible block range to prioritize them
-    QScrollArea* scrollArea = qobject_cast<QScrollArea*>(parentWidget());
+    QScrollArea* scrollArea = FindParentScrollArea(this);
     int visibleStart = 0, visibleEnd = m_totalBlocks;
     if (scrollArea) {
         QScrollBar* vbar = scrollArea->verticalScrollBar();
@@ -269,20 +282,12 @@ void BlockVisualizationWidget::updateBlockStatusesAsync()
     const int CHUNK_SIZE = 200;
     int processed = 0;
 
-    // First, process visible blocks
-    std::set<int> visiblePending;
-    for (int height : m_pendingBlocks) {
-        if (height >= visibleStart && height <= visibleEnd) {
-            visiblePending.insert(height);
-        }
-    }
-
-    // Process visible blocks first
-    for (int height : visiblePending) {
-        if (processed >= CHUNK_SIZE) break;
-
+    // Process visible blocks first without scanning the whole pending set.
+    for (auto it = m_pendingBlocks.lower_bound(visibleStart);
+         it != m_pendingBlocks.end() && *it <= visibleEnd && processed < CHUNK_SIZE;) {
+        const int height = *it;
+        it = m_pendingBlocks.erase(it);
         updateBlockStatus(height);
-        m_pendingBlocks.erase(height);
         processed++;
     }
 
@@ -291,8 +296,9 @@ void BlockVisualizationWidget::updateBlockStatusesAsync()
         for (auto it = m_pendingBlocks.begin(); it != m_pendingBlocks.end();) {
             if (processed >= CHUNK_SIZE) break;
 
-            updateBlockStatus(*it);
+            const int height = *it;
             it = m_pendingBlocks.erase(it);
+            updateBlockStatus(height);
             processed++;
         }
     }
@@ -328,17 +334,17 @@ void BlockVisualizationWidget::updateBlockStatus(int height)
         return;
     }
 
-    const int tip_height = std::max(m_totalBlocks, m_chain.getHeight().value_or(m_totalBlocks));
-
     // Classify by known state without forcing block reads from disk.
     try {
+        auto prev_it = m_statusCache.find(height);
+        const bool previously_had_block = prev_it != m_statusCache.end() && prev_it->second == HAVE_BLOCK;
         if (m_chain.haveBlockOnDisk(height)) {
             m_statusCache[height] = HAVE_BLOCK;
         } else if (m_chain.isBlockInFlight(height)) {
             m_statusCache[height] = IN_FLIGHT;
         } else if (m_chain.isBackfillTargetHeight(height)) {
             m_statusCache[height] = TO_BE_DOWNLOADED;
-        } else if (height < tip_height) {
+        } else if (previously_had_block) {
             m_statusCache[height] = PRUNED;
         } else {
             m_statusCache[height] = HEADER_ONLY;
@@ -348,8 +354,8 @@ void BlockVisualizationWidget::updateBlockStatus(int height)
             m_statusCache[height] = COMPETING;
         }
     } catch (...) {
-        // Keep deterministic fallback semantics for missing active-chain block data.
-        m_statusCache[height] = (height < tip_height) ? PRUNED : HEADER_ONLY;
+        // Keep deterministic fallback semantics if chain access fails.
+        m_statusCache[height] = HEADER_ONLY;
     }
 }
 
@@ -359,7 +365,7 @@ void BlockVisualizationWidget::calculateLayout()
 
     // Get the available width from the parent scroll area
     int availableWidth = width();
-    if (QScrollArea* scrollArea = qobject_cast<QScrollArea*>(parentWidget())) {
+    if (QScrollArea* scrollArea = FindParentScrollArea(this)) {
         availableWidth = scrollArea->viewport()->width();
     }
     if (availableWidth <= 0) {
@@ -536,8 +542,6 @@ int BlockVisualizationWidget::getBlockIndexFromPosition(const QPoint& pos) const
 
 void BlockVisualizationWidget::paintEvent(QPaintEvent *event)
 {
-    Q_UNUSED(event);
-
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, false); // Disable antialiasing for better performance
 
@@ -559,8 +563,13 @@ void BlockVisualizationWidget::paintEvent(QPaintEvent *event)
     colors[8] = getColorForStatus(HAVE_UTXOS);
     colors[9] = getColorForStatus(WALLET_UTXOS);
 
-    // Draw blocks more efficiently
-    for (int height = 0; height <= m_totalBlocks; ++height) {
+    const QRect dirty = event ? event->rect() : rect();
+    const int start_row = std::max(0, dirty.top() / m_blockHeight);
+    const int end_row = std::max(start_row, std::min((m_totalBlocks / m_blocksPerRow), dirty.bottom() / m_blockHeight + 1));
+    const int start_height = start_row * m_blocksPerRow;
+    const int end_height = std::min(m_totalBlocks, ((end_row + 1) * m_blocksPerRow) - 1);
+
+    for (int height = start_height; height <= end_height; ++height) {
         int row = height / m_blocksPerRow;
         int col = height % m_blocksPerRow;
 

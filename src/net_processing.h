@@ -75,6 +75,8 @@ public:
     virtual void SetPruneMode(bool prune_mode) = 0;
     /** Return whether a block is currently in-flight for download. */
     virtual bool IsBlockInFlight(const uint256& block_hash) const = 0;
+    /** Return total number of blocks currently in-flight across peers. */
+    virtual size_t GetBlockInFlightCount() const = 0;
 
     /**
      * Increment peer's misbehavior score. If the new value >= DISCOURAGEMENT_THRESHOLD, mark the node

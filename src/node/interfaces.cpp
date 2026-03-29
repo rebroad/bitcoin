@@ -71,6 +71,20 @@ using interfaces::WalletLoader;
 
 namespace node {
 namespace {
+bool AutomaticPruneTargetEnabled()
+{
+    return node::fPruneMode && node::nPruneTarget > 0 &&
+           node::nPruneTarget != std::numeric_limits<uint64_t>::max();
+}
+
+bool ShouldBackfillHistoricalBlocksNow(ChainstateManager& chainman)
+{
+    if (!AutomaticPruneTargetEnabled()) return false;
+    const uint64_t usage = chainman.m_blockman.CalculateCurrentUsage();
+    const uint64_t pause_buffer = node::BLOCKFILE_CHUNK_SIZE + node::UNDOFILE_CHUNK_SIZE;
+    return usage + pause_buffer < node::nPruneTarget;
+}
+
 #ifdef ENABLE_EXTERNAL_SIGNER
 class ExternalSignerImpl : public interfaces::ExternalSigner
 {
@@ -637,6 +651,12 @@ public:
         if (!block || !m_node.peerman) return false;
         return m_node.peerman->IsBlockInFlight(block->GetBlockHash());
     }
+    size_t blockInFlightCount() override
+    {
+        LOCK(cs_main);
+        if (!m_node.peerman) return 0;
+        return m_node.peerman->GetBlockInFlightCount();
+    }
     bool hasCompetingBlocks(int height) override
     {
         LOCK(cs_main);
@@ -865,19 +885,13 @@ public:
     {
         LOCK(cs_main);
         if (!m_node.chainman) return false;
-        const bool automatic_target = node::nPruneTarget > 0 &&
-                                      node::nPruneTarget != std::numeric_limits<uint64_t>::max();
-        return node::fPruneMode &&
-               automatic_target &&
-               chainman().m_blockman.CalculateCurrentUsage() < node::nPruneTarget;
+        return ShouldBackfillHistoricalBlocksNow(chainman());
     }
     bool isBackfillTargetHeight(int height) override
     {
         LOCK(cs_main);
         if (!m_node.chainman) return false;
-        const bool automatic_target = node::nPruneTarget > 0 &&
-                                      node::nPruneTarget != std::numeric_limits<uint64_t>::max();
-        if (!node::fPruneMode || !automatic_target) return false;
+        if (!AutomaticPruneTargetEnabled()) return false;
 
         const CChain& active = m_node.chainman->ActiveChain();
         const CBlockIndex* tip = active.Tip();
@@ -887,7 +901,8 @@ public:
         if (!block || (block->nStatus & BLOCK_HAVE_DATA)) return false;
 
         const uint64_t usage = m_node.chainman->m_blockman.CalculateCurrentUsage();
-        if (usage >= node::nPruneTarget) return false;
+        const uint64_t pause_buffer = node::BLOCKFILE_CHUNK_SIZE + node::UNDOFILE_CHUNK_SIZE;
+        if (usage + pause_buffer >= node::nPruneTarget) return false;
 
         int prune_height = tip->nHeight;
         const CBlockIndex* cursor = tip;
@@ -903,7 +918,7 @@ public:
         const double avg_block_bytes = static_cast<double>(usage) / retained_blocks;
         if (avg_block_bytes <= 0) return false;
 
-        const uint64_t deficit = node::nPruneTarget - usage;
+        const uint64_t deficit = node::nPruneTarget - (usage + pause_buffer);
         const int64_t approx_blocks_needed = std::max<int64_t>(
             1, static_cast<int64_t>(std::ceil(static_cast<double>(deficit) / avg_block_bytes)));
         const int backfill_start = std::max(0, prune_height - static_cast<int>(approx_blocks_needed));

@@ -52,6 +52,8 @@ extern bool fHavePruned;
 extern bool fPruneMode;
 /** Number of MiB of block files that we're trying to stay below. */
 extern uint64_t nPruneTarget;
+/** Monotonic counter incremented whenever pruning removes at least one blk/rev pair. */
+extern std::atomic<uint64_t> g_prune_event_count;
 
 typedef std::unordered_map<uint256, CBlockIndex*, BlockHasher> BlockMap;
 

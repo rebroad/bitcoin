@@ -118,6 +118,8 @@ public:
     virtual bool haveBlockOnDisk(int height) = 0;
     //! Check whether a block at height is currently in-flight for download.
     virtual bool isBlockInFlight(int height) = 0;
+    //! Total blocks currently in-flight for download.
+    virtual size_t blockInFlightCount() = 0;
     //! Check whether there are known competing blocks at this height.
     virtual bool hasCompetingBlocks(int height) = 0;
     //! Return known blocks at this height (active and side-chain), with state flags.

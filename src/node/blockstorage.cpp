@@ -33,6 +33,7 @@ std::atomic_bool fReindex(false);
 bool fHavePruned = false;
 bool fPruneMode = false;
 uint64_t nPruneTarget = 0;
+std::atomic<uint64_t> g_prune_event_count{0};
 
 static FILE* OpenUndoFile(const FlatFilePos& pos, bool fReadOnly = false);
 static FlatFileSeq BlockFileSeq();
@@ -137,6 +138,10 @@ void BlockManager::FindFilesToPruneManual(std::set<int>& setFilesToPrune, int nM
         count++;
     }
     LogPrintf("Prune (Manual): prune_height=%d removed %d blk/rev pairs\n", nLastBlockWeCanPrune, count);
+    if (count > 0) {
+        g_prune_event_count.fetch_add(1, std::memory_order_relaxed);
+    }
+    uiInterface.NotifyBlockStatusChanged();
 }
 
 void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPruneAfterHeight, int chain_tip_height, int prune_height, bool is_ibd)
@@ -196,6 +201,10 @@ void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPr
            nPruneTarget/1024/1024, nCurrentUsage/1024/1024,
            ((int64_t)nPruneTarget - (int64_t)nCurrentUsage)/1024/1024,
            nLastBlockWeCanPrune, count);
+    if (count > 0) {
+        g_prune_event_count.fetch_add(1, std::memory_order_relaxed);
+    }
+    uiInterface.NotifyBlockStatusChanged();
 }
 
 CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)

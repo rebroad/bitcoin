@@ -830,6 +830,7 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         connect(model, &ClientModel::mempoolSizeChanged, this, &RPCConsole::updateBlocksDisplay);
         connect(model, &ClientModel::blockStatusesChanged, this, [this]() {
             if (m_blockVisualizationWidget) m_blockVisualizationWidget->refreshVisibleStatuses();
+            updateLegend();
         });
 
         // Update on header tip changes (for new headers)
@@ -1820,8 +1821,7 @@ void RPCConsole::updateLegend()
     const auto to_mib = [](uint64_t bytes) -> uint64_t { return bytes / 1024 / 1024; };
     const int queued_cached = m_blockVisualizationWidget ?
         m_blockVisualizationWidget->countCachedBlocksByStatus(BlockVisualizationWidget::TO_BE_DOWNLOADED) : 0;
-    const int in_flight_cached = m_blockVisualizationWidget ?
-        m_blockVisualizationWidget->countCachedBlocksByStatus(BlockVisualizationWidget::IN_FLIGHT) : 0;
+    const int in_flight_now = static_cast<int>(m_chain.blockInFlightCount());
     legendText += "<br/><b>Prune:</b> ";
     if (!prune_mode) {
         legendText += "prune=0 (disabled)";
@@ -1831,7 +1831,7 @@ void RPCConsole::updateLegend()
         legendText += QString("Block_usage=%1 < prune=%2 backfilling (in_flight=%3)")
                           .arg(to_mib(usage_bytes))
                           .arg(to_mib(target_bytes))
-                          .arg(in_flight_cached);
+                          .arg(in_flight_now);
         legendText += QString(" (to_download=%1)").arg(queued_cached);
     } else if (usage_bytes > target_bytes) {
         legendText += QString("Block_usage=%1 > prune=%2")

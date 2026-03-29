@@ -45,6 +45,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <typeinfo>
@@ -54,6 +55,7 @@ using node::ReadRawBlockFromDisk;
 using node::fImporting;
 using node::fPruneMode;
 using node::fReindex;
+using node::g_prune_event_count;
 using node::nPruneTarget;
 
 /** How long to cache transactions in mapRelay for normal relay */
@@ -182,6 +184,23 @@ static constexpr size_t MAX_ADDR_PROCESSING_TOKEN_BUCKET{MAX_ADDR_TO_SEND};
 
 // Internal stuff
 namespace {
+bool IsAutomaticPruneTargetConfigured()
+{
+    return fPruneMode && nPruneTarget > 0 &&
+           nPruneTarget != std::numeric_limits<uint64_t>::max();
+}
+
+bool ShouldRunHistoricalBackfill(ChainstateManager& chainman)
+{
+    if (!IsAutomaticPruneTargetConfigured()) return false;
+
+    const uint64_t usage = chainman.m_blockman.CalculateCurrentUsage();
+    // Keep a safety margin so historical backfill doesn't immediately trigger
+    // prune checks near the target boundary.
+    const uint64_t pause_buffer = node::BLOCKFILE_CHUNK_SIZE + node::UNDOFILE_CHUNK_SIZE;
+    return usage + pause_buffer < nPruneTarget;
+}
+
 /** Blocks that are in flight, and that are in the queue to be downloaded. */
 struct QueuedBlock {
     /** BlockIndex. We must have this since we only request blocks when we've already validated the header. */
@@ -337,6 +356,7 @@ public:
     void SetBestHeight(int height) override { m_best_height = height; };
     void SetPruneMode(bool prune_mode) override;
     bool IsBlockInFlight(const uint256& block_hash) const override;
+    size_t GetBlockInFlightCount() const override;
     void Misbehaving(const NodeId pnode, const int howmuch, const std::string& message) override;
     void ProcessMessage(CNode& pfrom, const std::string& msg_type, CDataStream& vRecv,
                         const std::chrono::microseconds time_received, const std::atomic<bool>& interruptMsgProc) override;
@@ -604,6 +624,7 @@ private:
      */
     void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     void FindNextBlocksToBackfill(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool IsHistoricalBackfillActive() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> > mapBlocksInFlight GUARDED_BY(cs_main);
 
@@ -643,6 +664,12 @@ private:
 
     /** Most recent active-chain block index considered for historical backfill requests. */
     const CBlockIndex* m_backfill_cursor GUARDED_BY(cs_main){nullptr};
+    /** Backfill latch: once pruning actually removes files, pause backfill until prune setting changes. */
+    bool m_backfill_paused_by_prune GUARDED_BY(cs_main){false};
+    /** Last prune event generation observed by this peerman instance. */
+    uint64_t m_last_seen_prune_event GUARDED_BY(cs_main){0};
+    /** Last prune target for which backfill latch state was evaluated. */
+    uint64_t m_backfill_setting_target GUARDED_BY(cs_main){0};
 
     /** Storage for orphan information */
     TxOrphanage m_orphanage;
@@ -1278,8 +1305,8 @@ void PeerManagerImpl::FindNextBlocksToBackfill(NodeId nodeid, unsigned int count
 {
     if (count == 0) return;
 
-    // In prune mode, only backfill historical gaps while we're below the configured prune target.
-    if (fPruneMode && m_chainman.m_blockman.CalculateCurrentUsage() >= nPruneTarget) return;
+    // Only backfill while sufficiently below the prune target.
+    if (!IsHistoricalBackfillActive()) return;
 
     CNodeState* state = State(nodeid);
     assert(state != nullptr);
@@ -1300,6 +1327,29 @@ void PeerManagerImpl::FindNextBlocksToBackfill(NodeId nodeid, unsigned int count
         if (IsBlockRequested(pindex->GetBlockHash())) continue;
         vBlocks.push_back(pindex);
     }
+}
+
+bool PeerManagerImpl::IsHistoricalBackfillActive()
+{
+    AssertLockHeld(cs_main);
+
+    if (m_backfill_setting_target != nPruneTarget) {
+        m_backfill_setting_target = nPruneTarget;
+        m_backfill_paused_by_prune = false;
+        m_last_seen_prune_event = g_prune_event_count.load(std::memory_order_relaxed);
+    }
+
+    const uint64_t prune_events = g_prune_event_count.load(std::memory_order_relaxed);
+    if (prune_events != m_last_seen_prune_event) {
+        m_last_seen_prune_event = prune_events;
+        m_backfill_paused_by_prune = true;
+        m_connman.SetHistoricalBackfillBlockRelayPeers(0);
+        EvictExtraOutboundPeers(GetTime<std::chrono::seconds>());
+        LogPrint(BCLog::PRUNE, "Backfill paused after prune event; waiting for prune setting change\n");
+    }
+
+    if (m_backfill_paused_by_prune) return false;
+    return ShouldRunHistoricalBackfill(m_chainman);
 }
 
 } // namespace
@@ -1737,9 +1787,7 @@ void PeerManagerImpl::SetPruneMode(bool prune_mode)
 {
     LOCK(cs_main);
     fPruneMode = prune_mode;
-    const bool historical_backfill_active = fPruneMode &&
-                                            nPruneTarget > 0 &&
-                                            m_chainman.m_blockman.CalculateCurrentUsage() < nPruneTarget;
+    const bool historical_backfill_active = IsHistoricalBackfillActive();
     m_connman.SetHistoricalBackfillBlockRelayPeers(
         historical_backfill_active ? HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS : 0);
     if (fPruneMode) {
@@ -1754,6 +1802,12 @@ bool PeerManagerImpl::IsBlockInFlight(const uint256& block_hash) const
 {
     LOCK(cs_main);
     return mapBlocksInFlight.count(block_hash) > 0;
+}
+
+size_t PeerManagerImpl::GetBlockInFlightCount() const
+{
+    LOCK(cs_main);
+    return mapBlocksInFlight.size();
 }
 
 std::unique_ptr<PeerManager> PeerManager::make(const CChainParams& chainparams, CConnman& connman, AddrMan& addrman,
@@ -5070,9 +5124,7 @@ void PeerManagerImpl::CheckForStaleTipAndEvictPeers()
 {
     LOCK(cs_main);
 
-    const bool historical_backfill_active = fPruneMode &&
-                                            nPruneTarget > 0 &&
-                                            m_chainman.m_blockman.CalculateCurrentUsage() < nPruneTarget;
+    const bool historical_backfill_active = IsHistoricalBackfillActive();
     m_connman.SetHistoricalBackfillBlockRelayPeers(
         historical_backfill_active ? HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS : 0);
 
