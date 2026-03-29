@@ -479,9 +479,9 @@ static void NotifyInitialSyncFinished(ClientModel *clientmodel)
     assert(invoked);
 }
 
-static void NotifyBlockStatusChanged(ClientModel* clientmodel)
+static void NotifyBlockStatusChanged(ClientModel* clientmodel, int height)
 {
-    Q_EMIT clientmodel->blockStatusesChanged();
+    Q_EMIT clientmodel->blockStatusChanged(height);
 }
 
 static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_state, interfaces::BlockTip tip, double verificationProgress, bool fHeader)
@@ -531,7 +531,7 @@ void ClientModel::subscribeToCoreSignals()
     m_handler_banned_list_changed = m_node.handleBannedListChanged(std::bind(BannedListChanged, this));
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, false));
     m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, true));
-    m_handler_notify_block_status_changed = m_node.handleNotifyBlockStatusChanged(std::bind(NotifyBlockStatusChanged, this));
+    m_handler_notify_block_status_changed = m_node.handleNotifyBlockStatusChanged(std::bind(NotifyBlockStatusChanged, this, std::placeholders::_1));
     m_handler_notify_initial_sync_finished = m_node.handleNotifyInitialSyncFinished(std::bind(NotifyInitialSyncFinished, this));
 
     m_connection_mempool_stats_did_change = CStats::DefaultStats()->MempoolStatsDidChange.connect(std::bind(MempoolStatsDidChange, this));

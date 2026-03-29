@@ -83,6 +83,7 @@ private:
     int m_totalBlocks = 0;
 
     QColor getColorForStatus(BlockStatus status) const;
+    BlockStatus getDisplayStatus(int height) const;
     QString getTooltipForBlock(int height) const;
     int getBlockIndexFromPosition(const QPoint& pos) const;
     void calculateLayout();

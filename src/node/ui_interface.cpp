@@ -58,7 +58,7 @@ void CClientUIInterface::NotifyAlertChanged() { return g_ui_signals.NotifyAlertC
 void CClientUIInterface::ShowProgress(const std::string& title, int nProgress, bool resume_possible) { return g_ui_signals.ShowProgress(title, nProgress, resume_possible); }
 void CClientUIInterface::NotifyBlockTip(SynchronizationState s, const CBlockIndex* i) { return g_ui_signals.NotifyBlockTip(s, i); }
 void CClientUIInterface::NotifyHeaderTip(SynchronizationState s, const CBlockIndex* i) { return g_ui_signals.NotifyHeaderTip(s, i); }
-void CClientUIInterface::NotifyBlockStatusChanged() { return g_ui_signals.NotifyBlockStatusChanged(); }
+void CClientUIInterface::NotifyBlockStatusChanged(int height) { return g_ui_signals.NotifyBlockStatusChanged(height); }
 void CClientUIInterface::BannedListChanged() { return g_ui_signals.BannedListChanged(); }
 void CClientUIInterface::NotifyInitialSyncFinished() { return g_ui_signals.NotifyInitialSyncFinished(); }
 

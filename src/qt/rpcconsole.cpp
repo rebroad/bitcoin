@@ -828,8 +828,11 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
 
         // Also update on mempool changes (which can indicate reorgs or new blocks)
         connect(model, &ClientModel::mempoolSizeChanged, this, &RPCConsole::updateBlocksDisplay);
-        connect(model, &ClientModel::blockStatusesChanged, this, [this]() {
-            if (m_blockVisualizationWidget) m_blockVisualizationWidget->refreshVisibleStatuses();
+        connect(model, &ClientModel::blockStatusChanged, this, [this](int height) {
+            if (m_blockVisualizationWidget) {
+                if (height >= 0) m_blockVisualizationWidget->refreshBlockStatus(height);
+                else m_blockVisualizationWidget->refreshVisibleStatuses();
+            }
             updateLegend();
         });
 

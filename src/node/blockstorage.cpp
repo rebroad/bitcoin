@@ -86,10 +86,12 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
 {
     AssertLockHeld(cs_main);
     LOCK(cs_LastBlockFile);
+    std::set<int> changed_heights;
 
     for (const auto& entry : m_block_index) {
         CBlockIndex* pindex = entry.second;
         if (pindex->nFile == fileNumber) {
+            changed_heights.insert(pindex->nHeight);
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
             pindex->nFile = 0;
@@ -114,7 +116,9 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
 
     m_blockfile_info[fileNumber].SetNull();
     m_dirty_fileinfo.insert(fileNumber);
-    uiInterface.NotifyBlockStatusChanged();
+    for (const int height : changed_heights) {
+        uiInterface.NotifyBlockStatusChanged(height);
+    }
 }
 
 void BlockManager::FindFilesToPruneManual(std::set<int>& setFilesToPrune, int nManualPruneHeight, int chain_tip_height)
@@ -141,7 +145,7 @@ void BlockManager::FindFilesToPruneManual(std::set<int>& setFilesToPrune, int nM
     if (count > 0) {
         g_prune_event_count.fetch_add(1, std::memory_order_relaxed);
     }
-    uiInterface.NotifyBlockStatusChanged();
+    // Per-height block status updates are emitted by PruneOneBlockFile().
 }
 
 void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPruneAfterHeight, int chain_tip_height, int prune_height, bool is_ibd)
@@ -204,7 +208,7 @@ void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPr
     if (count > 0) {
         g_prune_event_count.fetch_add(1, std::memory_order_relaxed);
     }
-    uiInterface.NotifyBlockStatusChanged();
+    // Per-height block status updates are emitted by PruneOneBlockFile().
 }
 
 CBlockIndex* BlockManager::InsertBlockIndex(const uint256& hash)

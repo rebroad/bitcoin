@@ -173,15 +173,18 @@ void BlockVisualizationWidget::refreshBlockStatus(int height)
         return;
     }
 
-    // Remove from cache to force re-check
+    // Remove from cache to force re-check.
     m_statusCache.erase(height);
+    // For targeted updates (requested/received), refresh synchronously so fast
+    // transitions (in-flight -> have block) are visible immediately.
+    updateBlockStatus(height);
 
-    // Add to pending blocks for immediate update
-    m_pendingBlocks.insert(height);
-
-    // Trigger immediate update
-    if (!m_updateTimer->isActive()) {
-        m_updateTimer->start();
+    if (m_blocksPerRow > 0 && m_blockWidth > 0 && m_blockHeight > 0) {
+        const int row = height / m_blocksPerRow;
+        const int col = height % m_blocksPerRow;
+        update(QRect(col * m_blockWidth, row * m_blockHeight, m_blockWidth, m_blockHeight));
+    } else {
+        update();
     }
 }
 
@@ -349,8 +352,9 @@ void BlockVisualizationWidget::updateBlockStatus(int height)
         } else {
             m_statusCache[height] = HEADER_ONLY;
         }
-        if (m_statusCache[height] == HEADER_ONLY &&
-            m_chain.hasCompetingBlocks(height)) {
+        // Any multi-block height should be surfaced as competing, regardless
+        // of whether we currently have active-chain block data.
+        if (m_chain.hasCompetingBlocks(height)) {
             m_statusCache[height] = COMPETING;
         }
     } catch (...) {
@@ -425,13 +429,8 @@ QColor BlockVisualizationWidget::getColorForStatus(BlockStatus status) const
     }
 }
 
-QString BlockVisualizationWidget::getTooltipForBlock(int height) const
+BlockVisualizationWidget::BlockStatus BlockVisualizationWidget::getDisplayStatus(int height) const
 {
-    if (height < 0 || height > m_totalBlocks) {
-        return tr("Invalid block");
-    }
-
-    // Get status from global cache
     BlockStatus status = UNKNOWN;
     auto it = m_statusCache.find(height);
     if (it != m_statusCache.end()) {
@@ -442,6 +441,24 @@ QString BlockVisualizationWidget::getTooltipForBlock(int height) const
             status = ToWidgetStatus(globalCache.getStatus(height));
         }
     }
+
+    // Always surface competing headers consistently across paint/tooltip paths.
+    try {
+        if (m_chain.hasCompetingBlocks(height)) {
+            status = COMPETING;
+        }
+    } catch (...) {
+    }
+    return status;
+}
+
+QString BlockVisualizationWidget::getTooltipForBlock(int height) const
+{
+    if (height < 0 || height > m_totalBlocks) {
+        return tr("Invalid block");
+    }
+
+    const BlockStatus status = getDisplayStatus(height);
 
     QString statusText;
     switch (status) {
@@ -479,15 +496,16 @@ QString BlockVisualizationWidget::getTooltipForBlock(int height) const
 
     QString tooltip = tr("Block %1\nStatus: %2").arg(height).arg(statusText);
 
-    // Try to get additional block information
+    // Try to get additional block information.
+    // Avoid requesting block data for header-only/pruned states, which can
+    // trigger noisy OpenBlockFile errors for blocks with no on-disk file.
     try {
         uint256 blockHash = m_chain.getBlockHash(height);
         if (!blockHash.IsNull()) {
             // Get block information using FoundBlock
             int64_t blockTime = 0;
-            CBlock blockData;
             interfaces::FoundBlock foundBlock;
-            foundBlock.time(blockTime).data(blockData);
+            foundBlock.time(blockTime);
 
             if (m_chain.findBlock(blockHash, foundBlock) && foundBlock.found) {
                 // Add timestamp
@@ -497,10 +515,15 @@ QString BlockVisualizationWidget::getTooltipForBlock(int height) const
                     tooltip += tr("\nTime: %1").arg(timeStr);
                 }
 
-                // Add block size if we have the data
-                if (!blockData.IsNull()) {
-                    size_t blockSize = ::GetSerializeSize(blockData, PROTOCOL_VERSION);
-                    tooltip += tr("\nSize: %1 bytes").arg(blockSize);
+                // Add block size only when we know block data is available.
+                if (status == HAVE_BLOCK) {
+                    CBlock blockData;
+                    interfaces::FoundBlock dataBlock;
+                    dataBlock.data(blockData);
+                    if (m_chain.findBlock(blockHash, dataBlock) && dataBlock.found && !blockData.IsNull()) {
+                        size_t blockSize = ::GetSerializeSize(blockData, PROTOCOL_VERSION);
+                        tooltip += tr("\nSize: %1 bytes").arg(blockSize);
+                    }
                 }
             }
         }
@@ -579,16 +602,7 @@ void BlockVisualizationWidget::paintEvent(QPaintEvent *event)
         QRect blockRect(x, y, m_blockWidth, m_blockHeight);
 
         // Prefer locally refreshed status, fallback to startup cache.
-        BlockStatus status = UNKNOWN;
-        auto it = m_statusCache.find(height);
-        if (it != m_statusCache.end()) {
-            status = it->second;
-        } else {
-            BlockStatusCache& globalCache = BlockStatusCache::getInstance();
-            if (globalCache.isPopulated()) {
-                status = ToWidgetStatus(globalCache.getStatus(height));
-            }
-        }
+        const BlockStatus status = getDisplayStatus(height);
 
         // Draw block with appropriate color
         painter.fillRect(blockRect, colors[static_cast<int>(status)]);

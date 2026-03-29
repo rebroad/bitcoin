@@ -106,8 +106,8 @@ public:
 
     /** Best header has changed */
     ADD_SIGNALS_DECL_WRAPPER(NotifyHeaderTip, void, SynchronizationState, const CBlockIndex*);
-    /** Block status state changed (in-flight/downloaded/pruned/etc). */
-    ADD_SIGNALS_DECL_WRAPPER(NotifyBlockStatusChanged, void, );
+    /** Block status changed; pass height >=0 for targeted update, -1 for global refresh. */
+    ADD_SIGNALS_DECL_WRAPPER(NotifyBlockStatusChanged, void, int height);
 
     /** Banlist did change. */
     ADD_SIGNALS_DECL_WRAPPER(BannedListChanged, void, void);

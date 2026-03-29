@@ -977,6 +977,7 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
     }
 
     auto [node_id, list_it] = it->second;
+    const int height = list_it->pindex ? list_it->pindex->nHeight : -1;
     CNodeState *state = State(node_id);
     assert(state != nullptr);
 
@@ -996,7 +997,7 @@ void PeerManagerImpl::RemoveBlockRequest(const uint256& hash)
     }
     state->m_stalling_since = 0us;
     mapBlocksInFlight.erase(it);
-    uiInterface.NotifyBlockStatusChanged();
+    uiInterface.NotifyBlockStatusChanged(height);
 
     if (!fPruneMode) {
         const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
@@ -1036,7 +1037,7 @@ bool PeerManagerImpl::BlockRequested(NodeId nodeid, const CBlockIndex& block, st
     }
     itInFlight = mapBlocksInFlight.insert(std::make_pair(hash, std::make_pair(nodeid, it))).first;
     if (pit) *pit = &itInFlight->second.second;
-    uiInterface.NotifyBlockStatusChanged();
+    uiInterface.NotifyBlockStatusChanged(block.nHeight);
 
     return true;
 }
@@ -1507,8 +1508,25 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
 
     int64_t DLsince = state->m_downloading_since.count() / 1000000;
     int nBlocksInFlight = state->vBlocksInFlight.size();
+    std::vector<int> lost_inflight_heights;
+    lost_inflight_heights.reserve(nBlocksInFlight);
+    const CBlockIndex* highest_lost_backfill GUARDED_BY(cs_main){nullptr};
     for (const QueuedBlock& entry : state->vBlocksInFlight) {
+        if (entry.pindex) {
+            lost_inflight_heights.push_back(entry.pindex->nHeight);
+            // In prune backfill mode, rewind the cursor to the newest lost
+            // active-chain block so disconnects don't permanently skip gaps.
+            if (fPruneMode && m_chainman.ActiveChain().Contains(entry.pindex) &&
+                !(entry.pindex->nStatus & BLOCK_HAVE_DATA) &&
+                (highest_lost_backfill == nullptr || entry.pindex->nHeight > highest_lost_backfill->nHeight)) {
+                highest_lost_backfill = entry.pindex;
+            }
+        }
         mapBlocksInFlight.erase(entry.pindex->GetBlockHash());
+    }
+    if (highest_lost_backfill &&
+        (m_backfill_cursor == nullptr || m_backfill_cursor->nHeight < highest_lost_backfill->nHeight)) {
+        m_backfill_cursor = highest_lost_backfill;
     }
     int nErasedOrphans;
     WITH_LOCK(g_cs_orphans, nErasedOrphans = m_orphanage.EraseForPeer(nodeid));
@@ -1530,7 +1548,10 @@ void PeerManagerImpl::FinalizeNode(const CNode& node)
     if (nBlocksInFlight || nErasedOrphans) {
         unsigned int nMaxOrphans = (unsigned int)std::max((int64_t)0, gArgs.GetIntArg("-maxorphantx", DEFAULT_MAX_ORPHAN_TRANSACTIONS));
         int64_t nNow = GetTime();
-        LogPrintf("%s: %s%sfDisc=%d LastRecv=%s LastSend=%s DLsince=%s peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight%s. ", nBlocksInFlight, node.nBlocksToBeProcessed ? strprintf(" (%d ToBe)", node.nBlocksToBeProcessed) : "") : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, strAge(nNow - count_seconds(node.m_last_recv)), strAge(nNow - count_seconds(node.m_last_send)), strAge(nNow - DLsince), nodeid);
+    LogPrintf("%s: %s%sfDisc=%d LastRecv=%s LastSend=%s DLsince=%s peer=%d\n", __func__, nBlocksInFlight ? strprintf("Lost %d blocks in flight%s. ", nBlocksInFlight, node.nBlocksToBeProcessed ? strprintf(" (%d ToBe)", node.nBlocksToBeProcessed) : "") : "", nErasedOrphans ? strprintf("Erased %d of %d orphans. ", nErasedOrphans, nMaxOrphans) : "", node.fDisconnect ? 1:0, strAge(nNow - count_seconds(node.m_last_recv)), strAge(nNow - count_seconds(node.m_last_send)), strAge(nNow - DLsince), nodeid);
+    for (const int height : lost_inflight_heights) {
+        uiInterface.NotifyBlockStatusChanged(height);
+    }
     }
 
     if (mapNodeState.empty()) {
@@ -1869,6 +1890,7 @@ void PeerManagerImpl::BlockConnected(const std::shared_ptr<const CBlock>& pblock
             m_txrequest.ForgetTxHash(ptx->GetWitnessHash());
         }
     }
+    uiInterface.NotifyBlockStatusChanged(pindex ? pindex->nHeight : -1);
 }
 
 void PeerManagerImpl::BlockDisconnected(const std::shared_ptr<const CBlock> &block, const CBlockIndex* pindex)
@@ -3063,14 +3085,22 @@ void PeerManagerImpl::ProcessBlock(CNode& node, const std::shared_ptr<const CBlo
 {
     bool new_block{false};
     m_chainman.ProcessNewBlock(m_chainparams, block, force_processing, &new_block);
+    int changed_height{-1};
     if (new_block) {
         node.m_last_block_time = GetTime<std::chrono::seconds>();
         LOCK(cs_main);
+        if (const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(block->GetHash())) {
+            changed_height = pindex->nHeight;
+        }
         MaybeSetPeerAsAnnouncingHeaderAndIDs(node.GetId());
     } else {
         LOCK(cs_main);
+        if (const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(block->GetHash())) {
+            changed_height = pindex->nHeight;
+        }
         mapBlockSource.erase(block->GetHash()); // Don't reward the peer for the block
     }
+    uiInterface.NotifyBlockStatusChanged(changed_height);
 }
 
 void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, CDataStream& vRecv,
