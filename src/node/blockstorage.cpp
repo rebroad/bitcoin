@@ -623,6 +623,26 @@ uint64_t BlockManager::CalculateCurrentUsage()
     return retval;
 }
 
+bool BlockManager::HasPrunableFilesNow(int chain_tip_height, int prune_height)
+{
+    LOCK2(cs_main, cs_LastBlockFile);
+    if (chain_tip_height < 0 || nPruneTarget == 0) return false;
+
+    const unsigned int nLastBlockWeCanPrune{
+        static_cast<unsigned int>(std::min(prune_height, chain_tip_height - static_cast<int>(MIN_BLOCKS_TO_KEEP)))};
+    uint64_t nCurrentUsage = CalculateCurrentUsage();
+    uint64_t nBuffer = BLOCKFILE_CHUNK_SIZE + UNDOFILE_CHUNK_SIZE;
+
+    if (nCurrentUsage + nBuffer < nPruneTarget) return false;
+
+    for (int fileNumber = 0; fileNumber < m_last_blockfile; fileNumber++) {
+        if (m_blockfile_info[fileNumber].nSize == 0) continue;
+        if (m_blockfile_info[fileNumber].nHeightLast > nLastBlockWeCanPrune) continue;
+        return true;
+    }
+    return false;
+}
+
 void UnlinkPrunedFiles(const std::set<int>& setFilesToPrune)
 {
     for (std::set<int>::iterator it = setFilesToPrune.begin(); it != setFilesToPrune.end(); ++it) {

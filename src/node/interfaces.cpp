@@ -851,6 +851,16 @@ public:
         LOCK(cs_main);
         return node::fPruneMode;
     }
+    bool hasPrunableBlockFilesNow() override
+    {
+        LOCK(cs_main);
+        if (!m_node.chainman || !node::fPruneMode) return false;
+        const CChain& active = m_node.chainman->ActiveChain();
+        const CBlockIndex* tip = active.Tip();
+        if (!tip) return false;
+        const int prune_height = tip->nHeight;
+        return m_node.chainman->m_blockman.HasPrunableFilesNow(tip->nHeight, prune_height);
+    }
     bool shouldBackfillHistoricalBlocks() override
     {
         LOCK(cs_main);

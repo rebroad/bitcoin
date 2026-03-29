@@ -156,6 +156,8 @@ public:
 
     /** Calculate the amount of disk space the block & undo files currently use */
     uint64_t CalculateCurrentUsage();
+    /** Return whether any whole blk/rev file is currently eligible for pruning. */
+    bool HasPrunableFilesNow(int chain_tip_height, int prune_height) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     void SetCheckForPruning() EXCLUSIVE_LOCKS_REQUIRED(cs_main)
     {

@@ -228,6 +228,8 @@ public:
     virtual uint64_t pruneTargetBytes() = 0;
     //! Whether prune mode is currently enabled.
     virtual bool pruneModeEnabled() = 0;
+    //! Return whether there are currently whole block/rev files eligible for pruning.
+    virtual bool hasPrunableBlockFilesNow() = 0;
     //! Return whether historical backfill is currently active (missing blocks should be downloaded).
     virtual bool shouldBackfillHistoricalBlocks() = 0;
     //! Return whether an active-chain height is expected to be fetched by historical backfill.

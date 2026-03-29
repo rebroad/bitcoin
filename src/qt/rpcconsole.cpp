@@ -1816,6 +1816,7 @@ void RPCConsole::updateLegend()
     const bool prune_mode = m_chain.pruneModeEnabled();
     const uint64_t usage_bytes = m_chain.currentBlockDataUsage();
     const uint64_t target_bytes = m_chain.pruneTargetBytes();
+    const bool has_prunable_files = m_chain.hasPrunableBlockFilesNow();
     const auto to_mib = [](uint64_t bytes) -> uint64_t { return bytes / 1024 / 1024; };
     const int queued_cached = m_blockVisualizationWidget ?
         m_blockVisualizationWidget->countCachedBlocksByStatus(BlockVisualizationWidget::TO_BE_DOWNLOADED) : 0;
@@ -1823,26 +1824,27 @@ void RPCConsole::updateLegend()
         m_blockVisualizationWidget->countCachedBlocksByStatus(BlockVisualizationWidget::IN_FLIGHT) : 0;
     legendText += "<br/><b>Prune:</b> ";
     if (!prune_mode) {
-        legendText += QString("prune=0 (disabled) therefore DISABLED (in_flight=%1)").arg(in_flight_cached);
+        legendText += "prune=0 (disabled)";
     } else if (target_bytes == std::numeric_limits<uint64_t>::max() || target_bytes == 0) {
-        legendText += QString("prune=1/manual therefore MANUAL (in_flight=%1)").arg(in_flight_cached);
+        legendText += "prune=1/manual";
     } else if (usage_bytes < target_bytes) {
-        legendText += QString("Block_usage=%1 < prune=%2 therefore backfilling (in_flight=%3)")
+        legendText += QString("Block_usage=%1 < prune=%2 backfilling (in_flight=%3)")
                           .arg(to_mib(usage_bytes))
                           .arg(to_mib(target_bytes))
                           .arg(in_flight_cached);
+        legendText += QString(" (to_download=%1)").arg(queued_cached);
     } else if (usage_bytes > target_bytes) {
-        legendText += QString("Block_usage=%1 > prune=%2 therefore pruning (in_flight=%3)")
+        legendText += QString("Block_usage=%1 > prune=%2")
                           .arg(to_mib(usage_bytes))
-                          .arg(to_mib(target_bytes))
-                          .arg(in_flight_cached);
+                          .arg(to_mib(target_bytes));
+        if (!has_prunable_files) {
+            legendText += " (no whole prunable blk/rev files yet)";
+        }
     } else {
-        legendText += QString("Block_usage=%1 = prune=%2 therefore balanced (in_flight=%3)")
+        legendText += QString("Block_usage=%1 = prune=%2")
                           .arg(to_mib(usage_bytes))
-                          .arg(to_mib(target_bytes))
-                          .arg(in_flight_cached);
+                          .arg(to_mib(target_bytes));
     }
-    legendText += QString(" (to_download=%1)").arg(queued_cached);
     legendText += "</body></html>";
 
     ui->legendLabel->setText(legendText);

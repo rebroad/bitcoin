@@ -44,6 +44,8 @@ using node::NodeContext;
 static std::optional<std::string> ApplyRuntimePruneSetting(const JSONRPCRequest& request)
 {
     ArgsManager& args{EnsureAnyArgsman(request.context)};
+    const uint64_t old_prune_target = node::nPruneTarget;
+    const bool old_prune_mode = node::fPruneMode;
     const int64_t prune_arg{args.GetIntArg("-prune", 0)};
     if (prune_arg < 0) {
         return std::string{"Prune cannot be configured with a negative value."};
@@ -73,7 +75,18 @@ static std::optional<std::string> ApplyRuntimePruneSetting(const JSONRPCRequest&
 
     node::nPruneTarget = prune_target;
     node::fPruneMode = prune_mode;
-    EnsurePeerman(EnsureAnyNodeContext(request.context)).SetPruneMode(prune_mode);
+    NodeContext& node_context = EnsureAnyNodeContext(request.context);
+    EnsurePeerman(node_context).SetPruneMode(prune_mode);
+
+    // If target is lowered at runtime, trigger an immediate prune pass.
+    const bool automatic_old = old_prune_mode && old_prune_target > 0 &&
+                               old_prune_target != std::numeric_limits<uint64_t>::max();
+    const bool automatic_new = prune_mode && prune_target > 0 &&
+                               prune_target != std::numeric_limits<uint64_t>::max();
+    if (automatic_old && automatic_new && prune_target < old_prune_target && node_context.chainman) {
+        WITH_LOCK(cs_main, node_context.chainman->m_blockman.SetCheckForPruning());
+        node_context.chainman->ActiveChainstate().ForceFlushStateToDisk();
+    }
     return std::nullopt;
 }
 
