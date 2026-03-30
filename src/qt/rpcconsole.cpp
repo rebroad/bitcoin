@@ -23,6 +23,7 @@
 #include <qt/walletmodel.h>
 #include <rpc/client.h>
 #include <rpc/server.h>
+#include <logging.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/system.h>
@@ -42,6 +43,7 @@
 #include <QAbstractItemModel>
 #include <QCursor>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QFontDatabase>
 #include <QKeyEvent>
@@ -710,6 +712,10 @@ RPCConsole::RPCConsole(interfaces::Node& node, interfaces::Chain& chain, const P
     connect(ui->fontBiggerButton, &QAbstractButton::clicked, this, &RPCConsole::fontBigger);
     connect(ui->fontSmallerButton, &QAbstractButton::clicked, this, &RPCConsole::fontSmaller);
 
+    m_blocks_display_timer = new QTimer(this);
+    m_blocks_display_timer->setSingleShot(true);
+    connect(m_blocks_display_timer, &QTimer::timeout, this, &RPCConsole::updateBlocksDisplay);
+
     // Setup block visualization widget (but don't load data yet)
     setupBlockVisualizationWidget();
 
@@ -823,23 +829,33 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         setNumBlocks(bestblock_height, QDateTime::fromSecsSinceEpoch(bestblock_date), verification_progress, false);
         connect(model, &ClientModel::numBlocksChanged, this, &RPCConsole::setNumBlocks);
 
-        // Connect to blockchain updates for automatic block visualization updates
-        connect(model, &ClientModel::numBlocksChanged, this, &RPCConsole::updateBlocksDisplay);
+        // Connect to blockchain updates for automatic block visualization updates.
+        // Coalesce updates to avoid saturating the GUI thread during IBD.
+        connect(model, &ClientModel::numBlocksChanged, this, [this] {
+            scheduleBlocksDisplayUpdate();
+        });
 
         // Also update on mempool changes (which can indicate reorgs or new blocks)
-        connect(model, &ClientModel::mempoolSizeChanged, this, &RPCConsole::updateBlocksDisplay);
+        connect(model, &ClientModel::mempoolSizeChanged, this, [this] {
+            scheduleBlocksDisplayUpdate();
+        });
         connect(model, &ClientModel::blockStatusChanged, this, [this](int height) {
-            if (m_blockVisualizationWidget) {
-                if (height >= 0) m_blockVisualizationWidget->refreshBlockStatus(height);
-                else m_blockVisualizationWidget->refreshVisibleStatuses();
+            if (shouldRefreshBlockVisualization() && m_blockVisualizationWidget) {
+                if (height >= 0) {
+                    m_blockVisualizationWidget->refreshBlockStatus(height);
+                } else {
+                    m_blockVisualizationWidget->refreshVisibleStatuses();
+                }
+                updateLegend();
+                return;
             }
-            updateLegend();
+            m_blocks_display_dirty = true;
         });
 
         // Update on header tip changes (for new headers)
         connect(model, &ClientModel::numBlocksChanged, this, [this](int count, const QDateTime& blockDate, double nVerificationProgress, bool header, SynchronizationState sync_state) {
             if (header) {
-                updateBlocksDisplay();
+                scheduleBlocksDisplayUpdate();
             }
         });
 
@@ -1359,10 +1375,7 @@ void RPCConsole::on_tabWidget_currentChanged(int index)
         // Load block data only when the blocks tab is actually selected.
         // Defer work to keep the GUI thread responsive on tab switch.
         QTimer::singleShot(0, this, [this] {
-            if (ui->tabWidget->currentWidget() == ui->tab_blocks &&
-                m_blockVisualizationWidget && !m_blockVisualizationWidget->isDataLoaded()) {
-                m_blockVisualizationWidget->updateBlockData();
-            }
+            scheduleBlocksDisplayUpdate(/*delay_ms=*/0);
             if (QScrollBar* vbar = ui->blockVisualizationScrollArea->verticalScrollBar()) {
                 vbar->setValue(vbar->maximum());
                 m_block_view_initial_scroll_done = true;
@@ -1528,6 +1541,10 @@ void RPCConsole::showEvent(QShowEvent *event)
 
     // start PeerTableModel auto refresh
     clientModel->getPeerTableModel()->startAutoRefresh();
+
+    if (m_blocks_display_dirty && shouldRefreshBlockVisualization()) {
+        scheduleBlocksDisplayUpdate(/*delay_ms=*/0);
+    }
 }
 
 void RPCConsole::hideEvent(QHideEvent *event)
@@ -1538,6 +1555,10 @@ void RPCConsole::hideEvent(QHideEvent *event)
     m_banlist_widget_header_state = ui->banlistWidget->horizontalHeader()->saveState();
 
     QWidget::hideEvent(event);
+
+    if (m_blocks_display_timer && m_blocks_display_timer->isActive()) {
+        m_blocks_display_timer->stop();
+    }
 
     if (!clientModel || !clientModel->getPeerTableModel())
         return;
@@ -1791,18 +1812,44 @@ void RPCConsole::setupBlockVisualizationWidget()
 
 void RPCConsole::updateBlocksDisplay()
 {
-    if (!clientModel)
+    if (!clientModel || !m_blockVisualizationWidget)
+        return;
+    if (!shouldRefreshBlockVisualization())
         return;
 
-    // Update the block visualization widget
-    if (m_blockVisualizationWidget) {
-        m_blockVisualizationWidget->updateBlockData();
-        // Force a repaint to ensure the display updates
-        m_blockVisualizationWidget->update();
+    m_blocks_display_dirty = false;
+    QElapsedTimer timer;
+    timer.start();
+
+    m_blockVisualizationWidget->updateBlockData();
+    // Force a repaint to ensure the display updates.
+    m_blockVisualizationWidget->update();
+    updateLegend();
+
+    const qint64 elapsed_ms = timer.elapsed();
+    if (elapsed_ms > 25) {
+        LogPrint(BCLog::QT, "RPCConsole::updateBlocksDisplay took %d ms\n", static_cast<int>(elapsed_ms));
+    }
+}
+
+bool RPCConsole::shouldRefreshBlockVisualization() const
+{
+    return isVisible() &&
+           ui->tabWidget->currentWidget() == ui->tab_blocks &&
+           m_blockVisualizationWidget != nullptr;
+}
+
+void RPCConsole::scheduleBlocksDisplayUpdate(int delay_ms)
+{
+    m_blocks_display_dirty = true;
+    if (!shouldRefreshBlockVisualization() || !m_blocks_display_timer) {
+        return;
     }
 
-    // Update the legend
-    updateLegend();
+    const int delay = std::max(0, delay_ms);
+    if (!m_blocks_display_timer->isActive() || m_blocks_display_timer->remainingTime() > delay) {
+        m_blocks_display_timer->start(delay);
+    }
 }
 
 void RPCConsole::updateLegend()

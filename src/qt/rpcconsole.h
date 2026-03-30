@@ -35,6 +35,7 @@ QT_BEGIN_NAMESPACE
 class QDateTime;
 class QMenu;
 class QItemSelection;
+class QTimer;
 QT_END_NAMESPACE
 
 /** Local Bitcoin RPC console. */
@@ -108,6 +109,8 @@ private Q_SLOTS:
     void updateDetailWidget();
     /** update blocks information display */
     void updateBlocksDisplay();
+    /** schedule a coalesced blocks tab refresh */
+    void scheduleBlocksDisplayUpdate(int delay_ms = 75);
     /** create and setup the block visualization widget */
     void setupBlockVisualizationWidget();
     /** update the legend display */
@@ -195,9 +198,13 @@ private:
     bool m_slider_in_use{false};
     int m_set_slider_value{0};
     bool m_block_view_initial_scroll_done{false};
+    bool m_blocks_display_dirty{false};
+    QTimer* m_blocks_display_timer{nullptr};
 
     /** Update UI with latest network info from model. */
     void updateNetworkState();
+    /** True when blocks tab work should run on this widget right now. */
+    bool shouldRefreshBlockVisualization() const;
 
     /** Helper for the output of a time duration field. Inputs are UNIX epoch times. */
     QString TimeDurationField(std::chrono::seconds time_now, std::chrono::seconds time_at_event) const

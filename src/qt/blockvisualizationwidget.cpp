@@ -424,14 +424,6 @@ BlockVisualizationWidget::BlockStatus BlockVisualizationWidget::getDisplayStatus
             status = ToWidgetStatus(globalCache.getStatus(height));
         }
     }
-
-    // Always surface competing headers consistently across paint/tooltip paths.
-    try {
-        if (m_chain.hasCompetingBlocks(height)) {
-            status = COMPETING;
-        }
-    } catch (...) {
-    }
     return status;
 }
 
