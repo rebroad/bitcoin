@@ -70,14 +70,14 @@ void DumpAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& a
 std::vector<CAddress> ReadAnchors(const fs::path& anchors_db_path);
 
 /**
- * Dump IBD anchor peers (IBDanchors.dat).
+ * Dump block anchor peers (blkanchors.dat).
  *
- * These are outbound peers observed to be high-throughput during IBD and are
- * preferred on the next restart while still in IBD.
+ * These are outbound peers observed to be high-throughput for block download
+ * and can be reused for IBD and historical backfill.
  */
-void DumpIBDAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& anchors);
+void DumpBlockAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& anchors);
 
-/** Read IBD anchor peers (IBDanchors.dat). */
-std::vector<CAddress> ReadIBDAnchors(const fs::path& anchors_db_path);
+/** Read block anchor peers (blkanchors.dat). */
+std::vector<CAddress> ReadBlockAnchors(const fs::path& anchors_db_path);
 
 #endif // BITCOIN_ADDRDB_H

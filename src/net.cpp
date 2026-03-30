@@ -65,12 +65,14 @@
 #include <math.h>
 
 /** Maximum number of block-relay-only anchor connections */
-static constexpr size_t MAX_BLOCK_RELAY_ONLY_ANCHORS = 0;
+static constexpr size_t MAX_BLOCK_RELAY_ONLY_ANCHORS = 2;
 static_assert (MAX_BLOCK_RELAY_ONLY_ANCHORS <= static_cast<size_t>(MAX_BLOCK_RELAY_ONLY_CONNECTIONS), "MAX_BLOCK_RELAY_ONLY_ANCHORS must not exceed MAX_BLOCK_RELAY_ONLY_CONNECTIONS.");
 /** Anchor IP address database file name */
 const char* const ANCHORS_DATABASE_FILENAME = "txanchors.dat";
-/** IBD anchor IP address database file name */
-const char* const IBD_ANCHORS_DATABASE_FILENAME = "IBDanchors.dat";
+/** Block anchor IP address database file name */
+const char* const BLOCK_ANCHORS_DATABASE_FILENAME = "blkanchors.dat";
+/** Legacy IBD anchor IP address database file name (read fallback only). */
+const char* const LEGACY_IBD_ANCHORS_DATABASE_FILENAME = "IBDanchors.dat";
 
 static constexpr int64_t IBD_SPEED_MEASUREMENT_WINDOW{180};   // 3 minutes
 static constexpr int64_t IBD_SLOW_PEER_DISCONNECT_DELAY{180}; // 3 minutes
@@ -1711,14 +1713,16 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     static int64_t ibd_calibration_started{0};
     static int ibd_max_full_outbound{0};
     static int ibd_target_peers{0};
-    static int64_t ibd_last_dump{0};
-    static std::vector<CAddress> ibd_last_dumped;
+    static int64_t blk_anchor_last_dump{0};
+    static std::vector<CAddress> blk_anchor_last_dumped;
     std::unordered_map<NodeId, uint64_t> ibd_block_bytes_now;
-    std::unordered_map<NodeId, CAddress> ibd_addrs;
     std::unordered_set<NodeId> full_outbound_ids;
     const bool use_peer_stats_snapshots{gArgs.GetBoolArg("-peerstatssnapshots", false)};
     if (now != lastnow) {
         m_max_outbound_full_relay = std::min(nMaxConnections, (int)gArgs.GetIntArg("-maxoutboundrelay", MAX_OUTBOUND_FULL_RELAY_CONNECTIONS));
+        m_max_outbound_block_relay = std::clamp<int>(
+            gArgs.GetIntArg("-blockrelaypeers", MAX_BLOCK_RELAY_ONLY_CONNECTIONS),
+            0, std::max(0, nMaxConnections - m_max_outbound_full_relay));
         m_max_outbound = m_max_outbound_full_relay + m_max_outbound_block_relay + nMaxFeeler;
         for (CNode* pnode : nodes) {
             uint64_t nRecvBytes;
@@ -1750,7 +1754,6 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             if (pnode->IsFullOutboundConn()) {
                 full_outbound_ids.insert(pnode->GetId());
                 ibd_block_bytes_now.emplace(pnode->GetId(), pnode->nBlockBytes);
-                ibd_addrs.emplace(pnode->GetId(), pnode->addr);
                 nTotalBytesRecv += nRecvBytesInterval;
                 nTotalMempoolBytes += nMempoolBytes;
                 latestNode = pnode->GetId();
@@ -1783,6 +1786,41 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 }
             } else if (pnode->IsBlockOnlyConn()) nOutboundBlockRelay++;
         } // for (CNode* pnode : nodes)
+
+        // Rank block-relay-only peers by observed block download throughput and
+        // persist top candidates for future block-focused anchor selection.
+        if (m_collect_block_anchors && m_max_outbound_block_relay > 0) {
+            std::vector<std::pair<double, CAddress>> ranked_block_relays;
+            ranked_block_relays.reserve(nodes.size());
+            for (CNode* pnode : nodes) {
+                if (!pnode->IsBlockOnlyConn() || pnode->fDisconnect) continue;
+                const int64_t connected_since = count_seconds(pnode->m_connected);
+                int64_t interval_start = connected_since;
+                uint64_t block_bytes = pnode->nBlockBytes;
+                if (use_peer_stats_snapshots && pnode->nTimeSnapOld > 0 && pnode->nBlockBytes >= pnode->nBlockBytesSnapOld) {
+                    interval_start = pnode->nTimeSnapOld;
+                    block_bytes = pnode->nBlockBytes - pnode->nBlockBytesSnapOld;
+                }
+                if (now <= interval_start) continue;
+                const double block_bps = static_cast<double>(block_bytes) / static_cast<double>(now - interval_start);
+                if (block_bps <= 0.0) continue;
+                ranked_block_relays.emplace_back(block_bps, pnode->addr);
+            }
+
+            const bool dump_due = blk_anchor_last_dump == 0 || now - blk_anchor_last_dump >= IBD_ANCHOR_DUMP_INTERVAL;
+            if (dump_due && static_cast<int>(ranked_block_relays.size()) >= m_max_outbound_block_relay) {
+                std::sort(ranked_block_relays.begin(), ranked_block_relays.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+                std::vector<CAddress> block_anchors_to_dump;
+                for (size_t i = 0; i < ranked_block_relays.size() && static_cast<int>(i) < m_max_outbound_block_relay; ++i) {
+                    block_anchors_to_dump.push_back(ranked_block_relays[i].second);
+                }
+                if (!block_anchors_to_dump.empty() && block_anchors_to_dump != blk_anchor_last_dumped) {
+                    DumpBlockAnchors(gArgs.GetDataDirNet() / BLOCK_ANCHORS_DATABASE_FILENAME, block_anchors_to_dump);
+                    blk_anchor_last_dumped = block_anchors_to_dump;
+                }
+                blk_anchor_last_dump = now;
+            }
+        }
         if (nPeersIBD == 0 && IsIBD) {
             tIBDEnded = now;
             latestOutboundConn = now;
@@ -1870,34 +1908,12 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 }
             }
 
-            const int snapshot_target = ibd_target_peers > 0 ? ibd_target_peers : std::clamp(ibd_max_full_outbound, 2, max_target_peers);
-            if (snapshot_target > 0 && static_cast<int>(ibd_peer_bps.size()) >= snapshot_target && (ibd_last_dump == 0 || now - ibd_last_dump >= IBD_ANCHOR_DUMP_INTERVAL)) {
-                std::vector<std::pair<double, CAddress>> ranked;
-                ranked.reserve(ibd_peer_bps.size());
-                for (const auto& [node_id, bps] : ibd_peer_bps) {
-                    const auto addr_it = ibd_addrs.find(node_id);
-                    if (addr_it != ibd_addrs.end()) ranked.emplace_back(bps, addr_it->second);
-                }
-                std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
-
-                std::vector<CAddress> ibd_anchors_to_dump;
-                for (size_t i = 0; i < ranked.size() && static_cast<int>(i) < snapshot_target; ++i) {
-                    ibd_anchors_to_dump.push_back(ranked[i].second);
-                }
-
-                if (!ibd_anchors_to_dump.empty() && ibd_anchors_to_dump != ibd_last_dumped) {
-                    DumpIBDAnchors(gArgs.GetDataDirNet() / IBD_ANCHORS_DATABASE_FILENAME, ibd_anchors_to_dump);
-                    ibd_last_dumped = ibd_anchors_to_dump;
-                }
-                ibd_last_dump = now;
-            }
         } else {
             ibd_block_samples.clear();
             ibd_slow_since.clear();
             ibd_calibration_started = 0;
             ibd_max_full_outbound = 0;
             ibd_target_peers = 0;
-            ibd_last_dump = 0;
         }
     } // if (now != lastnow)
 
@@ -2269,18 +2285,9 @@ bool CConnman::GetTryNewOutboundPeer() const
     return m_try_another_outbound_peer;
 }
 
-void CConnman::SetHistoricalBackfillBlockRelayPeers(int peers)
+void CConnman::SetBlockAnchorCollectionActive(bool active)
 {
-    const int clamped = std::max(0, peers);
-    const int old = m_historical_backfill_block_relay_peers.exchange(clamped);
-    if (old != clamped) {
-        LogPrint(BCLog::CONN, "net: set historical backfill block-relay peers=%d\n", clamped);
-    }
-}
-
-int CConnman::GetHistoricalBackfillBlockRelayPeers() const
-{
-    return m_historical_backfill_block_relay_peers.load();
+    m_collect_block_anchors = active;
 }
 
 void CConnman::SetTryNewOutboundPeer(bool flag)
@@ -2298,7 +2305,7 @@ void CConnman::SetTryNewOutboundPeer(bool flag)
 int CConnman::GetExtraFullOutboundCount() const
 {
     int full_outbound_peers = 0;
-    const int full_target = std::max(1, m_max_outbound_full_relay - GetHistoricalBackfillBlockRelayPeers());
+    const int full_target = std::max(1, m_max_outbound_full_relay);
     {
         LOCK(m_nodes_mutex);
         for (const CNode* pnode : m_nodes) {
@@ -2313,7 +2320,7 @@ int CConnman::GetExtraFullOutboundCount() const
 int CConnman::GetExtraBlockRelayCount() const
 {
     int block_relay_peers = 0;
-    const int block_relay_target = m_max_outbound_block_relay + GetHistoricalBackfillBlockRelayPeers();
+    const int block_relay_target = m_max_outbound_block_relay;
     {
         LOCK(m_nodes_mutex);
         for (const CNode* pnode : m_nodes) {
@@ -2445,9 +2452,8 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             stale_tip_no_outbound_mode = false;
         }
         const bool in_ibd_anchor_mode = nPeersIBD > 0 || stale_tip_no_outbound_mode;
-        const int historical_backfill_block_relay = GetHistoricalBackfillBlockRelayPeers();
-        const int full_relay_target = std::max(1, m_max_outbound_full_relay - historical_backfill_block_relay);
-        const int block_relay_target = m_max_outbound_block_relay + historical_backfill_block_relay;
+        const int full_relay_target = std::max(1, m_max_outbound_full_relay);
+        const int block_relay_target = m_max_outbound_block_relay;
 
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
         auto now = GetTime<std::chrono::microseconds>();
@@ -2468,10 +2474,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         // block-relay-only peer (to confirm our tip is current, see below) or the next_feeler
         // timer to decide if we should open a FEELER.
 
-        if (!m_anchors.empty()) {
-            if (anchor < block_relay_target)
-                conn_type = ConnectionType::BLOCK_RELAY;
-        } else if (nOutboundBlockRelay < block_relay_target) {
+        if ((!m_anchors.empty() && anchor < block_relay_target) || nOutboundBlockRelay < block_relay_target) {
             conn_type = ConnectionType::BLOCK_RELAY;
         } else if (nOutboundFullRelay < full_relay_target) {
             // OUTBOUND_FULL_RELAY
@@ -2516,7 +2519,10 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         int nTries = 0;
         static bool was_in_ibd_anchor_mode{true};
         if (!in_ibd_anchor_mode && was_in_ibd_anchor_mode && !m_anchors.empty()) {
-            const std::vector<CAddress> ibd_anchors_on_disk = ReadIBDAnchors(gArgs.GetDataDirNet() / IBD_ANCHORS_DATABASE_FILENAME);
+            std::vector<CAddress> ibd_anchors_on_disk = ReadBlockAnchors(gArgs.GetDataDirNet() / BLOCK_ANCHORS_DATABASE_FILENAME);
+            if (ibd_anchors_on_disk.empty()) {
+                ibd_anchors_on_disk = ReadBlockAnchors(gArgs.GetDataDirNet() / LEGACY_IBD_ANCHORS_DATABASE_FILENAME);
+            }
             if (!ibd_anchors_on_disk.empty()) {
                 const std::set<CAddress> ibd_anchor_set(ibd_anchors_on_disk.begin(), ibd_anchors_on_disk.end());
                 const size_t before = m_anchors.size();
@@ -2612,7 +2618,10 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
                     if (stale_tip_no_outbound_mode) {
                         LogPrintf("Using IBD anchors: tip block age=%ds and outbound count is zero\n", tip_block_age);
                     }
-                    std::vector<CAddress> ibd_anchors = ReadIBDAnchors(gArgs.GetDataDirNet() / IBD_ANCHORS_DATABASE_FILENAME);
+                    std::vector<CAddress> ibd_anchors = ReadBlockAnchors(gArgs.GetDataDirNet() / BLOCK_ANCHORS_DATABASE_FILENAME);
+                    if (ibd_anchors.empty()) {
+                        ibd_anchors = ReadBlockAnchors(gArgs.GetDataDirNet() / LEGACY_IBD_ANCHORS_DATABASE_FILENAME);
+                    }
                     for (auto it = ibd_anchors.rbegin(); it != ibd_anchors.rend(); ++it) {
                         m_anchors.push_back(*it);
                     }

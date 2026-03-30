@@ -60,11 +60,11 @@ static const unsigned int MAX_PROTOCOL_MESSAGE_LENGTH = 4 * 1000 * 1000;
 /** Maximum length of the user agent string in `version` message */
 static const unsigned int MAX_SUBVERSION_LENGTH = 256;
 /** Maximum number of automatic outgoing nodes over which we'll relay everything (blocks, tx, addrs, etc) */
-static const int MAX_OUTBOUND_FULL_RELAY_CONNECTIONS = 10;
+static const int MAX_OUTBOUND_FULL_RELAY_CONNECTIONS = 8;
 /** Maximum number of addnode outgoing nodes */
 static const int MAX_ADDNODE_CONNECTIONS = 8;
 /** Maximum number of block-relay-only outgoing connections */
-static const int MAX_BLOCK_RELAY_ONLY_CONNECTIONS = 0;
+static const int MAX_BLOCK_RELAY_ONLY_CONNECTIONS = 2;
 /** Maximum number of feeler connections */
 static const int MAX_FEELER_CONNECTIONS = 1;
 /** -listen default */
@@ -948,9 +948,7 @@ public:
     // a peer that is better than all our current peers.
     void SetTryNewOutboundPeer(bool flag);
     bool GetTryNewOutboundPeer() const;
-    void SetHistoricalBackfillBlockRelayPeers(int peers);
-    int GetHistoricalBackfillBlockRelayPeers() const;
-
+    void SetBlockAnchorCollectionActive(bool active);
     void StartExtraBlockRelayPeers() {
         LogPrint(BCLog::NET, "net: enabling extra block-relay-only peers\n");
         m_start_extra_block_relay_peers = true;
@@ -1313,9 +1311,8 @@ private:
      *  as these connections are intended to be short-lived and low-bandwidth.
      */
     std::atomic_bool m_start_extra_block_relay_peers{false};
-    /** Additional block-relay peers reserved while historical prune backfill is active. */
-    std::atomic<int> m_historical_backfill_block_relay_peers{0};
-
+    /** Whether block anchor throughput sampling/dumping is currently active. */
+    std::atomic_bool m_collect_block_anchors{false};
     /**
      * A vector of -bind=<address>:<port>=onion arguments each of which is
      * an address and port that are designated for incoming Tor connections.

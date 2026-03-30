@@ -112,8 +112,6 @@ static constexpr auto GETDATA_TX_INTERVAL{60s};
 static const unsigned int MAX_GETDATA_SZ = 1000;
 /** Number of blocks that can be requested at any given time from a single peer. */
 static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 16;
-/** Default dedicated block-relay peers reserved for historical prune backfill. */
-static constexpr int DEFAULT_HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS = 2;
 /** Default per-peer backfill in-flight target, in MiB, used with rolling average block size. */
 static constexpr int DEFAULT_HISTORICAL_BACKFILL_INFLIGHT_MIB = 24;
 /** Time during which a peer must stall block download progress before being disconnected. */
@@ -676,8 +674,6 @@ private:
     uint64_t m_last_seen_prune_event GUARDED_BY(cs_main){0};
     /** Last prune target for which backfill latch state was evaluated. */
     uint64_t m_backfill_setting_target GUARDED_BY(cs_main){0};
-    /** Runtime-configured number of dedicated block-relay peers for backfill. */
-    int m_backfill_block_relay_peers GUARDED_BY(cs_main){DEFAULT_HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS};
     /** Runtime-configured target in-flight bytes for backfill block requests, per peer. */
     uint64_t m_backfill_target_inflight_bytes GUARDED_BY(cs_main){static_cast<uint64_t>(DEFAULT_HISTORICAL_BACKFILL_INFLIGHT_MIB) * 1024 * 1024};
     /** Rolling average block size used to convert backfill byte target into block count. */
@@ -1357,7 +1353,6 @@ bool PeerManagerImpl::IsHistoricalBackfillActive()
     if (prune_events != m_last_seen_prune_event) {
         m_last_seen_prune_event = prune_events;
         m_backfill_paused_by_prune = true;
-        m_connman.SetHistoricalBackfillBlockRelayPeers(0);
         EvictExtraOutboundPeers(GetTime<std::chrono::seconds>());
         LogPrint(BCLog::PRUNE, "Backfill paused after prune event; waiting for prune setting change\n");
     }
@@ -1369,13 +1364,6 @@ bool PeerManagerImpl::IsHistoricalBackfillActive()
 void PeerManagerImpl::RefreshBackfillRuntimeSettings()
 {
     AssertLockHeld(cs_main);
-
-    const int64_t configured_peers = gArgs.GetIntArg("-historicalbackfillblockrelaypeers", DEFAULT_HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS);
-    const int clamped_peers = std::max<int64_t>(0, configured_peers);
-    if (clamped_peers != m_backfill_block_relay_peers) {
-        m_backfill_block_relay_peers = clamped_peers;
-        LogPrint(BCLog::CONN, "net: runtime historical backfill block-relay peers=%d\n", m_backfill_block_relay_peers);
-    }
 
     const int64_t configured_mib = gArgs.GetIntArg("-historicalbackfillinflightmib", DEFAULT_HISTORICAL_BACKFILL_INFLIGHT_MIB);
     const uint64_t clamped_mib = std::max<int64_t>(1, configured_mib);
@@ -1870,9 +1858,8 @@ void PeerManagerImpl::SetPruneMode(bool prune_mode)
     LOCK(cs_main);
     fPruneMode = prune_mode;
     RefreshBackfillRuntimeSettings();
-    const bool historical_backfill_active = IsHistoricalBackfillActive();
-    m_connman.SetHistoricalBackfillBlockRelayPeers(
-        historical_backfill_active ? m_backfill_block_relay_peers : 0);
+    m_connman.SetBlockAnchorCollectionActive(
+        m_chainman.ActiveChainstate().IsInitialBlockDownload() || IsHistoricalBackfillActive());
     if (fPruneMode) {
         m_backfill_cursor = nullptr;
         m_chainman.m_blockman.SetCheckForPruning();
@@ -5112,49 +5099,46 @@ void PeerManagerImpl::ConsiderEviction(CNode& pto, std::chrono::seconds time_in_
 
 void PeerManagerImpl::EvictExtraOutboundPeers(std::chrono::seconds now)
 {
-    // If we have any extra block-relay-only peers, disconnect the youngest unless
-    // it's given us a block -- in which case, compare with the second-youngest, and
-    // out of those two, disconnect the peer who least recently gave us a block.
-    // The youngest block-relay-only peer would be the extra peer we connected
-    // to temporarily in order to sync our tip; see net.cpp.
-    // Note that we use higher nodeid as a measure for most recent connection.
+    // If we have extra block-relay-only peers, disconnect the slowest one by
+    // observed block download throughput. Never evict peers that still have
+    // blocks in flight.
     if (m_connman.GetExtraBlockRelayCount() > 0) {
-        std::pair<NodeId, std::chrono::seconds> youngest_peer{-1, 0}, next_youngest_peer{-1, 0};
-
+        NodeId to_disconnect{-1};
+        double slowest_bps{std::numeric_limits<double>::infinity()};
         m_connman.ForEachNode([&](CNode* pnode) {
             if (!pnode->IsBlockOnlyConn() || pnode->fDisconnect) return;
-            if (pnode->GetId() > youngest_peer.first) {
-                next_youngest_peer = youngest_peer;
-                youngest_peer.first = pnode->GetId();
-                youngest_peer.second = pnode->m_last_block_time;
+            CNodeState* node_state = State(pnode->GetId());
+            if (node_state == nullptr) return;
+            if (now - pnode->m_connected < MINIMUM_CONNECT_TIME) return;
+            if (node_state->nBlocksInFlight != 0) return;
+
+            int64_t interval_start = count_seconds(pnode->m_connected);
+            uint64_t block_bytes = pnode->nBlockBytes;
+            if (pnode->nTimeSnapOld > 0 && pnode->nBlockBytes >= pnode->nBlockBytesSnapOld) {
+                interval_start = pnode->nTimeSnapOld;
+                block_bytes = pnode->nBlockBytes - pnode->nBlockBytesSnapOld;
+            }
+            if (count_seconds(now) <= interval_start) return;
+            const double block_bps = static_cast<double>(block_bytes) / static_cast<double>(count_seconds(now) - interval_start);
+            if (block_bps < slowest_bps || (block_bps == slowest_bps && pnode->GetId() > to_disconnect)) {
+                slowest_bps = block_bps;
+                to_disconnect = pnode->GetId();
             }
         });
-        NodeId to_disconnect = youngest_peer.first;
-        if (youngest_peer.second > next_youngest_peer.second) {
-            // Our newest block-relay-only peer gave us a block more recently;
-            // disconnect our second youngest.
-            to_disconnect = next_youngest_peer.first;
+
+        if (to_disconnect != -1) {
+            m_connman.ForNode(to_disconnect, [&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
+                AssertLockHeld(::cs_main);
+                CNodeState* node_state = State(pnode->GetId());
+                if (node_state && node_state->nBlocksInFlight == 0) {
+                    pnode->fDisconnect = true;
+                    LogPrintf("disconnecting extra block-relay-only peer=%d (throughput=%sB/s)\n",
+                              pnode->GetId(), strprintf("%.2f", slowest_bps));
+                    return true;
+                }
+                return false;
+            });
         }
-        m_connman.ForNode(to_disconnect, [&](CNode* pnode) EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
-            AssertLockHeld(::cs_main);
-            // Make sure we're not getting a block right now, and that
-            // we've been connected long enough for this eviction to happen
-            // at all.
-            // Note that we only request blocks from a peer if we learn of a
-            // valid headers chain with at least as much work as our tip.
-            CNodeState *node_state = State(pnode->GetId());
-            if (node_state == nullptr ||
-                (now - pnode->m_connected >= MINIMUM_CONNECT_TIME && node_state->nBlocksInFlight == 0)) {
-                pnode->fDisconnect = true;
-                LogPrintf("disconnecting extra block-relay-only peer=%d (last block received %s ago)\n",
-                         pnode->GetId(), strAge(count_seconds(now) - count_seconds(pnode->m_last_block_time)));
-                return true;
-            } else {
-                LogPrint(BCLog::CONN, "keeping block-relay-only peer=%d chosen for eviction (connect time: %s, blocks_in_flight: %d)\n",
-                         pnode->GetId(), strAge(count_seconds(now - pnode->m_connected)), node_state->nBlocksInFlight);
-            }
-            return false;
-        });
     }
 
     // Check whether we have too many outbound-full-relay peers
@@ -5218,8 +5202,8 @@ void PeerManagerImpl::CheckForStaleTipAndEvictPeers()
     LOCK(cs_main);
 
     const bool historical_backfill_active = IsHistoricalBackfillActive();
-    m_connman.SetHistoricalBackfillBlockRelayPeers(
-        historical_backfill_active ? m_backfill_block_relay_peers : 0);
+    m_connman.SetBlockAnchorCollectionActive(
+        m_chainman.ActiveChainstate().IsInitialBlockDownload() || historical_backfill_active);
 
     auto now{GetTime<std::chrono::seconds>()};
 

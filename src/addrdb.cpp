@@ -251,13 +251,13 @@ std::vector<CAddress> ReadAnchors(const fs::path& anchors_db_path)
     return anchors;
 }
 
-void DumpIBDAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& anchors)
+void DumpBlockAnchors(const fs::path& anchors_db_path, const std::vector<CAddress>& anchors)
 {
-    LOG_TIME_SECONDS(strprintf("Flush %d outbound IBD peer addresses to IBDanchors.dat", anchors.size()));
-    SerializeFileDB("ibdanchors", anchors_db_path, anchors, CLIENT_VERSION | ADDRV2_FORMAT);
+    LOG_TIME_SECONDS(strprintf("Flush %d outbound block anchor peer addresses to blkanchors.dat", anchors.size()));
+    SerializeFileDB("blkanchors", anchors_db_path, anchors, CLIENT_VERSION | ADDRV2_FORMAT);
 }
 
-std::vector<CAddress> ReadIBDAnchors(const fs::path& anchors_db_path)
+std::vector<CAddress> ReadBlockAnchors(const fs::path& anchors_db_path)
 {
     std::vector<CAddress> anchors;
     try {
