@@ -648,7 +648,6 @@ void TrafficGraphWidget::saveData()
         }
 
         fileout.fclose();
-        LogPrintf("TrafficGraphWidget: Successfully saved traffic graph data to %s\n", pathTrafficGraph.generic_string());
     } catch (const std::exception& e) {
         LogPrintf("TrafficGraphWidget: Error saving data: %s (path: %s)\n",
                  e.what(), m_data_dir);
