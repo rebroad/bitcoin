@@ -94,6 +94,7 @@ private:
     std::set<int> m_pendingTooltipRequests;
     int m_totalBlocks = 0;
     int m_known_tip_height = 0;
+    int m_known_active_tip_height = 0;
     int m_backfill_cursor = 0;
     bool m_backfill_complete = false;
     int m_lowest_in_flight_height_hint = -1;

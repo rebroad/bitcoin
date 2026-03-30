@@ -835,13 +835,15 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         setNumBlocks(bestblock_height, QDateTime::fromSecsSinceEpoch(bestblock_date), verification_progress, false);
         connect(model, &ClientModel::numBlocksChanged, this, &RPCConsole::setNumBlocks);
 
-        // Track chain-tip progress only for non-header events. Header sync churn is
-        // intentionally ignored for BVW follow behavior.
+        // Keep BVW populated during header sync, but only track follow/activity
+        // position for non-header events.
         connect(model, &ClientModel::numBlocksChanged, this, [this](int count, const QDateTime&, double, bool header, SynchronizationState) {
-            if (header) return;
-            m_last_blocks_update_height = std::max(m_last_blocks_update_height, count);
             if (m_blockVisualizationWidget) {
                 m_blockVisualizationWidget->setDisplayTipHeight(count);
+            }
+            if (!header) {
+                m_seen_block_download_activity = true;
+                m_last_blocks_update_height = std::max(m_last_blocks_update_height, count);
             }
             scheduleBlocksDisplayUpdate();
         });
@@ -852,7 +854,20 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         });
         connect(model, &ClientModel::blockStatusChanged, this, [this](int height) {
             if (height >= 0) {
-                m_last_blocks_update_height = std::max(m_last_blocks_update_height, height);
+                bool should_follow_height = false;
+                try {
+                    const auto blocks = m_chain.getBlocksAtHeight(height);
+                    const bool have_data = std::any_of(blocks.begin(), blocks.end(), [](const interfaces::BlockHeightInfo& b) {
+                        return b.have_data;
+                    });
+                    const bool in_flight = !have_data && m_chain.isBlockInFlight(height);
+                    should_follow_height = have_data || in_flight;
+                } catch (...) {
+                }
+                if (should_follow_height) {
+                    m_seen_block_download_activity = true;
+                    m_last_blocks_update_height = std::max(m_last_blocks_update_height, height);
+                }
                 if (m_blockVisualizationWidget) {
                     m_blockVisualizationWidget->setDisplayTipHeight(height);
                     // Keep status cache fresh even when BVW is not currently visible.

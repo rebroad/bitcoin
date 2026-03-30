@@ -264,6 +264,7 @@ void BlockVisualizationWidget::updateBlockData()
     try {
         m_is_initial_block_download = m_chain.isInitialBlockDownload();
         m_highest_pruned_height_hint = m_chain.highestPrunedHeight().value_or(-1);
+        m_known_active_tip_height = m_chain.getHeight().value_or(m_known_active_tip_height);
     } catch (...) {
         m_is_initial_block_download = false;
         m_highest_pruned_height_hint = -1;
@@ -359,6 +360,9 @@ void BlockVisualizationWidget::refreshBlockStatus(int height)
                 m_statusCache[height] = status;
                 m_tooltipFullCache.erase(height);
                 onStatusObserved(height, status);
+                if (status == HAVE_BLOCK) {
+                    m_known_active_tip_height = std::max(m_known_active_tip_height, height);
+                }
                 if (m_blocksPerRow > 0 && m_blockWidth > 0 && m_blockHeight > 0) {
                     const int row = height / m_blocksPerRow;
                     const int col = height % m_blocksPerRow;
@@ -488,6 +492,7 @@ void BlockVisualizationWidget::updateBlockStatusesAsync()
     try {
         m_is_initial_block_download = m_chain.isInitialBlockDownload();
         m_highest_pruned_height_hint = m_chain.highestPrunedHeight().value_or(-1);
+        m_known_active_tip_height = m_chain.getHeight().value_or(m_known_active_tip_height);
     } catch (...) {
         m_is_initial_block_download = false;
         m_highest_pruned_height_hint = -1;
@@ -653,6 +658,9 @@ void BlockVisualizationWidget::dispatchStatusBatch()
                     m_statusCache[height] = new_status;
                     m_tooltipFullCache.erase(height);
                     onStatusObserved(height, new_status);
+                    if (new_status == HAVE_BLOCK) {
+                        m_known_active_tip_height = std::max(m_known_active_tip_height, height);
+                    }
                     if (m_blocksPerRow > 0 && m_blockWidth > 0 && m_blockHeight > 0) {
                         const int row = height / m_blocksPerRow;
                         const int col = height % m_blocksPerRow;
@@ -746,6 +754,24 @@ BlockVisualizationWidget::BlockStatus BlockVisualizationWidget::getDisplayStatus
         if (globalCache.isPopulated() && height <= globalCache.getTotalBlocks()) {
             status = ToWidgetStatus(globalCache.getStatus(height));
         }
+    }
+    // Pruned-history heuristic: if we know the highest pruned height, render
+    // everything at or below it as header-only.
+    if (m_highest_pruned_height_hint >= 0 && height <= m_highest_pruned_height_hint) {
+        status = HEADER_ONLY;
+    }
+    // Heuristic: once a height is below the best known header height, don't
+    // show it as unknown/no-header just because async status fetch hasn't
+    // caught up yet.
+    if ((status == UNKNOWN || status == NO_HEADER) && height <= m_known_tip_height) {
+        status = HEADER_ONLY;
+    }
+    // Companion heuristic: treat blocks below active tip as present when they
+    // are above the known pruned boundary, avoiding stale non-green display.
+    if ((status == UNKNOWN || status == NO_HEADER || status == HEADER_ONLY) &&
+        height <= m_known_active_tip_height &&
+        height > m_highest_pruned_height_hint) {
+        status = HAVE_BLOCK;
     }
     if (m_is_initial_block_download &&
         m_lowest_in_flight_height_hint >= 0 &&

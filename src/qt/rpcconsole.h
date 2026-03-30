@@ -201,6 +201,7 @@ private:
     int m_set_slider_value{0};
     bool m_blocks_display_dirty{false};
     int m_last_blocks_update_height{-1};
+    bool m_seen_block_download_activity{false};
     QTimer* m_blocks_display_timer{nullptr};
     QTimer* m_legend_update_timer{nullptr};
     bool m_legend_dirty{false};

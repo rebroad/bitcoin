@@ -344,6 +344,7 @@ public:
     bool ProcessMessages(CNode* pfrom, std::atomic<bool>& interrupt, bool fToggle) override;
     bool SendMessages(CNode* pto) override EXCLUSIVE_LOCKS_REQUIRED(pto->cs_sendProcessing);
     std::optional<int64_t> GetTipBlockTime() const override;
+    bool IsInitialBlockDownload() const override;
 
     /** Implement PeerManager */
     void StartScheduledTasks(CScheduler& scheduler) override;
@@ -1497,6 +1498,12 @@ std::optional<int64_t> PeerManagerImpl::GetTipBlockTime() const
     const CBlockIndex* const tip = m_chainman.ActiveChain().Tip();
     if (!tip) return std::nullopt;
     return tip->GetBlockTime();
+}
+
+bool PeerManagerImpl::IsInitialBlockDownload() const
+{
+    LOCK(cs_main);
+    return m_chainman.ActiveChainstate().IsInitialBlockDownload();
 }
 
 void PeerManagerImpl::ReattemptInitialBroadcast(CScheduler& scheduler)

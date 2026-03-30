@@ -65,6 +65,8 @@ static const int MAX_OUTBOUND_FULL_RELAY_CONNECTIONS = 8;
 static const int MAX_ADDNODE_CONNECTIONS = 8;
 /** Maximum number of block-relay-only outgoing connections */
 static const int MAX_BLOCK_RELAY_ONLY_CONNECTIONS = 2;
+/** Temporary block-relay-only target while in IBD. */
+static const int IBD_BLOCK_RELAY_ONLY_CONNECTIONS = 8;
 /** Maximum number of feeler connections */
 static const int MAX_FEELER_CONNECTIONS = 1;
 /** -listen default */
@@ -814,6 +816,8 @@ public:
 
     /** Return local active-chain tip block time in seconds since epoch, if available. */
     virtual std::optional<int64_t> GetTipBlockTime() const = 0;
+    /** Return whether chainstate is currently in initial block download. */
+    virtual bool IsInitialBlockDownload() const = 0;
 
 
 protected:
@@ -963,6 +967,8 @@ public:
     int GetExtraFullOutboundCount() const;
     // Count the number of block-relay-only peers we have over our limit.
     int GetExtraBlockRelayCount() const;
+    // Effective block-relay-only target (IBD-aware).
+    int GetTargetOutboundBlockRelay() const;
 
     bool AddNode(const std::string& node);
     bool RemoveAddedNode(const std::string& node);

@@ -1343,7 +1343,7 @@ bool CConnman::AddConnection(const std::string& address, ConnectionType conn_typ
     case ConnectionType::OUTBOUND_FULL_RELAY:
         break;
     case ConnectionType::BLOCK_RELAY:
-        max_connections = m_max_outbound_block_relay;
+        max_connections = GetTargetOutboundBlockRelay();
         break;
     // no limit for ADDR_FETCH because -seednode has no limit either
     case ConnectionType::ADDR_FETCH:
@@ -1723,7 +1723,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
         m_max_outbound_block_relay = std::clamp<int>(
             gArgs.GetIntArg("-blockrelaypeers", MAX_BLOCK_RELAY_ONLY_CONNECTIONS),
             0, std::max(0, nMaxConnections - m_max_outbound_full_relay));
-        m_max_outbound = m_max_outbound_full_relay + m_max_outbound_block_relay + nMaxFeeler;
+        m_max_outbound = m_max_outbound_full_relay + GetTargetOutboundBlockRelay() + nMaxFeeler;
         for (CNode* pnode : nodes) {
             uint64_t nRecvBytes;
             {
@@ -1789,7 +1789,8 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
 
         // Rank block-relay-only peers by observed block download throughput and
         // persist top candidates for future block-focused anchor selection.
-        if (m_collect_block_anchors && m_max_outbound_block_relay > 0) {
+        const int block_relay_target = GetTargetOutboundBlockRelay();
+        if (m_collect_block_anchors && block_relay_target > 0) {
             std::vector<std::pair<double, CAddress>> ranked_block_relays;
             ranked_block_relays.reserve(nodes.size());
             for (CNode* pnode : nodes) {
@@ -1808,10 +1809,10 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             }
 
             const bool dump_due = blk_anchor_last_dump == 0 || now - blk_anchor_last_dump >= IBD_ANCHOR_DUMP_INTERVAL;
-            if (dump_due && static_cast<int>(ranked_block_relays.size()) >= m_max_outbound_block_relay) {
+            if (dump_due && static_cast<int>(ranked_block_relays.size()) >= block_relay_target) {
                 std::sort(ranked_block_relays.begin(), ranked_block_relays.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
                 std::vector<CAddress> block_anchors_to_dump;
-                for (size_t i = 0; i < ranked_block_relays.size() && static_cast<int>(i) < m_max_outbound_block_relay; ++i) {
+                for (size_t i = 0; i < ranked_block_relays.size() && static_cast<int>(i) < block_relay_target; ++i) {
                     block_anchors_to_dump.push_back(ranked_block_relays[i].second);
                 }
                 if (!block_anchors_to_dump.empty() && block_anchors_to_dump != blk_anchor_last_dumped) {
@@ -2320,7 +2321,7 @@ int CConnman::GetExtraFullOutboundCount() const
 int CConnman::GetExtraBlockRelayCount() const
 {
     int block_relay_peers = 0;
-    const int block_relay_target = m_max_outbound_block_relay;
+    const int block_relay_target = GetTargetOutboundBlockRelay();
     {
         LOCK(m_nodes_mutex);
         for (const CNode* pnode : m_nodes) {
@@ -2330,6 +2331,16 @@ int CConnman::GetExtraBlockRelayCount() const
         }
     }
     return std::max(block_relay_peers - block_relay_target, 0);
+}
+
+int CConnman::GetTargetOutboundBlockRelay() const
+{
+    const int configured_target = m_max_outbound_block_relay;
+    const int max_allowed = std::max(0, nMaxConnections - m_max_outbound_full_relay);
+    if (!m_msgproc || !m_msgproc->IsInitialBlockDownload()) {
+        return std::clamp(configured_target, 0, max_allowed);
+    }
+    return std::clamp(std::max(configured_target, IBD_BLOCK_RELAY_ONLY_CONNECTIONS), 0, max_allowed);
 }
 
 void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
@@ -2453,7 +2464,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
         }
         const bool in_ibd_anchor_mode = nPeersIBD > 0 || stale_tip_no_outbound_mode;
         const int full_relay_target = std::max(1, m_max_outbound_full_relay);
-        const int block_relay_target = m_max_outbound_block_relay;
+        const int block_relay_target = GetTargetOutboundBlockRelay();
 
         ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
         auto now = GetTime<std::chrono::microseconds>();
@@ -2565,7 +2576,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             } else if (anchor && m_anchors.empty()) {
                 std::string strComment;
                 nAnchorTryAgain++;
-                if (nOutboundFullRelay >= anchor - m_max_outbound_block_relay) {
+                if (nOutboundFullRelay >= anchor - block_relay_target) {
                     strComment = strprintf("No further action needed! (tries=%d)", nAnchorTryAgain);
                     nAnchorTryAgain = 0;
                 } else {
