@@ -112,8 +112,10 @@ static constexpr auto GETDATA_TX_INTERVAL{60s};
 static const unsigned int MAX_GETDATA_SZ = 1000;
 /** Number of blocks that can be requested at any given time from a single peer. */
 static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 16;
-/** Dedicated block-relay peers reserved for historical prune backfill. */
-static constexpr int HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS = 2;
+/** Default dedicated block-relay peers reserved for historical prune backfill. */
+static constexpr int DEFAULT_HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS = 2;
+/** Default per-peer backfill in-flight target, in MiB, used with rolling average block size. */
+static constexpr int DEFAULT_HISTORICAL_BACKFILL_INFLIGHT_MIB = 24;
 /** Time during which a peer must stall block download progress before being disconnected. */
 static constexpr auto BLOCK_STALLING_TIMEOUT{2s};
 /** Number of headers sent in one getheaders result. We rely on the assumption that if a peer sends
@@ -185,6 +187,8 @@ static constexpr size_t MAX_ADDR_PROCESSING_TOKEN_BUCKET{MAX_ADDR_TO_SEND};
 // Internal stuff
 namespace {
 static constexpr uint64_t BACKFILL_MIN_DEFICIT_BYTES = 130ULL * 1024 * 1024;
+static constexpr uint64_t BACKFILL_MIN_AVG_BLOCK_BYTES = 256 * 1024;
+static constexpr uint64_t BACKFILL_MAX_AVG_BLOCK_BYTES = 4 * 1024 * 1024;
 
 bool IsAutomaticPruneTargetConfigured()
 {
@@ -624,6 +628,9 @@ private:
     void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks, NodeId& nodeStaller) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     void FindNextBlocksToBackfill(NodeId nodeid, unsigned int count, std::vector<const CBlockIndex*>& vBlocks) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     bool IsHistoricalBackfillActive() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void RefreshBackfillRuntimeSettings() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    unsigned int GetPerPeerBlockInflightLimit(const CNode& node) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void UpdateBackfillAverageBlockBytes(const CBlockIndex* pindex, size_t n_bytes) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     std::map<uint256, std::pair<NodeId, std::list<QueuedBlock>::iterator> > mapBlocksInFlight GUARDED_BY(cs_main);
 
@@ -669,6 +676,12 @@ private:
     uint64_t m_last_seen_prune_event GUARDED_BY(cs_main){0};
     /** Last prune target for which backfill latch state was evaluated. */
     uint64_t m_backfill_setting_target GUARDED_BY(cs_main){0};
+    /** Runtime-configured number of dedicated block-relay peers for backfill. */
+    int m_backfill_block_relay_peers GUARDED_BY(cs_main){DEFAULT_HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS};
+    /** Runtime-configured target in-flight bytes for backfill block requests, per peer. */
+    uint64_t m_backfill_target_inflight_bytes GUARDED_BY(cs_main){static_cast<uint64_t>(DEFAULT_HISTORICAL_BACKFILL_INFLIGHT_MIB) * 1024 * 1024};
+    /** Rolling average block size used to convert backfill byte target into block count. */
+    uint64_t m_backfill_avg_block_bytes GUARDED_BY(cs_main){1500000};
 
     /** Storage for orphan information */
     TxOrphanage m_orphanage;
@@ -1332,6 +1345,7 @@ void PeerManagerImpl::FindNextBlocksToBackfill(NodeId nodeid, unsigned int count
 bool PeerManagerImpl::IsHistoricalBackfillActive()
 {
     AssertLockHeld(cs_main);
+    RefreshBackfillRuntimeSettings();
 
     if (m_backfill_setting_target != nPruneTarget) {
         m_backfill_setting_target = nPruneTarget;
@@ -1350,6 +1364,54 @@ bool PeerManagerImpl::IsHistoricalBackfillActive()
 
     if (m_backfill_paused_by_prune) return false;
     return ShouldRunHistoricalBackfill(m_chainman);
+}
+
+void PeerManagerImpl::RefreshBackfillRuntimeSettings()
+{
+    AssertLockHeld(cs_main);
+
+    const int64_t configured_peers = gArgs.GetIntArg("-historicalbackfillblockrelaypeers", DEFAULT_HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS);
+    const int clamped_peers = std::max<int64_t>(0, configured_peers);
+    if (clamped_peers != m_backfill_block_relay_peers) {
+        m_backfill_block_relay_peers = clamped_peers;
+        LogPrint(BCLog::CONN, "net: runtime historical backfill block-relay peers=%d\n", m_backfill_block_relay_peers);
+    }
+
+    const int64_t configured_mib = gArgs.GetIntArg("-historicalbackfillinflightmib", DEFAULT_HISTORICAL_BACKFILL_INFLIGHT_MIB);
+    const uint64_t clamped_mib = std::max<int64_t>(1, configured_mib);
+    const uint64_t target_bytes = clamped_mib * 1024 * 1024;
+    if (target_bytes != m_backfill_target_inflight_bytes) {
+        m_backfill_target_inflight_bytes = target_bytes;
+        LogPrint(BCLog::CONN, "net: runtime historical backfill in-flight target=%d MiB\n", clamped_mib);
+    }
+}
+
+unsigned int PeerManagerImpl::GetPerPeerBlockInflightLimit(const CNode& node)
+{
+    AssertLockHeld(cs_main);
+
+    if (!node.IsBlockOnlyConn() || !IsHistoricalBackfillActive()) {
+        return MAX_BLOCKS_IN_TRANSIT_PER_PEER;
+    }
+
+    const uint64_t avg = std::clamp(m_backfill_avg_block_bytes, BACKFILL_MIN_AVG_BLOCK_BYTES, BACKFILL_MAX_AVG_BLOCK_BYTES);
+    const uint64_t limit = std::max<uint64_t>(1, m_backfill_target_inflight_bytes / avg);
+    return std::min<unsigned int>(MAX_BLOCKS_IN_TRANSIT_PER_PEER, static_cast<unsigned int>(limit));
+}
+
+void PeerManagerImpl::UpdateBackfillAverageBlockBytes(const CBlockIndex* pindex, size_t n_bytes)
+{
+    AssertLockHeld(cs_main);
+    if (pindex == nullptr || n_bytes == 0) return;
+
+    const CBlockIndex* tip = m_chainman.ActiveChain().Tip();
+    if (tip == nullptr) return;
+
+    if (!m_chainman.ActiveChain().Contains(pindex)) return;
+    if (pindex->nHeight >= tip->nHeight) return;
+
+    const uint64_t sample = std::clamp<uint64_t>(n_bytes, BACKFILL_MIN_AVG_BLOCK_BYTES, BACKFILL_MAX_AVG_BLOCK_BYTES);
+    m_backfill_avg_block_bytes = (m_backfill_avg_block_bytes * 7 + sample) / 8;
 }
 
 } // namespace
@@ -1807,9 +1869,10 @@ void PeerManagerImpl::SetPruneMode(bool prune_mode)
 {
     LOCK(cs_main);
     fPruneMode = prune_mode;
+    RefreshBackfillRuntimeSettings();
     const bool historical_backfill_active = IsHistoricalBackfillActive();
     m_connman.SetHistoricalBackfillBlockRelayPeers(
-        historical_backfill_active ? HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS : 0);
+        historical_backfill_active ? m_backfill_block_relay_peers : 0);
     if (fPruneMode) {
         m_backfill_cursor = nullptr;
         m_chainman.m_blockman.SetCheckForPruning();
@@ -4548,11 +4611,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             // cs_main in ProcessNewBlock is fine.
             mapBlockSource.emplace(hash, std::make_pair(pfrom.GetId(), true));
 
-            const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
+            pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
             if (pindex)
                 strExtra += strprintf(" %s", strBlkInfo(pindex));
             else
                 strExtra += " UNSOLICITED";
+            UpdateBackfillAverageBlockBytes(pindex, nSize);
         }
         LogPrint(BCLog::BLOCK, "recv block%s %s%s size=%d peer=%d\n", forceProcessing ? "":"!", pblock->GetHash().ToString(), strExtra, nSize, pfrom.GetId());
 
@@ -5155,7 +5219,7 @@ void PeerManagerImpl::CheckForStaleTipAndEvictPeers()
 
     const bool historical_backfill_active = IsHistoricalBackfillActive();
     m_connman.SetHistoricalBackfillBlockRelayPeers(
-        historical_backfill_active ? HISTORICAL_BACKFILL_BLOCK_ONLY_PEERS : 0);
+        historical_backfill_active ? m_backfill_block_relay_peers : 0);
 
     auto now{GetTime<std::chrono::seconds>()};
 
@@ -5842,9 +5906,10 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         //
         std::vector<CInv> vGetData;
         bool fDownloadBlocks = gArgs.GetBoolArg("-downloadblocks", true);
-        if (fDownloadBlocks && !m_chainman.IsBootstrapChainstatePending() && !pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+        const unsigned int per_peer_inflight_limit = GetPerPeerBlockInflightLimit(*pto);
+        if (fDownloadBlocks && !m_chainman.IsBootstrapChainstatePending() && !pto->fClient && ((fFetch && !pto->m_limited_node) || !m_chainman.ActiveChainstate().IsInitialBlockDownload()) && state.nBlocksInFlight < static_cast<int>(per_peer_inflight_limit)) {
             state.BlockUnblocked(6);
-            const unsigned int request_budget = MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight;
+            const unsigned int request_budget = per_peer_inflight_limit - static_cast<unsigned int>(state.nBlocksInFlight);
             std::vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;
             FindNextBlocksToDownload(pto->GetId(), request_budget, vToDownload, staller);
@@ -5888,7 +5953,7 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                 }
             }
         } else if (pto->fClient) state.BlockBlocked(6, "pto->fClient");
-        else if (state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) state.BlockBlocked(6, "!fFetch || m_limited_node");
+        else if (state.nBlocksInFlight < static_cast<int>(per_peer_inflight_limit)) state.BlockBlocked(6, "!fFetch || m_limited_node");
         else state.BlockBlocked(6);
 
         //
