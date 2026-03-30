@@ -111,6 +111,8 @@ private Q_SLOTS:
     void updateBlocksDisplay();
     /** schedule a coalesced blocks tab refresh */
     void scheduleBlocksDisplayUpdate(int delay_ms = 75);
+    /** schedule throttled legend refresh */
+    void scheduleLegendUpdate(int delay_ms = 350);
     /** create and setup the block visualization widget */
     void setupBlockVisualizationWidget();
     /** update the legend display */
@@ -200,6 +202,8 @@ private:
     bool m_blocks_display_dirty{false};
     int m_last_blocks_update_height{-1};
     QTimer* m_blocks_display_timer{nullptr};
+    QTimer* m_legend_update_timer{nullptr};
+    bool m_legend_dirty{false};
 
     /** Update UI with latest network info from model. */
     void updateNetworkState();

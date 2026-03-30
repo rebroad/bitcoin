@@ -715,6 +715,12 @@ RPCConsole::RPCConsole(interfaces::Node& node, interfaces::Chain& chain, const P
     m_blocks_display_timer = new QTimer(this);
     m_blocks_display_timer->setSingleShot(true);
     connect(m_blocks_display_timer, &QTimer::timeout, this, &RPCConsole::updateBlocksDisplay);
+    m_legend_update_timer = new QTimer(this);
+    m_legend_update_timer->setSingleShot(true);
+    connect(m_legend_update_timer, &QTimer::timeout, this, [this]() {
+        m_legend_dirty = false;
+        updateLegend();
+    });
 
     // Setup block visualization widget (but don't load data yet)
     setupBlockVisualizationWidget();
@@ -850,10 +856,11 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
                 } else {
                     m_blockVisualizationWidget->refreshVisibleStatuses();
                 }
-                updateLegend();
+                scheduleLegendUpdate();
                 return;
             }
             m_blocks_display_dirty = true;
+            m_legend_dirty = true;
         });
 
         // Update on header tip changes (for new headers)
@@ -1544,6 +1551,9 @@ void RPCConsole::hideEvent(QHideEvent *event)
     if (m_blocks_display_timer && m_blocks_display_timer->isActive()) {
         m_blocks_display_timer->stop();
     }
+    if (m_legend_update_timer && m_legend_update_timer->isActive()) {
+        m_legend_update_timer->stop();
+    }
 
     if (!clientModel || !clientModel->getPeerTableModel())
         return;
@@ -1791,12 +1801,10 @@ void RPCConsole::updateBlocksDisplay()
     timer.start();
 
     m_blockVisualizationWidget->updateBlockData();
-    // Force a repaint to ensure the display updates.
-    m_blockVisualizationWidget->update();
     if (m_last_blocks_update_height >= 0) {
         m_blockVisualizationWidget->centerBlockInView(m_last_blocks_update_height);
     }
-    updateLegend();
+    scheduleLegendUpdate();
 
     const qint64 elapsed_ms = timer.elapsed();
     if (elapsed_ms > 25) {
@@ -1821,6 +1829,16 @@ void RPCConsole::scheduleBlocksDisplayUpdate(int delay_ms)
     const int delay = std::max(0, delay_ms);
     if (!m_blocks_display_timer->isActive() || m_blocks_display_timer->remainingTime() > delay) {
         m_blocks_display_timer->start(delay);
+    }
+}
+
+void RPCConsole::scheduleLegendUpdate(int delay_ms)
+{
+    m_legend_dirty = true;
+    if (!m_legend_update_timer) return;
+    const int delay = std::max(0, delay_ms);
+    if (!m_legend_update_timer->isActive() || m_legend_update_timer->remainingTime() > delay) {
+        m_legend_update_timer->start(delay);
     }
 }
 

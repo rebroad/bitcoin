@@ -7,6 +7,8 @@
 
 #include <QWidget>
 #include <QTimer>
+#include <QThread>
+#include <QElapsedTimer>
 #include <QPainter>
 #include <QMouseEvent>
 #include <QShowEvent>
@@ -62,6 +64,8 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    class BlockDataWorker;
+
     interfaces::Node& m_node;
     interfaces::Chain& m_chain;
 
@@ -71,22 +75,39 @@ private:
 
     QTimer* m_resizeTimer = nullptr;
     QTimer* m_updateTimer = nullptr;
+    QTimer* m_tooltip_timer = nullptr;
+    QThread* m_worker_thread = nullptr;
+    BlockDataWorker* m_worker = nullptr;
     bool m_initialized = false;
     bool m_dataLoaded = false;
+    bool m_status_request_in_flight = false;
+    bool m_auto_follow_tip = true;
+    bool m_internal_scroll = false;
 
     // Block status caching
     std::map<int, BlockStatus> m_statusCache;
+    std::map<int, QString> m_tooltipFullCache;
     std::set<int> m_pendingBlocks;
+    std::set<int> m_pendingTooltipRequests;
     int m_totalBlocks = 0;
+    int m_last_hovered_block = -1;
+    int m_latest_updated_height = -1;
+    QPoint m_last_hover_global_pos;
+    QElapsedTimer m_event_loop_timer;
+    bool m_event_loop_timer_started = false;
 
     QColor getColorForStatus(BlockStatus status) const;
     BlockStatus getDisplayStatus(int height) const;
     QString getTooltipForBlock(int height) const;
+    QString getTooltipForBlockLightweight(int height) const;
+    void dispatchStatusBatch();
+    void requestTooltipDetails(int height);
+    void processTooltipHover();
+    void onScrollValueChanged(int value);
+    void attachScrollTracking();
     int getBlockIndexFromPosition(const QPoint& pos) const;
     void calculateLayout();
     void updateBlockStatusesAsync();
-    void updateBlockStatus(int height);
-    void populateBlockStatusCache();
     void drawLegend(QPainter& painter);
 };
 
