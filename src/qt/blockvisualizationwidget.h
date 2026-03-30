@@ -51,6 +51,7 @@ public:
     void updateBlockData();
     void refreshBlockStatus(int height);
     void refreshVisibleStatuses();
+    void setDisplayTipHeight(int height);
     void centerBlockInView(int height);
     int countCachedBlocksByStatus(BlockStatus status) const;
     bool isDataLoaded() const { return m_dataLoaded; }
@@ -83,6 +84,8 @@ private:
     bool m_status_request_in_flight = false;
     bool m_auto_follow_tip = true;
     bool m_internal_scroll = false;
+    bool m_ignore_scroll_tracking = false;
+    bool m_shutting_down = false;
 
     // Block status caching
     std::map<int, BlockStatus> m_statusCache;
@@ -90,6 +93,12 @@ private:
     std::set<int> m_pendingBlocks;
     std::set<int> m_pendingTooltipRequests;
     int m_totalBlocks = 0;
+    int m_known_tip_height = 0;
+    int m_backfill_cursor = 0;
+    bool m_backfill_complete = false;
+    int m_lowest_in_flight_height_hint = -1;
+    int m_highest_pruned_height_hint = -1;
+    bool m_is_initial_block_download = false;
     int m_last_hovered_block = -1;
     int m_latest_updated_height = -1;
     QPoint m_last_hover_global_pos;
@@ -105,6 +114,10 @@ private:
     void processTooltipHover();
     void onScrollValueChanged(int value);
     void attachScrollTracking();
+    void scheduleStatusRefresh(bool urgent = false);
+    bool isShuttingDownNow();
+    void onStatusObserved(int height, BlockStatus status);
+    void recomputeLowestInFlightHint();
     int getBlockIndexFromPosition(const QPoint& pos) const;
     void calculateLayout();
     void updateBlockStatusesAsync();

@@ -481,7 +481,10 @@ static void NotifyInitialSyncFinished(ClientModel *clientmodel)
 
 static void NotifyBlockStatusChanged(ClientModel* clientmodel, int height)
 {
-    Q_EMIT clientmodel->blockStatusChanged(height);
+    bool invoked = QMetaObject::invokeMethod(clientmodel, [clientmodel, height] {
+        Q_EMIT clientmodel->blockStatusChanged(height);
+    }, Qt::QueuedConnection);
+    assert(invoked);
 }
 
 static void BlockTipChanged(ClientModel* clientmodel, SynchronizationState sync_state, interfaces::BlockTip tip, double verificationProgress, bool fHeader)

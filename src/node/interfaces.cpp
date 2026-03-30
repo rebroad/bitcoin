@@ -589,17 +589,19 @@ private:
     ChainstateManager& chainman() { return *Assert(m_node.chainman); }
     void RefreshBlocksAtHeightCache(const CChain& active) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
     {
+        const size_t block_index_size = m_node.chainman->m_blockman.m_block_index.size();
         const CBlockIndex* tip = active.Tip();
         if (!tip) {
             m_blocks_at_height_cache.clear();
             m_blocks_at_height_cache_tip.SetNull();
+            m_blocks_at_height_cache_size = 0;
             return;
         }
         const uint256 tip_hash = tip->GetBlockHash();
-        if (m_blocks_at_height_cache_tip == tip_hash) return;
+        if (m_blocks_at_height_cache_tip == tip_hash && m_blocks_at_height_cache_size == block_index_size) return;
 
         m_blocks_at_height_cache.clear();
-        m_blocks_at_height_cache.reserve(m_node.chainman->m_blockman.m_block_index.size() / 16 + 1);
+        m_blocks_at_height_cache.reserve(block_index_size / 16 + 1);
         for (const auto& entry : m_node.chainman->m_blockman.m_block_index) {
             const CBlockIndex* block = entry.second;
             if (block && block->nHeight >= 0) {
@@ -607,6 +609,7 @@ private:
             }
         }
         m_blocks_at_height_cache_tip = tip_hash;
+        m_blocks_at_height_cache_size = block_index_size;
     }
 public:
     explicit ChainImpl(NodeContext& node) : m_node(node) {}
@@ -638,19 +641,26 @@ public:
         LOCK(cs_main);
         if (!m_node.chainman) return false;
         const CChain& active = m_node.chainman->ActiveChain();
-        if (height < 0 || height > active.Height()) return false;
-        CBlockIndex* block = active[height];
-        return block && ((block->nStatus & BLOCK_HAVE_DATA) != 0);
+        if (height < 0) return false;
+        RefreshBlocksAtHeightCache(active);
+        const auto it = m_blocks_at_height_cache.find(height);
+        if (it == m_blocks_at_height_cache.end()) return false;
+        return std::any_of(it->second.begin(), it->second.end(), [](const CBlockIndex* block) {
+            return block && ((block->nStatus & BLOCK_HAVE_DATA) != 0);
+        });
     }
     bool isBlockInFlight(int height) override
     {
         LOCK(cs_main);
         if (!m_node.chainman) return false;
+        if (height < 0 || !m_node.peerman) return false;
         const CChain& active = m_node.chainman->ActiveChain();
-        if (height < 0 || height > active.Height()) return false;
-        CBlockIndex* block = active[height];
-        if (!block || !m_node.peerman) return false;
-        return m_node.peerman->IsBlockInFlight(block->GetBlockHash());
+        RefreshBlocksAtHeightCache(active);
+        const auto it = m_blocks_at_height_cache.find(height);
+        if (it == m_blocks_at_height_cache.end()) return false;
+        return std::any_of(it->second.begin(), it->second.end(), [this](const CBlockIndex* block) {
+            return block && m_node.peerman->IsBlockInFlight(block->GetBlockHash());
+        });
     }
     size_t blockInFlightCount() override
     {
@@ -663,7 +673,7 @@ public:
         LOCK(cs_main);
         if (!m_node.chainman) return false;
         const CChain& active = m_node.chainman->ActiveChain();
-        if (height < 0 || height > active.Height()) return false;
+        if (height < 0) return false;
         RefreshBlocksAtHeightCache(active);
         const auto it = m_blocks_at_height_cache.find(height);
         return it != m_blocks_at_height_cache.end() && it->second.size() > 1;
@@ -674,7 +684,7 @@ public:
         std::vector<BlockHeightInfo> result;
         if (!m_node.chainman) return result;
         const CChain& active = m_node.chainman->ActiveChain();
-        if (height < 0 || height > active.Height()) return result;
+        if (height < 0) return result;
         RefreshBlocksAtHeightCache(active);
         const auto it = m_blocks_at_height_cache.find(height);
         if (it == m_blocks_at_height_cache.end()) return result;
@@ -856,6 +866,34 @@ public:
         LOCK(cs_main);
         return node::fHavePruned;
     }
+    std::optional<int> highestPrunedHeight() override
+    {
+        LOCK(cs_main);
+        if (!m_node.chainman || !node::fHavePruned) return std::nullopt;
+        const CChain& active = m_node.chainman->ActiveChain();
+        const CBlockIndex* tip = active.Tip();
+        if (!tip) return std::nullopt;
+
+        const uint256 tip_hash = tip->GetBlockHash();
+        const uint64_t prune_events = node::g_prune_event_count.load(std::memory_order_relaxed);
+        if (m_pruned_height_cache_tip == tip_hash && m_pruned_height_cache_prune_events == prune_events) {
+            return m_pruned_height_cache;
+        }
+
+        std::optional<int> highest_pruned;
+        const CBlockIndex* cursor = tip;
+        while (cursor && cursor->pprev && (cursor->pprev->nStatus & BLOCK_HAVE_DATA)) {
+            cursor = cursor->pprev;
+        }
+        if (cursor && cursor->pprev && !(cursor->pprev->nStatus & BLOCK_HAVE_DATA)) {
+            highest_pruned = cursor->pprev->nHeight;
+        }
+
+        m_pruned_height_cache_tip = tip_hash;
+        m_pruned_height_cache_prune_events = prune_events;
+        m_pruned_height_cache = highest_pruned;
+        return highest_pruned;
+    }
     uint64_t currentBlockDataUsage() override
     {
         LOCK(cs_main);
@@ -999,7 +1037,11 @@ public:
     }
     NodeContext& m_node;
     mutable uint256 m_blocks_at_height_cache_tip GUARDED_BY(cs_main){};
+    mutable size_t m_blocks_at_height_cache_size GUARDED_BY(cs_main){0};
     mutable std::unordered_map<int, std::vector<const CBlockIndex*>> m_blocks_at_height_cache GUARDED_BY(cs_main);
+    mutable uint256 m_pruned_height_cache_tip GUARDED_BY(cs_main){};
+    mutable uint64_t m_pruned_height_cache_prune_events GUARDED_BY(cs_main){0};
+    mutable std::optional<int> m_pruned_height_cache GUARDED_BY(cs_main);
 };
 } // namespace
 } // namespace node

@@ -224,6 +224,8 @@ public:
 
     //! Check if any block has been pruned.
     virtual bool havePruned() = 0;
+    //! Highest active-chain height known to be pruned (no block data). Returns nullopt if unknown/none.
+    virtual std::optional<int> highestPrunedHeight() { return std::nullopt; }
     //! Current on-disk usage of block and undo files in bytes.
     virtual uint64_t currentBlockDataUsage() = 0;
     //! Active prune target in bytes (0 if unset, max uint64 for manual prune mode).

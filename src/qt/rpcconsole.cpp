@@ -835,10 +835,14 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         setNumBlocks(bestblock_height, QDateTime::fromSecsSinceEpoch(bestblock_date), verification_progress, false);
         connect(model, &ClientModel::numBlocksChanged, this, &RPCConsole::setNumBlocks);
 
-        // Connect to blockchain updates for automatic block visualization updates.
-        // Coalesce updates to avoid saturating the GUI thread during IBD.
-        connect(model, &ClientModel::numBlocksChanged, this, [this](int count, const QDateTime&, double, bool, SynchronizationState) {
-            m_last_blocks_update_height = count;
+        // Track chain-tip progress only for non-header events. Header sync churn is
+        // intentionally ignored for BVW follow behavior.
+        connect(model, &ClientModel::numBlocksChanged, this, [this](int count, const QDateTime&, double, bool header, SynchronizationState) {
+            if (header) return;
+            m_last_blocks_update_height = std::max(m_last_blocks_update_height, count);
+            if (m_blockVisualizationWidget) {
+                m_blockVisualizationWidget->setDisplayTipHeight(count);
+            }
             scheduleBlocksDisplayUpdate();
         });
 
@@ -848,12 +852,15 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         });
         connect(model, &ClientModel::blockStatusChanged, this, [this](int height) {
             if (height >= 0) {
-                m_last_blocks_update_height = height;
+                m_last_blocks_update_height = std::max(m_last_blocks_update_height, height);
+                if (m_blockVisualizationWidget) {
+                    m_blockVisualizationWidget->setDisplayTipHeight(height);
+                    // Keep status cache fresh even when BVW is not currently visible.
+                    m_blockVisualizationWidget->refreshBlockStatus(height);
+                }
             }
             if (shouldRefreshBlockVisualization() && m_blockVisualizationWidget) {
-                if (height >= 0) {
-                    m_blockVisualizationWidget->refreshBlockStatus(height);
-                } else {
+                if (height < 0) {
                     m_blockVisualizationWidget->refreshVisibleStatuses();
                 }
                 scheduleLegendUpdate();
@@ -861,13 +868,6 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             }
             m_blocks_display_dirty = true;
             m_legend_dirty = true;
-        });
-
-        // Update on header tip changes (for new headers)
-        connect(model, &ClientModel::numBlocksChanged, this, [this](int count, const QDateTime& blockDate, double nVerificationProgress, bool header, SynchronizationState sync_state) {
-            if (header) {
-                scheduleBlocksDisplayUpdate();
-            }
         });
 
         updateNetworkState();
@@ -1804,6 +1804,9 @@ void RPCConsole::updateBlocksDisplay()
     if (m_last_blocks_update_height >= 0) {
         m_blockVisualizationWidget->centerBlockInView(m_last_blocks_update_height);
     }
+    // After recentering, refresh the now-visible range so activity that
+    // happened while the tab was hidden is reflected immediately.
+    m_blockVisualizationWidget->refreshVisibleStatuses();
     scheduleLegendUpdate();
 
     const qint64 elapsed_ms = timer.elapsed();
