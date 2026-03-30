@@ -210,7 +210,10 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState& state,
 bool CheckFinalTx(const CBlockIndex* active_chain_tip, const CTransaction &tx, int flags)
 {
     AssertLockHeld(cs_main);
-    assert(active_chain_tip); // TODO: Make active_chain_tip a reference
+    // During startup/import there can be a short window where no active tip is
+    // available yet. In that case, treat transactions as non-final rather than
+    // aborting the process.
+    if (active_chain_tip == nullptr) return false;
 
     // By convention a negative value for flags indicates that the
     // current network-enforced consensus rules should be used. In

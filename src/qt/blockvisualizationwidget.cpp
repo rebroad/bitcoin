@@ -94,26 +94,24 @@ void BlockVisualizationWidget::updateBlockData()
 {
     if (!m_chain.isUsable()) return;
 
+    int numBlocks = 0;
+    try {
+        numBlocks = m_node.getNumBlocks();
+    } catch (...) {
+        // Chainman not available yet, just return
+        return;
+    }
+    if (numBlocks <= 0) return;
+
     // Check if global cache is populated
     BlockStatusCache& globalCache = BlockStatusCache::getInstance();
 
     if (globalCache.isPopulated()) {
-        // Use the global cache that was populated during startup
-        m_totalBlocks = globalCache.getTotalBlocks();
+        // Use startup cache as a baseline, but prefer current runtime height.
+        m_totalBlocks = std::max(globalCache.getTotalBlocks(), numBlocks);
         m_dataLoaded = true;
         m_initialized = true;
     } else {
-        // Fallback to the old method if global cache isn't populated
-        int numBlocks = 0;
-        try {
-            numBlocks = m_node.getNumBlocks();
-        } catch (...) {
-            // Chainman not available yet, just return
-            return;
-        }
-
-        if (numBlocks <= 0) return;
-
         m_totalBlocks = numBlocks;
         populateBlockStatusCache();
         m_dataLoaded = true;
@@ -310,6 +308,25 @@ void BlockVisualizationWidget::updateBlockStatusesAsync()
     if (!m_pendingBlocks.empty()) {
         m_updateTimer->start();
     }
+}
+
+void BlockVisualizationWidget::centerBlockInView(int height)
+{
+    if (height < 0 || m_totalBlocks <= 0 || m_blocksPerRow <= 0 || m_blockHeight <= 0) {
+        return;
+    }
+
+    QScrollArea* scrollArea = FindParentScrollArea(this);
+    if (!scrollArea) return;
+    QScrollBar* vbar = scrollArea->verticalScrollBar();
+    if (!vbar) return;
+
+    const int clamped_height = std::min(height, m_totalBlocks);
+    const int row = clamped_height / m_blocksPerRow;
+    const int block_center_y = row * m_blockHeight + (m_blockHeight / 2);
+    const int viewport_half = scrollArea->viewport()->height() / 2;
+    const int target = std::clamp(block_center_y - viewport_half, 0, vbar->maximum());
+    vbar->setValue(target);
 }
 
 void BlockVisualizationWidget::updateBlockStatus(int height)

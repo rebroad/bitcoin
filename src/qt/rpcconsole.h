@@ -197,8 +197,8 @@ private:
     QByteArray m_banlist_widget_header_state;
     bool m_slider_in_use{false};
     int m_set_slider_value{0};
-    bool m_block_view_initial_scroll_done{false};
     bool m_blocks_display_dirty{false};
+    int m_last_blocks_update_height{-1};
     QTimer* m_blocks_display_timer{nullptr};
 
     /** Update UI with latest network info from model. */

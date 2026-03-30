@@ -831,7 +831,8 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
 
         // Connect to blockchain updates for automatic block visualization updates.
         // Coalesce updates to avoid saturating the GUI thread during IBD.
-        connect(model, &ClientModel::numBlocksChanged, this, [this] {
+        connect(model, &ClientModel::numBlocksChanged, this, [this](int count, const QDateTime&, double, bool, SynchronizationState) {
+            m_last_blocks_update_height = count;
             scheduleBlocksDisplayUpdate();
         });
 
@@ -840,6 +841,9 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             scheduleBlocksDisplayUpdate();
         });
         connect(model, &ClientModel::blockStatusChanged, this, [this](int height) {
+            if (height >= 0) {
+                m_last_blocks_update_height = height;
+            }
             if (shouldRefreshBlockVisualization() && m_blockVisualizationWidget) {
                 if (height >= 0) {
                     m_blockVisualizationWidget->refreshBlockStatus(height);
@@ -1376,25 +1380,6 @@ void RPCConsole::on_tabWidget_currentChanged(int index)
         // Defer work to keep the GUI thread responsive on tab switch.
         QTimer::singleShot(0, this, [this] {
             scheduleBlocksDisplayUpdate(/*delay_ms=*/0);
-            if (QScrollBar* vbar = ui->blockVisualizationScrollArea->verticalScrollBar()) {
-                vbar->setValue(vbar->maximum());
-                m_block_view_initial_scroll_done = true;
-            }
-        });
-        // A delayed second scroll handles late layout/size updates.
-        QTimer::singleShot(100, this, [this] {
-            if (ui->tabWidget->currentWidget() == ui->tab_blocks) {
-                if (QScrollBar* vbar = ui->blockVisualizationScrollArea->verticalScrollBar()) {
-                    vbar->setValue(vbar->maximum());
-                }
-            }
-        });
-        QTimer::singleShot(300, this, [this] {
-            if (ui->tabWidget->currentWidget() == ui->tab_blocks) {
-                if (QScrollBar* vbar = ui->blockVisualizationScrollArea->verticalScrollBar()) {
-                    vbar->setValue(vbar->maximum());
-                }
-            }
         });
     }
 }
@@ -1790,22 +1775,6 @@ void RPCConsole::setupBlockVisualizationWidget()
     // Set the widget as the scroll area's widget
     ui->blockVisualizationScrollArea->setWidget(m_blockVisualizationWidget);
 
-    // Start at chain tip (bottom) when opening the block visualization.
-    if (QScrollBar* vbar = ui->blockVisualizationScrollArea->verticalScrollBar()) {
-        connect(vbar, &QScrollBar::rangeChanged, this, [this, vbar](int, int max) {
-            if (!m_block_view_initial_scroll_done && max > 0) {
-                vbar->setValue(max);
-                m_block_view_initial_scroll_done = true;
-            }
-        });
-        QTimer::singleShot(0, this, [this, vbar]() {
-            if (!m_block_view_initial_scroll_done && vbar->maximum() > 0) {
-                vbar->setValue(vbar->maximum());
-                m_block_view_initial_scroll_done = true;
-            }
-        });
-    }
-
     // Update the legend
     updateLegend();
 }
@@ -1824,6 +1793,9 @@ void RPCConsole::updateBlocksDisplay()
     m_blockVisualizationWidget->updateBlockData();
     // Force a repaint to ensure the display updates.
     m_blockVisualizationWidget->update();
+    if (m_last_blocks_update_height >= 0) {
+        m_blockVisualizationWidget->centerBlockInView(m_last_blocks_update_height);
+    }
     updateLegend();
 
     const qint64 elapsed_ms = timer.elapsed();

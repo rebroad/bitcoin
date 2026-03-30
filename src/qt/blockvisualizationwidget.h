@@ -49,6 +49,7 @@ public:
     void updateBlockData();
     void refreshBlockStatus(int height);
     void refreshVisibleStatuses();
+    void centerBlockInView(int height);
     int countCachedBlocksByStatus(BlockStatus status) const;
     bool isDataLoaded() const { return m_dataLoaded; }
     void showEvent(QShowEvent *event) override;

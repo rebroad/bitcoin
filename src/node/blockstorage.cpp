@@ -1009,25 +1009,21 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
         return;
     }
 
-    if (!genesis_loaded) {
-        // We can't hold cs_main during ActivateBestChain even though we're accessing
-        // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
-        // the relevant pointers before the ABC call.
-        LogPrintf("%s: ActivateBestChain\n", __func__);
-        for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
-            BlockValidationState state;
-            if (!chainstate->ActivateBestChain(state, nullptr)) { // REBTODO - Set fActivateChain instead?
-                LogPrintf("Failed to connect best block (%s)\n", state.ToString());
-                StartShutdown();
-                return;
-            }
+    // We can't hold cs_main during ActivateBestChain even though we're accessing
+    // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
+    // the relevant pointers before the ABC call.
+    //
+    // Do this unconditionally here: this path runs before the validation thread is
+    // started, and deferring activation via fActivateChain can leave init waiting
+    // forever for genesis notification.
+    LogPrintf("%s: ActivateBestChain (genesis_loaded=%d)\n", __func__, genesis_loaded ? 1 : 0);
+    for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
+        BlockValidationState state;
+        if (!chainstate->ActivateBestChain(state, nullptr)) { // REBTODO - Set fActivateChain instead?
+            LogPrintf("Failed to connect best block (%s)\n", state.ToString());
+            StartShutdown();
+            return;
         }
-    } else {
-        // Set flag to let validation thread handle chain activation instead of doing it directly
-        // This ensures proper thread separation and allows the validation thread to handle
-        // chain progression efficiently while loadblk focuses on block loading
-        LogPrintf("%s: Set fActivateChain\n", __func__);
-        fActivateChain = true;
     }
 
     if (!ShutdownRequested()) {
