@@ -435,9 +435,7 @@ void BlockVisualizationWidget::showEvent(QShowEvent *event)
 void BlockVisualizationWidget::hideEvent(QHideEvent *event)
 {
     QWidget::hideEvent(event);
-    // Keep status refresh available while hidden for cache catch-up, but
-    // hidden-mode scheduling is throttled in scheduleStatusRefresh().
-    if (m_shutting_down && m_updateTimer && m_updateTimer->isActive()) m_updateTimer->stop();
+    if (m_updateTimer && m_updateTimer->isActive()) m_updateTimer->stop();
     if (m_tooltip_timer->isActive()) m_tooltip_timer->stop();
 }
 
@@ -445,8 +443,8 @@ void BlockVisualizationWidget::scheduleStatusRefresh(bool urgent)
 {
     if (isShuttingDownNow()) return;
     if (!m_chain.isUsable()) return;
-    const bool visible = isVisible();
-    const int delay_ms = urgent ? (visible ? 0 : 150) : (visible ? 75 : 350);
+    if (!isVisible()) return;
+    const int delay_ms = urgent ? 0 : 75;
     if (!m_updateTimer->isActive() || m_updateTimer->remainingTime() > delay_ms) {
         m_updateTimer->start(delay_ms);
     }
@@ -489,6 +487,10 @@ void BlockVisualizationWidget::updateBlockStatusesAsync()
         if (m_updateTimer->isActive()) m_updateTimer->stop();
         return;
     }
+    if (!isVisible()) {
+        if (m_updateTimer->isActive()) m_updateTimer->stop();
+        return;
+    }
     try {
         m_is_initial_block_download = m_chain.isInitialBlockDownload();
         m_highest_pruned_height_hint = m_chain.highestPrunedHeight().value_or(-1);
@@ -501,8 +503,13 @@ void BlockVisualizationWidget::updateBlockStatusesAsync()
     if (m_event_loop_timer_started) {
         const qint64 lag_ms = m_event_loop_timer.elapsed();
         const int expected_ms = isVisible() ? 75 : 350;
-        if (lag_ms > expected_ms + 250) {
+        constexpr qint64 LAG_WARN_COOLDOWN_MS{10'000};
+        const int severe_lag_ms = expected_ms + 750;
+        static int64_t s_last_lag_warn_ms{0};
+        const int64_t now_ms = GetTimeMillis();
+        if (lag_ms > severe_lag_ms && (now_ms - s_last_lag_warn_ms >= LAG_WARN_COOLDOWN_MS)) {
             LogPrint(BCLog::QT, "BlockVisualizationWidget GUI event-loop lag=%d ms\n", static_cast<int>(lag_ms));
+            s_last_lag_warn_ms = now_ms;
         }
     }
     m_event_loop_timer.restart();
@@ -672,14 +679,18 @@ void BlockVisualizationWidget::dispatchStatusBatch()
             }
 
             m_status_request_in_flight = false;
-            // Visible mode polls continuously for live transitions; hidden mode
-            // only continues while there is pending catch-up work.
-            if (isVisible() || !m_pendingBlocks.empty() || !m_backfill_complete) {
+            if (isVisible()) {
                 scheduleStatusRefresh();
             }
-            if (elapsed_ms > 20) {
+            // Log only severe/sluggish worker batches, and rate-limit to avoid log spam.
+            constexpr qint64 BATCH_WARN_COOLDOWN_MS{10'000};
+            constexpr qint64 BATCH_WARN_MS{400};
+            static int64_t s_last_batch_warn_ms{0};
+            const int64_t now_ms = GetTimeMillis();
+            if (elapsed_ms > BATCH_WARN_MS && (now_ms - s_last_batch_warn_ms >= BATCH_WARN_COOLDOWN_MS)) {
                 LogPrint(BCLog::QT, "BlockVisualizationWidget::requestStatusesBatch took %d ms for %d heights\n",
                          static_cast<int>(elapsed_ms), batch.size());
+                s_last_batch_warn_ms = now_ms;
             }
         }, Qt::QueuedConnection);
     }, Qt::QueuedConnection);
