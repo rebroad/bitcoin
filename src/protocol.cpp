@@ -7,8 +7,6 @@
 
 #include <util/system.h>
 
-#include <array>
-
 static std::atomic<bool> g_initial_block_download_completed(false);
 
 namespace NetMsgType {
@@ -200,6 +198,7 @@ static std::string serviceFlagToStr(size_t bit)
     case NODE_WITNESS:         return "WITNESS";
     case NODE_COMPACT_FILTERS: return "COMPACT_FILTERS";
     case NODE_NETWORK_LIMITED: return "NETWORK_LIMITED";
+    case NODE_P2P_V2:          return "P2P_V2";
     // Not using default, so we get warned when a case is missing
     }
 
@@ -226,20 +225,16 @@ std::vector<std::string> serviceFlagsToStr(uint64_t flags)
 
 std::string serviceFlagsToEmojiVisual(uint64_t flags)
 {
-    // Visualize low 8 bits in fixed positions, then append known higher bits.
-    std::array<std::string, 8> slots{" ", " ", " ", " ", " ", " ", " ", " "};
+    // Compact emoji rendering in service-bit order, without separators.
+    std::string out;
     const bool has_network = flags & NODE_NETWORK;
     const bool has_network_limited = flags & NODE_NETWORK_LIMITED;
-    if (has_network) slots[0] = "🌐";
-    if (flags & NODE_BLOOM) slots[2] = "🫧";
-    if (flags & NODE_WITNESS) slots[3] = "👁️";
-    if (flags & NODE_COMPACT_FILTERS) slots[6] = "🔎";
-
-    std::string out = "[";
-    for (const auto& s : slots) out += s;
-    out += "]";
-
+    if (has_network) out += "🌐";
     if (!has_network && has_network_limited) out += "🧱";
+    if (flags & NODE_BLOOM) out += "🫧";
+    if (!(flags & NODE_WITNESS)) out += "🙈";
+    if (flags & NODE_COMPACT_FILTERS) out += "🔎";
+    if (flags & NODE_P2P_V2) out += "🔐";
     return out;
 }
 
