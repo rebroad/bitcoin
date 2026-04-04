@@ -140,6 +140,8 @@ public Q_SLOTS:
     void scrollToEnd();
     /** Disconnect a selected node on the Peers tab */
     void disconnectSelectedNode();
+    /** Remove selected peers from addnode list on the Peers tab */
+    void removeSelectedNodeFromAddnode();
     /** Ban a selected node on the Peers tab */
     void banSelectedNode(int bantime);
     /** Unban a selected node on the Bans tab */
@@ -185,6 +187,7 @@ private:
     RPCTimerInterface *rpcTimerInterface = nullptr;
     QMenu *peersTableContextMenu = nullptr;
     QMenu *banTableContextMenu = nullptr;
+    QAction* m_remove_from_addnode_action = nullptr;
     QAction* m_unban_action = nullptr;
     QAction* m_ban_asn_1h_action = nullptr;
     QAction* m_ban_asn_1d_action = nullptr;

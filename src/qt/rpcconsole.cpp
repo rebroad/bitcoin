@@ -68,6 +68,7 @@
 #include <cmath>
 #include <chrono>
 #include <limits>
+#include <set>
 
 const int CONSOLE_HISTORY = 50;
 const QSize FONT_RANGE(4, 40);
@@ -939,6 +940,7 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
         });
         peersTableContextMenu->addSeparator();
         peersTableContextMenu->addAction(tr("&Disconnect"), this, &RPCConsole::disconnectSelectedNode);
+        m_remove_from_addnode_action = peersTableContextMenu->addAction(tr("&Remove from addnode list"), this, &RPCConsole::removeSelectedNodeFromAddnode);
         peersTableContextMenu->addAction(ts.ban_for + " " + tr("1 &hour"), [this] { banSelectedNode(60 * 60); });
         peersTableContextMenu->addAction(ts.ban_for + " " + tr("1 d&ay"), [this] { banSelectedNode(60 * 60 * 24); });
         peersTableContextMenu->addAction(ts.ban_for + " " + tr("1 &week"), [this] { banSelectedNode(60 * 60 * 24 * 7); });
@@ -1580,8 +1582,20 @@ void RPCConsole::hideEvent(QHideEvent *event)
 void RPCConsole::showPeersTableContextMenu(const QPoint& point)
 {
     QModelIndex index = ui->peerWidget->indexAt(point);
-    if (index.isValid())
+    if (index.isValid()) {
+        bool has_manual_peer{false};
+        for (const QModelIndex& peer : GUIUtil::getEntryData(ui->peerWidget, PeerTableModel::NetNodeId)) {
+            const auto stats = peer.data(PeerTableModel::StatsRole).value<CNodeCombinedStats*>();
+            if (stats && stats->nodeStats.m_conn_type == ConnectionType::MANUAL) {
+                has_manual_peer = true;
+                break;
+            }
+        }
+        if (m_remove_from_addnode_action) {
+            m_remove_from_addnode_action->setEnabled(has_manual_peer);
+        }
         peersTableContextMenu->exec(QCursor::pos());
+    }
 }
 
 void RPCConsole::showBanTableContextMenu(const QPoint& point)
@@ -1626,6 +1640,109 @@ void RPCConsole::disconnectSelectedNode()
         // Find the node, disconnect it and clear the selected node
         if(m_node.disconnectById(id))
             clearSelectedNode();
+    }
+}
+
+void RPCConsole::removeSelectedNodeFromAddnode()
+{
+    std::set<std::string> selected_addr_names;
+    std::set<std::string> selected_connected_addrs;
+    bool has_selected_manual_peer{false};
+    for (const QModelIndex& peer : GUIUtil::getEntryData(ui->peerWidget, PeerTableModel::NetNodeId)) {
+        const auto stats = peer.data(PeerTableModel::StatsRole).value<CNodeCombinedStats*>();
+        if (!stats || stats->nodeStats.m_conn_type != ConnectionType::MANUAL) {
+            continue;
+        }
+        has_selected_manual_peer = true;
+        if (!stats->nodeStats.m_addr_name.empty()) {
+            selected_addr_names.insert(stats->nodeStats.m_addr_name);
+        }
+        const std::string connected_addr = stats->nodeStats.addr.ToStringIPPort();
+        if (!connected_addr.empty()) {
+            selected_connected_addrs.insert(connected_addr);
+        }
+    }
+
+    if (!has_selected_manual_peer) {
+        message(CMD_ERROR, tr("No selected peers are addnode peers."), false);
+        return;
+    }
+
+    std::set<std::string> nodes_to_remove;
+    UniValue added_node_info_params(UniValue::VARR);
+    UniValue addnode_info;
+    try {
+        addnode_info = m_node.executeRpc("getaddednodeinfo", added_node_info_params, "");
+    } catch (const std::exception& e) {
+        message(CMD_ERROR, tr("Failed to read addnode list: %1").arg(QString::fromStdString(e.what())), false);
+        return;
+    }
+
+    for (size_t i = 0; i < addnode_info.size(); ++i) {
+        const UniValue& entry = addnode_info[i];
+        if (!entry.isObject()) {
+            continue;
+        }
+        const UniValue added_node = find_value(entry, "addednode");
+        if (!added_node.isStr()) {
+            continue;
+        }
+        const std::string added_node_str = added_node.get_str();
+        if (selected_addr_names.count(added_node_str) != 0) {
+            nodes_to_remove.insert(added_node_str);
+            continue;
+        }
+
+        const UniValue connected = find_value(entry, "connected");
+        if (!connected.isTrue()) {
+            continue;
+        }
+        const UniValue addresses = find_value(entry, "addresses");
+        if (!addresses.isArray()) {
+            continue;
+        }
+        for (size_t j = 0; j < addresses.size(); ++j) {
+            const UniValue& address_entry = addresses[j];
+            if (!address_entry.isObject()) {
+                continue;
+            }
+            const UniValue address = find_value(address_entry, "address");
+            if (address.isStr() && selected_connected_addrs.count(address.get_str()) != 0) {
+                nodes_to_remove.insert(added_node_str);
+                break;
+            }
+        }
+    }
+
+    // Fallback to remove by selected destination names if no direct match was found.
+    if (nodes_to_remove.empty()) {
+        nodes_to_remove = selected_addr_names;
+    }
+
+    if (nodes_to_remove.empty()) {
+        message(CMD_ERROR, tr("Selected peers are not present in addnode list."), false);
+        return;
+    }
+
+    int removed_count{0};
+    int failure_count{0};
+    for (const std::string& node : nodes_to_remove) {
+        UniValue remove_params(UniValue::VARR);
+        remove_params.push_back(node);
+        remove_params.push_back("remove");
+        try {
+            m_node.executeRpc("addnode", remove_params, "");
+            ++removed_count;
+        } catch (const std::exception&) {
+            ++failure_count;
+        }
+    }
+
+    if (removed_count > 0) {
+        message(CMD_REPLY, tr("%1 node(s) removed from addnode list.").arg(removed_count), false);
+    }
+    if (removed_count == 0 || failure_count > 0) {
+        message(CMD_ERROR, tr("Could not remove %1 node(s) from addnode list.").arg(failure_count > 0 ? failure_count : static_cast<int>(nodes_to_remove.size())), false);
     }
 }
 
