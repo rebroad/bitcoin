@@ -1697,12 +1697,12 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     double nLatestNodeScore{0.0};
     std::vector<std::pair<NodeId, std::pair<double, double>>> outbound_peer_metrics;
     NodeId latestNode = -1;
-    NodeId worstNodeCombined = -1;
-    static NodeId lastWorstCombined = -1;
+    NodeId worstNode = -1;
+    static NodeId lastWorst = -1;
     float nGlobalTXpm = 0;
     float nGlobalBps = 0;
     int64_t now = GetTimeSeconds();
-    static int64_t tWorstCombinedChanged = now;
+    static int64_t tWorstChanged = now;
     static int64_t tIBDEnded = now;
     static int64_t m_last_block_time = 0;
     static int64_t lastnow = 0;
@@ -1879,6 +1879,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
 
                 for (CNode* pnode : nodes) {
                     if (!pnode->IsFullOutboundConn()) continue;
+                    if (pnode->HasPermission(NetPermissionFlags::NoBan)) continue;
                     const NodeId node_id = pnode->GetId();
                     const auto speed_it = ibd_peer_bps.find(node_id);
                     if (speed_it == ibd_peer_bps.end()) continue;
@@ -1901,6 +1902,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 if (disconnect_candidate != -1 && nOutboundFullRelay > 2) {
                     for (CNode* pnode : nodes) {
                         if (pnode->GetId() != disconnect_candidate) continue;
+                        if (pnode->HasPermission(NetPermissionFlags::NoBan)) continue;
                         pnode->fDisconnect = true;
                         LogPrintf("IBD speed eviction: peer=%d speed=%sB/s fastest=%sB/s window=%ds\n",
                                   disconnect_candidate, strprintf("%.2f", disconnect_candidate_bps), strprintf("%.2f", fastest_bps), (int)IBD_SPEED_MEASUREMENT_WINDOW);
@@ -1947,17 +1949,17 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                 nSecondLowestScore = nLowestScore;
                 nLowestScore = score;
                 nLowestEffectiveTXpm = metrics.second;
-                worstNodeCombined = node_id;
+                worstNode = node_id;
             } else if (score < nSecondLowestScore) {
                 nSecondLowestScore = score;
             }
         }
-        if (lastWorstCombined != worstNodeCombined) {
-            tWorstCombinedChanged = now;
-            LogPrintf("worstC: score %d -> %d (%.3f:%.3f) Global: TXpm=%d Pct=%d %sbps\n",
-                      lastWorstCombined, worstNodeCombined, nLowestScore, nSecondLowestScore,
+        if (lastWorst != worstNode) {
+            tWorstChanged = now;
+            LogPrintf("worst: score %d -> %d (%.3f:%.3f) Global: TXpm=%d Pct=%d %sbps\n",
+                      lastWorst, worstNode, nLowestScore, nSecondLowestScore,
                       nGlobalTXpm, 100 * nTotalMempoolBytes / (nTotalBytesRecv + 1), strUnit(nGlobalBps));
-            lastWorstCombined = worstNodeCombined;
+            lastWorst = worstNode;
         }
         static double last_latest_node_score{0.0};
         if (nLatestNodeScore < last_latest_node_score) fLatestNodeScoreDegrading = true;
@@ -1970,10 +1972,8 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
 
         // Evict worst performing outbound connection
         if (!IsIBD && lastnow != now) {
-            const NodeId worstNode = worstNodeCombined;
             const double nLowest = nLowestScore;
             const double nSecondLowest = nSecondLowestScore;
-            int64_t tWorstChanged = tWorstCombinedChanged;
             const bool fLatestNodeDegrading = fLatestNodeScoreDegrading;
             if (tIBDEnded > tWorstChanged) tWorstChanged = tIBDEnded;
             bool MaxedOut = nOutboundFullRelay >= (int)m_max_outbound_full_relay;
@@ -1981,7 +1981,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             std::string strReason;
             std::string strDetails;
             int64_t m_connected = std::max(count_seconds(pnode->m_connected), tIBDEnded);
-            if (pnode->GetId() == worstNode && !pnode->fDisconnect) {
+            if (pnode->GetId() == worstNode && !pnode->fDisconnect && !pnode->HasPermission(NetPermissionFlags::NoBan)) {
                 if (MaxedOut) {
                     // A block came in and so the lowest will always be the lowest - disconnect it
                     if (m_last_block_time > latestOutboundConn && (pnode->nBTXpm || (pnode->nBTXpm == 0 && m_last_block_time - m_connected >= 120))) {
@@ -2004,7 +2004,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             }
             if (DoIt) {
                 pnode->fDisconnect = 1; nOutboundFullRelay--;
-                LogPrintf("EvictC: score=%.3f,%.3f %s %s TimeConn=%d LastOut=%d LastSnapOld=%d %sdisconnect peer=%d\n",
+                LogPrintf("Evict: score=%.3f,%.3f %s %s TimeConn=%d LastOut=%d LastSnapOld=%d %sdisconnect peer=%d\n",
                           nLowest, nSecondLowest, strReason, strDetails, now - m_connected, now - latestOutboundConn,
                           now - latestSnapOld, MaxedOut ? "MO " : "", pnode->GetId());
                 if ((now - latestOutboundConn) >= 120 && MaxedOut
