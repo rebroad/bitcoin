@@ -933,8 +933,11 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                         if (fEqual)
                             popstack(stack);
                         else {
-                            LogPrintf("%s: NOT EQUAL vch1=%s vch2=%s\n", __func__,
+                            // Suppress expected mismatches from anyone-can-spend probing.
+                            if (!execdata.m_anyone_can_spend_probe) {
+                                LogPrintf("%s: NOT EQUAL vch1=%s vch2=%s\n", __func__,
                                 HexStr(vch1), HexStr(vch2));
+                            }
                             return set_error(serror, SCRIPT_ERR_EQUALVERIFY);
                         }
                     }

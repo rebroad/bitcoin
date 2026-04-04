@@ -195,6 +195,9 @@ enum class SigVersion
 
 struct ScriptExecutionData
 {
+    //! True when script execution is a non-consensus anyone-can-spend probe.
+    bool m_anyone_can_spend_probe = false;
+
     //! Whether m_tapleaf_hash is initialized.
     bool m_tapleaf_hash_init = false;
     //! The tapleaf hash.

@@ -654,6 +654,7 @@ RPCHelpMan listsinceblock();
 RPCHelpMan gettransaction();
 RPCHelpMan abandontransaction();
 RPCHelpMan removeconflictedtransactions();
+RPCHelpMan removeinvalidanyonecanspendtransactions();
 RPCHelpMan rescanblockchain();
 RPCHelpMan abortrescan();
 
@@ -709,6 +710,7 @@ static const CRPCCommand commands[] =
     { "wallet",             &lockunspent,                    },
     { "wallet",             &newkeypool,                     },
     { "wallet",             &removeconflictedtransactions,   },
+    { "wallet",             &removeinvalidanyonecanspendtransactions, },
     { "wallet",             &removeprunedfunds,              },
     { "wallet",             &rescanblockchain,               },
     { "wallet",             &send,                           },

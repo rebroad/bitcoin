@@ -82,10 +82,12 @@ bool IsAnyoneCanSpendScriptPubKey(const CScript& script_pub_key, CScript* spend_
 
         DummySignatureChecker checker;
         std::vector<std::vector<unsigned char>> stack;
-        if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
+        ScriptExecutionData execdata;
+        execdata.m_anyone_can_spend_probe = true;
+        if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, execdata, &serror)) {
             continue;
         }
-        if (EvalScript(stack, script_pub_key, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror) &&
+        if (EvalScript(stack, script_pub_key, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, execdata, &serror) &&
             !stack.empty() && IsTrueStackValue(stack.back())) {
             if (spend_script_sig) *spend_script_sig = script_sig;
             return true;

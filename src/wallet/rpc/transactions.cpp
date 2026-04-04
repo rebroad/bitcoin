@@ -4,11 +4,12 @@
 
 #include <core_io.h>
 #include <key_io.h>
-#include <node/context.h>
+#include <net.h>
 #include <policy/rbf.h>
 #include <rpc/server_util.h>
 #include <rpc/util.h>
 #include <util/vector.h>
+#include <util/system.h>
 #include <wallet/receive.h>
 #include <wallet/rpc/util.h>
 #include <wallet/wallet.h>
@@ -904,6 +905,154 @@ RPCHelpMan removeconflictedtransactions()
     UniValue result(UniValue::VOBJ);
     result.pushKV("removed", static_cast<int>(removed_txids.size()));
     result.pushKV("txids", txids);
+    return result;
+},
+    };
+}
+
+RPCHelpMan removeinvalidanyonecanspendtransactions()
+{
+    return RPCHelpMan{"removeinvalidanyonecanspendtransactions",
+                "\nRemove unconfirmed wallet transactions created by the anyone-can-spend flow that are not acceptable to mempool policy.\n"
+                "A transaction is considered removable if it pays to the configured destination and is either:\n"
+                "  1. rejected with script-verify flags, or\n"
+                "  2. rejected with missing-inputs where inputs depend on another removable transaction.\n",
+                {
+                    {"dry_run", RPCArg::Type::BOOL, RPCArg::Default{false}, "If true, only report what would be removed."},
+                    {"destination", RPCArg::Type::STR, RPCArg::Optional::OMITTED_NAMED_ARG, "Destination address to match. Defaults to -anyonecanspenddestination."},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::BOOL, "dry_run", "Whether removal was simulated only"},
+                        {RPCResult::Type::STR, "destination", "Destination used for matching candidate transactions"},
+                        {RPCResult::Type::NUM, "scanned_unconfirmed", "Unconfirmed wallet transactions scanned"},
+                        {RPCResult::Type::NUM, "candidates", "Candidate transactions paying to destination"},
+                        {RPCResult::Type::NUM, "removable", "Transactions classified as removable"},
+                        {RPCResult::Type::NUM, "removed", "Number of transactions removed"},
+                        {RPCResult::Type::ARR, "txids", "Removable transaction ids",
+                            {
+                                {RPCResult::Type::STR_HEX, "", "Transaction id"},
+                            }},
+                        {RPCResult::Type::ARR, "details", "Classification details for removable txs",
+                            {
+                                {RPCResult::Type::OBJ, "", "",
+                                    {
+                                        {RPCResult::Type::STR_HEX, "txid", "Transaction id"},
+                                        {RPCResult::Type::STR, "reason", "Mempool reject reason/classification"},
+                                    }},
+                            }},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("removeinvalidanyonecanspendtransactions", "")
+            + HelpExampleCli("removeinvalidanyonecanspendtransactions", "true")
+            + HelpExampleRpc("removeinvalidanyonecanspendtransactions", "[]")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return NullUniValue;
+
+    const bool dry_run{request.params[0].isNull() ? false : request.params[0].get_bool()};
+    std::string destination = request.params[1].isNull() ? gArgs.GetArg("-anyonecanspenddestination", "") : request.params[1].get_str();
+    if (destination.empty() || !IsValidDestinationString(destination)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Destination is required and must be a valid address");
+    }
+    const CScript destination_script = GetScriptForDestination(DecodeDestination(destination));
+
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    struct Candidate {
+        uint256 txid;
+        CTransactionRef tx;
+    };
+    std::vector<Candidate> candidates;
+    size_t scanned_unconfirmed{0};
+
+    {
+        LOCK(pwallet->cs_wallet);
+        candidates.reserve(pwallet->mapWallet.size());
+        for (const auto& [txid, wtx] : pwallet->mapWallet) {
+            if (pwallet->GetTxDepthInMainChain(wtx) != 0) continue;
+            scanned_unconfirmed++;
+            for (const auto& txout : wtx.tx->vout) {
+                if (txout.scriptPubKey == destination_script) {
+                    candidates.push_back({txid, wtx.tx});
+                    break;
+                }
+            }
+        }
+    }
+
+    auto starts_with = [](const std::string& s, const std::string& p) { return s.rfind(p, 0) == 0; };
+    std::map<uint256, std::string> reject_reasons;
+    std::set<uint256> remove_set;
+    for (const auto& c : candidates) {
+        if (pwallet->chain().isInMempool(c.txid)) {
+            continue;
+        }
+        std::string err_string;
+        const bool accepted = pwallet->chain().broadcastTransaction(c.tx, /*max_tx_fee=*/0, /*relay=*/false, err_string, NODEID_WALLET_ORIGIN);
+        if (accepted) continue;
+
+        std::string reason = err_string.empty() ? std::string{"mempool-rejected"} : err_string;
+        reject_reasons.emplace(c.txid, reason);
+        if (starts_with(reason, "mandatory-script-verify-flag") || starts_with(reason, "non-mandatory-script-verify-flag")) {
+            remove_set.insert(c.txid);
+        }
+    }
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const auto& c : candidates) {
+            if (remove_set.count(c.txid) != 0) continue;
+            auto it = reject_reasons.find(c.txid);
+            if (it == reject_reasons.end()) continue;
+            if (!starts_with(it->second, "missing-inputs")) continue;
+            for (const auto& in : c.tx->vin) {
+                if (remove_set.count(in.prevout.hash) != 0) {
+                    remove_set.insert(c.txid);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    std::vector<uint256> removable_txids(remove_set.begin(), remove_set.end());
+    std::vector<uint256> removed_txids;
+
+    if (!dry_run && !removable_txids.empty()) {
+        LOCK(pwallet->cs_wallet);
+        if (pwallet->ZapSelectTx(removable_txids, removed_txids) != DBErrors::LOAD_OK) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Could not properly delete invalid anyone-can-spend transactions.");
+        }
+    } else {
+        removed_txids = removable_txids;
+    }
+
+    UniValue txids(UniValue::VARR);
+    UniValue details(UniValue::VARR);
+    for (const auto& txid : removed_txids) {
+        txids.push_back(txid.GetHex());
+        UniValue entry(UniValue::VOBJ);
+        entry.pushKV("txid", txid.GetHex());
+        const auto it = reject_reasons.find(txid);
+        entry.pushKV("reason", it != reject_reasons.end() ? it->second : "dependent-missing-inputs");
+        details.push_back(entry);
+    }
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("dry_run", dry_run);
+    result.pushKV("destination", destination);
+    result.pushKV("scanned_unconfirmed", static_cast<int64_t>(scanned_unconfirmed));
+    result.pushKV("candidates", static_cast<int64_t>(candidates.size()));
+    result.pushKV("removable", static_cast<int64_t>(remove_set.size()));
+    result.pushKV("removed", static_cast<int64_t>(removed_txids.size()));
+    result.pushKV("txids", txids);
+    result.pushKV("details", details);
     return result;
 },
     };
