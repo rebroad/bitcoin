@@ -852,6 +852,63 @@ RPCHelpMan abandontransaction()
     };
 }
 
+RPCHelpMan removeconflictedtransactions()
+{
+    return RPCHelpMan{"removeconflictedtransactions",
+                "\nRemove all conflicted wallet transactions.\n"
+                "Conflicted transactions have negative confirmations and are not included in the active chain.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::NUM, "removed", "Number of transactions removed"},
+                        {RPCResult::Type::ARR, "txids", "Removed transaction ids",
+                            {
+                                {RPCResult::Type::STR_HEX, "", "The transaction id"},
+                            }
+                        },
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("removeconflictedtransactions", "")
+            + HelpExampleRpc("removeconflictedtransactions", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return NullUniValue;
+
+    // Make sure conflicted state reflects the current active chain.
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    std::vector<uint256> conflicted_txids;
+    conflicted_txids.reserve(pwallet->mapWallet.size());
+    for (const auto& [txid, wtx] : pwallet->mapWallet) {
+        if (pwallet->GetTxDepthInMainChain(wtx) < 0) {
+            conflicted_txids.push_back(txid);
+        }
+    }
+
+    std::vector<uint256> removed_txids;
+    if (!conflicted_txids.empty() && pwallet->ZapSelectTx(conflicted_txids, removed_txids) != DBErrors::LOAD_OK) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Could not properly delete conflicted transactions.");
+    }
+
+    UniValue txids(UniValue::VARR);
+    for (const uint256& txid : removed_txids) {
+        txids.push_back(txid.GetHex());
+    }
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("removed", static_cast<int>(removed_txids.size()));
+    result.pushKV("txids", txids);
+    return result;
+},
+    };
+}
+
 
 
 RPCHelpMan rescanblockchain()
