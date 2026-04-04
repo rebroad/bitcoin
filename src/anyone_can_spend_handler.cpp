@@ -27,14 +27,23 @@
 #include <hash.h>
 
 #include <algorithm>
+#include <chrono>
 #include <set>
 
 namespace {
 const CFeeRate MIN_ANYONE_CAN_SPEND_FEERATE{20'000}; // 20 sat/vB floor.
-constexpr size_t MAX_OUTPUTS_SCANNED_PER_TX{32};
-constexpr size_t MAX_OUTPUTS_RETURNED_PER_TX{8};
-constexpr size_t MAX_PROBE_EVALS_PER_TX{192};
-constexpr size_t MAX_PROBE_SCRIPT_SIG_TEMPLATES{8};
+constexpr size_t MIN_OUTPUTS_SCANNED_PER_TX{8};
+constexpr size_t MAX_OUTPUTS_SCANNED_PER_TX{64};
+constexpr size_t MIN_OUTPUTS_RETURNED_PER_TX{2};
+constexpr size_t MAX_OUTPUTS_RETURNED_PER_TX{16};
+constexpr size_t MIN_PROBE_EVALS_PER_TX{48};
+constexpr size_t MAX_PROBE_EVALS_PER_TX{512};
+constexpr size_t MIN_PROBE_SCRIPT_SIG_TEMPLATES{2};
+constexpr size_t MAX_PROBE_SCRIPT_SIG_TEMPLATES{16};
+constexpr int64_t TARGET_ELAPSED_US_MEMPOOL{2'000};
+constexpr int64_t TARGET_ELAPSED_US_BLOCK{10'000};
+constexpr uint64_t ADJUST_INTERVAL_EVENTS{25};
+constexpr double EMA_ALPHA{0.2};
 
 class DummySignatureCheckerAllowAll final : public BaseSignatureChecker {
 public:
@@ -324,8 +333,12 @@ void AnyoneCanSpendHandler::TransactionAddedToMempool(const CTransactionRef& tx,
         m_stats.transactions_evaluated_mempool++;
     }
 
+    const auto start = std::chrono::steady_clock::now();
+    bool budget_exhausted{false};
     // Check for anyone-can-spend outputs in this transaction
-    auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(*tx);
+    auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(*tx, /*from_mempool=*/true, &budget_exhausted);
+    const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+    UpdateRuntimeTuning(/*from_mempool=*/true, elapsed_us, budget_exhausted);
     if (!anyone_can_spend_outputs.empty()) {
         LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpendHandler: Found %zu anyone-can-spend outputs in mempool transaction %s\n",
                   anyone_can_spend_outputs.size(), tx->GetHash().ToString());
@@ -359,7 +372,11 @@ void AnyoneCanSpendHandler::BlockConnected(const std::shared_ptr<const CBlock>& 
 
     // Check for anyone-can-spend outputs in each transaction in the block
     for (const auto& tx : block->vtx) {
-        auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(*tx);
+        const auto start = std::chrono::steady_clock::now();
+        bool budget_exhausted{false};
+        auto anyone_can_spend_outputs = FindAnyoneCanSpendOutputs(*tx, /*from_mempool=*/false, &budget_exhausted);
+        const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+        UpdateRuntimeTuning(/*from_mempool=*/false, elapsed_us, budget_exhausted);
         if (!anyone_can_spend_outputs.empty()) {
             LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpendHandler: Found %zu anyone-can-spend outputs in block transaction %s\n",
                   anyone_can_spend_outputs.size(), tx->GetHash().ToString());
@@ -699,11 +716,28 @@ void AnyoneCanSpendHandler::StartHeartbeat()
             }
 
             if (!ShutdownRequested()) {
-                std::lock_guard<std::mutex> lock(m_stats_mutex);
+                Stats stats_snapshot;
+                RuntimeTuning tuning_snapshot;
+                {
+                    std::lock_guard<std::mutex> lock(m_stats_mutex);
+                    stats_snapshot = m_stats;
+                }
+                {
+                    std::lock_guard<std::mutex> lock(m_tuning_mutex);
+                    tuning_snapshot = m_tuning_state;
+                }
                 if (m_handler_enabled) {
-                    LogPrintf("AnyoneCanSpendHandler: Heartbeat - Transactions evaluated: %u blocks, %u mempool, Anyone-can-spend outputs detected: %u, Outputs spent: %u\n",
-                             m_stats.transactions_evaluated_blocks, m_stats.transactions_evaluated_mempool,
-                             m_stats.outputs_detected, m_stats.outputs_spent);
+                    LogPrintf("AnyoneCanSpendHandler: Heartbeat - tx_eval(block=%llu,mempool=%llu) outputs(detected=%llu,spent=%llu) tuning(scan=%zu,return=%zu,eval_budget=%zu,templates=%zu) perf(ema_us_mempool=%.1f,ema_us_block=%.1f,overruns_mempool=%llu,overruns_block=%llu,budget_exhaust_mempool=%llu,budget_exhaust_block=%llu,cache_hit_rate=%.1f%%)\n",
+                             (unsigned long long)stats_snapshot.transactions_evaluated_blocks, (unsigned long long)stats_snapshot.transactions_evaluated_mempool,
+                             (unsigned long long)stats_snapshot.outputs_detected, (unsigned long long)stats_snapshot.outputs_spent,
+                             tuning_snapshot.max_outputs_scanned_per_tx, tuning_snapshot.max_outputs_returned_per_tx,
+                             tuning_snapshot.max_probe_evals_per_tx, tuning_snapshot.max_probe_script_sig_templates,
+                             tuning_snapshot.ema_elapsed_us_mempool, tuning_snapshot.ema_elapsed_us_block,
+                             (unsigned long long)tuning_snapshot.mempool_overruns, (unsigned long long)tuning_snapshot.block_overruns,
+                             (unsigned long long)tuning_snapshot.mempool_budget_exhaustions, (unsigned long long)tuning_snapshot.block_budget_exhaustions,
+                             (tuning_snapshot.cache_hits + tuning_snapshot.cache_misses) > 0
+                                 ? (100.0 * tuning_snapshot.cache_hits) / (tuning_snapshot.cache_hits + tuning_snapshot.cache_misses)
+                                 : 0.0);
                 } else {
                     LogPrintf("AnyoneCanSpendHandler: Heartbeat - Handler disabled (invalid destination address)\n");
                 }
@@ -724,26 +758,46 @@ void AnyoneCanSpendHandler::StopHeartbeat()
     }
 }
 
-std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpendOutputs(const CTransaction& tx)
+std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpendOutputs(const CTransaction& tx, bool from_mempool, bool* budget_exhausted)
 {
-    std::vector<std::pair<size_t, CScript>> results;
-    results.reserve(std::min(tx.vout.size(), MAX_OUTPUTS_RETURNED_PER_TX));
+    if (budget_exhausted) *budget_exhausted = false;
 
-    size_t remaining_eval_budget{MAX_PROBE_EVALS_PER_TX};
-    const size_t outputs_to_scan = std::min(tx.vout.size(), MAX_OUTPUTS_SCANNED_PER_TX);
-    for (size_t index = 0; index < outputs_to_scan && results.size() < MAX_OUTPUTS_RETURNED_PER_TX; ++index) {
+    size_t max_outputs_scanned_per_tx;
+    size_t max_outputs_returned_per_tx;
+    size_t max_probe_evals_per_tx;
+    size_t max_probe_script_sig_templates;
+    {
+        std::lock_guard<std::mutex> lock(m_tuning_mutex);
+        max_outputs_scanned_per_tx = m_tuning_state.max_outputs_scanned_per_tx;
+        max_outputs_returned_per_tx = m_tuning_state.max_outputs_returned_per_tx;
+        max_probe_evals_per_tx = m_tuning_state.max_probe_evals_per_tx;
+        max_probe_script_sig_templates = m_tuning_state.max_probe_script_sig_templates;
+    }
+
+    std::vector<std::pair<size_t, CScript>> results;
+    results.reserve(std::min(tx.vout.size(), max_outputs_returned_per_tx));
+
+    size_t remaining_eval_budget{max_probe_evals_per_tx};
+    const size_t outputs_to_scan = std::min(tx.vout.size(), max_outputs_scanned_per_tx);
+    for (size_t index = 0; index < outputs_to_scan && results.size() < max_outputs_returned_per_tx; ++index) {
         const CTxOut& txout = tx.vout[index];
         CScript script_sig;
         bool is_anyone_can_spend_cached{false};
         if (LookupDetectionCache(txout.scriptPubKey, is_anyone_can_spend_cached, &script_sig)) {
+            std::lock_guard<std::mutex> lock(m_tuning_mutex);
+            m_tuning_state.cache_hits++;
             if (is_anyone_can_spend_cached) {
                 results.emplace_back(index, script_sig);
             }
             continue;
         }
+        {
+            std::lock_guard<std::mutex> lock(m_tuning_mutex);
+            m_tuning_state.cache_misses++;
+        }
 
         anyonecanspend::ProbeLimits limits;
-        limits.max_script_sig_templates = MAX_PROBE_SCRIPT_SIG_TEMPLATES;
+        limits.max_script_sig_templates = max_probe_script_sig_templates;
         limits.remaining_eval_budget = &remaining_eval_budget;
         const bool is_anyone_can_spend = anyonecanspend::IsAnyoneCanSpendScriptPubKey(txout.scriptPubKey, &script_sig, limits);
         StoreDetectionCache(txout.scriptPubKey, is_anyone_can_spend, script_sig);
@@ -751,7 +805,9 @@ std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpen
             results.emplace_back(index, script_sig);
         }
         if (remaining_eval_budget == 0) {
-            LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Probe budget exhausted while scanning tx=%s\n", tx.GetHash().ToString());
+            LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Probe budget exhausted while scanning tx=%s mode=%s\n",
+                     tx.GetHash().ToString(), from_mempool ? "mempool" : "block");
+            if (budget_exhausted) *budget_exhausted = true;
             break;
         }
     }
@@ -764,6 +820,58 @@ std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpen
     }
 
     return results;
+}
+
+void AnyoneCanSpendHandler::UpdateRuntimeTuning(bool from_mempool, int64_t elapsed_us, bool budget_exhausted)
+{
+    std::lock_guard<std::mutex> lock(m_tuning_mutex);
+    auto& t = m_tuning_state;
+
+    const int64_t target_us = from_mempool ? TARGET_ELAPSED_US_MEMPOOL : TARGET_ELAPSED_US_BLOCK;
+    double& ema = from_mempool ? t.ema_elapsed_us_mempool : t.ema_elapsed_us_block;
+    uint64_t& events = from_mempool ? t.mempool_events : t.block_events;
+    uint64_t& budget_exhaustions = from_mempool ? t.mempool_budget_exhaustions : t.block_budget_exhaustions;
+    uint64_t& overruns = from_mempool ? t.mempool_overruns : t.block_overruns;
+    uint64_t& since_adjust = from_mempool ? t.mempool_events_since_adjust : t.block_events_since_adjust;
+
+    events++;
+    since_adjust++;
+    if (budget_exhausted) budget_exhaustions++;
+    if (elapsed_us > target_us) overruns++;
+
+    ema = (events == 1) ? static_cast<double>(elapsed_us) : (EMA_ALPHA * static_cast<double>(elapsed_us) + (1.0 - EMA_ALPHA) * ema);
+
+    if (since_adjust < ADJUST_INTERVAL_EVENTS) {
+        return;
+    }
+    since_adjust = 0;
+
+    const double exhaust_rate = events > 0 ? static_cast<double>(budget_exhaustions) / static_cast<double>(events) : 0.0;
+    const bool overloaded = ema > static_cast<double>(target_us) || exhaust_rate > 0.20;
+    const bool underloaded = ema < static_cast<double>(target_us) * 0.5 && exhaust_rate < 0.05;
+    if (overloaded) {
+        if (t.max_probe_evals_per_tx > MIN_PROBE_EVALS_PER_TX) {
+            t.max_probe_evals_per_tx = std::max(MIN_PROBE_EVALS_PER_TX, (t.max_probe_evals_per_tx * 8) / 10);
+        } else if (t.max_probe_script_sig_templates > MIN_PROBE_SCRIPT_SIG_TEMPLATES) {
+            t.max_probe_script_sig_templates = std::max(MIN_PROBE_SCRIPT_SIG_TEMPLATES, (t.max_probe_script_sig_templates * 8) / 10);
+        } else if (t.max_outputs_scanned_per_tx > MIN_OUTPUTS_SCANNED_PER_TX) {
+            t.max_outputs_scanned_per_tx = std::max(MIN_OUTPUTS_SCANNED_PER_TX, (t.max_outputs_scanned_per_tx * 8) / 10);
+        }
+    } else if (underloaded) {
+        if (t.max_probe_evals_per_tx < MAX_PROBE_EVALS_PER_TX) {
+            t.max_probe_evals_per_tx = std::min(MAX_PROBE_EVALS_PER_TX, (t.max_probe_evals_per_tx * 11) / 10 + 1);
+        } else if (t.max_probe_script_sig_templates < MAX_PROBE_SCRIPT_SIG_TEMPLATES) {
+            t.max_probe_script_sig_templates = std::min(MAX_PROBE_SCRIPT_SIG_TEMPLATES, (t.max_probe_script_sig_templates * 11) / 10 + 1);
+        } else if (t.max_outputs_scanned_per_tx < MAX_OUTPUTS_SCANNED_PER_TX) {
+            t.max_outputs_scanned_per_tx = std::min(MAX_OUTPUTS_SCANNED_PER_TX, (t.max_outputs_scanned_per_tx * 11) / 10 + 1);
+        }
+    }
+
+    t.max_outputs_returned_per_tx = std::min(t.max_outputs_scanned_per_tx, std::max(MIN_OUTPUTS_RETURNED_PER_TX, t.max_outputs_returned_per_tx));
+    LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: tuning update mode=%s ema_us=%.1f target_us=%d exhaust_rate=%.2f limits(scan=%zu,return=%zu,eval_budget=%zu,templates=%zu)\n",
+             from_mempool ? "mempool" : "block", ema, target_us, exhaust_rate,
+             t.max_outputs_scanned_per_tx, t.max_outputs_returned_per_tx,
+             t.max_probe_evals_per_tx, t.max_probe_script_sig_templates);
 }
 
 bool AnyoneCanSpendHandler::LookupDetectionCache(const CScript& script_pub_key, bool& is_anyone_can_spend, CScript* spend_script_sig) const

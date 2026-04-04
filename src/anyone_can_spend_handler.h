@@ -158,6 +158,26 @@ private:
         bool is_anyone_can_spend{false};
         CScript spend_script_sig;
     };
+    struct RuntimeTuning {
+        size_t max_outputs_scanned_per_tx{32};
+        size_t max_outputs_returned_per_tx{8};
+        size_t max_probe_evals_per_tx{192};
+        size_t max_probe_script_sig_templates{8};
+        double ema_elapsed_us_mempool{0.0};
+        double ema_elapsed_us_block{0.0};
+        uint64_t mempool_events{0};
+        uint64_t block_events{0};
+        uint64_t mempool_budget_exhaustions{0};
+        uint64_t block_budget_exhaustions{0};
+        uint64_t mempool_overruns{0};
+        uint64_t block_overruns{0};
+        uint64_t cache_hits{0};
+        uint64_t cache_misses{0};
+        uint64_t mempool_events_since_adjust{0};
+        uint64_t block_events_since_adjust{0};
+    };
+    mutable std::mutex m_tuning_mutex;
+    RuntimeTuning m_tuning_state;
     mutable std::mutex m_detection_cache_mutex;
     std::map<uint256, DetectionCacheEntry> m_detection_cache;
     std::deque<uint256> m_detection_cache_order;
@@ -191,10 +211,11 @@ private:
      * @param tx The transaction to check
      * @return Vector of (output_index, working_script_sig) pairs
      */
-    std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx);
+    std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx, bool from_mempool, bool* budget_exhausted = nullptr);
 
     bool LookupDetectionCache(const CScript& script_pub_key, bool& is_anyone_can_spend, CScript* spend_script_sig) const;
     void StoreDetectionCache(const CScript& script_pub_key, bool is_anyone_can_spend, const CScript& spend_script_sig);
+    void UpdateRuntimeTuning(bool from_mempool, int64_t elapsed_us, bool budget_exhausted);
 };
 
 #endif // BITCOIN_ANYONE_CAN_SPEND_HANDLER_H
