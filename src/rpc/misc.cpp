@@ -12,6 +12,7 @@
 #include <interfaces/init.h>
 #include <interfaces/ipc.h>
 #include <key_io.h>
+#include <net.h>
 #include <net_processing.h>
 #include <node/context.h>
 #include <outputtype.h>
@@ -87,6 +88,32 @@ static std::optional<std::string> ApplyRuntimePruneSetting(const JSONRPCRequest&
         WITH_LOCK(cs_main, node_context.chainman->m_blockman.SetCheckForPruning());
         node_context.chainman->ActiveChainstate().ForceFlushStateToDisk();
     }
+    return std::nullopt;
+}
+
+static std::optional<std::string> ApplyRuntimeConnectionSettings(const JSONRPCRequest& request)
+{
+    ArgsManager& args{EnsureAnyArgsman(request.context)};
+    NodeContext& node_context = EnsureAnyNodeContext(request.context);
+    if (!node_context.connman) {
+        return std::string{"Error: Peer-to-peer functionality missing or disabled"};
+    }
+
+    std::vector<NetWhitelistPermissions> whitelisted_ranges;
+    for (const auto& net : args.GetArgs("-whitelist")) {
+        NetWhitelistPermissions subnet;
+        bilingual_str error;
+        if (!NetWhitelistPermissions::TryParse(net, subnet, error)) {
+            return strprintf("Invalid -whitelist entry '%s': %s", net, error.original);
+        }
+        whitelisted_ranges.push_back(subnet);
+    }
+
+    CConnman& connman = EnsureConnman(node_context);
+    connman.SetWhitelistedRanges(whitelisted_ranges);
+    connman.RefreshWhitelistedPeerPermissions();
+    connman.SetAddedNodes(args.GetArgs("-addnode"));
+
     return std::nullopt;
 }
 
@@ -940,6 +967,11 @@ static RPCHelpMan reloadconfig()
             warnings.push_back(*prune_error);
             success = false;
         }
+        if (const auto conn_error{ApplyRuntimeConnectionSettings(request)}) {
+            warnings.push_back(*conn_error);
+            success = false;
+        }
+        ApplyScriptCheckThreads();
     }
 
     result.pushKV("success", success);

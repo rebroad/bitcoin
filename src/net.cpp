@@ -546,6 +546,7 @@ void CNode::CloseSocketDisconnect() {
 }
 
 void CConnman::AddWhitelistPermissionFlags(NetPermissionFlags& flags, const CNetAddr &addr) const {
+    LOCK(m_whitelisted_range_mutex);
     for (const auto& subnet : vWhitelistedRange) {
         if (subnet.m_subnet.Match(addr)) NetPermissions::AddFlag(flags, subnet.m_flags);
     }
@@ -3450,6 +3451,39 @@ bool CConnman::RemoveAddedNode(const std::string& strNode)
         }
     }
     return false;
+}
+
+void CConnman::SetAddedNodes(const std::vector<std::string>& nodes)
+{
+    LOCK(m_added_nodes_mutex);
+    m_added_nodes = nodes;
+}
+
+void CConnman::SetWhitelistedRanges(const std::vector<NetWhitelistPermissions>& ranges)
+{
+    LOCK(m_whitelisted_range_mutex);
+    vWhitelistedRange = ranges;
+}
+
+void CConnman::RefreshWhitelistedPeerPermissions()
+{
+    LOCK(m_nodes_mutex);
+    for (CNode* pnode : m_nodes) {
+        NetPermissionFlags permission_flags{pnode->m_permissionFlags};
+        AddWhitelistPermissionFlags(permission_flags, pnode->addr);
+        if (NetPermissions::HasFlag(permission_flags, NetPermissionFlags::Implicit)) {
+            NetPermissions::ClearFlag(permission_flags, NetPermissionFlags::Implicit);
+            if (gArgs.GetBoolArg("-whitelistforcerelay", DEFAULT_WHITELISTFORCERELAY)) {
+                NetPermissions::AddFlag(permission_flags, NetPermissionFlags::ForceRelay);
+            }
+            if (gArgs.GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY)) {
+                NetPermissions::AddFlag(permission_flags, NetPermissionFlags::Relay);
+            }
+            NetPermissions::AddFlag(permission_flags, NetPermissionFlags::Mempool);
+            NetPermissions::AddFlag(permission_flags, NetPermissionFlags::NoBan);
+        }
+        pnode->m_permissionFlags = permission_flags;
+    }
 }
 
 size_t CConnman::GetNodeCount(ConnectionDirection flags) const

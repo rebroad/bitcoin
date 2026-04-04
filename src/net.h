@@ -880,7 +880,10 @@ public:
             LOCK(cs_totalBytesSent);
             nMaxOutboundLimit = connOptions.nMaxOutboundLimit;
         }
-        vWhitelistedRange = connOptions.vWhitelistedRange;
+        {
+            LOCK(m_whitelisted_range_mutex);
+            vWhitelistedRange = connOptions.vWhitelistedRange;
+        }
         {
             LOCK(m_added_nodes_mutex);
             m_added_nodes = connOptions.m_added_nodes;
@@ -973,6 +976,9 @@ public:
     bool AddNode(const std::string& node);
     bool RemoveAddedNode(const std::string& node);
     std::vector<AddedNodeInfo> GetAddedNodeInfo() const;
+    void SetAddedNodes(const std::vector<std::string>& nodes);
+    void SetWhitelistedRanges(const std::vector<NetWhitelistPermissions>& ranges);
+    void RefreshWhitelistedPeerPermissions();
 
     /**
      * Attempts to open a connection. Currently only used from tests.
@@ -1189,7 +1195,8 @@ private:
 
     // Whitelisted ranges. Any node connecting from these is automatically
     // whitelisted (as well as those connecting to whitelisted binds).
-    std::vector<NetWhitelistPermissions> vWhitelistedRange;
+    std::vector<NetWhitelistPermissions> vWhitelistedRange GUARDED_BY(m_whitelisted_range_mutex);
+    mutable Mutex m_whitelisted_range_mutex;
 
     unsigned int nSendBufferMaxSize{0};
     unsigned int nReceiveFloodSize{0};
