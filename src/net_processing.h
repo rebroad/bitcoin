@@ -43,6 +43,7 @@ public:
     virtual ~PeerManager() { }
 
     virtual std::optional<std::string> FetchMempool(NodeId peer_id) = 0;
+    virtual std::optional<std::string> SendMempool(NodeId peer_id) = 0;
 
     /**
      * Attempt to manually fetch block from a given peer. We must already have the header.

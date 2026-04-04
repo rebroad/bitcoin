@@ -297,6 +297,35 @@ static RPCHelpMan getmempoolfrompeer()
     };
 }
 
+static RPCHelpMan sendmempooltopeer()
+{
+    return RPCHelpMan{
+        "sendmempooltopeer",
+        "Attempt to send this node's mempool to a given peer.\n\n"
+        "Returns an empty JSON object if the send was successfully scheduled.",
+        {
+            {"peer_id", RPCArg::Type::NUM, RPCArg::Optional::NO, "The peer to send it to (see getpeerinfo for peer IDs)"},
+        },
+        RPCResult{RPCResult::Type::OBJ, "", /*optional=*/false, "", {}},
+        RPCExamples{
+            HelpExampleCli("sendmempooltopeer", "0")
+            + HelpExampleRpc("sendmempooltopeer", "0")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    const NodeContext& node = EnsureAnyNodeContext(request.context);
+    PeerManager& peerman = EnsurePeerman(node);
+
+    const NodeId peer_id{request.params[0].get_int64()};
+
+    if (const auto err{peerman.SendMempool(peer_id)}) {
+        throw JSONRPCError(RPC_MISC_ERROR, err.value());
+    }
+    return UniValue::VOBJ;
+},
+    };
+}
+
 static RPCHelpMan maxoutboundrelay()
 {
     return RPCHelpMan{"maxoutboundrelay",
@@ -1092,6 +1121,7 @@ static const CRPCCommand commands[] =
     { "network",             &getnettotals,            },
     { "network",             &getnetworkinfo,          },
     { "network",             &getmempoolfrompeer,      },
+    { "network",             &sendmempooltopeer,       },
     { "network",             &maxoutboundrelay,        },
     { "network",             &setban,                  },
     { "network",             &listbanned,              },

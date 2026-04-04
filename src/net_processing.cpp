@@ -366,6 +366,7 @@ public:
     void CheckForStaleTipAndEvictPeers() override;
     std::optional<std::string> FetchBlock(NodeId peer_id, const CBlockIndex& block_index) override;
     std::optional<std::string> FetchMempool(NodeId peer_id) override;
+    std::optional<std::string> SendMempool(NodeId peer_id) override;
     bool GetNodeStateStats(NodeId nodeid, CNodeStateStats& stats) const override;
     bool IgnoresIncomingTxs() override { return m_ignore_incoming_txs; }
     void SendPings() override;
@@ -1842,6 +1843,29 @@ std::optional<std::string> PeerManagerImpl::FetchMempool(NodeId peer_id)
     if (!success) return "Peer not fully connected";
 
     LogPrintf("Requesting mempool from peer=%d\n", peer_id);
+    return std::nullopt;
+}
+
+std::optional<std::string> PeerManagerImpl::SendMempool(NodeId peer_id)
+{
+    LOCK(cs_main);
+    CNodeState* state = State(peer_id);
+    if (state == nullptr) return "Peer does not exist";
+
+    bool can_send_mempool = false;
+    bool success = m_connman.ForNode(peer_id, [&can_send_mempool](CNode* node) {
+        if (node->m_tx_relay == nullptr) return true;
+
+        LOCK(node->m_tx_relay->cs_tx_inventory);
+        node->m_tx_relay->fSendMempool = true;
+        can_send_mempool = true;
+        return true;
+    });
+
+    if (!success) return "Peer not fully connected";
+    if (!can_send_mempool) return "Peer does not relay transactions";
+
+    LogPrintf("Sending mempool to peer=%d\n", peer_id);
     return std::nullopt;
 }
 
