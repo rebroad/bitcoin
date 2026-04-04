@@ -2866,6 +2866,17 @@ void CConnman::OpenNetworkConnection(const CAddress& addrConnect, bool fCountFai
     if (!pnode) return;
     if (grantOutbound) grantOutbound->MoveTo(pnode->grantOutbound);
 
+    NetPermissionFlags permissionFlags = NetPermissionFlags::None;
+    AddWhitelistPermissionFlags(permissionFlags, pnode->addr);
+    if (NetPermissions::HasFlag(permissionFlags, NetPermissionFlags::Implicit)) {
+        NetPermissions::ClearFlag(permissionFlags, NetPermissionFlags::Implicit);
+        if (gArgs.GetBoolArg("-whitelistforcerelay", DEFAULT_WHITELISTFORCERELAY)) NetPermissions::AddFlag(permissionFlags, NetPermissionFlags::ForceRelay);
+        if (gArgs.GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY)) NetPermissions::AddFlag(permissionFlags, NetPermissionFlags::Relay);
+        NetPermissions::AddFlag(permissionFlags, NetPermissionFlags::Mempool);
+        NetPermissions::AddFlag(permissionFlags, NetPermissionFlags::NoBan);
+    }
+    pnode->m_permissionFlags = permissionFlags;
+
     m_msgproc->InitializeNode(pnode);
     {
         LOCK(m_nodes_mutex);
