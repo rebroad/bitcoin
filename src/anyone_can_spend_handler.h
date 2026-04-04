@@ -38,6 +38,17 @@ bool IsAnyoneCanSpendScriptPubKey(const CScript& script_pub_key, CScript* spend_
  * Returns vector of (vout index, satisfying scriptSig candidate).
  */
 std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx, size_t max_outputs = std::numeric_limits<size_t>::max());
+
+/**
+ * Best-effort ACS reason string for a specific tx output index.
+ * Returns empty if the output does not match ACS detection.
+ */
+std::string DescribeAnyoneCanSpendOutput(const CTransaction& tx, size_t output_index);
+
+/**
+ * Accepts both plain wallet name ("Anyone") and path-like names ending with "/Anyone".
+ */
+bool IsAnyoneWalletName(const std::string& wallet_name);
 } // namespace anyonecanspend
 
 /**

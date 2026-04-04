@@ -8,6 +8,7 @@
 
 #include <qt/transactiondesc.h>
 
+#include <anyone_can_spend_handler.h>
 #include <qt/bitcoinunits.h>
 #include <qt/guiutil.h>
 #include <qt/paymentserver.h>
@@ -276,6 +277,35 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
         strHTML += "<br><b>" + tr("Message") + ":</b><br>" + GUIUtil::HtmlEscape(wtx.value_map["message"], true) + "<br>";
     if (wtx.value_map.count("comment") && !wtx.value_map["comment"].empty())
         strHTML += "<br><b>" + tr("Comment") + ":</b><br>" + GUIUtil::HtmlEscape(wtx.value_map["comment"], true) + "<br>";
+    const bool is_anyone_wallet = anyonecanspend::IsAnyoneWalletName(wallet.getWalletName());
+    const bool looks_like_sweep = rec->type == TransactionRecord::SendToAddress || rec->type == TransactionRecord::SendToOther || rec->type == TransactionRecord::SendToSelf;
+    const bool looks_like_detected = rec->type == TransactionRecord::RecvWithAddress || rec->type == TransactionRecord::RecvFromOther;
+    if ((wtx.value_map.count("acs_sweep") && !wtx.value_map["acs_sweep"].empty()) || (is_anyone_wallet && looks_like_sweep)) {
+        QString sweep_summary = tr("Internal ACS sweep transaction");
+        if (wtx.value_map.count("acs_sweep_outputs")) {
+            sweep_summary += QString(" (%1 outputs").arg(QString::fromStdString(wtx.value_map["acs_sweep_outputs"]));
+            if (wtx.value_map.count("acs_sweep_total")) {
+                sweep_summary += QString(", total %1").arg(QString::fromStdString(wtx.value_map["acs_sweep_total"]));
+            }
+            if (wtx.value_map.count("acs_sweep_fee")) {
+                sweep_summary += QString(", fee %1").arg(QString::fromStdString(wtx.value_map["acs_sweep_fee"]));
+            }
+            sweep_summary += QLatin1Char(')');
+        }
+        strHTML += "<br><b>" + tr("ACS sweep") + ":</b><br>" + GUIUtil::HtmlEscape(sweep_summary.toStdString(), true) + "<br>";
+    }
+    if (wtx.value_map.count("acs_reason") && !wtx.value_map["acs_reason"].empty())
+        strHTML += "<br><b>" + tr("ACS selection reason") + ":</b><br>" + GUIUtil::HtmlEscape(wtx.value_map["acs_reason"], true) + "<br>";
+    else if (is_anyone_wallet && looks_like_detected) {
+        const std::string inferred_reason = (wtx.tx && rec->getOutputIndex() >= 0)
+            ? anyonecanspend::DescribeAnyoneCanSpendOutput(*wtx.tx, static_cast<size_t>(rec->getOutputIndex()))
+            : std::string{};
+        if (!inferred_reason.empty()) {
+            strHTML += "<br><b>" + tr("ACS selection reason") + ":</b><br>" + GUIUtil::HtmlEscape(inferred_reason, true) + "<br>";
+        } else {
+            strHTML += "<br><b>" + tr("ACS selection reason") + ":</b><br>" + tr("Detected as anyone-can-spend (legacy entry; detailed reason unavailable)") + "<br>";
+        }
+    }
 
     strHTML += "<b>" + tr("Transaction ID") + ":</b> " + rec->getTxHash() + "<br>";
     strHTML += "<b>" + tr("Transaction total size") + ":</b> " + QString::number(wtx.tx->GetTotalSize()) + " bytes<br>";

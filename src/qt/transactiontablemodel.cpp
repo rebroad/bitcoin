@@ -4,6 +4,7 @@
 
 #include <qt/transactiontablemodel.h>
 
+#include <anyone_can_spend_handler.h>
 #include <qt/addresstablemodel.h>
 #include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
@@ -371,11 +372,25 @@ QString TransactionTableModel::lookupAddress(const std::string &address, bool to
 
 QString TransactionTableModel::formatTxType(const TransactionRecord *wtx) const
 {
+    const bool is_anyone_wallet = anyonecanspend::IsAnyoneWalletName(walletModel->getWalletName().toStdString());
+    const interfaces::WalletTx wallet_tx = walletModel->wallet().getWalletTx(wtx->hash);
+    const bool is_acs_sweep = wallet_tx.value_map.count("acs_sweep") != 0;
+    const bool is_acs_detected = wallet_tx.value_map.count("acs_reason") != 0;
+
+    if (is_acs_sweep || (is_anyone_wallet && (wtx->type == TransactionRecord::SendToAddress || wtx->type == TransactionRecord::SendToOther || wtx->type == TransactionRecord::SendToSelf))) {
+        return tr("ACS sweep");
+    }
+    if (is_anyone_wallet && (wtx->type == TransactionRecord::RecvWithAddress || wtx->type == TransactionRecord::RecvFromOther)) {
+        return tr("ACS detected");
+    }
+
     switch(wtx->type)
     {
     case TransactionRecord::RecvWithAddress:
+        if (is_acs_detected) return tr("ACS detected");
         return tr("Received with");
     case TransactionRecord::RecvFromOther:
+        if (is_acs_detected) return tr("ACS detected");
         return tr("Received from");
     case TransactionRecord::SendToAddress:
     case TransactionRecord::SendToOther:
@@ -513,6 +528,26 @@ QString TransactionTableModel::formatTooltip(const TransactionRecord *rec) const
        rec->type==TransactionRecord::SendToAddress || rec->type==TransactionRecord::RecvWithAddress)
     {
         tooltip += QString(" ") + formatTxToAddress(rec, true);
+    }
+    const interfaces::WalletTx wtx = walletModel->wallet().getWalletTx(rec->hash);
+    const bool is_anyone_wallet = anyonecanspend::IsAnyoneWalletName(walletModel->getWalletName().toStdString());
+    const bool looks_like_sweep = rec->type == TransactionRecord::SendToAddress || rec->type == TransactionRecord::SendToOther || rec->type == TransactionRecord::SendToSelf;
+    const bool looks_like_detected = rec->type == TransactionRecord::RecvWithAddress || rec->type == TransactionRecord::RecvFromOther;
+    if (wtx.value_map.count("acs_sweep") != 0 || (is_anyone_wallet && looks_like_sweep)) {
+        tooltip += QString("\nACS: %1").arg(tr("internal sweep transaction created by handler"));
+    }
+    const auto it = wtx.value_map.find("acs_reason");
+    if (it != wtx.value_map.end() && !it->second.empty()) {
+        tooltip += QString("\nACS: %1").arg(QString::fromStdString(it->second));
+    } else if (is_anyone_wallet && looks_like_detected) {
+        const std::string inferred_reason = (wtx.tx && rec->getOutputIndex() >= 0)
+            ? anyonecanspend::DescribeAnyoneCanSpendOutput(*wtx.tx, static_cast<size_t>(rec->getOutputIndex()))
+            : std::string{};
+        if (!inferred_reason.empty()) {
+            tooltip += QString("\nACS: %1").arg(QString::fromStdString(inferred_reason));
+        } else {
+            tooltip += QString("\nACS: %1").arg(tr("detected as anyone-can-spend (legacy entry; detailed reason unavailable)"));
+        }
     }
     return tooltip;
 }

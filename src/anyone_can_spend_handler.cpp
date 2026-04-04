@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <chrono>
 #include <set>
+#include <string_view>
 
 namespace {
 const CFeeRate MIN_ANYONE_CAN_SPEND_FEERATE{20'000}; // 20 sat/vB floor.
@@ -124,6 +125,33 @@ static uint256 ScriptCacheKey(const CScript& script_pub_key)
 {
     return Hash(script_pub_key);
 }
+
+static std::string DescribeAcsSelection(const CTxOut& txout, const CScript& script_sig)
+{
+    if (txout.scriptPubKey.size() == 1 && (txout.scriptPubKey[0] == OP_TRUE || txout.scriptPubKey[0] == OP_1)) {
+        return "scriptPubKey=OP_TRUE";
+    }
+    if (txout.scriptPubKey.size() == 2 && txout.scriptPubKey[0] == OP_DROP &&
+        (txout.scriptPubKey[1] == OP_TRUE || txout.scriptPubKey[1] == OP_1)) {
+        return "scriptPubKey=OP_DROP OP_TRUE";
+    }
+    return strprintf("probe(scriptSig=%s)", HexStr(script_sig));
+}
+
+static std::string BuildAcsReasonSummary(const CTransactionRef& tx, const std::vector<std::pair<size_t, CScript>>& anyone_can_spend_outputs)
+{
+    std::string summary = "ACS-selected outputs: ";
+    bool first = true;
+    for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
+        if (!first) summary += "; ";
+        first = false;
+        summary += strprintf("vout=%u amount=%s %s",
+                             (unsigned)output_index,
+                             FormatMoney(tx->vout[output_index].nValue),
+                             DescribeAcsSelection(tx->vout[output_index], script_sig));
+    }
+    return summary;
+}
 } // namespace
 
 namespace anyonecanspend {
@@ -186,6 +214,34 @@ std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransac
         }
     }
     return results;
+}
+
+std::string DescribeAnyoneCanSpendOutput(const CTransaction& tx, size_t output_index)
+{
+    if (output_index >= tx.vout.size()) {
+        return {};
+    }
+    CScript spend_script_sig;
+    if (!IsAnyoneCanSpendScriptPubKey(tx.vout[output_index].scriptPubKey, &spend_script_sig)) {
+        return {};
+    }
+    return strprintf("vout=%u amount=%s %s",
+                     static_cast<unsigned>(output_index),
+                     FormatMoney(tx.vout[output_index].nValue),
+                     DescribeAcsSelection(tx.vout[output_index], spend_script_sig));
+}
+
+bool IsAnyoneWalletName(const std::string& wallet_name)
+{
+    if (wallet_name == "Anyone") return true;
+    constexpr std::string_view suffix{"/Anyone"};
+    if (wallet_name.size() >= suffix.size() &&
+        wallet_name.compare(wallet_name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        return true;
+    }
+    constexpr std::string_view suffix_windows{"\\Anyone"};
+    return wallet_name.size() >= suffix_windows.size() &&
+           wallet_name.compare(wallet_name.size() - suffix_windows.size(), suffix_windows.size(), suffix_windows) == 0;
 }
 } // namespace anyonecanspend
 
@@ -343,12 +399,6 @@ void AnyoneCanSpendHandler::TransactionAddedToMempool(const CTransactionRef& tx,
 
         // Process the anyone-can-spend outputs
         ProcessAnyoneCanSpendOutputs(tx, anyone_can_spend_outputs, wallet::TxStateInMempool{});
-    } else {
-        // Log occasionally to see how many transactions we're processing
-        static int processed_count = 0;
-        if (++processed_count % 100 == 0) {
-            LogPrintf("AnyoneCanSpendHandler: Processed %d transactions, found no anyone-can-spend outputs\n", processed_count);
-        }
     }
 }
 
@@ -563,7 +613,11 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
     // Add the transaction to the wallet with the appropriate state
     // The wallet will only show notifications for outputs that are marked as "mine"
     // Since we only added profitable outputs to setAnyoneCanSpend, only those will be tracked
-    wallet->AddToWallet(tx, state);
+    const std::string acs_reason_summary = BuildAcsReasonSummary(tx, anyone_can_spend_outputs);
+    wallet->AddToWallet(tx, state, [&](wallet::CWalletTx& wtx, bool) {
+        wtx.mapValue["acs_reason"] = acs_reason_summary;
+        return true;
+    });
 
     LogPrintf("AnyoneCanSpendHandler: Added transaction %s to 'Anyone' wallet with %zu profitable anyone-can-spend outputs (total value: %s)\n",
               tx->GetHash().ToString(), outputs_for_spending.size(), FormatMoney(total_amount));
@@ -680,8 +734,13 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
             return std::nullopt;
         }
 
-        // Commit the transaction to the wallet
-        wallet->CommitTransaction(tx_new, {}, {});
+        // Commit the transaction to the wallet with ACS metadata for UI explainability.
+        wallet::mapValue_t map_value;
+        map_value["acs_sweep"] = "1";
+        map_value["acs_sweep_outputs"] = ToString(outputs.size());
+        map_value["acs_sweep_total"] = FormatMoney(total_amount);
+        map_value["acs_sweep_fee"] = FormatMoney(estimated_fee);
+        wallet->CommitTransaction(tx_new, std::move(map_value), {});
 
         LogPrintf("AnyoneCanSpendHandler: Created and committed spending transaction %s for %zu outputs (total: %s, amount sent: %s, fee: %s, feerate: %s)\n",
                   tx_new->GetHash().ToString(), outputs.size(), FormatMoney(total_amount), FormatMoney(amount_to_send), FormatMoney(estimated_fee), fee_rate.ToString(FeeEstimateMode::SAT_VB));
