@@ -442,12 +442,20 @@ public:
     bool HaveWatchOnly(const CScript &dest) const;
     //! Returns whether there are any watch-only things in the wallet
     bool HaveWatchOnly() const;
+    //! Returns the currently tracked watch-only scripts
+    std::vector<CScript> GetWatchOnlyScripts() const;
     //! Remove a watch only script from the keystore
     bool RemoveWatchOnly(const CScript &dest);
     //! Returns whether the anyone-can-spend script is in the wallet
     bool HaveAnyoneCanSpend(const CScript &dest) const;
     //! Adds an anyone-can-spend script to the wallet
     bool AddAnyoneCanSpend(const CScript &dest);
+    //! Removes an anyone-can-spend script from the wallet
+    bool RemoveAnyoneCanSpend(const CScript& dest);
+    //! Removes all anyone-can-spend scripts from the wallet and returns count removed
+    size_t ClearAnyoneCanSpend();
+    //! Returns the currently tracked anyone-can-spend scripts
+    std::vector<CScript> GetAnyoneCanSpendScripts() const;
     bool AddWatchOnly(const CScript& dest, int64_t nCreateTime) EXCLUSIVE_LOCKS_REQUIRED(cs_KeyStore);
 
     //! Fetches a pubkey from mapWatchKeys if it exists there

@@ -120,6 +120,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "testmempoolaccept", 0, "rawtxs" },
     { "testmempoolaccept", 1, "maxfeerate" },
     { "removeinvalidanyonecanspendtransactions", 0, "dry_run" },
+    { "manageanyonecanspendscripts", 1, "remove_tracked_transactions" },
     { "combinerawtransaction", 0, "txs" },
     { "fundrawtransaction", 1, "options" },
     { "fundrawtransaction", 2, "iswitness" },

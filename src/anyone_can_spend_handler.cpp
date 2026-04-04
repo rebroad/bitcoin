@@ -585,6 +585,12 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
         return std::nullopt;
     }
 
+    {
+        std::lock_guard<std::mutex> lock(m_stats_mutex);
+        m_stats.outputs_detected += outputs_for_spending.size();
+        m_stats.total_amount_detected += total_amount;
+    }
+
     // Add the specific anyone-can-spend outputs to the wallet
     // This makes the wallet recognize these outputs as "mine" so they show in the balance
     // They will be marked as ISMINE_ANYONE and can be spent by our custom logic
@@ -742,6 +748,12 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
         map_value["acs_sweep_fee"] = FormatMoney(estimated_fee);
         wallet->CommitTransaction(tx_new, std::move(map_value), {});
 
+        {
+            std::lock_guard<std::mutex> lock(m_stats_mutex);
+            m_stats.outputs_spent += outputs.size();
+            m_stats.total_amount_spent += total_amount;
+        }
+
         LogPrintf("AnyoneCanSpendHandler: Created and committed spending transaction %s for %zu outputs (total: %s, amount sent: %s, fee: %s, feerate: %s)\n",
                   tx_new->GetHash().ToString(), outputs.size(), FormatMoney(total_amount), FormatMoney(amount_to_send), FormatMoney(estimated_fee), fee_rate.ToString(FeeEstimateMode::SAT_VB));
 
@@ -843,6 +855,7 @@ void AnyoneCanSpendHandler::CleanupStaleAnyoneWalletTransactions(bool force)
     candidates.reserve(static_cast<size_t>(cfg.cleanup_max_candidates));
     std::vector<uint256> confirmed_prune_txids;
     confirmed_prune_txids.reserve(static_cast<size_t>(cfg.cleanup_max_candidates));
+    size_t retained_acs_sweeps{0};
 
     {
         LOCK(wallet->cs_wallet);
@@ -856,6 +869,14 @@ void AnyoneCanSpendHandler::CleanupStaleAnyoneWalletTransactions(bool force)
             }
             if (depth != 0) continue;
             if (wallet->chain().isInMempool(txid)) continue;
+            const bool is_acs_sweep = wtx.mapValue.count("acs_sweep") != 0;
+            const bool has_replacement = wtx.mapValue.count("replaced_by_txid") != 0;
+            // Keep stale unconfirmed ACS sweep transactions for post-mortem analysis
+            // unless they were explicitly replaced or abandoned.
+            if (is_acs_sweep && !has_replacement && !wtx.isAbandoned()) {
+                ++retained_acs_sweeps;
+                continue;
+            }
             const int64_t received = wtx.nTimeReceivedMillis > 0 ? (wtx.nTimeReceivedMillis / 1000) : wtx.nTimeReceived;
             if ((now - received) < cfg.cleanup_stale_age_secs) continue;
             candidates.push_back({txid, wtx.tx});
@@ -905,9 +926,9 @@ void AnyoneCanSpendHandler::CleanupStaleAnyoneWalletTransactions(bool force)
         m_stats.cleanup_removed += removed_txids.size();
     }
 
-    if (!candidates.empty() || !confirmed_prune_txids.empty() || !removed_txids.empty()) {
-        LogPrintf("AnyoneCanSpendHandler: Cleanup run stale_candidates=%u confirmed_candidates=%u removed=%u force=%s\n",
-                  (unsigned)candidates.size(), (unsigned)confirmed_prune_txids.size(), (unsigned)removed_txids.size(), force ? "true" : "false");
+    if (!candidates.empty() || !confirmed_prune_txids.empty() || !removed_txids.empty() || retained_acs_sweeps > 0) {
+        LogPrintf("AnyoneCanSpendHandler: Cleanup run stale_candidates=%u confirmed_candidates=%u retained_acs_sweeps=%u removed=%u force=%s\n",
+                  (unsigned)candidates.size(), (unsigned)confirmed_prune_txids.size(), (unsigned)retained_acs_sweeps, (unsigned)removed_txids.size(), force ? "true" : "false");
     }
 }
 

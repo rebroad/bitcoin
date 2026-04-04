@@ -872,6 +872,12 @@ bool LegacyScriptPubKeyMan::HaveWatchOnly() const
     return (!setWatchOnly.empty());
 }
 
+std::vector<CScript> LegacyScriptPubKeyMan::GetWatchOnlyScripts() const
+{
+    LOCK(cs_KeyStore);
+    return std::vector<CScript>(setWatchOnly.begin(), setWatchOnly.end());
+}
+
 bool LegacyScriptPubKeyMan::HaveAnyoneCanSpend(const CScript &dest) const
 {
     LOCK(cs_KeyStore);
@@ -883,6 +889,26 @@ bool LegacyScriptPubKeyMan::AddAnyoneCanSpend(const CScript &dest)
     LOCK(cs_KeyStore);
     setAnyoneCanSpend.insert(dest);
     return true;
+}
+
+bool LegacyScriptPubKeyMan::RemoveAnyoneCanSpend(const CScript& dest)
+{
+    LOCK(cs_KeyStore);
+    return setAnyoneCanSpend.erase(dest) > 0;
+}
+
+size_t LegacyScriptPubKeyMan::ClearAnyoneCanSpend()
+{
+    LOCK(cs_KeyStore);
+    const size_t removed = setAnyoneCanSpend.size();
+    setAnyoneCanSpend.clear();
+    return removed;
+}
+
+std::vector<CScript> LegacyScriptPubKeyMan::GetAnyoneCanSpendScripts() const
+{
+    LOCK(cs_KeyStore);
+    return std::vector<CScript>(setAnyoneCanSpend.begin(), setAnyoneCanSpend.end());
 }
 
 static bool ExtractPubKey(const CScript &dest, CPubKey& pubKeyOut)

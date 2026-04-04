@@ -12,6 +12,7 @@
 #include <util/system.h>
 #include <wallet/receive.h>
 #include <wallet/rpc/util.h>
+#include <wallet/scriptpubkeyman.h>
 #include <wallet/wallet.h>
 
 using interfaces::FoundBlock;
@@ -1053,6 +1054,118 @@ RPCHelpMan removeinvalidanyonecanspendtransactions()
     result.pushKV("removed", static_cast<int64_t>(removed_txids.size()));
     result.pushKV("txids", txids);
     result.pushKV("details", details);
+    return result;
+},
+    };
+}
+
+RPCHelpMan manageanyonecanspendscripts()
+{
+    return RPCHelpMan{"manageanyonecanspendscripts",
+                "\nInspect or clear script tracking used by the Anyone wallet.\n"
+                "The \"clear\" action removes tracked anyone-can-spend scripts and non-ACS watch-only scripts.\n"
+                "Optionally remove non-ACS wallet transactions that pay to those scripts.\n",
+                {
+                    {"action", RPCArg::Type::STR, RPCArg::Default{"list"}, "Action to perform: \"list\" or \"clear\"."},
+                    {"remove_tracked_transactions", RPCArg::Type::BOOL, RPCArg::Default{false}, "If true and action is \"clear\", remove wallet transactions that pay to cleared scripts and are not tagged as ACS metadata."},
+                },
+                RPCResult{
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR, "action", "Requested action"},
+                        {RPCResult::Type::NUM, "scripts_before", "Tracked anyone-can-spend script count before action"},
+                        {RPCResult::Type::NUM, "scripts_after", "Tracked anyone-can-spend script count after action"},
+                        {RPCResult::Type::NUM, "watchonly_scripts_before", "Tracked watch-only script count before action"},
+                        {RPCResult::Type::NUM, "watchonly_scripts_after", "Tracked watch-only script count after action"},
+                        {RPCResult::Type::ARR, "scripts", "Tracked scriptPubKeys (hex)", {{RPCResult::Type::STR_HEX, "", "scriptPubKey hex"}}},
+                        {RPCResult::Type::BOOL, "remove_tracked_transactions", "Whether tx removal was requested"},
+                        {RPCResult::Type::NUM, "removed_transactions", "Number of wallet transactions removed"},
+                        {RPCResult::Type::ARR, "removed_txids", "Removed txids", {{RPCResult::Type::STR_HEX, "", "Transaction id"}}},
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("manageanyonecanspendscripts", "")
+            + HelpExampleCli("manageanyonecanspendscripts", "\"list\"")
+            + HelpExampleCli("manageanyonecanspendscripts", "\"clear\" true")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return NullUniValue;
+
+    const std::string action = request.params[0].isNull() ? "list" : request.params[0].get_str();
+    if (action != "list" && action != "clear") {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid action. Expected \"list\" or \"clear\".");
+    }
+    const bool remove_tracked_txs = request.params[1].isNull() ? false : request.params[1].get_bool();
+
+    auto spk_man = pwallet->GetLegacyScriptPubKeyMan();
+    if (!spk_man) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Legacy script manager not available for this wallet.");
+    }
+
+    const std::vector<CScript> scripts_before = spk_man->GetAnyoneCanSpendScripts();
+    std::vector<CScript> scripts_after = scripts_before;
+    const std::vector<CScript> watchonly_before = spk_man->GetWatchOnlyScripts();
+    std::vector<CScript> watchonly_after = watchonly_before;
+    std::vector<uint256> removed_txids;
+    std::set<CScript> purge_scripts(scripts_before.begin(), scripts_before.end());
+
+    if (action == "clear") {
+        spk_man->ClearAnyoneCanSpend();
+        scripts_after = spk_man->GetAnyoneCanSpendScripts();
+
+        // In the Anyone wallet, lingering watch-only scripts can cause non-ACS contamination.
+        // Remove them as part of a full clear pass.
+        for (const auto& script : watchonly_before) {
+            if (spk_man->RemoveWatchOnly(script)) {
+                purge_scripts.insert(script);
+            }
+        }
+        watchonly_after = spk_man->GetWatchOnlyScripts();
+
+        if (remove_tracked_txs && !purge_scripts.empty()) {
+            std::vector<uint256> txids_to_remove;
+            {
+                LOCK(pwallet->cs_wallet);
+                txids_to_remove.reserve(pwallet->mapWallet.size());
+                for (const auto& [txid, wtx] : pwallet->mapWallet) {
+                    if (wtx.mapValue.count("acs_reason") != 0 || wtx.mapValue.count("acs_sweep") != 0) {
+                        continue; // Keep explicitly tagged ACS records.
+                    }
+                    for (const auto& txout : wtx.tx->vout) {
+                        if (purge_scripts.count(txout.scriptPubKey) != 0) {
+                            txids_to_remove.push_back(txid);
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!txids_to_remove.empty() && pwallet->ZapSelectTx(txids_to_remove, removed_txids) != DBErrors::LOAD_OK) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Could not properly delete tracked anyone-can-spend transactions.");
+            }
+        }
+    }
+
+    UniValue scripts(UniValue::VARR);
+    for (const auto& script : scripts_after) {
+        scripts.push_back(HexStr(script));
+    }
+    UniValue removed(UniValue::VARR);
+    for (const auto& txid : removed_txids) {
+        removed.push_back(txid.GetHex());
+    }
+
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("action", action);
+    result.pushKV("scripts_before", static_cast<int>(scripts_before.size()));
+    result.pushKV("scripts_after", static_cast<int>(scripts_after.size()));
+    result.pushKV("watchonly_scripts_before", static_cast<int>(watchonly_before.size()));
+    result.pushKV("watchonly_scripts_after", static_cast<int>(watchonly_after.size()));
+    result.pushKV("scripts", scripts);
+    result.pushKV("remove_tracked_transactions", remove_tracked_txs);
+    result.pushKV("removed_transactions", static_cast<int>(removed_txids.size()));
+    result.pushKV("removed_txids", removed);
     return result;
 },
     };

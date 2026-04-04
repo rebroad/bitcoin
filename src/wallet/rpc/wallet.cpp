@@ -655,6 +655,7 @@ RPCHelpMan gettransaction();
 RPCHelpMan abandontransaction();
 RPCHelpMan removeconflictedtransactions();
 RPCHelpMan removeinvalidanyonecanspendtransactions();
+RPCHelpMan manageanyonecanspendscripts();
 RPCHelpMan rescanblockchain();
 RPCHelpMan abortrescan();
 
@@ -711,6 +712,7 @@ static const CRPCCommand commands[] =
     { "wallet",             &newkeypool,                     },
     { "wallet",             &removeconflictedtransactions,   },
     { "wallet",             &removeinvalidanyonecanspendtransactions, },
+    { "wallet",             &manageanyonecanspendscripts,    },
     { "wallet",             &removeprunedfunds,              },
     { "wallet",             &rescanblockchain,               },
     { "wallet",             &send,                           },
