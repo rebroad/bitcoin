@@ -98,7 +98,32 @@ public:
         uint64_t transactions_evaluated_mempool = 0;
     };
 
-    Stats GetStats() const { return m_stats; }
+    Stats GetStats() const;
+    struct RuntimeMetrics {
+        size_t max_outputs_scanned_per_tx{0};
+        size_t max_outputs_returned_per_tx{0};
+        size_t max_probe_evals_per_tx{0};
+        size_t max_probe_script_sig_templates{0};
+        double ema_elapsed_us_mempool{0.0};
+        double ema_elapsed_us_block{0.0};
+        uint64_t mempool_events{0};
+        uint64_t block_events{0};
+        uint64_t mempool_budget_exhaustions{0};
+        uint64_t block_budget_exhaustions{0};
+        uint64_t mempool_overruns{0};
+        uint64_t block_overruns{0};
+        uint64_t cache_hits{0};
+        uint64_t cache_misses{0};
+        int64_t target_elapsed_us_mempool{0};
+        int64_t target_elapsed_us_block{0};
+        uint64_t adjust_interval_events{0};
+        double ema_alpha{0.0};
+        double overload_exhaust_threshold{0.0};
+        double underload_exhaust_threshold{0.0};
+        int overload_scale_percent{0};
+        int underload_scale_percent{0};
+    };
+    RuntimeMetrics GetRuntimeMetrics() const;
 
     /**
      * Get the destination address from configuration.
@@ -176,6 +201,18 @@ private:
         uint64_t mempool_events_since_adjust{0};
         uint64_t block_events_since_adjust{0};
     };
+    struct AutoTuneConfig {
+        int64_t target_elapsed_us_mempool{2'000};
+        int64_t target_elapsed_us_block{10'000};
+        uint64_t adjust_interval_events{25};
+        double ema_alpha{0.2};
+        double overload_exhaust_threshold{0.20};
+        double underload_exhaust_threshold{0.05};
+        int overload_scale_percent{80}; // 80% => shrink by 20%
+        int underload_scale_percent{110}; // 110% => grow by 10%
+    };
+    void LoadAutoTuneConfigFromArgs();
+    AutoTuneConfig m_tuning_config;
     mutable std::mutex m_tuning_mutex;
     RuntimeTuning m_tuning_state;
     mutable std::mutex m_detection_cache_mutex;

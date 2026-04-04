@@ -22,6 +22,7 @@ struct BlockAndHeaderTipInfo;
 namespace node {
 struct NodeContext;
 } // namespace node
+class AnyoneCanSpendHandler;
 
 /** Interrupt threads */
 void Interrupt(node::NodeContext& node);
@@ -74,5 +75,7 @@ void SetupServerArgs(ArgsManager& argsman);
  * Check if anyone-can-spend functionality is enabled
  */
 bool IsAnyoneCanSpendEnabled();
+AnyoneCanSpendHandler* GetAnyoneCanSpendHandler();
+AnyoneCanSpendHandler& EnsureAnyoneCanSpendHandler();
 
 #endif // BITCOIN_INIT_H

@@ -105,6 +105,19 @@ bool IsAnyoneCanSpendEnabled()
     return g_anyone_can_spend_handler != nullptr;
 }
 
+AnyoneCanSpendHandler* GetAnyoneCanSpendHandler()
+{
+    return g_anyone_can_spend_handler.get();
+}
+
+AnyoneCanSpendHandler& EnsureAnyoneCanSpendHandler()
+{
+    if (!g_anyone_can_spend_handler) {
+        g_anyone_can_spend_handler = std::make_unique<AnyoneCanSpendHandler>();
+    }
+    return *g_anyone_can_spend_handler;
+}
+
 #if ENABLE_ZMQ
 #include <zmq/zmqabstractnotifier.h>
 #include <zmq/zmqnotificationinterface.h>
@@ -472,6 +485,14 @@ void SetupServerArgs(ArgsManager& argsman)
     // Anyone-can-spend handler options
     argsman.AddArg("-anyonecanspenddestination=<address>", "Destination address for automatically spending 'anyone can spend' outputs", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-anyonecanspendautoenable", "Automatically enable the anyone-can-spend handler at startup (default: 0)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendtargetusmempool=<n>", "ACS autotuner target runtime per mempool callback in microseconds (default: 2000)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendtargetusblock=<n>", "ACS autotuner target runtime per block-tx callback in microseconds (default: 10000)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendadjustintervalevents=<n>", "ACS autotuner events between adjustments (default: 25)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendemalphapct=<n>", "ACS autotuner EMA alpha in percent (1-100, default: 20)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendoverloadexhaustpct=<n>", "ACS autotuner overload exhaust-rate threshold in percent (default: 20)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendunderloadexhaustpct=<n>", "ACS autotuner underload exhaust-rate threshold in percent (default: 5)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendoverloadscalepct=<n>", "ACS autotuner overload scale percent applied to budgets (10-100, default: 80)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendunderloadscalepct=<n>", "ACS autotuner underload scale percent applied to budgets (100-200, default: 110)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 
     argsman.AddArg("-addnode=<ip>", strprintf("Add a node to connect to and attempt to keep the connection open (see the addnode RPC help for more info). This option can be specified multiple times to add multiple nodes; connections are limited to %u at a time and are counted separately from the -maxconnections limit.", MAX_ADDNODE_CONNECTIONS), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
     argsman.AddArg("-asmap=<file>", strprintf("Specify asn mapping used for bucketing of the peers (default: %s). Relative paths will be prefixed by the net-specific datadir location.", DEFAULT_ASMAP_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);

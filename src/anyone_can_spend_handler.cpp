@@ -40,10 +40,6 @@ constexpr size_t MIN_PROBE_EVALS_PER_TX{48};
 constexpr size_t MAX_PROBE_EVALS_PER_TX{512};
 constexpr size_t MIN_PROBE_SCRIPT_SIG_TEMPLATES{2};
 constexpr size_t MAX_PROBE_SCRIPT_SIG_TEMPLATES{16};
-constexpr int64_t TARGET_ELAPSED_US_MEMPOOL{2'000};
-constexpr int64_t TARGET_ELAPSED_US_BLOCK{10'000};
-constexpr uint64_t ADJUST_INTERVAL_EVENTS{25};
-constexpr double EMA_ALPHA{0.2};
 
 class DummySignatureCheckerAllowAll final : public BaseSignatureChecker {
 public:
@@ -210,6 +206,7 @@ AnyoneCanSpendHandler::AnyoneCanSpendHandler()
     : m_handler_enabled(false), m_wallet_context(nullptr), m_auto_spend(false)
 {
     LogPrintf("AnyoneCanSpendHandler: Constructor called\n");
+    LoadAutoTuneConfigFromArgs();
 
     // Register with the validation interface
     RegisterValidationInterface(this);
@@ -826,8 +823,9 @@ void AnyoneCanSpendHandler::UpdateRuntimeTuning(bool from_mempool, int64_t elaps
 {
     std::lock_guard<std::mutex> lock(m_tuning_mutex);
     auto& t = m_tuning_state;
+    const auto cfg = m_tuning_config;
 
-    const int64_t target_us = from_mempool ? TARGET_ELAPSED_US_MEMPOOL : TARGET_ELAPSED_US_BLOCK;
+    const int64_t target_us = from_mempool ? cfg.target_elapsed_us_mempool : cfg.target_elapsed_us_block;
     double& ema = from_mempool ? t.ema_elapsed_us_mempool : t.ema_elapsed_us_block;
     uint64_t& events = from_mempool ? t.mempool_events : t.block_events;
     uint64_t& budget_exhaustions = from_mempool ? t.mempool_budget_exhaustions : t.block_budget_exhaustions;
@@ -839,31 +837,31 @@ void AnyoneCanSpendHandler::UpdateRuntimeTuning(bool from_mempool, int64_t elaps
     if (budget_exhausted) budget_exhaustions++;
     if (elapsed_us > target_us) overruns++;
 
-    ema = (events == 1) ? static_cast<double>(elapsed_us) : (EMA_ALPHA * static_cast<double>(elapsed_us) + (1.0 - EMA_ALPHA) * ema);
+    ema = (events == 1) ? static_cast<double>(elapsed_us) : (cfg.ema_alpha * static_cast<double>(elapsed_us) + (1.0 - cfg.ema_alpha) * ema);
 
-    if (since_adjust < ADJUST_INTERVAL_EVENTS) {
+    if (since_adjust < cfg.adjust_interval_events) {
         return;
     }
     since_adjust = 0;
 
     const double exhaust_rate = events > 0 ? static_cast<double>(budget_exhaustions) / static_cast<double>(events) : 0.0;
-    const bool overloaded = ema > static_cast<double>(target_us) || exhaust_rate > 0.20;
-    const bool underloaded = ema < static_cast<double>(target_us) * 0.5 && exhaust_rate < 0.05;
+    const bool overloaded = ema > static_cast<double>(target_us) || exhaust_rate > cfg.overload_exhaust_threshold;
+    const bool underloaded = ema < static_cast<double>(target_us) * 0.5 && exhaust_rate < cfg.underload_exhaust_threshold;
     if (overloaded) {
         if (t.max_probe_evals_per_tx > MIN_PROBE_EVALS_PER_TX) {
-            t.max_probe_evals_per_tx = std::max(MIN_PROBE_EVALS_PER_TX, (t.max_probe_evals_per_tx * 8) / 10);
+            t.max_probe_evals_per_tx = std::max(MIN_PROBE_EVALS_PER_TX, (t.max_probe_evals_per_tx * static_cast<size_t>(cfg.overload_scale_percent)) / 100);
         } else if (t.max_probe_script_sig_templates > MIN_PROBE_SCRIPT_SIG_TEMPLATES) {
-            t.max_probe_script_sig_templates = std::max(MIN_PROBE_SCRIPT_SIG_TEMPLATES, (t.max_probe_script_sig_templates * 8) / 10);
+            t.max_probe_script_sig_templates = std::max(MIN_PROBE_SCRIPT_SIG_TEMPLATES, (t.max_probe_script_sig_templates * static_cast<size_t>(cfg.overload_scale_percent)) / 100);
         } else if (t.max_outputs_scanned_per_tx > MIN_OUTPUTS_SCANNED_PER_TX) {
-            t.max_outputs_scanned_per_tx = std::max(MIN_OUTPUTS_SCANNED_PER_TX, (t.max_outputs_scanned_per_tx * 8) / 10);
+            t.max_outputs_scanned_per_tx = std::max(MIN_OUTPUTS_SCANNED_PER_TX, (t.max_outputs_scanned_per_tx * static_cast<size_t>(cfg.overload_scale_percent)) / 100);
         }
     } else if (underloaded) {
         if (t.max_probe_evals_per_tx < MAX_PROBE_EVALS_PER_TX) {
-            t.max_probe_evals_per_tx = std::min(MAX_PROBE_EVALS_PER_TX, (t.max_probe_evals_per_tx * 11) / 10 + 1);
+            t.max_probe_evals_per_tx = std::min(MAX_PROBE_EVALS_PER_TX, (t.max_probe_evals_per_tx * static_cast<size_t>(cfg.underload_scale_percent)) / 100 + 1);
         } else if (t.max_probe_script_sig_templates < MAX_PROBE_SCRIPT_SIG_TEMPLATES) {
-            t.max_probe_script_sig_templates = std::min(MAX_PROBE_SCRIPT_SIG_TEMPLATES, (t.max_probe_script_sig_templates * 11) / 10 + 1);
+            t.max_probe_script_sig_templates = std::min(MAX_PROBE_SCRIPT_SIG_TEMPLATES, (t.max_probe_script_sig_templates * static_cast<size_t>(cfg.underload_scale_percent)) / 100 + 1);
         } else if (t.max_outputs_scanned_per_tx < MAX_OUTPUTS_SCANNED_PER_TX) {
-            t.max_outputs_scanned_per_tx = std::min(MAX_OUTPUTS_SCANNED_PER_TX, (t.max_outputs_scanned_per_tx * 11) / 10 + 1);
+            t.max_outputs_scanned_per_tx = std::min(MAX_OUTPUTS_SCANNED_PER_TX, (t.max_outputs_scanned_per_tx * static_cast<size_t>(cfg.underload_scale_percent)) / 100 + 1);
         }
     }
 
@@ -905,4 +903,66 @@ void AnyoneCanSpendHandler::StoreDetectionCache(const CScript& script_pub_key, b
         m_detection_cache_order.pop_front();
         m_detection_cache.erase(oldest);
     }
+}
+
+AnyoneCanSpendHandler::RuntimeMetrics AnyoneCanSpendHandler::GetRuntimeMetrics() const
+{
+    std::lock_guard<std::mutex> lock(m_tuning_mutex);
+    RuntimeMetrics out;
+    out.max_outputs_scanned_per_tx = m_tuning_state.max_outputs_scanned_per_tx;
+    out.max_outputs_returned_per_tx = m_tuning_state.max_outputs_returned_per_tx;
+    out.max_probe_evals_per_tx = m_tuning_state.max_probe_evals_per_tx;
+    out.max_probe_script_sig_templates = m_tuning_state.max_probe_script_sig_templates;
+    out.ema_elapsed_us_mempool = m_tuning_state.ema_elapsed_us_mempool;
+    out.ema_elapsed_us_block = m_tuning_state.ema_elapsed_us_block;
+    out.mempool_events = m_tuning_state.mempool_events;
+    out.block_events = m_tuning_state.block_events;
+    out.mempool_budget_exhaustions = m_tuning_state.mempool_budget_exhaustions;
+    out.block_budget_exhaustions = m_tuning_state.block_budget_exhaustions;
+    out.mempool_overruns = m_tuning_state.mempool_overruns;
+    out.block_overruns = m_tuning_state.block_overruns;
+    out.cache_hits = m_tuning_state.cache_hits;
+    out.cache_misses = m_tuning_state.cache_misses;
+    out.target_elapsed_us_mempool = m_tuning_config.target_elapsed_us_mempool;
+    out.target_elapsed_us_block = m_tuning_config.target_elapsed_us_block;
+    out.adjust_interval_events = m_tuning_config.adjust_interval_events;
+    out.ema_alpha = m_tuning_config.ema_alpha;
+    out.overload_exhaust_threshold = m_tuning_config.overload_exhaust_threshold;
+    out.underload_exhaust_threshold = m_tuning_config.underload_exhaust_threshold;
+    out.overload_scale_percent = m_tuning_config.overload_scale_percent;
+    out.underload_scale_percent = m_tuning_config.underload_scale_percent;
+    return out;
+}
+
+AnyoneCanSpendHandler::Stats AnyoneCanSpendHandler::GetStats() const
+{
+    std::lock_guard<std::mutex> lock(m_stats_mutex);
+    return m_stats;
+}
+
+void AnyoneCanSpendHandler::LoadAutoTuneConfigFromArgs()
+{
+    auto clamp_double = [](double v, double lo, double hi) { return std::max(lo, std::min(hi, v)); };
+    auto clamp_i64 = [](int64_t v, int64_t lo, int64_t hi) { return std::max(lo, std::min(hi, v)); };
+    auto clamp_u64 = [](uint64_t v, uint64_t lo, uint64_t hi) { return std::max(lo, std::min(hi, v)); };
+    auto clamp_int = [](int v, int lo, int hi) { return std::max(lo, std::min(hi, v)); };
+
+    AutoTuneConfig cfg;
+    cfg.target_elapsed_us_mempool = clamp_i64(gArgs.GetIntArg("-anyonecanspendtargetusmempool", cfg.target_elapsed_us_mempool), 100, 1'000'000);
+    cfg.target_elapsed_us_block = clamp_i64(gArgs.GetIntArg("-anyonecanspendtargetusblock", cfg.target_elapsed_us_block), 100, 1'000'000);
+    cfg.adjust_interval_events = clamp_u64(gArgs.GetIntArg("-anyonecanspendadjustintervalevents", cfg.adjust_interval_events), 1, 10'000);
+    cfg.ema_alpha = clamp_double(gArgs.GetIntArg("-anyonecanspendemalphapct", static_cast<int64_t>(cfg.ema_alpha * 100.0)) / 100.0, 0.01, 1.0);
+    cfg.overload_exhaust_threshold = clamp_double(gArgs.GetIntArg("-anyonecanspendoverloadexhaustpct", static_cast<int64_t>(cfg.overload_exhaust_threshold * 100.0)) / 100.0, 0.0, 1.0);
+    cfg.underload_exhaust_threshold = clamp_double(gArgs.GetIntArg("-anyonecanspendunderloadexhaustpct", static_cast<int64_t>(cfg.underload_exhaust_threshold * 100.0)) / 100.0, 0.0, 1.0);
+    cfg.overload_scale_percent = clamp_int(gArgs.GetIntArg("-anyonecanspendoverloadscalepct", cfg.overload_scale_percent), 10, 100);
+    cfg.underload_scale_percent = clamp_int(gArgs.GetIntArg("-anyonecanspendunderloadscalepct", cfg.underload_scale_percent), 100, 200);
+
+    {
+        std::lock_guard<std::mutex> lock(m_tuning_mutex);
+        m_tuning_config = cfg;
+    }
+
+    LogPrintf("AnyoneCanSpendHandler: Auto-tune config target_us(mempool=%d,block=%d) adjust_interval=%u ema_alpha=%.2f exhaust(overload=%.2f,underload=%.2f) scale(overload=%d%%,underload=%d%%)\n",
+              cfg.target_elapsed_us_mempool, cfg.target_elapsed_us_block, cfg.adjust_interval_events, cfg.ema_alpha,
+              cfg.overload_exhaust_threshold, cfg.underload_exhaust_threshold, cfg.overload_scale_percent, cfg.underload_scale_percent);
 }

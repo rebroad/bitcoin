@@ -5,6 +5,7 @@
 #include <rpc/server.h>
 #include <rpc/server_util.h>
 #include <anyone_can_spend_handler.h>
+#include <init.h>
 #include <node/context.h>
 #include <util/strencodings.h>
 #include <key_io.h>
@@ -17,9 +18,6 @@
 #include <interfaces/wallet.h>
 
 #include <univalue.h>
-
-// Global handler instance
-static std::unique_ptr<AnyoneCanSpendHandler> g_anyone_can_spend_handler;
 
 static RPCHelpMan anyonecanspendhandler()
 {
@@ -44,6 +42,34 @@ static RPCHelpMan anyonecanspendhandler()
                             {RPCResult::Type::NUM, "outputs_spent", "Number of outputs spent"},
                             {RPCResult::Type::STR_AMOUNT, "total_amount_detected", "Total amount detected"},
                             {RPCResult::Type::STR_AMOUNT, "total_amount_spent", "Total amount spent"},
+                            {RPCResult::Type::NUM, "transactions_evaluated_mempool", "Transactions evaluated from mempool callbacks"},
+                            {RPCResult::Type::NUM, "transactions_evaluated_blocks", "Transactions evaluated from block callbacks"},
+                            {RPCResult::Type::OBJ, "runtime", "Adaptive runtime metrics",
+                            {
+                                {RPCResult::Type::NUM, "max_outputs_scanned_per_tx", "Current output scan limit per tx"},
+                                {RPCResult::Type::NUM, "max_outputs_returned_per_tx", "Current detection cap per tx"},
+                                {RPCResult::Type::NUM, "max_probe_evals_per_tx", "Current script eval budget per tx"},
+                                {RPCResult::Type::NUM, "max_probe_script_sig_templates", "Current scriptSig template budget"},
+                                {RPCResult::Type::NUM, "ema_elapsed_us_mempool", "EMA callback runtime (microseconds) for mempool path"},
+                                {RPCResult::Type::NUM, "ema_elapsed_us_block", "EMA callback runtime (microseconds) for block path"},
+                                {RPCResult::Type::NUM, "mempool_events", "Observed mempool callback events"},
+                                {RPCResult::Type::NUM, "block_events", "Observed block callback tx evaluations"},
+                                {RPCResult::Type::NUM, "mempool_budget_exhaustions", "Times mempool path exhausted probe budget"},
+                                {RPCResult::Type::NUM, "block_budget_exhaustions", "Times block path exhausted probe budget"},
+                                {RPCResult::Type::NUM, "mempool_overruns", "Times mempool callback exceeded target runtime"},
+                                {RPCResult::Type::NUM, "block_overruns", "Times block callback exceeded target runtime"},
+                                {RPCResult::Type::NUM, "cache_hits", "Script classification cache hits"},
+                                {RPCResult::Type::NUM, "cache_misses", "Script classification cache misses"},
+                                {RPCResult::Type::NUM, "cache_hit_rate_percent", "Script classification cache hit rate"},
+                                {RPCResult::Type::NUM, "target_elapsed_us_mempool", "Mempool callback runtime target (microseconds)"},
+                                {RPCResult::Type::NUM, "target_elapsed_us_block", "Block callback runtime target (microseconds)"},
+                                {RPCResult::Type::NUM, "adjust_interval_events", "Events between adaptive tuning adjustments"},
+                                {RPCResult::Type::NUM, "ema_alpha", "EMA alpha used for runtime smoothing"},
+                                {RPCResult::Type::NUM, "overload_exhaust_threshold", "Exhaust-rate threshold triggering overload behavior"},
+                                {RPCResult::Type::NUM, "underload_exhaust_threshold", "Exhaust-rate threshold for underload growth"},
+                                {RPCResult::Type::NUM, "overload_scale_percent", "Scale factor (%) applied when overloaded"},
+                                {RPCResult::Type::NUM, "underload_scale_percent", "Scale factor (%) applied when underloaded"},
+                            }},
                         }},
                     }},
                 RPCExamples{
@@ -86,64 +112,97 @@ static RPCHelpMan anyonecanspendhandler()
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Wallet loader not available");
         }
 
-        // Create the handler if it doesn't exist
-        if (!g_anyone_can_spend_handler) {
-            g_anyone_can_spend_handler = std::make_unique<AnyoneCanSpendHandler>();
-        }
+        AnyoneCanSpendHandler& handler = EnsureAnyoneCanSpendHandler();
 
         // Initialize the handler
-        g_anyone_can_spend_handler->Initialize(destination, node.wallet_loader->context(), false); // Start with auto-spend disabled
+        handler.Initialize(destination, node.wallet_loader->context(), false); // Start with auto-spend disabled
 
         result.pushKV("status", "initialized");
         result.pushKV("destination", destination);
         result.pushKV("auto_spend", false);
 
     } else if (command == "enable") {
-        if (!g_anyone_can_spend_handler) {
+        auto* handler = GetAnyoneCanSpendHandler();
+        if (!handler) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Handler not initialized. Use 'init' first.");
         }
 
-        g_anyone_can_spend_handler->SetAutoSpend(true);
+        handler->SetAutoSpend(true);
 
         result.pushKV("status", "auto-spend enabled");
         result.pushKV("auto_spend", true);
-        result.pushKV("destination", g_anyone_can_spend_handler->GetDestinationAddress());
+        result.pushKV("destination", handler->GetDestinationAddress());
 
     } else if (command == "disable") {
-        if (!g_anyone_can_spend_handler) {
+        auto* handler = GetAnyoneCanSpendHandler();
+        if (!handler) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Handler not initialized. Use 'init' first.");
         }
 
-        g_anyone_can_spend_handler->SetAutoSpend(false);
+        handler->SetAutoSpend(false);
 
         result.pushKV("status", "auto-spend disabled");
         result.pushKV("auto_spend", false);
-        result.pushKV("destination", g_anyone_can_spend_handler->GetDestinationAddress());
+        result.pushKV("destination", handler->GetDestinationAddress());
 
     } else if (command == "status") {
-        if (!g_anyone_can_spend_handler) {
+        auto* handler = GetAnyoneCanSpendHandler();
+        if (!handler) {
             result.pushKV("status", "not initialized");
             result.pushKV("auto_spend", false);
             result.pushKV("destination", "");
             result.pushKV("config_destination", gArgs.GetArg("-anyonecanspenddestination", ""));
         } else {
             result.pushKV("status", "initialized");
-            result.pushKV("auto_spend", g_anyone_can_spend_handler->GetAutoSpend());
-            result.pushKV("destination", g_anyone_can_spend_handler->GetDestinationAddress());
+            result.pushKV("auto_spend", handler->GetAutoSpend());
+            result.pushKV("destination", handler->GetDestinationAddress());
             result.pushKV("config_destination", gArgs.GetArg("-anyonecanspenddestination", ""));
         }
     } else if (command == "stats") {
-        if (!g_anyone_can_spend_handler) {
+        auto* handler = GetAnyoneCanSpendHandler();
+        if (!handler) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Handler not initialized. Use 'init' first.");
         }
 
-        auto stats = g_anyone_can_spend_handler->GetStats();
+        auto stats = handler->GetStats();
+        auto runtime = handler->GetRuntimeMetrics();
 
         UniValue stats_obj(UniValue::VOBJ);
         stats_obj.pushKV("outputs_detected", (int64_t)stats.outputs_detected);
         stats_obj.pushKV("outputs_spent", (int64_t)stats.outputs_spent);
         stats_obj.pushKV("total_amount_detected", FormatMoney(stats.total_amount_detected));
         stats_obj.pushKV("total_amount_spent", FormatMoney(stats.total_amount_spent));
+        stats_obj.pushKV("transactions_evaluated_mempool", (int64_t)stats.transactions_evaluated_mempool);
+        stats_obj.pushKV("transactions_evaluated_blocks", (int64_t)stats.transactions_evaluated_blocks);
+
+        UniValue runtime_obj(UniValue::VOBJ);
+        runtime_obj.pushKV("max_outputs_scanned_per_tx", (int64_t)runtime.max_outputs_scanned_per_tx);
+        runtime_obj.pushKV("max_outputs_returned_per_tx", (int64_t)runtime.max_outputs_returned_per_tx);
+        runtime_obj.pushKV("max_probe_evals_per_tx", (int64_t)runtime.max_probe_evals_per_tx);
+        runtime_obj.pushKV("max_probe_script_sig_templates", (int64_t)runtime.max_probe_script_sig_templates);
+        runtime_obj.pushKV("ema_elapsed_us_mempool", runtime.ema_elapsed_us_mempool);
+        runtime_obj.pushKV("ema_elapsed_us_block", runtime.ema_elapsed_us_block);
+        runtime_obj.pushKV("mempool_events", (int64_t)runtime.mempool_events);
+        runtime_obj.pushKV("block_events", (int64_t)runtime.block_events);
+        runtime_obj.pushKV("mempool_budget_exhaustions", (int64_t)runtime.mempool_budget_exhaustions);
+        runtime_obj.pushKV("block_budget_exhaustions", (int64_t)runtime.block_budget_exhaustions);
+        runtime_obj.pushKV("mempool_overruns", (int64_t)runtime.mempool_overruns);
+        runtime_obj.pushKV("block_overruns", (int64_t)runtime.block_overruns);
+        runtime_obj.pushKV("cache_hits", (int64_t)runtime.cache_hits);
+        runtime_obj.pushKV("cache_misses", (int64_t)runtime.cache_misses);
+        const double cache_hit_rate = (runtime.cache_hits + runtime.cache_misses) > 0
+            ? (100.0 * runtime.cache_hits) / (runtime.cache_hits + runtime.cache_misses)
+            : 0.0;
+        runtime_obj.pushKV("cache_hit_rate_percent", cache_hit_rate);
+        runtime_obj.pushKV("target_elapsed_us_mempool", runtime.target_elapsed_us_mempool);
+        runtime_obj.pushKV("target_elapsed_us_block", runtime.target_elapsed_us_block);
+        runtime_obj.pushKV("adjust_interval_events", (int64_t)runtime.adjust_interval_events);
+        runtime_obj.pushKV("ema_alpha", runtime.ema_alpha);
+        runtime_obj.pushKV("overload_exhaust_threshold", runtime.overload_exhaust_threshold);
+        runtime_obj.pushKV("underload_exhaust_threshold", runtime.underload_exhaust_threshold);
+        runtime_obj.pushKV("overload_scale_percent", runtime.overload_scale_percent);
+        runtime_obj.pushKV("underload_scale_percent", runtime.underload_scale_percent);
+        stats_obj.pushKV("runtime", runtime_obj);
 
         result.pushKV("status", "stats retrieved");
         result.pushKV("stats", stats_obj);
