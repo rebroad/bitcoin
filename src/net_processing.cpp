@@ -194,6 +194,21 @@ bool IsAutomaticPruneTargetConfigured()
            nPruneTarget != std::numeric_limits<uint64_t>::max();
 }
 
+const CBlockIndex* FindHighestMissingActiveBlock(const CChain& active)
+{
+    const CBlockIndex* tip = active.Tip();
+    if (!tip) return nullptr;
+
+    const CBlockIndex* cursor = tip;
+    while (cursor->pprev && (cursor->pprev->nStatus & BLOCK_HAVE_DATA)) {
+        cursor = cursor->pprev;
+    }
+    if (cursor->pprev && !(cursor->pprev->nStatus & BLOCK_HAVE_DATA)) {
+        return cursor->pprev;
+    }
+    return nullptr;
+}
+
 bool ShouldRunHistoricalBackfill(ChainstateManager& chainman)
 {
     if (!IsAutomaticPruneTargetConfigured()) return false;
@@ -1353,9 +1368,14 @@ bool PeerManagerImpl::IsHistoricalBackfillActive()
     const uint64_t prune_events = g_prune_event_count.load(std::memory_order_relaxed);
     if (prune_events != m_last_seen_prune_event) {
         m_last_seen_prune_event = prune_events;
+        m_backfill_cursor = FindHighestMissingActiveBlock(m_chainman.ActiveChain());
         m_backfill_paused_by_prune = true;
         EvictExtraOutboundPeers(GetTime<std::chrono::seconds>());
         LogPrint(BCLog::PRUNE, "Backfill paused after prune event; waiting for prune setting change\n");
+    }
+
+    if (!fPruneMode || nPruneTarget == 0) {
+        return m_backfill_cursor != nullptr;
     }
 
     if (m_backfill_paused_by_prune) return false;
@@ -1871,7 +1891,7 @@ void PeerManagerImpl::SetPruneMode(bool prune_mode)
         m_backfill_cursor = nullptr;
         m_chainman.m_blockman.SetCheckForPruning();
     } else {
-        m_backfill_cursor = m_chainman.ActiveChain().Tip();
+        m_backfill_cursor = FindHighestMissingActiveBlock(m_chainman.ActiveChain());
     }
 }
 
@@ -2341,15 +2361,21 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
         pfrom.fDisconnect = true;
         return;
     }
-    // Avoid leaking prune-height by never sending blocks below the NODE_NETWORK_LIMITED threshold
-    if (!pfrom.HasPermission(NetPermissionFlags::NoBan) && (
-            (((pfrom.GetLocalServices() & NODE_NETWORK_LIMITED) == NODE_NETWORK_LIMITED) && ((pfrom.GetLocalServices() & NODE_NETWORK) != NODE_NETWORK) && (m_chainman.ActiveChain().Tip()->nHeight - pindex->nHeight > (int)NODE_NETWORK_LIMITED_MIN_BLOCKS + 2 /* add two blocks buffer extension for possible races */) )
-       )) {
+    // Pruned nodes may have deleted the block, so check whether
+    // it's available before trying to send.
+    // If we're advertising limited-only service, don't serve requests older
+    // than the BIP159 window to avoid leaking prune depth.
+    if (!pfrom.HasPermission(NetPermissionFlags::NoBan) &&
+        ((pfrom.GetLocalServices() & NODE_NETWORK_LIMITED) == NODE_NETWORK_LIMITED) &&
+        ((pfrom.GetLocalServices() & NODE_NETWORK) != NODE_NETWORK) &&
+        (m_chainman.ActiveChain().Tip()->nHeight - pindex->nHeight >
+         static_cast<int>(NODE_NETWORK_LIMITED_MIN_BLOCKS) + 2 /* race buffer */)) {
         LogPrintf("Ignore block request below NODE_NETWORK_LIMITED threshold, disconnect peer=%d\n", pfrom.GetId());
-        //disconnect node and prevent it from stalling (would otherwise wait for the missing block)
+        // Disconnect to avoid the peer waiting for a block we intentionally won't serve.
         pfrom.fDisconnect = true;
         return;
     }
+
     // Pruned nodes may have deleted the block, so check whether
     // it's available before trying to send.
     if (!(pindex->nStatus & BLOCK_HAVE_DATA)) {
@@ -3249,14 +3275,19 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         //bool fLoggy = (pfrom.HasPermission(NetPermissionFlags::NoBan) || pfrom.IsOutboundOrBlockRelayConn() || cleanSubVer.find("bitnodes") != std::string::npos || pfrom.IsInboundConn());
         bool fLoggy = true;
         LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "recv version: %s v=%d s=%s relay=%d%s %speer=%d\n",
-                  cleanSubVer, pfrom.nVersion, strBinary(nServices), fRelay, remoteAddr,
+                  cleanSubVer, pfrom.nVersion, serviceFlagsToEmojiVisual(nServices), fRelay, remoteAddr,
                   pfrom.IsInboundConn() ? "inbound " : "", pfrom.GetId());
 
-        if (pfrom.ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices)) {
-            bool fDisconnect = !pfrom.IsInboundConn(); // Allow inbound to connect
+        const bool require_desirable_services =
+            pfrom.IsBlockOnlyConn() &&
+            (m_chainman.ActiveChainstate().IsInitialBlockDownload() ||
+             WITH_LOCK(cs_main, return IsHistoricalBackfillActive();));
+        if (require_desirable_services && !HasAllDesirableServiceFlags(nServices)) {
+            // Only enforce this on outbound block-relay peers while syncing.
+            bool fDisconnect = !pfrom.IsInboundConn();
             LogPrint(fLoggy ? BCLog::ALL : BCLog::NET, "peer does not offer the expected services (%s expected) %speer=%d\n",
-                strBinary(GetDesirableServiceFlags(nServices)), fDisconnect ? "disconnecting " : "", pfrom.GetId());
-            if (fDisconnect) { // REBTODO - Allow 8 and (1024 OR 1) (witness and limited or node)
+                serviceFlagsToEmojiVisual(GetDesirableServiceFlags(nServices)), fDisconnect ? "disconnecting " : "", pfrom.GetId());
+            if (fDisconnect) {
                 pfrom.fDisconnect = true;
                 return;
             }

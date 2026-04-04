@@ -7,6 +7,8 @@
 
 #include <util/system.h>
 
+#include <array>
+
 static std::atomic<bool> g_initial_block_download_completed(false);
 
 namespace NetMsgType {
@@ -220,6 +222,25 @@ std::vector<std::string> serviceFlagsToStr(uint64_t flags)
     }
 
     return str_flags;
+}
+
+std::string serviceFlagsToEmojiVisual(uint64_t flags)
+{
+    // Visualize low 8 bits in fixed positions, then append known higher bits.
+    std::array<std::string, 8> slots{" ", " ", " ", " ", " ", " ", " ", " "};
+    const bool has_network = flags & NODE_NETWORK;
+    const bool has_network_limited = flags & NODE_NETWORK_LIMITED;
+    if (has_network) slots[0] = "🌐";
+    if (flags & NODE_BLOOM) slots[2] = "🫧";
+    if (flags & NODE_WITNESS) slots[3] = "👁️";
+    if (flags & NODE_COMPACT_FILTERS) slots[6] = "🔎";
+
+    std::string out = "[";
+    for (const auto& s : slots) out += s;
+    out += "]";
+
+    if (!has_network && has_network_limited) out += "🧱";
+    return out;
 }
 
 GenTxid ToGenTxid(const CInv& inv)

@@ -79,8 +79,25 @@ bool AutomaticPruneTargetEnabled()
            node::nPruneTarget != std::numeric_limits<uint64_t>::max();
 }
 
+bool ActiveChainHasHistoricalDataGaps(ChainstateManager& chainman)
+{
+    const CChain& active = chainman.ActiveChain();
+    const CBlockIndex* tip = active.Tip();
+    if (!tip) return false;
+
+    const CBlockIndex* cursor = tip;
+    while (cursor->pprev && (cursor->pprev->nStatus & BLOCK_HAVE_DATA)) {
+        cursor = cursor->pprev;
+    }
+    return cursor->nHeight > 0;
+}
+
 bool ShouldBackfillHistoricalBlocksNow(ChainstateManager& chainman)
 {
+    if (!node::fPruneMode || node::nPruneTarget == 0) {
+        return ActiveChainHasHistoricalDataGaps(chainman);
+    }
+
     if (!AutomaticPruneTargetEnabled()) return false;
     const uint64_t usage = chainman.m_blockman.CalculateCurrentUsage();
     return usage + BACKFILL_MIN_DEFICIT_BYTES < node::nPruneTarget;
@@ -930,7 +947,9 @@ public:
     {
         LOCK(cs_main);
         if (!m_node.chainman) return false;
-        if (!AutomaticPruneTargetEnabled()) return false;
+        const bool automatic_target = AutomaticPruneTargetEnabled();
+        const bool unpruned_target = !node::fPruneMode || node::nPruneTarget == 0;
+        if (!automatic_target && !unpruned_target) return false;
 
         const CChain& active = m_node.chainman->ActiveChain();
         const CBlockIndex* tip = active.Tip();
@@ -940,7 +959,7 @@ public:
         if (!block || (block->nStatus & BLOCK_HAVE_DATA)) return false;
 
         const uint64_t usage = m_node.chainman->m_blockman.CalculateCurrentUsage();
-        if (usage + BACKFILL_MIN_DEFICIT_BYTES >= node::nPruneTarget) return false;
+        if (automatic_target && usage + BACKFILL_MIN_DEFICIT_BYTES >= node::nPruneTarget) return false;
 
         int prune_height = tip->nHeight;
         const CBlockIndex* cursor = tip;
@@ -949,6 +968,7 @@ public:
             prune_height = cursor->nHeight;
         }
         if (height >= prune_height) return false;
+        if (!automatic_target) return true;
 
         const int retained_blocks = tip->nHeight - prune_height + 1;
         if (retained_blocks <= 0 || usage == 0) return false;

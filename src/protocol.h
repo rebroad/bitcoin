@@ -314,6 +314,12 @@ enum ServiceFlags : uint64_t {
 std::vector<std::string> serviceFlagsToStr(uint64_t flags);
 
 /**
+ * Render service flags for logs as an 8-slot emoji bitmap (bits 0-7), plus
+ * explicit emojis for known higher bits.
+ */
+std::string serviceFlagsToEmojiVisual(uint64_t flags);
+
+/**
  * Gets the set of service flags which are "desirable" for a given peer.
  *
  * These are the flags which are required for a peer to support for them
