@@ -13,18 +13,25 @@
 #include <node/context.h>
 #include <util/system.h>
 #include <limits>
+#include <deque>
+#include <map>
 #include <memory>
 #include <string>
 #include <stack>
 #include <vector>
 
 namespace anyonecanspend {
+struct ProbeLimits {
+    size_t max_script_sig_templates{8};
+    size_t* remaining_eval_budget{nullptr};
+};
+
 /**
  * Returns true if a scriptPubKey is spendable by anyone.
  * Witness programs (including Taproot and future SegWit versions) are excluded.
  * If provided, `spend_script_sig` receives one satisfying scriptSig candidate.
  */
-bool IsAnyoneCanSpendScriptPubKey(const CScript& script_pub_key, CScript* spend_script_sig = nullptr);
+bool IsAnyoneCanSpendScriptPubKey(const CScript& script_pub_key, CScript* spend_script_sig = nullptr, const ProbeLimits& limits = {});
 
 /**
  * Find anyone-can-spend outputs in a transaction.
@@ -147,6 +154,14 @@ private:
     mutable std::mutex m_stats_mutex;
     std::thread m_heartbeat_thread;
     std::atomic<bool> m_heartbeat_running{false};
+    struct DetectionCacheEntry {
+        bool is_anyone_can_spend{false};
+        CScript spend_script_sig;
+    };
+    mutable std::mutex m_detection_cache_mutex;
+    std::map<uint256, DetectionCacheEntry> m_detection_cache;
+    std::deque<uint256> m_detection_cache_order;
+    static constexpr size_t MAX_DETECTION_CACHE_ENTRIES{4096};
 
     /**
      * Process "anyone can spend" outputs from a transaction.
@@ -177,6 +192,9 @@ private:
      * @return Vector of (output_index, working_script_sig) pairs
      */
     std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx);
+
+    bool LookupDetectionCache(const CScript& script_pub_key, bool& is_anyone_can_spend, CScript* spend_script_sig) const;
+    void StoreDetectionCache(const CScript& script_pub_key, bool is_anyone_can_spend, const CScript& spend_script_sig);
 };
 
 #endif // BITCOIN_ANYONE_CAN_SPEND_HANDLER_H

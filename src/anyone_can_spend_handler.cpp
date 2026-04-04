@@ -24,11 +24,44 @@
 #include <node/context.h>
 #include <script/interpreter.h>
 #include <node/ui_interface.h>
+#include <hash.h>
 
 #include <algorithm>
+#include <set>
 
 namespace {
 const CFeeRate MIN_ANYONE_CAN_SPEND_FEERATE{20'000}; // 20 sat/vB floor.
+constexpr size_t MAX_OUTPUTS_SCANNED_PER_TX{32};
+constexpr size_t MAX_OUTPUTS_RETURNED_PER_TX{8};
+constexpr size_t MAX_PROBE_EVALS_PER_TX{192};
+constexpr size_t MAX_PROBE_SCRIPT_SIG_TEMPLATES{8};
+
+class DummySignatureCheckerAllowAll final : public BaseSignatureChecker {
+public:
+    bool CheckECDSASignature(const std::vector<unsigned char>&, const std::vector<unsigned char>&, const CScript&, SigVersion) const override { return true; }
+    bool CheckSchnorrSignature(Span<const unsigned char>, Span<const unsigned char>, SigVersion, ScriptExecutionData&, ScriptError*) const override { return true; }
+    bool CheckLockTime(const CScriptNum&) const override { return true; }
+    bool CheckSequence(const CScriptNum&) const override { return true; }
+};
+
+class DummySignatureCheckerDenyAll final : public BaseSignatureChecker {
+public:
+    bool CheckECDSASignature(const std::vector<unsigned char>&, const std::vector<unsigned char>&, const CScript&, SigVersion) const override { return false; }
+    bool CheckSchnorrSignature(Span<const unsigned char>, Span<const unsigned char>, SigVersion, ScriptExecutionData&, ScriptError*) const override { return false; }
+    bool CheckLockTime(const CScriptNum&) const override { return false; }
+    bool CheckSequence(const CScriptNum&) const override { return false; }
+};
+
+static bool ConsumeProbeBudget(const anyonecanspend::ProbeLimits& limits, size_t units = 1)
+{
+    if (!limits.remaining_eval_budget) return true;
+    if (*limits.remaining_eval_budget < units) {
+        *limits.remaining_eval_budget = 0;
+        return false;
+    }
+    *limits.remaining_eval_budget -= units;
+    return true;
+}
 
 static bool IsTrueStackValue(const std::vector<unsigned char>& value)
 {
@@ -40,10 +73,56 @@ static bool IsTrueStackValue(const std::vector<unsigned char>& value)
     }
     return false;
 }
+
+static std::vector<CScript> BuildProbeScriptSigTemplates(size_t max_templates)
+{
+    std::vector<CScript> ordered_templates = {
+        CScript(),                    // Empty scriptSig
+        CScript() << OP_1,            // Script true
+        CScript() << OP_0,            // Script false
+        CScript() << OP_1 << OP_1,    // Two truthy stack items
+        CScript() << OP_2,            // Small integer
+        CScript() << OP_1NEGATE,      // -1
+        CScript() << std::vector<unsigned char>{1},
+        CScript() << std::vector<unsigned char>{0},
+    };
+
+    std::vector<CScript> result;
+    result.reserve(std::min(max_templates, ordered_templates.size()));
+    std::set<std::vector<unsigned char>> seen;
+    for (const auto& candidate : ordered_templates) {
+        if (result.size() >= max_templates) break;
+        const auto inserted = seen.insert(std::vector<unsigned char>(candidate.begin(), candidate.end()));
+        if (!inserted.second) continue;
+        result.push_back(candidate);
+    }
+    return result;
+}
+
+static bool EvalProbeCandidate(const CScript& script_sig, const CScript& script_pub_key, const BaseSignatureChecker& checker, const anyonecanspend::ProbeLimits& limits)
+{
+    ScriptError serror;
+    std::vector<std::vector<unsigned char>> stack;
+    ScriptExecutionData execdata;
+    execdata.m_anyone_can_spend_probe = true;
+
+    if (!ConsumeProbeBudget(limits) || !EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, execdata, &serror)) {
+        return false;
+    }
+    if (!ConsumeProbeBudget(limits) || !EvalScript(stack, script_pub_key, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, execdata, &serror)) {
+        return false;
+    }
+    return !stack.empty() && IsTrueStackValue(stack.back());
+}
+
+static uint256 ScriptCacheKey(const CScript& script_pub_key)
+{
+    return Hash(script_pub_key);
+}
 } // namespace
 
 namespace anyonecanspend {
-bool IsAnyoneCanSpendScriptPubKey(const CScript& script_pub_key, CScript* spend_script_sig)
+bool IsAnyoneCanSpendScriptPubKey(const CScript& script_pub_key, CScript* spend_script_sig, const ProbeLimits& limits)
 {
     int witness_version;
     std::vector<unsigned char> witness_program;
@@ -62,35 +141,27 @@ bool IsAnyoneCanSpendScriptPubKey(const CScript& script_pub_key, CScript* spend_
         return true;
     }
 
-    std::vector<CScript> test_script_sigs = {
-        CScript(),
-        CScript() << OP_1,
-        CScript() << OP_0,
-        CScript() << OP_1 << OP_1,
-    };
+    const size_t template_limit = std::max<size_t>(1, limits.max_script_sig_templates);
+    const std::vector<CScript> test_script_sigs = BuildProbeScriptSigTemplates(template_limit);
+    DummySignatureCheckerAllowAll allow_checker;
+    DummySignatureCheckerDenyAll deny_checker;
 
     for (const auto& script_sig : test_script_sigs) {
-        ScriptError serror;
-
-        class DummySignatureChecker : public BaseSignatureChecker {
-        public:
-            bool CheckECDSASignature(const std::vector<unsigned char>&, const std::vector<unsigned char>&, const CScript&, SigVersion) const override { return true; }
-            bool CheckSchnorrSignature(Span<const unsigned char>, Span<const unsigned char>, SigVersion, ScriptExecutionData&, ScriptError*) const override { return true; }
-            bool CheckLockTime(const CScriptNum&) const override { return true; }
-            bool CheckSequence(const CScriptNum&) const override { return true; }
-        };
-
-        DummySignatureChecker checker;
-        std::vector<std::vector<unsigned char>> stack;
-        ScriptExecutionData execdata;
-        execdata.m_anyone_can_spend_probe = true;
-        if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, execdata, &serror)) {
+        // Option B: Only classify as anyone-can-spend if the candidate succeeds
+        // both with permissive and strict checker behavior.
+        const bool allow_ok = EvalProbeCandidate(script_sig, script_pub_key, allow_checker, limits);
+        if (!allow_ok) {
             continue;
         }
-        if (EvalScript(stack, script_pub_key, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, execdata, &serror) &&
-            !stack.empty() && IsTrueStackValue(stack.back())) {
+        const bool deny_ok = EvalProbeCandidate(script_sig, script_pub_key, deny_checker, limits);
+        if (deny_ok) {
             if (spend_script_sig) *spend_script_sig = script_sig;
             return true;
+        }
+
+        if (limits.remaining_eval_budget && *limits.remaining_eval_budget == 0) {
+            LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Probe budget exhausted while evaluating scriptPubKey=%s\n", HexStr(script_pub_key));
+            break;
         }
     }
     return false;
@@ -586,6 +657,14 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
         // Create the transaction
         CTransactionRef tx_new = MakeTransactionRef(mtx);
 
+        // Option D: Preflight mempool policy acceptance before committing to wallet.
+        std::string preflight_err;
+        if (!wallet->chain().broadcastTransaction(tx_new, /*max_tx_fee=*/0, /*relay=*/false, preflight_err, NODEID_WALLET_ORIGIN)) {
+            LogPrintf("AnyoneCanSpendHandler: Preflight reject for auto-spend tx %s: %s\n",
+                      tx_new->GetHash().ToString(), preflight_err);
+            return std::nullopt;
+        }
+
         // Commit the transaction to the wallet
         wallet->CommitTransaction(tx_new, {}, {});
 
@@ -647,24 +726,75 @@ void AnyoneCanSpendHandler::StopHeartbeat()
 
 std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpendOutputs(const CTransaction& tx)
 {
-    // Safety mechanism: limit the number of anyone-can-spend outputs we process
-    static int total_anyone_can_spend_outputs_found = 0;
-    const int MAX_ANYONE_CAN_SPEND_OUTPUTS = 10;
-    if (total_anyone_can_spend_outputs_found >= MAX_ANYONE_CAN_SPEND_OUTPUTS) {
-        LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Reached maximum limit of %d anyone-can-spend outputs, stopping detection\n",
-                  MAX_ANYONE_CAN_SPEND_OUTPUTS);
-        return {};
+    std::vector<std::pair<size_t, CScript>> results;
+    results.reserve(std::min(tx.vout.size(), MAX_OUTPUTS_RETURNED_PER_TX));
+
+    size_t remaining_eval_budget{MAX_PROBE_EVALS_PER_TX};
+    const size_t outputs_to_scan = std::min(tx.vout.size(), MAX_OUTPUTS_SCANNED_PER_TX);
+    for (size_t index = 0; index < outputs_to_scan && results.size() < MAX_OUTPUTS_RETURNED_PER_TX; ++index) {
+        const CTxOut& txout = tx.vout[index];
+        CScript script_sig;
+        bool is_anyone_can_spend_cached{false};
+        if (LookupDetectionCache(txout.scriptPubKey, is_anyone_can_spend_cached, &script_sig)) {
+            if (is_anyone_can_spend_cached) {
+                results.emplace_back(index, script_sig);
+            }
+            continue;
+        }
+
+        anyonecanspend::ProbeLimits limits;
+        limits.max_script_sig_templates = MAX_PROBE_SCRIPT_SIG_TEMPLATES;
+        limits.remaining_eval_budget = &remaining_eval_budget;
+        const bool is_anyone_can_spend = anyonecanspend::IsAnyoneCanSpendScriptPubKey(txout.scriptPubKey, &script_sig, limits);
+        StoreDetectionCache(txout.scriptPubKey, is_anyone_can_spend, script_sig);
+        if (is_anyone_can_spend) {
+            results.emplace_back(index, script_sig);
+        }
+        if (remaining_eval_budget == 0) {
+            LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Probe budget exhausted while scanning tx=%s\n", tx.GetHash().ToString());
+            break;
+        }
     }
 
-    const size_t remaining = MAX_ANYONE_CAN_SPEND_OUTPUTS - total_anyone_can_spend_outputs_found;
-    auto results = anyonecanspend::FindAnyoneCanSpendOutputs(tx, remaining);
     for (const auto& [index, script_sig] : results) {
-        total_anyone_can_spend_outputs_found++;
         const CTxOut& txout = tx.vout[index];
-        LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s, scriptPubKey: %s, scriptSig: %s (total found: %d)\n",
+        LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s, scriptPubKey: %s, scriptSig: %s\n",
                   tx.GetHash().ToString(), index, FormatMoney(txout.nValue),
-                  HexStr(txout.scriptPubKey), HexStr(script_sig), total_anyone_can_spend_outputs_found);
+                  HexStr(txout.scriptPubKey), HexStr(script_sig));
     }
 
     return results;
+}
+
+bool AnyoneCanSpendHandler::LookupDetectionCache(const CScript& script_pub_key, bool& is_anyone_can_spend, CScript* spend_script_sig) const
+{
+    const uint256 key = ScriptCacheKey(script_pub_key);
+    std::lock_guard<std::mutex> lock(m_detection_cache_mutex);
+    const auto it = m_detection_cache.find(key);
+    if (it == m_detection_cache.end()) {
+        return false;
+    }
+    is_anyone_can_spend = it->second.is_anyone_can_spend;
+    if (is_anyone_can_spend && spend_script_sig) {
+        *spend_script_sig = it->second.spend_script_sig;
+    }
+    return true;
+}
+
+void AnyoneCanSpendHandler::StoreDetectionCache(const CScript& script_pub_key, bool is_anyone_can_spend, const CScript& spend_script_sig)
+{
+    const uint256 key = ScriptCacheKey(script_pub_key);
+    std::lock_guard<std::mutex> lock(m_detection_cache_mutex);
+    auto [it, inserted] = m_detection_cache.emplace(key, DetectionCacheEntry{is_anyone_can_spend, spend_script_sig});
+    if (!inserted) {
+        it->second = DetectionCacheEntry{is_anyone_can_spend, spend_script_sig};
+        return;
+    }
+
+    m_detection_cache_order.push_back(key);
+    while (m_detection_cache.size() > MAX_DETECTION_CACHE_ENTRIES && !m_detection_cache_order.empty()) {
+        const uint256 oldest = m_detection_cache_order.front();
+        m_detection_cache_order.pop_front();
+        m_detection_cache.erase(oldest);
+    }
 }
