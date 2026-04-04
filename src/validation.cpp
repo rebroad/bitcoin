@@ -17,6 +17,7 @@ static constexpr int GUI_IDLE_CHECK_DELAY_MS = 6;
 static constexpr int GUI_IDLE_THRESHOLD_MS = 20;
 
 #include <arith_uint256.h>
+#include <anyone_can_spend_handler.h>
 #include <chain.h>
 #include <chainparams.h>
 #include <checkqueue.h>
@@ -5074,84 +5075,13 @@ const AssumeutxoData* ExpectedAssumeutxo(
     return nullptr;
 }
 
-/**
- * Find working script signatures for "anyone can spend" outputs in a transaction.
- * Returns a vector of (output_index, working_script_sig) pairs.
- * Only includes outputs that are profitable to spend (value > estimated fee).
- */
 static std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx)
 {
-    std::vector<std::pair<size_t, CScript>> results;
-
-    for (size_t i = 0; i < tx.vout.size(); i++) {
-        const CTxOut& txout = tx.vout[i];
-
-        // Test every output with script execution to determine if it's anyone-can-spend
-        // Use a minimal but effective test set covering the most common anyone-can-spend patterns
-        std::vector<CScript> test_script_sigs = {
-            CScript(),           // Empty script signature (most common anyone-can-spend case)
-            CScript() << OP_1,   // Push true value
-            CScript() << OP_0,   // Push false value
-        };
-
-        // Use Bitcoin Core's actual script execution engine
-        for (const auto& script_sig : test_script_sigs) {
-            ScriptError serror;
-
-            // Create a dummy signature checker that always returns true for signature checks
-            class DummySignatureChecker : public BaseSignatureChecker {
-            public:
-                bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig,
-                                        const std::vector<unsigned char>& vchPubKey,
-                                        const CScript& scriptCode,
-                                        SigVersion sigversion) const override {
-                    return true; // Always return true for signature checks
-                }
-
-                bool CheckSchnorrSignature(Span<const unsigned char> sig,
-                                          Span<const unsigned char> pubkey,
-                                          SigVersion sigversion,
-                                          ScriptExecutionData& execdata,
-                                          ScriptError* serror) const override {
-                    return true; // Always return true for signature checks
-                }
-
-                bool CheckLockTime(const CScriptNum& nLockTime) const override {
-                    return true; // Always return true for lock time checks
-                }
-
-                bool CheckSequence(const CScriptNum& nSequence) const override {
-                    return true; // Always return true for sequence checks
-                }
-            };
-
-            DummySignatureChecker checker;
-
-            // Use EvalScript directly to avoid debug log noise from VerifyScript
-            // We're intentionally testing scripts, so failures are expected
-            std::vector<std::vector<unsigned char>> stack;
-
-            // Execute the script signature first
-            if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
-                continue; // Script signature failed, try next one
-            }
-
-            // Then execute the scriptPubKey
-            if (EvalScript(stack, txout.scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
-                // Check if the final result is true (non-empty stack with truthy top element)
-                if (!stack.empty() && !stack.back().empty() && stack.back()[0] != 0) {
-                    // Found a working script signature for this anyone-can-spend output
-                    // Add it to results - profitability checking will be done in the handler
-                    results.emplace_back(i, script_sig);
-                    LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s\n",
-                              tx.GetHash().ToString(), i, FormatMoney(txout.nValue));
-                    break; // Found working script signature, no need to test more
-                }
-            }
-            // Script failed - this is expected when testing, so continue silently
-        }
+    auto results = anyonecanspend::FindAnyoneCanSpendOutputs(tx);
+    for (const auto& [index, _] : results) {
+        LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s\n",
+                  tx.GetHash().ToString(), index, FormatMoney(tx.vout[index].nValue));
     }
-
     return results;
 }
 

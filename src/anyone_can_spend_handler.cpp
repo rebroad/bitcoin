@@ -25,6 +25,105 @@
 #include <script/interpreter.h>
 #include <node/ui_interface.h>
 
+#include <algorithm>
+
+namespace {
+const CFeeRate MIN_ANYONE_CAN_SPEND_FEERATE{20'000}; // 20 sat/vB floor.
+
+static bool IsTrueStackValue(const std::vector<unsigned char>& value)
+{
+    for (size_t i = 0; i < value.size(); ++i) {
+        if (value[i] != 0) {
+            // Negative zero is also false in script semantics.
+            return !(i == value.size() - 1 && value[i] == 0x80);
+        }
+    }
+    return false;
+}
+} // namespace
+
+namespace anyonecanspend {
+bool IsAnyoneCanSpendScriptPubKey(const CScript& script_pub_key, CScript* spend_script_sig)
+{
+    int witness_version;
+    std::vector<unsigned char> witness_program;
+    if (script_pub_key.IsWitnessProgram(witness_version, witness_program)) {
+        return false;
+    }
+
+    if (script_pub_key.size() == 1 && (script_pub_key[0] == OP_TRUE || script_pub_key[0] == OP_1)) {
+        if (spend_script_sig) *spend_script_sig = CScript();
+        return true;
+    }
+
+    if (script_pub_key.size() == 2 && script_pub_key[0] == OP_DROP &&
+        (script_pub_key[1] == OP_TRUE || script_pub_key[1] == OP_1)) {
+        if (spend_script_sig) *spend_script_sig = CScript() << OP_1;
+        return true;
+    }
+
+    std::vector<CScript> test_script_sigs = {
+        CScript(),
+        CScript() << OP_1,
+        CScript() << OP_0,
+        CScript() << OP_1 << OP_1,
+    };
+
+    for (const auto& script_sig : test_script_sigs) {
+        ScriptError serror;
+
+        class DummySignatureChecker : public BaseSignatureChecker {
+        public:
+            bool CheckECDSASignature(const std::vector<unsigned char>&, const std::vector<unsigned char>&, const CScript&, SigVersion) const override { return true; }
+            bool CheckSchnorrSignature(Span<const unsigned char>, Span<const unsigned char>, SigVersion, ScriptExecutionData&, ScriptError*) const override { return true; }
+            bool CheckLockTime(const CScriptNum&) const override { return true; }
+            bool CheckSequence(const CScriptNum&) const override { return true; }
+        };
+
+        DummySignatureChecker checker;
+        std::vector<std::vector<unsigned char>> stack;
+        if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
+            continue;
+        }
+        if (EvalScript(stack, script_pub_key, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror) &&
+            !stack.empty() && IsTrueStackValue(stack.back())) {
+            if (spend_script_sig) *spend_script_sig = script_sig;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx, size_t max_outputs)
+{
+    std::vector<std::pair<size_t, CScript>> results;
+    for (size_t i = 0; i < tx.vout.size(); ++i) {
+        CScript spend_script_sig;
+        if (!IsAnyoneCanSpendScriptPubKey(tx.vout[i].scriptPubKey, &spend_script_sig)) {
+            continue;
+        }
+        results.emplace_back(i, spend_script_sig);
+        if (results.size() >= max_outputs) {
+            break;
+        }
+    }
+    return results;
+}
+} // namespace anyonecanspend
+
+namespace {
+static CFeeRate GetAnyoneCanSpendFeeRate(const wallet::CWallet& wallet, const wallet::CCoinControl& coin_control_in, FeeCalculation* fee_calc)
+{
+    wallet::CCoinControl coin_control{coin_control_in};
+    coin_control.m_confirm_target = 1;
+    coin_control.m_fee_mode = FeeEstimateMode::CONSERVATIVE;
+
+    const CFeeRate estimated_rate = GetMinimumFeeRate(wallet, coin_control, fee_calc);
+    const CFeeRate relay_floor = std::max(wallet.chain().relayMinFee(), wallet.chain().mempoolMinFee());
+    return std::max({estimated_rate, relay_floor, MIN_ANYONE_CAN_SPEND_FEERATE});
+}
+} // namespace
+
 AnyoneCanSpendHandler::AnyoneCanSpendHandler()
     : m_handler_enabled(false), m_wallet_context(nullptr), m_auto_spend(false)
 {
@@ -283,7 +382,7 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
 
     // Convert the signal data to the format expected by CreateSpendTransactionFromWallet
     // Filter out dust outputs and outputs that would cost more to spend than they're worth
-    std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>> outputs_for_spending;
+    std::vector<SpendableAnyoneOutput> outputs_for_spending;
     CAmount total_amount = 0;
 
     for (const auto& [output_index, script_sig] : anyone_can_spend_outputs) {
@@ -322,13 +421,10 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
             estimated_tx_size = (tx_weight + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR;
         }
 
-        // Get accurate fee estimation using the wallet's fee estimation
+        // Use a conservative next-block fee target with a hard floor.
         FeeCalculation fee_calc;
-        CAmount estimated_fee = GetMinimumFee(*wallet, estimated_tx_size, coin_control, &fee_calc);
-        if (estimated_fee == 0) {
-            // Fallback to a reasonable fee if estimation fails
-            estimated_fee = 1000; // 1000 sats as a reasonable fallback fee
-        }
+        const CFeeRate fee_rate = GetAnyoneCanSpendFeeRate(*wallet, coin_control, &fee_calc);
+        CAmount estimated_fee = fee_rate.GetFee(estimated_tx_size);
 
         // Skip if the output value is less than the estimated fee
         if (txout.nValue <= estimated_fee) {
@@ -340,7 +436,7 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
         LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpendHandler: Processing anyone can spend output %s:%d, amount %s\n",
                   outpoint.hash.ToString(), outpoint.n, FormatMoney(txout.nValue));
 
-        outputs_for_spending.push_back({outpoint, {txout.nValue, txout.scriptPubKey}});
+        outputs_for_spending.push_back({outpoint, txout.nValue, txout.scriptPubKey, script_sig});
         total_amount += txout.nValue;
     }
 
@@ -394,7 +490,7 @@ std::optional<uint256> AnyoneCanSpendHandler::ProcessAnyoneCanSpendOutputs(const
 
 std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
     std::shared_ptr<wallet::CWallet> wallet,
-    const std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>>& outputs)
+    const std::vector<AnyoneCanSpendHandler::SpendableAnyoneOutput>& outputs)
 {
     // Check for shutdown before processing
     if (ShutdownRequested()) {
@@ -426,13 +522,13 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
         // Calculate total amount
         CAmount total_amount = 0;
         for (const auto& output : outputs) {
-            total_amount += output.second.first;
+            total_amount += output.amount;
         }
 
         // Create coin control to specify the exact outputs to spend and get fee estimation
         wallet::CCoinControl coin_control;
         for (const auto& output : outputs) {
-            coin_control.Select(output.first);
+            coin_control.Select(output.outpoint);
         }
 
         // Set coin control to target next block inclusion
@@ -447,9 +543,8 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
 
         // Add inputs (anyone-can-spend outputs)
         for (const auto& output : outputs) {
-            CTxIn txin(output.first);
-            // For anyone-can-spend outputs, we can use an empty scriptSig
-            txin.scriptSig = CScript();
+            CTxIn txin(output.outpoint);
+            txin.scriptSig = output.script_sig;
             mtx_draft.vin.push_back(txin);
         }
 
@@ -461,13 +556,10 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
         int64_t tx_weight = GetTransactionWeight(tx_draft);
         unsigned int nTxBytes = (tx_weight + WITNESS_SCALE_FACTOR - 1) / WITNESS_SCALE_FACTOR; // Convert weight to vsize
 
-        // Get fee estimation using the coin control
+        // Use a conservative next-block fee target with a hard floor.
         FeeCalculation fee_calc;
-        CAmount estimated_fee = GetMinimumFee(*wallet, nTxBytes, coin_control, &fee_calc);
-        if (estimated_fee == 0) {
-            // Fallback to a reasonable fee if estimation fails
-            estimated_fee = 1000; // 1000 sats as a reasonable fallback fee
-        }
+        const CFeeRate fee_rate = GetAnyoneCanSpendFeeRate(*wallet, coin_control, &fee_calc);
+        CAmount estimated_fee = fee_rate.GetFee(nTxBytes);
 
         CAmount amount_to_send = total_amount - estimated_fee;
 
@@ -481,9 +573,8 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
 
         // Add inputs (anyone-can-spend outputs)
         for (const auto& output : outputs) {
-            CTxIn txin(output.first);
-            // For anyone-can-spend outputs, we can use an empty scriptSig
-            txin.scriptSig = CScript();
+            CTxIn txin(output.outpoint);
+            txin.scriptSig = output.script_sig;
             mtx.vin.push_back(txin);
         }
 
@@ -496,8 +587,8 @@ std::optional<uint256> AnyoneCanSpendHandler::CreateSpendTransactionFromWallet(
         // Commit the transaction to the wallet
         wallet->CommitTransaction(tx_new, {}, {});
 
-        LogPrintf("AnyoneCanSpendHandler: Created and committed spending transaction %s for %zu outputs (total: %s, amount sent: %s, fee: %s)\n",
-                  tx_new->GetHash().ToString(), outputs.size(), FormatMoney(total_amount), FormatMoney(amount_to_send), FormatMoney(estimated_fee));
+        LogPrintf("AnyoneCanSpendHandler: Created and committed spending transaction %s for %zu outputs (total: %s, amount sent: %s, fee: %s, feerate: %s)\n",
+                  tx_new->GetHash().ToString(), outputs.size(), FormatMoney(total_amount), FormatMoney(amount_to_send), FormatMoney(estimated_fee), fee_rate.ToString(FeeEstimateMode::SAT_VB));
 
         return tx_new->GetHash();
 
@@ -554,87 +645,23 @@ void AnyoneCanSpendHandler::StopHeartbeat()
 
 std::vector<std::pair<size_t, CScript>> AnyoneCanSpendHandler::FindAnyoneCanSpendOutputs(const CTransaction& tx)
 {
-    std::vector<std::pair<size_t, CScript>> results;
-
     // Safety mechanism: limit the number of anyone-can-spend outputs we process
     static int total_anyone_can_spend_outputs_found = 0;
     const int MAX_ANYONE_CAN_SPEND_OUTPUTS = 10;
+    if (total_anyone_can_spend_outputs_found >= MAX_ANYONE_CAN_SPEND_OUTPUTS) {
+        LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Reached maximum limit of %d anyone-can-spend outputs, stopping detection\n",
+                  MAX_ANYONE_CAN_SPEND_OUTPUTS);
+        return {};
+    }
 
-    for (size_t i = 0; i < tx.vout.size(); i++) {
-        // Exit early if we've found too many anyone-can-spend outputs
-        if (total_anyone_can_spend_outputs_found >= MAX_ANYONE_CAN_SPEND_OUTPUTS) {
-            LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Reached maximum limit of %d anyone-can-spend outputs, stopping detection\n", 
-                      MAX_ANYONE_CAN_SPEND_OUTPUTS);
-            break;
-        }
-        const CTxOut& txout = tx.vout[i];
-
-        // Test every output with script execution to determine if it's anyone-can-spend
-        // Use a minimal but effective test set covering the most common anyone-can-spend patterns
-        std::vector<CScript> test_script_sigs = {
-            CScript(),           // Empty script signature (most common anyone-can-spend case)
-            CScript() << OP_1,   // Push true value
-            CScript() << OP_0,   // Push false value
-        };
-
-        // Use Bitcoin Core's actual script execution engine
-        for (const auto& script_sig : test_script_sigs) {
-            ScriptError serror;
-
-            // Create a dummy signature checker that always returns true for signature checks
-            class DummySignatureChecker : public BaseSignatureChecker {
-            public:
-                bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig,
-                                        const std::vector<unsigned char>& vchPubKey,
-                                        const CScript& scriptCode,
-                                        SigVersion sigversion) const override {
-                    return true; // Always return true for signature checks
-                }
-
-                bool CheckSchnorrSignature(Span<const unsigned char> sig,
-                                          Span<const unsigned char> pubkey,
-                                          SigVersion sigversion,
-                                          ScriptExecutionData& execdata,
-                                          ScriptError* serror) const override {
-                    return true; // Always return true for signature checks
-                }
-
-                bool CheckLockTime(const CScriptNum& nLockTime) const override {
-                    return true; // Always return true for lock time checks
-                }
-
-                bool CheckSequence(const CScriptNum& nSequence) const override {
-                    return true; // Always return true for sequence checks
-                }
-            };
-
-            DummySignatureChecker checker;
-
-            // Use EvalScript directly to avoid debug log noise from VerifyScript
-            // We're intentionally testing scripts, so failures are expected
-            std::vector<std::vector<unsigned char>> stack;
-
-            // Execute the script signature first
-            if (!EvalScript(stack, script_sig, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
-                continue; // Script signature failed, try next one - REBTODO is this right?!
-            }
-
-            // Then execute the scriptPubKey
-            if (EvalScript(stack, txout.scriptPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, checker, SigVersion::BASE, &serror)) {
-                // Check if the final result is true (non-empty stack with truthy top element)
-                if (!stack.empty() && !stack.back().empty() && stack.back()[0] != 0) {
-                    // Found a working script signature for this anyone-can-spend output
-                    // Add it to results - profitability checking will be done in the handler
-                    results.emplace_back(i, script_sig);
-                    total_anyone_can_spend_outputs_found++;
-                    LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s, scriptPubKey: %s, scriptSig: %s (total found: %d)\n",
-                              tx.GetHash().ToString(), i, FormatMoney(txout.nValue), 
-                              HexStr(txout.scriptPubKey), HexStr(script_sig), total_anyone_can_spend_outputs_found);
-                    break; // Found working script signature, no need to test more
-                }
-            }
-            // Script failed - this is expected when testing, so continue silently
-        }
+    const size_t remaining = MAX_ANYONE_CAN_SPEND_OUTPUTS - total_anyone_can_spend_outputs_found;
+    auto results = anyonecanspend::FindAnyoneCanSpendOutputs(tx, remaining);
+    for (const auto& [index, script_sig] : results) {
+        total_anyone_can_spend_outputs_found++;
+        const CTxOut& txout = tx.vout[index];
+        LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: Found anyone-can-spend output %s:%d, amount: %s, scriptPubKey: %s, scriptSig: %s (total found: %d)\n",
+                  tx.GetHash().ToString(), index, FormatMoney(txout.nValue),
+                  HexStr(txout.scriptPubKey), HexStr(script_sig), total_anyone_can_spend_outputs_found);
     }
 
     return results;

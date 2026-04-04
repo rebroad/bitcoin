@@ -87,43 +87,7 @@ using node::UndoReadFromDisk;
  */
 static bool IsAnyoneCanSpendAddress(const CScript& scriptPubKey)
 {
-    // Check for OP_TRUE (always evaluates to true)
-    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_TRUE) {
-        return true;
-    }
-
-    // Check for OP_1 (pushes 1, which is true)
-    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_1) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_DROP followed by OP_TRUE
-    if (scriptPubKey.size() == 2 && scriptPubKey[0] == OP_DROP && scriptPubKey[1] == OP_TRUE) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_DROP followed by OP_1
-    if (scriptPubKey.size() == 2 && scriptPubKey[0] == OP_DROP && scriptPubKey[1] == OP_1) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_NOP (no operation, always succeeds)
-    if (scriptPubKey.size() == 1 && scriptPubKey[0] == OP_NOP) {
-        return true;
-    }
-
-    // Check for scripts that are just OP_NOP1 through OP_NOP10 (no operations)
-    if (scriptPubKey.size() == 1 && scriptPubKey[0] >= OP_NOP1 && scriptPubKey[0] <= OP_NOP10) {
-        return true;
-    }
-
-    // Note: We do NOT include:
-    // - SegWit witness programs (require proper witness data)
-    // - OP_RETURN outputs (provably unspendable)
-    // - Invalid/malformed scripts (will fail execution)
-    // - Oversized scripts (will fail validation)
-
-    return false;
+    return anyonecanspend::IsAnyoneCanSpendScriptPubKey(scriptPubKey, nullptr);
 }
 
 struct CUpdatedBlock
@@ -2276,10 +2240,6 @@ static RPCHelpMan getanyonecanspendutxos()
                                 type = "OP_TRUE";
                             } else if (coin.out.scriptPubKey[0] == OP_1) {
                                 type = "OP_1";
-                            } else if (coin.out.scriptPubKey[0] == OP_NOP) {
-                                type = "OP_NOP";
-                            } else if (coin.out.scriptPubKey[0] >= OP_NOP1 && coin.out.scriptPubKey[0] <= OP_NOP10) {
-                                type = "OP_NOP" + std::to_string(coin.out.scriptPubKey[0] - OP_NOP1 + 1);
                             }
                         } else if (coin.out.scriptPubKey.size() == 2) {
                             if (coin.out.scriptPubKey[0] == OP_DROP && coin.out.scriptPubKey[1] == OP_TRUE) {

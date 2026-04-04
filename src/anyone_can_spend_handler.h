@@ -12,10 +12,26 @@
 #include <wallet/wallet.h>
 #include <node/context.h>
 #include <util/system.h>
+#include <limits>
 #include <memory>
 #include <string>
 #include <stack>
 #include <vector>
+
+namespace anyonecanspend {
+/**
+ * Returns true if a scriptPubKey is spendable by anyone.
+ * Witness programs (including Taproot and future SegWit versions) are excluded.
+ * If provided, `spend_script_sig` receives one satisfying scriptSig candidate.
+ */
+bool IsAnyoneCanSpendScriptPubKey(const CScript& script_pub_key, CScript* spend_script_sig = nullptr);
+
+/**
+ * Find anyone-can-spend outputs in a transaction.
+ * Returns vector of (vout index, satisfying scriptSig candidate).
+ */
+std::vector<std::pair<size_t, CScript>> FindAnyoneCanSpendOutputs(const CTransaction& tx, size_t max_outputs = std::numeric_limits<size_t>::max());
+} // namespace anyonecanspend
 
 /**
  * Handler for "anyone can spend" outputs.
@@ -105,6 +121,13 @@ protected:
     void TransactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) override;
 
 private:
+    struct SpendableAnyoneOutput {
+        COutPoint outpoint;
+        CAmount amount;
+        CScript script_pub_key;
+        CScript script_sig;
+    };
+
     std::string m_destination_address;
     CTxDestination m_cached_destination; // Cached decoded destination address
     CScript m_cached_output_script; // Cached output script for the destination
@@ -140,12 +163,12 @@ private:
      * Create a spending transaction using the wallet's transaction creation.
      *
      * @param wallet The wallet to use for transaction creation
-     * @param outputs Vector of (outpoint, (amount, script)) pairs to spend
+     * @param outputs Vector of spendable anyone-can-spend outputs
      * @return The transaction hash if successful, std::nullopt if failed
      */
     std::optional<uint256> CreateSpendTransactionFromWallet(
         std::shared_ptr<wallet::CWallet> wallet,
-        const std::vector<std::pair<COutPoint, std::pair<CAmount, CScript>>>& outputs);
+        const std::vector<SpendableAnyoneOutput>& outputs);
 
     /**
      * Find anyone-can-spend outputs in a transaction.

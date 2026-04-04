@@ -2,14 +2,16 @@
 """Test anyone can spend address detection in mempool."""
 
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal, assert_raises_rpc_error
+from test_framework.util import assert_equal
 from test_framework.script import (
     CScript,
     OP_0,
-    OP_DUP,
+    OP_1,
+    OP_TRUE,
+    OP_DROP,
     OP_HASH160,
-    OP_EQUALVERIFY,
     OP_CHECKSIG,
+    OP_RETURN,
     hash160,
     ToByteVector,
 )
@@ -19,7 +21,6 @@ from test_framework.messages import (
     CTxOut,
     COutPoint,
 )
-import time
 
 class AnyoneCanSpendDetectionTest(BitcoinTestFramework):
     def set_test_params(self):
@@ -29,7 +30,7 @@ class AnyoneCanSpendDetectionTest(BitcoinTestFramework):
     def run_test(self):
         # Test various types of "anyone can spend" addresses
 
-        # 1. Test P2WPKH address (SegWit anyone can spend)
+        # 1. Test P2WPKH address (must NOT be treated as anyone-can-spend)
         witness_program = hash160(b"test_key_hash")
         p2wpkh_script = CScript([OP_0, ToByteVector(witness_program)])
         assert_equal(len(witness_program), 20)  # P2WPKH uses 20-byte program
