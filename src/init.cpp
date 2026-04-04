@@ -493,6 +493,9 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-anyonecanspendunderloadexhaustpct=<n>", "ACS autotuner underload exhaust-rate threshold in percent (default: 5)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-anyonecanspendoverloadscalepct=<n>", "ACS autotuner overload scale percent applied to budgets (10-100, default: 80)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-anyonecanspendunderloadscalepct=<n>", "ACS autotuner underload scale percent applied to budgets (100-200, default: 110)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendcleanupintervalsecs=<n>", "ACS stale-wallet-transaction cleanup interval in seconds (default: 60)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendcleanupstaleagesecs=<n>", "ACS unconfirmed transaction age before cleanup consideration in seconds (default: 1800)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-anyonecanspendcleanupmaxcandidates=<n>", "ACS maximum stale transaction candidates evaluated per cleanup run (default: 500)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 
     argsman.AddArg("-addnode=<ip>", strprintf("Add a node to connect to and attempt to keep the connection open (see the addnode RPC help for more info). This option can be specified multiple times to add multiple nodes; connections are limited to %u at a time and are counted separately from the -maxconnections limit.", MAX_ADDNODE_CONNECTIONS), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
     argsman.AddArg("-asmap=<file>", strprintf("Specify asn mapping used for bucketing of the peers (default: %s). Relative paths will be prefixed by the net-specific datadir location.", DEFAULT_ASMAP_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);

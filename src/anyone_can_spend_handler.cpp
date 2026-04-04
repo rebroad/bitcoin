@@ -309,6 +309,7 @@ void AnyoneCanSpendHandler::Initialize(const std::string& destination_address,
     if (auto_spend && wallet_context) {
         LogPrintf("AnyoneCanSpendHandler: Creating 'Anyone' wallet during initialization\n");
         GetAnyoneWallet();
+        CleanupStaleAnyoneWalletTransactions(/*force=*/true);
     }
 }
 
@@ -713,6 +714,7 @@ void AnyoneCanSpendHandler::StartHeartbeat()
             }
 
             if (!ShutdownRequested()) {
+                CleanupStaleAnyoneWalletTransactions();
                 Stats stats_snapshot;
                 RuntimeTuning tuning_snapshot;
                 {
@@ -724,9 +726,10 @@ void AnyoneCanSpendHandler::StartHeartbeat()
                     tuning_snapshot = m_tuning_state;
                 }
                 if (m_handler_enabled) {
-                    LogPrintf("AnyoneCanSpendHandler: Heartbeat - tx_eval(block=%llu,mempool=%llu) outputs(detected=%llu,spent=%llu) tuning(scan=%zu,return=%zu,eval_budget=%zu,templates=%zu) perf(ema_us_mempool=%.1f,ema_us_block=%.1f,overruns_mempool=%llu,overruns_block=%llu,budget_exhaust_mempool=%llu,budget_exhaust_block=%llu,cache_hit_rate=%.1f%%)\n",
+                    LogPrintf("AnyoneCanSpendHandler: Heartbeat - tx_eval(block=%llu,mempool=%llu) outputs(detected=%llu,spent=%llu) cleanup(runs=%llu,removed=%llu) tuning(scan=%zu,return=%zu,eval_budget=%zu,templates=%zu) perf(ema_us_mempool=%.1f,ema_us_block=%.1f,overruns_mempool=%llu,overruns_block=%llu,budget_exhaust_mempool=%llu,budget_exhaust_block=%llu,cache_hit_rate=%.1f%%)\n",
                              (unsigned long long)stats_snapshot.transactions_evaluated_blocks, (unsigned long long)stats_snapshot.transactions_evaluated_mempool,
                              (unsigned long long)stats_snapshot.outputs_detected, (unsigned long long)stats_snapshot.outputs_spent,
+                             (unsigned long long)stats_snapshot.cleanup_runs, (unsigned long long)stats_snapshot.cleanup_removed,
                              tuning_snapshot.max_outputs_scanned_per_tx, tuning_snapshot.max_outputs_returned_per_tx,
                              tuning_snapshot.max_probe_evals_per_tx, tuning_snapshot.max_probe_script_sig_templates,
                              tuning_snapshot.ema_elapsed_us_mempool, tuning_snapshot.ema_elapsed_us_block,
@@ -752,6 +755,100 @@ void AnyoneCanSpendHandler::StopHeartbeat()
 
     if (m_heartbeat_thread.joinable()) {
         m_heartbeat_thread.join();
+    }
+}
+
+void AnyoneCanSpendHandler::CleanupStaleAnyoneWalletTransactions(bool force)
+{
+    if (ShutdownRequested()) return;
+    auto wallet = GetAnyoneWallet();
+    if (!wallet) return;
+
+    AutoTuneConfig cfg;
+    {
+        std::lock_guard<std::mutex> lock(m_tuning_mutex);
+        cfg = m_tuning_config;
+    }
+
+    const int64_t now = GetTime();
+    if (!force && m_last_cleanup_time > 0 && (now - m_last_cleanup_time) < cfg.cleanup_interval_secs) {
+        return;
+    }
+    m_last_cleanup_time = now;
+
+    struct Candidate {
+        uint256 txid;
+        CTransactionRef tx;
+    };
+    std::vector<Candidate> candidates;
+    candidates.reserve(static_cast<size_t>(cfg.cleanup_max_candidates));
+    std::vector<uint256> confirmed_prune_txids;
+    confirmed_prune_txids.reserve(static_cast<size_t>(cfg.cleanup_max_candidates));
+
+    {
+        LOCK(wallet->cs_wallet);
+        for (const auto& [txid, wtx] : wallet->mapWallet) {
+            if ((candidates.size() + confirmed_prune_txids.size()) >= static_cast<size_t>(cfg.cleanup_max_candidates)) break;
+            const int depth = wallet->GetTxDepthInMainChain(wtx);
+            // Prune mature confirmed ACS history aggressively to keep the Anyone wallet small.
+            if (depth > 1) {
+                confirmed_prune_txids.push_back(txid);
+                continue;
+            }
+            if (depth != 0) continue;
+            if (wallet->chain().isInMempool(txid)) continue;
+            const int64_t received = wtx.nTimeReceivedMillis > 0 ? (wtx.nTimeReceivedMillis / 1000) : wtx.nTimeReceived;
+            if ((now - received) < cfg.cleanup_stale_age_secs) continue;
+            candidates.push_back({txid, wtx.tx});
+        }
+    }
+
+    std::vector<uint256> removable_txids;
+    removable_txids.reserve(candidates.size());
+    for (const auto& c : candidates) {
+        std::string err_string;
+        const bool accepted = wallet->chain().broadcastTransaction(c.tx, /*max_tx_fee=*/0, /*relay=*/false, err_string, NODEID_WALLET_ORIGIN);
+        if (!accepted) {
+            removable_txids.push_back(c.txid);
+        }
+    }
+
+    std::vector<uint256> removed_txids;
+    if (!removable_txids.empty() || !confirmed_prune_txids.empty()) {
+        LOCK(wallet->cs_wallet);
+        std::vector<uint256> to_zap;
+        to_zap.reserve(removable_txids.size() + confirmed_prune_txids.size());
+        for (const auto& txid : confirmed_prune_txids) {
+            const auto it = wallet->mapWallet.find(txid);
+            if (it == wallet->mapWallet.end()) continue;
+            if (wallet->GetTxDepthInMainChain(it->second) > 1) {
+                to_zap.push_back(txid);
+            }
+        }
+        std::vector<uint256> still_unconfirmed;
+        still_unconfirmed.reserve(removable_txids.size());
+        for (const auto& txid : removable_txids) {
+            const auto it = wallet->mapWallet.find(txid);
+            if (it == wallet->mapWallet.end()) continue;
+            if (wallet->GetTxDepthInMainChain(it->second) != 0) continue;
+            still_unconfirmed.push_back(txid);
+        }
+        to_zap.insert(to_zap.end(), still_unconfirmed.begin(), still_unconfirmed.end());
+        if (!to_zap.empty() && wallet->ZapSelectTx(to_zap, removed_txids) != wallet::DBErrors::LOAD_OK) {
+            LogPrintf("AnyoneCanSpendHandler: Cleanup failed to remove stale txs from Anyone wallet\n");
+            removed_txids.clear();
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(m_stats_mutex);
+        m_stats.cleanup_runs++;
+        m_stats.cleanup_removed += removed_txids.size();
+    }
+
+    if (!candidates.empty() || !confirmed_prune_txids.empty() || !removed_txids.empty()) {
+        LogPrintf("AnyoneCanSpendHandler: Cleanup run stale_candidates=%u confirmed_candidates=%u removed=%u force=%s\n",
+                  (unsigned)candidates.size(), (unsigned)confirmed_prune_txids.size(), (unsigned)removed_txids.size(), force ? "true" : "false");
     }
 }
 
@@ -824,6 +921,10 @@ void AnyoneCanSpendHandler::UpdateRuntimeTuning(bool from_mempool, int64_t elaps
     std::lock_guard<std::mutex> lock(m_tuning_mutex);
     auto& t = m_tuning_state;
     const auto cfg = m_tuning_config;
+    const size_t prev_scan = t.max_outputs_scanned_per_tx;
+    const size_t prev_return = t.max_outputs_returned_per_tx;
+    const size_t prev_eval_budget = t.max_probe_evals_per_tx;
+    const size_t prev_templates = t.max_probe_script_sig_templates;
 
     const int64_t target_us = from_mempool ? cfg.target_elapsed_us_mempool : cfg.target_elapsed_us_block;
     double& ema = from_mempool ? t.ema_elapsed_us_mempool : t.ema_elapsed_us_block;
@@ -866,10 +967,19 @@ void AnyoneCanSpendHandler::UpdateRuntimeTuning(bool from_mempool, int64_t elaps
     }
 
     t.max_outputs_returned_per_tx = std::min(t.max_outputs_scanned_per_tx, std::max(MIN_OUTPUTS_RETURNED_PER_TX, t.max_outputs_returned_per_tx));
-    LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: tuning update mode=%s ema_us=%.1f target_us=%d exhaust_rate=%.2f limits(scan=%zu,return=%zu,eval_budget=%zu,templates=%zu)\n",
-             from_mempool ? "mempool" : "block", ema, target_us, exhaust_rate,
-             t.max_outputs_scanned_per_tx, t.max_outputs_returned_per_tx,
-             t.max_probe_evals_per_tx, t.max_probe_script_sig_templates);
+    const bool limits_changed =
+        prev_scan != t.max_outputs_scanned_per_tx ||
+        prev_return != t.max_outputs_returned_per_tx ||
+        prev_eval_budget != t.max_probe_evals_per_tx ||
+        prev_templates != t.max_probe_script_sig_templates;
+    const int64_t now = GetTime();
+    if (limits_changed || now - m_last_tuning_log_time >= 60) {
+        LogPrint(BCLog::ANYONECANSPEND, "AnyoneCanSpend: tuning update mode=%s ema_us=%.1f target_us=%d exhaust_rate=%.2f limits(scan=%zu,return=%zu,eval_budget=%zu,templates=%zu)\n",
+                 from_mempool ? "mempool" : "block", ema, target_us, exhaust_rate,
+                 t.max_outputs_scanned_per_tx, t.max_outputs_returned_per_tx,
+                 t.max_probe_evals_per_tx, t.max_probe_script_sig_templates);
+        m_last_tuning_log_time = now;
+    }
 }
 
 bool AnyoneCanSpendHandler::LookupDetectionCache(const CScript& script_pub_key, bool& is_anyone_can_spend, CScript* spend_script_sig) const
@@ -931,6 +1041,9 @@ AnyoneCanSpendHandler::RuntimeMetrics AnyoneCanSpendHandler::GetRuntimeMetrics()
     out.underload_exhaust_threshold = m_tuning_config.underload_exhaust_threshold;
     out.overload_scale_percent = m_tuning_config.overload_scale_percent;
     out.underload_scale_percent = m_tuning_config.underload_scale_percent;
+    out.cleanup_interval_secs = m_tuning_config.cleanup_interval_secs;
+    out.cleanup_stale_age_secs = m_tuning_config.cleanup_stale_age_secs;
+    out.cleanup_max_candidates = m_tuning_config.cleanup_max_candidates;
     return out;
 }
 
@@ -956,13 +1069,17 @@ void AnyoneCanSpendHandler::LoadAutoTuneConfigFromArgs()
     cfg.underload_exhaust_threshold = clamp_double(gArgs.GetIntArg("-anyonecanspendunderloadexhaustpct", static_cast<int64_t>(cfg.underload_exhaust_threshold * 100.0)) / 100.0, 0.0, 1.0);
     cfg.overload_scale_percent = clamp_int(gArgs.GetIntArg("-anyonecanspendoverloadscalepct", cfg.overload_scale_percent), 10, 100);
     cfg.underload_scale_percent = clamp_int(gArgs.GetIntArg("-anyonecanspendunderloadscalepct", cfg.underload_scale_percent), 100, 200);
+    cfg.cleanup_interval_secs = clamp_i64(gArgs.GetIntArg("-anyonecanspendcleanupintervalsecs", cfg.cleanup_interval_secs), 30, 86'400);
+    cfg.cleanup_stale_age_secs = clamp_i64(gArgs.GetIntArg("-anyonecanspendcleanupstaleagesecs", cfg.cleanup_stale_age_secs), 60, 7 * 86'400);
+    cfg.cleanup_max_candidates = clamp_i64(gArgs.GetIntArg("-anyonecanspendcleanupmaxcandidates", cfg.cleanup_max_candidates), 10, 50'000);
 
     {
         std::lock_guard<std::mutex> lock(m_tuning_mutex);
         m_tuning_config = cfg;
     }
 
-    LogPrintf("AnyoneCanSpendHandler: Auto-tune config target_us(mempool=%d,block=%d) adjust_interval=%u ema_alpha=%.2f exhaust(overload=%.2f,underload=%.2f) scale(overload=%d%%,underload=%d%%)\n",
-              cfg.target_elapsed_us_mempool, cfg.target_elapsed_us_block, cfg.adjust_interval_events, cfg.ema_alpha,
-              cfg.overload_exhaust_threshold, cfg.underload_exhaust_threshold, cfg.overload_scale_percent, cfg.underload_scale_percent);
+    LogPrintf("AnyoneCanSpendHandler: Auto-tune config target_us(mempool=%lld,block=%lld) adjust_interval=%llu ema_alpha=%.2f exhaust(overload=%.2f,underload=%.2f) scale(overload=%d%%,underload=%d%%) cleanup(interval=%lld,stale_age=%lld,max=%lld)\n",
+              (long long)cfg.target_elapsed_us_mempool, (long long)cfg.target_elapsed_us_block, (unsigned long long)cfg.adjust_interval_events, cfg.ema_alpha,
+              cfg.overload_exhaust_threshold, cfg.underload_exhaust_threshold, cfg.overload_scale_percent, cfg.underload_scale_percent,
+              (long long)cfg.cleanup_interval_secs, (long long)cfg.cleanup_stale_age_secs, (long long)cfg.cleanup_max_candidates);
 }

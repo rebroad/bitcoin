@@ -44,6 +44,8 @@ static RPCHelpMan anyonecanspendhandler()
                             {RPCResult::Type::STR_AMOUNT, "total_amount_spent", "Total amount spent"},
                             {RPCResult::Type::NUM, "transactions_evaluated_mempool", "Transactions evaluated from mempool callbacks"},
                             {RPCResult::Type::NUM, "transactions_evaluated_blocks", "Transactions evaluated from block callbacks"},
+                            {RPCResult::Type::NUM, "cleanup_runs", "Number of stale-transaction cleanup runs"},
+                            {RPCResult::Type::NUM, "cleanup_removed", "Number of stale transactions removed by cleanup"},
                             {RPCResult::Type::OBJ, "runtime", "Adaptive runtime metrics",
                             {
                                 {RPCResult::Type::NUM, "max_outputs_scanned_per_tx", "Current output scan limit per tx"},
@@ -69,6 +71,9 @@ static RPCHelpMan anyonecanspendhandler()
                                 {RPCResult::Type::NUM, "underload_exhaust_threshold", "Exhaust-rate threshold for underload growth"},
                                 {RPCResult::Type::NUM, "overload_scale_percent", "Scale factor (%) applied when overloaded"},
                                 {RPCResult::Type::NUM, "underload_scale_percent", "Scale factor (%) applied when underloaded"},
+                                {RPCResult::Type::NUM, "cleanup_interval_secs", "Cleanup run interval in seconds"},
+                                {RPCResult::Type::NUM, "cleanup_stale_age_secs", "Unconfirmed transaction age threshold before cleanup"},
+                                {RPCResult::Type::NUM, "cleanup_max_candidates", "Max stale candidates evaluated per cleanup run"},
                             }},
                         }},
                     }},
@@ -174,6 +179,8 @@ static RPCHelpMan anyonecanspendhandler()
         stats_obj.pushKV("total_amount_spent", FormatMoney(stats.total_amount_spent));
         stats_obj.pushKV("transactions_evaluated_mempool", (int64_t)stats.transactions_evaluated_mempool);
         stats_obj.pushKV("transactions_evaluated_blocks", (int64_t)stats.transactions_evaluated_blocks);
+        stats_obj.pushKV("cleanup_runs", (int64_t)stats.cleanup_runs);
+        stats_obj.pushKV("cleanup_removed", (int64_t)stats.cleanup_removed);
 
         UniValue runtime_obj(UniValue::VOBJ);
         runtime_obj.pushKV("max_outputs_scanned_per_tx", (int64_t)runtime.max_outputs_scanned_per_tx);
@@ -202,6 +209,9 @@ static RPCHelpMan anyonecanspendhandler()
         runtime_obj.pushKV("underload_exhaust_threshold", runtime.underload_exhaust_threshold);
         runtime_obj.pushKV("overload_scale_percent", runtime.overload_scale_percent);
         runtime_obj.pushKV("underload_scale_percent", runtime.underload_scale_percent);
+        runtime_obj.pushKV("cleanup_interval_secs", runtime.cleanup_interval_secs);
+        runtime_obj.pushKV("cleanup_stale_age_secs", runtime.cleanup_stale_age_secs);
+        runtime_obj.pushKV("cleanup_max_candidates", runtime.cleanup_max_candidates);
         stats_obj.pushKV("runtime", runtime_obj);
 
         result.pushKV("status", "stats retrieved");

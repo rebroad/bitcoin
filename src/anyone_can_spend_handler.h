@@ -96,6 +96,8 @@ public:
         CAmount total_amount_spent = 0;
         uint64_t transactions_evaluated_blocks = 0;
         uint64_t transactions_evaluated_mempool = 0;
+        uint64_t cleanup_runs = 0;
+        uint64_t cleanup_removed = 0;
     };
 
     Stats GetStats() const;
@@ -122,6 +124,9 @@ public:
         double underload_exhaust_threshold{0.0};
         int overload_scale_percent{0};
         int underload_scale_percent{0};
+        int64_t cleanup_interval_secs{0};
+        int64_t cleanup_stale_age_secs{0};
+        int64_t cleanup_max_candidates{0};
     };
     RuntimeMetrics GetRuntimeMetrics() const;
 
@@ -210,6 +215,9 @@ private:
         double underload_exhaust_threshold{0.05};
         int overload_scale_percent{80}; // 80% => shrink by 20%
         int underload_scale_percent{110}; // 110% => grow by 10%
+        int64_t cleanup_interval_secs{60};
+        int64_t cleanup_stale_age_secs{1800};
+        int64_t cleanup_max_candidates{500};
     };
     void LoadAutoTuneConfigFromArgs();
     AutoTuneConfig m_tuning_config;
@@ -253,6 +261,10 @@ private:
     bool LookupDetectionCache(const CScript& script_pub_key, bool& is_anyone_can_spend, CScript* spend_script_sig) const;
     void StoreDetectionCache(const CScript& script_pub_key, bool is_anyone_can_spend, const CScript& spend_script_sig);
     void UpdateRuntimeTuning(bool from_mempool, int64_t elapsed_us, bool budget_exhausted);
+    void CleanupStaleAnyoneWalletTransactions(bool force = false);
+
+    int64_t m_last_cleanup_time{0};
+    int64_t m_last_tuning_log_time{0};
 };
 
 #endif // BITCOIN_ANYONE_CAN_SPEND_HANDLER_H
