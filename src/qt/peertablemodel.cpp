@@ -11,14 +11,12 @@
 #include <interfaces/node.h>
 #include <sync.h>
 #include <util/strencodings.h>
-#include <validation.h> // For cs_main
-#include <QElapsedTimer>
-#include <QDebug>
-#include <qt/locktiming.h>
 
 #include <algorithm>
 #include <memory>
 
+#include <QtConcurrent/QtConcurrentRun>
+#include <QFutureWatcher>
 #include <QList>
 #include <QTimer>
 
@@ -49,6 +47,8 @@ private:
     GeoIpResolver m_resolver{};
 };
 
+static constexpr auto PEER_MODEL_UPDATE_DELAY{500ms};
+
 PeerTableModel::PeerTableModel(interfaces::Node& node, QObject* parent) :
     QAbstractTableModel(parent),
     m_node(node),
@@ -58,7 +58,10 @@ PeerTableModel::PeerTableModel(interfaces::Node& node, QObject* parent) :
     // set up timer for auto refresh
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &PeerTableModel::refresh);
-    timer->setInterval(MODEL_UPDATE_DELAY);
+    timer->setInterval(PEER_MODEL_UPDATE_DELAY);
+    m_refresh_watcher = new QFutureWatcher<QList<CNodeCombinedStats>>(this);
+    connect(m_refresh_watcher, &QFutureWatcher<QList<CNodeCombinedStats>>::finished,
+            this, &PeerTableModel::onRefreshFinished);
 
     // load initial data
     refresh();
@@ -259,50 +262,68 @@ QModelIndex PeerTableModel::index(int row, int column, const QModelIndex& parent
 
 void PeerTableModel::refresh()
 {
-    // Try to get fresh data directly if cs_main is free
-    TIME_CS_MAIN_LOCK(10);
-    
-    if (lock.owns_lock()) {
-        // We got the lock! Get fresh data and update cache
-        interfaces::Node::NodesStats nodes_stats;
-        m_node.getNodesStats(nodes_stats);
-        decltype(m_peers_data) new_peers_data;
-        new_peers_data.reserve(nodes_stats.size());
-        for (const auto& node_stats : nodes_stats) {
-            const CNodeCombinedStats stats{std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)};
-            new_peers_data.append(stats);
-        }
-
-        // Handle peer addition or removal as suggested in Qt Docs. See:
-        // - https://doc.qt.io/qt-5/model-view-programming.html#inserting-and-removing-rows
-        // - https://doc.qt.io/qt-5/model-view-programming.html#resizable-models
-        // We take advantage of the fact that the std::vector returned
-        // by interfaces::Node::getNodesStats is sorted by nodeid.
-        for (int i = 0; i < m_peers_data.size();) {
-            if (i < new_peers_data.size() && m_peers_data.at(i).nodeStats.nodeid == new_peers_data.at(i).nodeStats.nodeid) {
-                ++i;
-                continue;
-            }
-            // A peer has been removed from the table.
-            beginRemoveRows(QModelIndex(), i, i);
-            m_peers_data.erase(m_peers_data.begin() + i);
-            endRemoveRows();
-        }
-
-        if (m_peers_data.size() < new_peers_data.size()) {
-            // Some peers have been added to the end of the table.
-            beginInsertRows(QModelIndex(), m_peers_data.size(), new_peers_data.size() - 1);
-            m_peers_data.swap(new_peers_data);
-            endInsertRows();
-        } else {
-            m_peers_data.swap(new_peers_data);
-        }
-
-        const auto top_left = index(0, 0);
-        const auto bottom_right = index(rowCount() - 1, columnCount() - 1);
-        // Only emit dataChanged if both indices are valid
-        if (top_left.isValid() && bottom_right.isValid())
-            Q_EMIT dataChanged(top_left, bottom_right);
+    if (m_refresh_in_flight) {
+        m_refresh_pending = true;
+        return;
     }
-    // If cs_main is busy, skip this update (non-blocking)
+    m_refresh_in_flight = true;
+    interfaces::Node* node = &m_node;
+    m_refresh_watcher->setFuture(QtConcurrent::run([node]() {
+        interfaces::Node::NodesStats nodes_stats;
+        node->getNodesStats(nodes_stats);
+        QList<CNodeCombinedStats> peers_data;
+        peers_data.reserve(nodes_stats.size());
+        for (const auto& node_stats : nodes_stats) {
+            peers_data.append(CNodeCombinedStats{std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)});
+        }
+        return peers_data;
+    }));
+}
+
+void PeerTableModel::onRefreshFinished()
+{
+    applyPeerStats(m_refresh_watcher->result());
+    m_refresh_in_flight = false;
+    if (m_refresh_pending) {
+        m_refresh_pending = false;
+        QTimer::singleShot(0, this, &PeerTableModel::refresh);
+    }
+}
+
+void PeerTableModel::applyPeerStats(const QList<CNodeCombinedStats>& peers_data)
+{
+    decltype(m_peers_data) new_peers_data;
+    new_peers_data.reserve(peers_data.size());
+    for (const auto& stats : peers_data) new_peers_data.append(stats);
+
+    // Handle peer addition or removal as suggested in Qt Docs. See:
+    // - https://doc.qt.io/qt-5/model-view-programming.html#inserting-and-removing-rows
+    // - https://doc.qt.io/qt-5/model-view-programming.html#resizable-models
+    // We take advantage of the fact that the std::vector returned
+    // by interfaces::Node::getNodesStats is sorted by nodeid.
+    for (int i = 0; i < m_peers_data.size();) {
+        if (i < new_peers_data.size() && m_peers_data.at(i).nodeStats.nodeid == new_peers_data.at(i).nodeStats.nodeid) {
+            ++i;
+            continue;
+        }
+        // A peer has been removed from the table.
+        beginRemoveRows(QModelIndex(), i, i);
+        m_peers_data.erase(m_peers_data.begin() + i);
+        endRemoveRows();
+    }
+
+    if (m_peers_data.size() < new_peers_data.size()) {
+        // Some peers have been added to the end of the table.
+        beginInsertRows(QModelIndex(), m_peers_data.size(), new_peers_data.size() - 1);
+        m_peers_data.swap(new_peers_data);
+        endInsertRows();
+    } else {
+        m_peers_data.swap(new_peers_data);
+    }
+
+    const auto top_left = index(0, 0);
+    const auto bottom_right = index(rowCount() - 1, columnCount() - 1);
+    // Only emit dataChanged if both indices are valid
+    if (top_left.isValid() && bottom_right.isValid())
+        Q_EMIT dataChanged(top_left, bottom_right);
 }

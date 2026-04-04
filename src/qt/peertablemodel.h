@@ -18,6 +18,7 @@
 
 class PeerTablePriv;
 class CountryFlagResolver;
+template <typename T> class QFutureWatcher;
 
 namespace interfaces {
 class Node;
@@ -80,8 +81,11 @@ public:
 
 public Q_SLOTS:
     void refresh();
+    void onRefreshFinished();
 
 private:
+    void applyPeerStats(const QList<CNodeCombinedStats>& peers_data);
+
     //! Internal peer data structure.
     QList<CNodeCombinedStats> m_peers_data{};
     interfaces::Node& m_node;
@@ -121,6 +125,9 @@ private:
             User Agent string. */
         tr("User Agent")};
     QTimer *timer;
+    QFutureWatcher<QList<CNodeCombinedStats>>* m_refresh_watcher{nullptr};
+    bool m_refresh_in_flight{false};
+    bool m_refresh_pending{false};
 };
 
 #endif // BITCOIN_QT_PEERTABLEMODEL_H
