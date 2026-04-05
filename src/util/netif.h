@@ -14,6 +14,7 @@
 std::optional<CNetAddr> QueryDefaultGateway(Network network);
 
 //! Return all local non-loopback IPv4 and IPv6 network addresses.
-std::vector<CNetAddr> GetLocalAddresses();
+//! If default_route_only is true, return only addresses selected by routing to default gateways.
+std::vector<CNetAddr> GetLocalAddresses(bool default_route_only = false);
 
 #endif // BITCOIN_UTIL_NETIF_H

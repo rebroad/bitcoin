@@ -12,6 +12,8 @@
 #include <util/sock.h>
 #include <util/syserror.h>
 
+#include <algorithm>
+
 #if defined(__linux__)
 #include <linux/rtnetlink.h>
 #include <sys/socket.h>
@@ -274,9 +276,45 @@ std::optional<CNetAddr> QueryDefaultGateway(Network network)
     }
 }
 
-std::vector<CNetAddr> GetLocalAddresses()
+std::vector<CNetAddr> GetLocalAddresses(bool default_route_only)
 {
     std::vector<CNetAddr> addresses;
+    if (default_route_only) {
+        for (const auto network : {NET_IPV4, NET_IPV6}) {
+            const std::optional<CNetAddr> gateway = QueryDefaultGateway(network);
+            if (!gateway) continue;
+
+            struct sockaddr_storage gateway_sockaddr;
+            socklen_t gateway_sockaddr_len = sizeof(gateway_sockaddr);
+            if (!CService(*gateway, /*port=*/9).GetSockAddr((struct sockaddr*)&gateway_sockaddr, &gateway_sockaddr_len)) continue;
+
+            const int family = network == NET_IPV4 ? AF_INET : AF_INET6;
+            SOCKET sock = socket(family, SOCK_DGRAM, IPPROTO_UDP);
+            if (sock == INVALID_SOCKET) continue;
+            Sock sock_wrapper{sock};
+            if (sock_wrapper.Connect((struct sockaddr*)&gateway_sockaddr, gateway_sockaddr_len) != 0) continue;
+
+            struct sockaddr_storage local_sockaddr;
+            socklen_t local_sockaddr_len = sizeof(local_sockaddr);
+            if (getsockname(sock, (struct sockaddr*)&local_sockaddr, &local_sockaddr_len) != 0) continue;
+
+            std::optional<CNetAddr> local_addr;
+            if (local_sockaddr.ss_family == AF_INET) {
+                struct sockaddr_in* s4 = (struct sockaddr_in*)&local_sockaddr;
+                local_addr = CNetAddr(s4->sin_addr);
+            } else if (local_sockaddr.ss_family == AF_INET6) {
+                struct sockaddr_in6* s6 = (struct sockaddr_in6*)&local_sockaddr;
+                local_addr = CNetAddr(s6->sin6_addr);
+            }
+
+            if (!local_addr || local_addr->IsBindAny() || local_addr->IsLocal()) continue;
+            if (std::find(addresses.begin(), addresses.end(), *local_addr) == addresses.end()) {
+                addresses.push_back(*local_addr);
+            }
+        }
+        return addresses;
+    }
+
 #ifdef WIN32
     char pszHostName[256] = "";
     if (gethostname(pszHostName, sizeof(pszHostName)) != SOCKET_ERROR) {

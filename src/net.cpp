@@ -129,6 +129,7 @@ static const uint64_t RANDOMIZER_ID_ADDRCACHE = 0x1cf2e4ddd306dda9ULL; // SHA256
 // Global state variables
 //
 bool fDiscover = true;
+bool fDiscoverDefaultOnly = false;
 bool fListen = true;
 Mutex g_maplocalhost_mutex;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost GUARDED_BY(g_maplocalhost_mutex);
@@ -3048,7 +3049,7 @@ void Discover()
     if (!fDiscover)
         return;
 
-    for (const CNetAddr &addr : GetLocalAddresses()) {
+    for (const CNetAddr& addr : GetLocalAddresses(fDiscoverDefaultOnly)) {
         if (AddLocal(addr, LOCAL_IF))
             LogPrintf("%s: %s\n", __func__, addr.ToString());
     }

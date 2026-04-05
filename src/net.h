@@ -237,6 +237,7 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer, ServiceFlags nLocalServices)
 
 
 extern bool fDiscover;
+extern bool fDiscoverDefaultOnly;
 extern bool fListen;
 extern std::atomic<int> nBlocksToBeProcessed;
 
