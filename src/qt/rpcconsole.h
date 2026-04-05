@@ -211,6 +211,8 @@ private:
 
     /** Update UI with latest network info from model. */
     void updateNetworkState();
+    /** Update local addresses shown in the Information tab. */
+    void updateLocalAddresses();
     /** True when blocks tab work should run on this widget right now. */
     bool shouldRefreshBlockVisualization() const;
 

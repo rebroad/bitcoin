@@ -32,6 +32,7 @@
 
 #include <limits>
 #include <optional>
+#include <set>
 #include <stdint.h>
 #include <tuple>
 #ifdef HAVE_MALLOC_INFO
@@ -113,6 +114,40 @@ static std::optional<std::string> ApplyRuntimeConnectionSettings(const JSONRPCRe
     connman.SetWhitelistedRanges(whitelisted_ranges);
     connman.RefreshWhitelistedPeerPermissions();
     connman.SetAddedNodes(args.GetArgs("-addnode"));
+
+    return std::nullopt;
+}
+
+static std::optional<std::string> ApplyRuntimeExternalIpSettings(const std::vector<std::string>& old_externalips, const std::vector<std::string>& new_externalips)
+{
+    std::set<CService> old_local_addrs;
+    for (const std::string& str_addr : old_externalips) {
+        CService addr_local;
+        if (Lookup(str_addr, addr_local, GetListenPort(), fNameLookup) && addr_local.IsValid()) {
+            old_local_addrs.insert(addr_local);
+        }
+    }
+
+    std::set<CService> new_local_addrs;
+    for (const std::string& str_addr : new_externalips) {
+        CService addr_local;
+        if (!Lookup(str_addr, addr_local, GetListenPort(), fNameLookup) || !addr_local.IsValid()) {
+            return strprintf("Invalid -externalip address or hostname: '%s'", str_addr);
+        }
+        new_local_addrs.insert(addr_local);
+    }
+
+    for (const CService& addr : old_local_addrs) {
+        if (!new_local_addrs.count(addr)) {
+            RemoveLocal(addr);
+        }
+    }
+
+    for (const CService& addr : new_local_addrs) {
+        if (!old_local_addrs.count(addr)) {
+            AddLocal(addr, LOCAL_MANUAL);
+        }
+    }
 
     return std::nullopt;
 }
@@ -955,6 +990,9 @@ static RPCHelpMan reloadconfig()
     UniValue result(UniValue::VOBJ);
     UniValue warnings(UniValue::VARR);
 
+    ArgsManager& args{EnsureAnyArgsman(request.context)};
+    const std::vector<std::string> old_externalips{args.GetArgs("-externalip")};
+
     std::string error;
     bool success = gArgs.ReadConfigFiles(error, true);
 
@@ -969,6 +1007,10 @@ static RPCHelpMan reloadconfig()
         }
         if (const auto conn_error{ApplyRuntimeConnectionSettings(request)}) {
             warnings.push_back(*conn_error);
+            success = false;
+        }
+        if (const auto externalip_error{ApplyRuntimeExternalIpSettings(old_externalips, args.GetArgs("-externalip"))}) {
+            warnings.push_back(*externalip_error);
             success = false;
         }
         ApplyScriptCheckThreads();

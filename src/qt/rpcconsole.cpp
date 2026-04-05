@@ -1244,6 +1244,33 @@ void RPCConsole::updateNetworkState()
     }
 
     ui->numberOfConnections->setText(connections);
+    updateLocalAddresses();
+}
+
+void RPCConsole::updateLocalAddresses()
+{
+    std::vector<QString> addresses;
+    {
+        LOCK(g_maplocalhost_mutex);
+        addresses.reserve(mapLocalHost.size());
+        for (const auto& [addr, info] : mapLocalHost) {
+            addresses.push_back(QString::fromStdString(CService{addr, info.nPort}.ToString()));
+        }
+    }
+
+    if (addresses.empty()) {
+        ui->localAddresses->setText(ts.na);
+        return;
+    }
+
+    std::sort(addresses.begin(), addresses.end(), [](const QString& a, const QString& b) {
+        return QString::compare(a, b, Qt::CaseInsensitive) < 0;
+    });
+    QStringList local_addresses;
+    for (const QString& address : addresses) {
+        local_addresses.append(address);
+    }
+    ui->localAddresses->setText(local_addresses.join("\n"));
 }
 
 void RPCConsole::setNumConnections(int count)
@@ -1399,6 +1426,8 @@ void RPCConsole::on_tabWidget_currentChanged(int index)
 {
     if (ui->tabWidget->widget(index) == ui->tab_console) {
         ui->lineEdit->setFocus();
+    } else if (ui->tabWidget->widget(index) == ui->tab_info) {
+        updateNetworkState();
     } else if (ui->tabWidget->widget(index) == ui->tab_blocks) {
         // Load block data only when the blocks tab is actually selected.
         // Defer work to keep the GUI thread responsive on tab switch.
@@ -1547,6 +1576,8 @@ void RPCConsole::showEvent(QShowEvent *event)
 
     if (!clientModel || !clientModel->getPeerTableModel())
         return;
+
+    updateNetworkState();
 
     // start PeerTableModel auto refresh
     clientModel->getPeerTableModel()->startAutoRefresh();
