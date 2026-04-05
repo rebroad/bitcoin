@@ -152,6 +152,31 @@ static std::optional<std::string> ApplyRuntimeExternalIpSettings(const std::vect
     return std::nullopt;
 }
 
+static std::optional<std::string> ApplyRuntimeTorSettings(
+    const std::string& old_numonion,
+    const std::string& old_torpassword,
+    const std::string& old_torcontrol,
+    const bool old_listenonion,
+    const ArgsManager& args)
+{
+    const bool new_listenonion = args.GetBoolArg("-listenonion", DEFAULT_LISTEN_ONION);
+    if (old_listenonion != new_listenonion) {
+        return std::string{"Changing -listenonion still requires restart; runtime reload is not supported yet."};
+    }
+    if (!new_listenonion) return std::nullopt;
+
+    const bool tor_settings_changed =
+        old_numonion != args.GetArg("-numonion", "1") ||
+        old_torpassword != args.GetArg("-torpassword", "") ||
+        old_torcontrol != args.GetArg("-torcontrol", DEFAULT_TOR_CONTROL);
+    if (!tor_settings_changed) return std::nullopt;
+
+    if (!ReconfigureTor()) {
+        return std::string{"Tor settings changed but Tor controller is not available at runtime. Restart required."};
+    }
+    return std::nullopt;
+}
+
 static RPCHelpMan validateaddress()
 {
     return RPCHelpMan{
@@ -992,6 +1017,10 @@ static RPCHelpMan reloadconfig()
 
     ArgsManager& args{EnsureAnyArgsman(request.context)};
     const std::vector<std::string> old_externalips{args.GetArgs("-externalip")};
+    const std::string old_numonion{args.GetArg("-numonion", "1")};
+    const std::string old_torpassword{args.GetArg("-torpassword", "")};
+    const std::string old_torcontrol{args.GetArg("-torcontrol", DEFAULT_TOR_CONTROL)};
+    const bool old_listenonion{args.GetBoolArg("-listenonion", DEFAULT_LISTEN_ONION)};
 
     std::string error;
     bool success = gArgs.ReadConfigFiles(error, true);
@@ -1011,6 +1040,10 @@ static RPCHelpMan reloadconfig()
         }
         if (const auto externalip_error{ApplyRuntimeExternalIpSettings(old_externalips, args.GetArgs("-externalip"))}) {
             warnings.push_back(*externalip_error);
+            success = false;
+        }
+        if (const auto tor_error{ApplyRuntimeTorSettings(old_numonion, old_torpassword, old_torcontrol, old_listenonion, args)}) {
+            warnings.push_back(*tor_error);
             success = false;
         }
         ApplyScriptCheckThreads();

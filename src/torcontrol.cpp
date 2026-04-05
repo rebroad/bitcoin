@@ -908,6 +908,32 @@ void TorController::ResetReconnectBackoff()
     }
 }
 
+void TorController::Reconfigure()
+{
+    LogPrint(BCLog::TOR, "tor: Reconfiguring onion services from runtime settings\n");
+
+    // Stop advertising any existing services before recreation.
+    for (const CService& service_entry : services) {
+        if (service_entry.IsValid()) {
+            RemoveLocal(service_entry);
+        }
+    }
+
+    // Reset service state so auth callback will create services again.
+    services.clear();
+    service_ids.clear();
+    services_initialized = false;
+    services_init_in_progress = false;
+    current_service_index = 0;
+    num_services = std::max<size_t>(1, static_cast<size_t>(gArgs.GetIntArg("-numonion", 1)));
+
+    // Reload keys from disk so runtime -numonion increases can use existing key files.
+    LoadPrivateKeysFromDirectory();
+
+    // Force re-auth/re-init flow, which issues ADD_ONION according to current args.
+    Reconnect();
+}
+
 void TorController::Reconnect()
 {
     /* Try to reconnect and reestablish if we get booted - for example, Tor
@@ -1432,6 +1458,34 @@ void ResetTorBackoff() {
         delete data;
         LogPrint(BCLog::TOR, "tor: Failed to schedule tor reconnect\n");
     }
+}
+
+bool ReconfigureTor()
+{
+    if (!torControlThread.joinable() || !gBase) return false;
+
+    TorController* ctrl = GetTorController();
+    if (!ctrl) {
+        LogPrint(BCLog::TOR, "tor: ReconfigureTor called but TorController is not available\n");
+        return false;
+    }
+
+    struct ReconfigureEvent {
+        TorController* ctrl;
+    };
+
+    auto* data = new ReconfigureEvent{ctrl};
+    if (event_base_once(gBase, -1, EV_TIMEOUT, [](evutil_socket_t, short, void* arg) {
+            auto* data = static_cast<ReconfigureEvent*>(arg);
+            data->ctrl->Reconfigure();
+            delete data;
+        }, data, nullptr) < 0) {
+        delete data;
+        LogPrint(BCLog::TOR, "tor: Failed to schedule tor reconfiguration\n");
+        return false;
+    }
+
+    return true;
 }
 
 CService DefaultOnionServiceTarget() {

@@ -31,6 +31,7 @@ void StartTorControl(CService onion_service_target);
 void InterruptTorControl();
 void StopTorControl();
 void ResetTorBackoff();
+bool ReconfigureTor();
 
 CService DefaultOnionServiceTarget();
 
@@ -128,6 +129,8 @@ public:
     void Reconnect();
     /** Reset reconnection backoff timer and attempt immediate reconnection */
     void ResetReconnectBackoff();
+    /** Reload private keys and recreate onion services from current runtime args. */
+    void Reconfigure();
 
 	const std::vector<CService>& GetOnionServices() const { return services; }
 
