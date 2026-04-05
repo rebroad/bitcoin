@@ -112,8 +112,8 @@ std::optional<CNetAddr> QueryDefaultGatewayImpl(sa_family_t family)
             }
         }
 
-        // Found gateway?
-        if (rta_gateway != nullptr) {
+        // Found gateway for default route?
+        if (rta_gateway != nullptr && r->rtm_dst_len == 0) {
             if (family == AF_INET && sizeof(in_addr) == RTA_PAYLOAD(rta_gateway)) {
                 in_addr gw;
                 std::memcpy(&gw, RTA_DATA(rta_gateway), sizeof(gw));
