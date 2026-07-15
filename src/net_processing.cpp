@@ -22,6 +22,7 @@
 #include <node/blockstorage.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
+#include <policy/settings.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -135,6 +136,27 @@ static constexpr double BLOCK_DOWNLOAD_TIMEOUT_BASE = 1;
 static constexpr double BLOCK_DOWNLOAD_TIMEOUT_PER_PEER = 0.5;
 /** Maximum number of headers to announce when relaying blocks with headers message.*/
 static const unsigned int MAX_BLOCKS_TO_ANNOUNCE = 8;
+
+/** Whether a block contains transactions that this node would not normally relay. */
+static bool BlockContainsNonRelayableTx(const CBlock& block)
+{
+    if (!gArgs.GetBoolArg("-relaynonstandardblocks", true)) return false;
+
+    for (size_t i = 1; i < block.vtx.size(); ++i) {
+        const CTransaction& tx = *block.vtx[i];
+
+        std::string reason;
+        if (fRequireStandard && !IsStandardTx(tx, reason)) return true;
+
+        if (!gArgs.GetBoolArg("-relaydust", false)) {
+            for (const CTxOut& txout : tx.vout) {
+                if (txout.nValue <= 250) return true;
+            }
+        }
+    }
+    return false;
+}
+
 /** Maximum number of unconnecting headers announcements before DoS score */
 static const int MAX_UNCONNECTING_HEADERS = 10;
 /** Minimum blocks required to signal NODE_NETWORK_LIMITED */
@@ -2021,6 +2043,11 @@ static bool fWitnessesPresentInMostRecentCompactBlock GUARDED_BY(cs_most_recent_
  */
 void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock>& pblock)
 {
+    if (BlockContainsNonRelayableTx(*pblock)) {
+        LogPrint(BCLog::BLOCK, "not relaying block %s containing non-relayable transaction\n", pindex->GetBlockHash().ToString());
+        return;
+    }
+
     std::shared_ptr<const CBlockHeaderAndShortTxIDs> pcmpctblock = std::make_shared<const CBlockHeaderAndShortTxIDs> (*pblock, true);
     const CNetMsgMaker msgMaker(PROTOCOL_VERSION);
 
@@ -2093,14 +2120,26 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
         }
     }
 
+    std::vector<uint256> relayableHashes;
+    bool relay_chain = true;
+    for (const uint256& hash : reverse_iterate(vHashes)) {
+        if (relay_chain && !gArgs.GetBoolArg("-relaynonstandardblocks", true)) {
+            const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
+            CBlock block;
+            if (pindex && ReadBlockFromDisk(block, pindex, m_chainparams.GetConsensus()) && BlockContainsNonRelayableTx(block)) {
+                LogPrint(BCLog::BLOCK, "not relaying block %s or descendants containing non-relayable transaction\n", hash.ToString());
+                relay_chain = false;
+            }
+        }
+        if (relay_chain) relayableHashes.push_back(hash);
+    }
+
     {
         LOCK(m_peer_mutex);
         for (auto& it : m_peer_map) {
             Peer& peer = *it.second;
             LOCK(peer.m_block_inv_mutex);
-            for (const uint256& hash : reverse_iterate(vHashes)) {
-                peer.m_blocks_for_headers_relay.push_back(hash);
-            }
+            peer.m_blocks_for_headers_relay.insert(peer.m_blocks_for_headers_relay.end(), relayableHashes.begin(), relayableHashes.end());
         }
     }
 
