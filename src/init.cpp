@@ -253,16 +253,26 @@ void Shutdown(NodeContext& node)
     if (node.peerman) UnregisterValidationInterface(node.peerman.get());
     if (node.connman) {
         node.connman->Interrupt(); // Set interruptNet to stop new connections
+        LogPrintf("%s: stopping connection manager threads\n", __func__);
         node.connman->Stop();
+        LogPrintf("%s: connection manager stopped\n", __func__);
     }
 
     StopTorControl();
 
     // After everything has been shut down, but before things get flushed, stop the
     // CScheduler/checkqueue, scheduler and load block thread.
-    if (node.scheduler) node.scheduler->stop();
-    if (node.chainman && node.chainman->m_load_block.joinable()) node.chainman->m_load_block.join();
+    if (node.scheduler) {
+        LogPrintf("%s: stopping scheduler\n", __func__);
+        node.scheduler->stop();
+    }
+    if (node.chainman && node.chainman->m_load_block.joinable()) {
+        LogPrintf("%s: waiting for block import thread\n", __func__);
+        node.chainman->m_load_block.join();
+    }
+    LogPrintf("%s: stopping script check workers\n", __func__);
     StopScriptCheckWorkerThreads();
+    LogPrintf("%s: script check workers stopped\n", __func__);
 
     // After the threads that potentially access these pointers have been stopped,
     // destruct and reset all to nullptr.
@@ -272,7 +282,9 @@ void Shutdown(NodeContext& node)
     node.addrman.reset();
 
     if (node.mempool && node.mempool->IsLoaded() && node.args->GetBoolArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL)) {
+        LogPrintf("%s: dumping mempool\n", __func__);
         DumpMempool(*node.mempool);
+        LogPrintf("%s: mempool dumped\n", __func__);
     }
 
     // Drop transactions we were still watching, and record fee estimations.
@@ -280,17 +292,21 @@ void Shutdown(NodeContext& node)
 
     // FlushStateToDisk generates a ChainStateFlushed callback, which we should avoid missing
     if (node.chainman) {
+        LogPrintf("%s: flushing chainstate\n", __func__);
         LOCK(cs_main);
         for (CChainState* chainstate : node.chainman->GetAll()) {
             if (chainstate->CanFlushToDisk()) {
                 chainstate->ForceFlushStateToDisk();
             }
         }
+        LogPrintf("%s: chainstate flushed\n", __func__);
     }
 
     // After there are no more peers/RPC left to give us new data which may generate
     // CValidationInterface callbacks, flush them...
+    LogPrintf("%s: flushing validation callbacks\n", __func__);
     GetMainSignals().FlushBackgroundCallbacks();
+    LogPrintf("%s: validation callbacks flushed\n", __func__);
 
     // Stop and delete all indexes only after flushing background callbacks.
     if (g_txindex) {
@@ -301,8 +317,10 @@ void Shutdown(NodeContext& node)
         g_coin_stats_index->Stop();
         g_coin_stats_index.reset();
     }
+    LogPrintf("%s: stopping indexes\n", __func__);
     ForEachBlockFilterIndex([](BlockFilterIndex& index) { index.Stop(); });
     DestroyAllBlockFilterIndexes();
+    LogPrintf("%s: indexes stopped\n", __func__);
 
     // Clean up AnyoneCanSpendHandler
     if (g_anyone_can_spend_handler) {
