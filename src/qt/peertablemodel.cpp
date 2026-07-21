@@ -17,6 +17,7 @@
 
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFutureWatcher>
+#include <QColor>
 #include <QList>
 #include <QTimer>
 
@@ -116,7 +117,12 @@ QVariant PeerTableModel::data(const QModelIndex& index, int role) const
     CNodeCombinedStats *rec = static_cast<CNodeCombinedStats*>(index.internalPointer());
 
     const auto column = static_cast<ColumnIndex>(index.column());
-    if (role == Qt::DisplayRole) {
+    if (role == Qt::ForegroundRole && rec->nodeStats.m_conn_type == ConnectionType::BLOCK_RELAY &&
+        (column == TxBpsPct || column == MPpm)) {
+        // Block-relay-only peers do not relay transactions, so zero MP%/MP/m
+        // values are expected and are not comparable with full-relay peers.
+        return QColor(Qt::gray);
+    } else if (role == Qt::DisplayRole) {
         switch (column) {
         case NetNodeId:
             return (qint64)rec->nodeStats.nodeid;
