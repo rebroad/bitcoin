@@ -162,7 +162,7 @@ static BlockRelayability BlockContainsNonRelayableTx(const CBlock& block)
 
         if (!relay_dust) {
             for (const CTxOut& txout : tx.vout) {
-                if (txout.nValue <= 250) {
+                if (txout.nValue && txout.nValue <= 250) {
                     ++result.low_value_txs;
                     break;
                 }
