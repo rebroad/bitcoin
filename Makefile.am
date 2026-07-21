@@ -429,6 +429,25 @@ check-libs:
 			fi; \
 		fi; \
 	done
+	@cd src && invalid=0; \
+	for obj in $$(find . -type f -name '*.o' -size 0c -print); do \
+		echo "   ❌ Found empty object: $$obj"; \
+		invalid=1; \
+	done; \
+	for generated in qt/qrc_*.cpp; do \
+		if [ -f "$$generated" ] && [ ! -s "$$generated" ]; then \
+			echo "   ❌ Found empty generated Qt resource: $$generated"; \
+			rm -f "$$generated"; \
+			invalid=1; \
+		fi; \
+	done; \
+	if [ $$invalid -eq 1 ]; then \
+		echo "   🧹 Removing archives containing stale build artifacts..."; \
+		rm -f libbitcoin_*.a crypto/libbitcoin_crypto_*.a qt/libbitcoinqt.a; \
+	fi; \
+	if [ $$invalid -eq 1 ]; then \
+		find . -type f -name '*.o' -size 0c -delete; \
+	fi
 	@echo ""
 	@echo "✅ Library check complete."
 	@echo ""
@@ -588,6 +607,13 @@ __smart_internal: check-build-srcdir check-libs
 			fi; \
 		fi; \
 	fi
+
+# Keep the common top-level GUI target on the smart-build path.  Without an
+# explicit target here, the recursive automake target in src/Makefile.am can
+# bypass __smart_internal and therefore skip stale-artifact recovery.
+.PHONY: bitcoin-qt
+bitcoin-qt: SMART_TARGETS=bitcoin-qt
+bitcoin-qt: __smart_internal
 
 .DEFAULT:
 	$(AM_V_at) if [ "$(SMART)" != "0" ] && [ -z "$(SMART_INTERNAL)" ]; then \
