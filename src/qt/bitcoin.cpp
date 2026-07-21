@@ -468,7 +468,7 @@ void BitcoinApplication::startThread()
 
     /*  communication to and from thread */
     connect(&m_executor.value(), &InitExecutor::initializeResult, this, &BitcoinApplication::initializeResult);
-    connect(&m_executor.value(), &InitExecutor::shutdownResult, this, &QCoreApplication::quit);
+    connect(&m_executor.value(), &InitExecutor::shutdownResult, this, &BitcoinApplication::shutdownResult);
     connect(&m_executor.value(), &InitExecutor::runawayException, this, &BitcoinApplication::handleRunawayException);
     connect(this, &BitcoinApplication::requestedInitialize, &m_executor.value(), &InitExecutor::initialize);
     connect(this, &BitcoinApplication::requestedShutdown, &m_executor.value(), &InitExecutor::shutdown);
@@ -538,6 +538,12 @@ void BitcoinApplication::requestShutdown()
 
     // Request shutdown from core thread
     Q_EMIT requestedShutdown();
+}
+
+void BitcoinApplication::shutdownResult()
+{
+    qDebug() << __func__ << ": Core shutdown completed; quitting Qt event loop";
+    quit();
 }
 
 void BitcoinApplication::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info)
@@ -622,18 +628,6 @@ WId BitcoinApplication::getMainWinId() const
         return 0;
 
     return window->winId();
-}
-
-bool BitcoinApplication::event(QEvent* e)
-{
-    // DISABLED: event() override causing system-wide freezing
-    // The real issue is cs_main lock blocking the GUI thread
-    // Focus on fixing the caching instead
-    if (e->type() == QEvent::Quit) {
-        requestShutdown();
-        return true;
-    }
-    return QApplication::event(e);
 }
 
 static void SetupUIArgs(ArgsManager& argsman)

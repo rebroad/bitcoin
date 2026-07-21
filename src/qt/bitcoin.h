@@ -79,6 +79,8 @@ public:
 
 public Q_SLOTS:
     void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
+    /// Exit the Qt event loop after core shutdown has completed.
+    void shutdownResult();
     /// Request core shutdown
     void requestShutdown();
     /// Handle runaway exceptions. Shows a message box with the problem and quits the program.
@@ -95,9 +97,6 @@ Q_SIGNALS:
     void requestedShutdown();
     void splashFinished();
     void windowShown(BitcoinGUI* window);
-
-protected:
-    bool event(QEvent* e) override;
 
 private:
     std::optional<InitExecutor> m_executor;
