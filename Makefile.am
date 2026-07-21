@@ -514,30 +514,38 @@ __smart_internal: check-build-srcdir check-libs
 	@echo "🚀 Starting smart build with automatic error recovery..."
 	@echo "📋 Step 0: Checking build system files..."
 	@need_regen=0; \
-	if [ -f "$(top_srcdir)/Makefile.in" ] && [ "$(top_srcdir)/Makefile.in" -nt "Makefile" ]; then need_regen=1; fi; \
-	if [ -f "$(top_srcdir)/src/Makefile.in" ] && [ "$(top_srcdir)/src/Makefile.in" -nt "src/Makefile" ]; then need_regen=1; fi; \
-	if [ -f "$(top_srcdir)/Makefile.am" ] && [ "$(top_srcdir)/Makefile.am" -nt "Makefile" ]; then need_regen=1; fi; \
-	if [ -f "$(top_srcdir)/src/Makefile.am" ] && [ "$(top_srcdir)/src/Makefile.am" -nt "src/Makefile" ]; then need_regen=1; fi; \
-	if [ $$need_regen -eq 1 ]; then \
-		echo "🔄 Detected stale Makefile(s). Regenerating via ./config.status..."; \
-		if [ -x "./config.status" ]; then \
-			./config.status; \
-		else \
-			echo "❌ Missing ./config.status. Re-run ./configure in this build directory."; \
-			exit 1; \
-		fi; \
+	if [ ! -f "$(top_srcdir)/Makefile.in" ] || [ "$(top_srcdir)/Makefile.am" -nt "$(top_srcdir)/Makefile.in" ] || \
+	   [ ! -f "$(top_srcdir)/src/Makefile.in" ] || [ "$(top_srcdir)/src/Makefile.am" -nt "$(top_srcdir)/src/Makefile.in" ]; then \
+		echo "🔄 Build templates are stale. Running ./autogen.sh..."; \
+		./autogen.sh || exit $$?; \
+		need_regen=1; \
 	fi; \
-	if [ -f "$(top_srcdir)/Makefile.am" ] && [ -f "$(top_srcdir)/Makefile.in" ] && [ "$(top_srcdir)/Makefile.am" -nt "$(top_srcdir)/Makefile.in" ]; then \
-		echo "⚠️  Makefile.am is newer than Makefile.in. Run ./autogen.sh and ./configure to refresh build files."; \
-	fi; \
-	if [ -f "$(top_srcdir)/src/Makefile.am" ] && [ -f "$(top_srcdir)/src/Makefile.in" ] && [ "$(top_srcdir)/src/Makefile.am" -nt "$(top_srcdir)/src/Makefile.in" ]; then \
-		echo "⚠️  src/Makefile.am is newer than src/Makefile.in. Run ./autogen.sh and ./configure to refresh build files."; \
+	if [ ! -x "./config.status" ]; then \
+		echo "🔧 Build is not configured. Running ./configure..."; \
+		./configure || exit $$?; \
+	elif [ $$need_regen -eq 1 ] || [ "./configure" -nt "./config.status" ]; then \
+		echo "🔄 Regenerating configured Makefiles via ./config.status..."; \
+		./config.status || exit $$?; \
 	fi
 
 	@echo "📋 Step 1: Attempting normal build..."
 	@echo ""
 	@smart_targets="$(SMART_TARGETS)"; \
 	if [ -z "$$smart_targets" ]; then smart_targets="all"; fi; \
+	requested_targets="$$smart_targets"; \
+	if [ "$$smart_targets" != "all" ]; then \
+		mapped_targets=""; \
+		for target in $$smart_targets; do \
+			case "$$target" in \
+				bitcoin-qt) target="qt/bitcoin-qt" ;; \
+			esac; \
+			mapped_targets="$$mapped_targets $$target"; \
+		done; \
+		smart_targets="$${mapped_targets# }"; \
+	fi; \
+	if [ "$$smart_targets" != "$$requested_targets" ]; then \
+		echo "🔀 Mapped top-level targets: $$requested_targets -> $$smart_targets"; \
+	fi; \
 	smart_tool="$${SMART_TOOL:-$$(command -v smart 2>/dev/null || printf '%s' "$$HOME/bin/smart")}"; \
 	if ! command -v "$$smart_tool" >/dev/null 2>&1 && [ ! -x "$$smart_tool" ]; then \
 		echo "ℹ️  smart not found; using plain make for: $$smart_targets"; \
