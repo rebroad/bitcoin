@@ -98,6 +98,9 @@ Q_SIGNALS:
     void splashFinished();
     void windowShown(BitcoinGUI* window);
 
+protected:
+    bool event(QEvent* e) override;
+
 private:
     std::optional<InitExecutor> m_executor;
     OptionsModel *optionsModel;
@@ -114,6 +117,7 @@ private:
     SplashScreen* m_splash = nullptr;
     std::unique_ptr<interfaces::Node> m_node;
     std::unique_ptr<interfaces::Chain> m_chain;
+    bool m_shutdown_finished{false};
 
     void startThread();
 };

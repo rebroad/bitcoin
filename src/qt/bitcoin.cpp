@@ -542,6 +542,7 @@ void BitcoinApplication::requestShutdown()
 
 void BitcoinApplication::shutdownResult()
 {
+    m_shutdown_finished = true;
     qDebug() << __func__ << ": Core shutdown completed; quitting Qt event loop";
     quit();
 }
@@ -628,6 +629,16 @@ WId BitcoinApplication::getMainWinId() const
         return 0;
 
     return window->winId();
+}
+
+bool BitcoinApplication::event(QEvent* e)
+{
+    if (e->type() == QEvent::Quit && !m_shutdown_finished) {
+        requestShutdown();
+        return true;
+    }
+
+    return QApplication::event(e);
 }
 
 static void SetupUIArgs(ArgsManager& argsman)
