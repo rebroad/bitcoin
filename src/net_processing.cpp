@@ -137,49 +137,39 @@ static constexpr double BLOCK_DOWNLOAD_TIMEOUT_PER_PEER = 0.5;
 /** Maximum number of headers to announce when relaying blocks with headers message.*/
 static const unsigned int MAX_BLOCKS_TO_ANNOUNCE = 8;
 
-/** Whether a block contains transactions that this node would not normally relay. */
-// TODO: Remove the unconditional Block relay debug logging once this behavior is verified.
-static bool BlockContainsNonRelayableTx(const CBlock& block, const uint256& block_hash)
+/** Counts the transaction policy violations that prevent block relay. */
+struct BlockRelayability {
+    size_t nonstandard_txs{0};
+    size_t low_value_txs{0};
+
+    bool IsNonRelayable() const { return nonstandard_txs != 0 || low_value_txs != 0; }
+};
+
+/** Count transactions that this node would not normally relay from a block. */
+static BlockRelayability BlockContainsNonRelayableTx(const CBlock& block)
 {
     const bool relay_nonstandard_blocks{gArgs.GetBoolArg("-relaynonstandardblocks", true)};
     const bool relay_dust{gArgs.GetBoolArg("-relaydust", false)};
 
-    if (!relay_nonstandard_blocks) {
-        LogPrintf("Block relay debug: block %s detector disabled (-relaynonstandardblocks=0), txs=%zu\n",
-                  block_hash.ToString(), block.vtx.size());
-        return false;
-    }
+    if (relay_nonstandard_blocks) return {};
 
-    size_t nonstandard_count{0};
-    size_t low_value_output_count{0};
+    BlockRelayability result;
     for (size_t i = 1; i < block.vtx.size(); ++i) {
         const CTransaction& tx = *block.vtx[i];
 
         std::string reason;
-        if (fRequireStandard && !IsStandardTx(tx, reason)) {
-            ++nonstandard_count;
-            LogPrintf("Block relay debug: block %s tx %s is non-standard, reason=%s\n",
-                      block_hash.ToString(), tx.GetHash().ToString(), reason);
-        }
+        if (fRequireStandard && !IsStandardTx(tx, reason)) ++result.nonstandard_txs;
 
         if (!relay_dust) {
             for (const CTxOut& txout : tx.vout) {
                 if (txout.nValue <= 250) {
-                    ++low_value_output_count;
-                    LogPrintf("Block relay debug: block %s tx %s has low-value output=%s sat\n",
-                              block_hash.ToString(), tx.GetHash().ToString(), ToString(txout.nValue));
+                    ++result.low_value_txs;
                     break;
                 }
             }
         }
     }
-
-    const bool non_relayable{nonstandard_count != 0 || low_value_output_count != 0};
-    LogPrintf("Block relay debug: block %s inspected txs=%zu, fRequireStandard=%d, -relaydust=%d, "
-              "nonstandard_txs=%zu, low_value_txs=%zu, result=%s\n",
-              block_hash.ToString(), block.vtx.size() - 1, fRequireStandard, relay_dust, nonstandard_count,
-              low_value_output_count, non_relayable ? "not relaying" : "relaying");
-    return non_relayable;
+    return result;
 }
 
 /** Maximum number of unconnecting headers announcements before DoS score */
@@ -2068,10 +2058,11 @@ static bool fWitnessesPresentInMostRecentCompactBlock GUARDED_BY(cs_most_recent_
  */
 void PeerManagerImpl::NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock>& pblock)
 {
-    if (BlockContainsNonRelayableTx(*pblock, pindex->GetBlockHash())) {
-        LogPrint(BCLog::BLOCK, "not relaying block %s containing non-relayable transaction\n", pindex->GetBlockHash().ToString());
-        return;
-    }
+    const BlockRelayability relayability = BlockContainsNonRelayableTx(*pblock);
+    LogPrint(BCLog::BLOCK, "block %s relay check: nonstandard_txs=%zu, low_value_txs=%zu, result=%s\n",
+             pindex->GetBlockHash().ToString(), relayability.nonstandard_txs, relayability.low_value_txs,
+             relayability.IsNonRelayable() ? "not relaying" : "relaying");
+    if (relayability.IsNonRelayable()) return;
 
     std::shared_ptr<const CBlockHeaderAndShortTxIDs> pcmpctblock = std::make_shared<const CBlockHeaderAndShortTxIDs> (*pblock, true);
     const CNetMsgMaker msgMaker(PROTOCOL_VERSION);
@@ -2151,9 +2142,14 @@ void PeerManagerImpl::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlock
         if (relay_chain && !gArgs.GetBoolArg("-relaynonstandardblocks", true)) {
             const CBlockIndex* pindex = m_chainman.m_blockman.LookupBlockIndex(hash);
             CBlock block;
-            if (pindex && ReadBlockFromDisk(block, pindex, m_chainparams.GetConsensus()) && BlockContainsNonRelayableTx(block, hash)) {
-                LogPrint(BCLog::BLOCK, "not relaying block %s or descendants containing non-relayable transaction\n", hash.ToString());
-                relay_chain = false;
+            if (pindex && ReadBlockFromDisk(block, pindex, m_chainparams.GetConsensus())) {
+                const BlockRelayability relayability = BlockContainsNonRelayableTx(block);
+                LogPrint(BCLog::BLOCK, "block %s relay check: nonstandard_txs=%zu, low_value_txs=%zu, result=%s\n",
+                         hash.ToString(), relayability.nonstandard_txs, relayability.low_value_txs,
+                         relayability.IsNonRelayable() ? "not relaying" : "relaying");
+                if (relayability.IsNonRelayable()) {
+                    relay_chain = false;
+                }
             }
         }
         if (relay_chain) relayableHashes.push_back(hash);
