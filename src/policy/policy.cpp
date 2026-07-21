@@ -70,9 +70,6 @@ bool IsStandard(const CScript& scriptPubKey, TxoutType& whichType)
             return false;
         if (m < 1 || m > n)
             return false;
-    } else if (whichType == TxoutType::NULL_DATA &&
-               (!fAcceptDatacarrier || scriptPubKey.size() > nMaxDatacarrierBytes)) {
-          return false;
     }
 
     return true;
@@ -132,12 +129,6 @@ bool IsStandardTx(const CTransaction& tx, bool permit_bare_multisig, const CFeeR
             reason = "dust";
             return false;
         }
-    }
-
-    // only one OP_RETURN txout is permitted
-    if (nDataOut > 1) {
-        reason = "multi-op-return";
-        return false;
     }
 
     return true;
